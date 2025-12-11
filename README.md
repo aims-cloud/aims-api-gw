@@ -24,9 +24,29 @@ aims-api-gw는 '마이크로 데이터센터 연동 스케일아웃 클라우드
 
 ### 요구사항
 
+#### 로컬 실행
 - Python 3.12 이상
 
-### 설치
+#### Docker 실행
+- Docker 20.10 이상
+- Docker Compose v2.0 이상
+
+### 방법 1: Docker Compose 실행 (권장)
+
+```bash
+# Docker Compose로 실행
+docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f
+
+# 중지
+docker-compose down
+```
+
+### 방법 2: 로컬 환경 실행
+
+**설치**
 
 ```bash
 # 가상환경 생성
@@ -42,7 +62,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 환경 설정
+**환경 설정**
 
 `.env.sample` 파일을 `.env`로 복사하고 필요한 환경변수를 설정하세요.
 
@@ -50,15 +70,22 @@ pip install -r requirements.txt
 cp .env.sample .env
 ```
 
-### 실행
+**실행**
 
 ```bash
+# run.py 사용
+python run.py
+
+# 또는 uvicorn 직접 실행
 uvicorn app.main:app --reload
 ```
 
+### 접속 정보
+
 API는 `http://localhost:8000`에서 실행됩니다.
 
-API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
+- **API 문서 (Swagger)**: `http://localhost:8000/docs`
+- **API 문서 (ReDoc)**: `http://localhost:8000/redoc`
 
 ## API 엔드포인트
 
@@ -78,10 +105,17 @@ aims-api-gw/
 │   │   ├── jwt.py           # JWT 토큰 처리
 │   │   └── routes.py        # 인증 관련 라우트
 │   └── routers/
-│       └── __init__.py
+│       ├── __init__.py
+│       └── hello.py         # Hello API 라우터
 ├── .env                     # 환경변수 (git에서 제외)
-├── .env.sample             # 환경변수 샘플
-├── requirements.txt        # 의존성 목록
+├── .env.sample              # 환경변수 샘플
+├── requirements.txt         # 의존성 목록
+├── run.py                   # 로컬 실행 스크립트
+├── Dockerfile               # Docker 이미지 빌드 파일
+├── docker-compose.yml       # Docker Compose 설정
+├── .dockerignore            # Docker 빌드 제외 파일
+├── .gitignore               # Git 제외 파일
+├── LICENSE                  # Apache 2.0 라이선스
 └── README.md
 ```
 

@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aims-api-gw
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=AIMS API Gateway
+      - APP_VERSION=0.1.0
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - DEMO_USERNAME=${DEMO_USERNAME:-admin}
+      - DEMO_PASSWORD=${DEMO_PASSWORD:-password}
+    volumes:
+      - ./app:/app/app
+      - ./.env:/app/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - aims-network
+
+networks:
+  aims-network:
+    driver: bridge
+    name: aims-network

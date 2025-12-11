@@ -1,6 +1,8 @@
 from fastapi import FastAPI
+
 from app.config import settings
 from app.auth import routes as auth_routes
+from app.routers import api_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -20,3 +22,4 @@ async def root():
 
 # Include routers
 app.include_router(auth_routes.router, prefix="/auth", tags=["Authentication"])
+app.include_router(api_router)

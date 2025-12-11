@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from app.auth.jwt import create_access_token, verify_token
+from app.config import settings
 
 router = APIRouter()
 
@@ -23,8 +24,8 @@ class UserResponse(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest):
     """User authentication and JWT token issuance"""
-    # Simple demo authentication (replace with actual authentication)
-    if request.username == "admin" and request.password == "password":
+    # Demo authentication using credentials from .env (for development/testing only)
+    if request.username == settings.demo_username and request.password == settings.demo_password:
         access_token = create_access_token(
             data={"sub": request.username, "user_id": "user_001"}
         )
@@ -39,7 +40,13 @@ async def login(request: LoginRequest):
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(payload: dict = Depends(verify_token)):
     """Get authenticated user information"""
-    return UserResponse(
-        username=payload.get("sub"),
-        user_id=payload.get("user_id")
-    )
+    username = payload.get("sub")
+    user_id = payload.get("user_id")
+
+    if not username or not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    return UserResponse(username=username, user_id=user_id)

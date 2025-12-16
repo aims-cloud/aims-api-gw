@@ -92,6 +92,29 @@ API는 `http://localhost:8000`에서 실행됩니다.
 - `GET /` - Health check 및 기본 정보
 - `POST /auth/login` - 사용자 인증 및 JWT 토큰 발급
 - `GET /auth/me` - 인증된 사용자 정보 조회
+- `POST /openstack/connect` - 오픈스택 인증정보로 연결 검증
+
+### OpenStack 연결 API
+
+```http
+POST /openstack/connect
+Content-Type: application/json
+```
+
+```json
+{
+  "auth_url": "https://openstack.example.com:5000/v3",
+  "username": "demo",
+  "password": "secret",
+  "project_name": "demo",
+  "user_domain_name": "Default",
+  "project_domain_name": "Default",
+  "region_name": "RegionOne",
+  "interface": "public"
+}
+```
+
+`auth_url`을 생략하면 `.env`에 지정된 `OS_AUTH_URL`이 사용됩니다. 요청이 성공하면 연결 여부, 현재 프로젝트/사용자 ID, 토큰 만료 시간 등의 기본 메타데이터가 반환됩니다.
 
 ## 프로젝트 구조
 
@@ -106,7 +129,11 @@ aims-api-gw/
 │   │   └── routes.py        # 인증 관련 라우트
 │   └── routers/
 │       ├── __init__.py
-│       └── hello.py         # Hello API 라우터
+│       ├── hello.py         # Hello API 라우터
+│       └── openstack.py     # OpenStack 연결 라우터
+├── app/services/
+│   ├── __init__.py
+│   └── openstack.py         # OpenStack 연결 유틸리티
 ├── .env                     # 환경변수 (git에서 제외)
 ├── .env.sample              # 환경변수 샘플
 ├── requirements.txt         # 의존성 목록
@@ -117,6 +144,15 @@ aims-api-gw/
 ├── .gitignore               # Git 제외 파일
 ├── LICENSE                  # Apache 2.0 라이선스
 └── README.md
+```
+
+### 환경 변수 예시
+
+```
+# OpenStack 연결 기본값
+OS_AUTH_URL=https://openstack.example.com:5000/v3
+OS_REGION_NAME=RegionOne
+OS_INTERFACE=public
 ```
 
 ## 개발 조직

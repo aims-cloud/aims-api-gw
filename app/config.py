@@ -17,5 +17,10 @@ class Settings(BaseSettings):
     demo_username: str = "admin"
     demo_password: str = "password"
 
+    # OpenStack defaults (can be overridden per request)
+    os_auth_url: str | None = None
+    os_region_name: str | None = None
+    os_interface: str | None = "public"
+
 
 settings = Settings()

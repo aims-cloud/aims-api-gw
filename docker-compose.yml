@@ -14,6 +14,9 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - DEMO_USERNAME=${DEMO_USERNAME:-admin}
       - DEMO_PASSWORD=${DEMO_PASSWORD:-password}
+      - OS_AUTH_URL=${OS_AUTH_URL:-}
+      - OS_REGION_NAME=${OS_REGION_NAME:-}
+      - OS_INTERFACE=${OS_INTERFACE:-public}
     volumes:
       - ./app:/app/app
       - ./.env:/app/.env

@@ -6,9 +6,11 @@ from openstack.exceptions import SDKException
 from pydantic import AnyHttpUrl, BaseModel, Field
 
 from app.config import settings
+from app.logging import get_logger, mask_sensitive
 from app.services.openstack import OpenStackCredentials, create_connection
 
 router = APIRouter(prefix="/openstack", tags=["OpenStack"])
+logger = get_logger(__name__)
 
 
 class OpenStackConnectRequest(BaseModel):
@@ -43,10 +45,19 @@ async def connect_openstack(request: OpenStackConnectRequest):
     """Validate OpenStack credentials and return minimal session metadata."""
     auth_url = request.auth_url or settings.os_auth_url
     if not auth_url:
+        logger.warning("openstack_connect_missing_auth_url")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OpenStack auth_url is required. Provide it in the request or configuration.",
         )
+
+    logger.info(
+        "openstack_connect_attempt",
+        auth_url=str(auth_url),
+        username=request.username,
+        project_name=request.project_name,
+        region_name=request.region_name or settings.os_region_name,
+    )
 
     credentials = OpenStackCredentials(
         auth_url=str(auth_url),
@@ -63,11 +74,24 @@ async def connect_openstack(request: OpenStackConnectRequest):
         conn = await run_in_threadpool(create_connection, credentials)
         token_result = await run_in_threadpool(conn.authorize)
     except SDKException as exc:
+        logger.error(
+            "openstack_connect_failed",
+            auth_url=str(auth_url),
+            username=request.username,
+            project_name=request.project_name,
+            error_type=type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OpenStack authentication failed. Please check your credentials and auth_url.",
         ) from exc
     except Exception as exc:
+        logger.error(
+            "openstack_connect_unexpected_error",
+            auth_url=str(auth_url),
+            username=request.username,
+            error_type=type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during OpenStack connection.",
@@ -77,10 +101,23 @@ async def connect_openstack(request: OpenStackConnectRequest):
     if isinstance(token_result, dict):
         token_expires = token_result.get("expires_at")
 
+    project_id = getattr(conn, "current_project_id", None)
+    user_id = getattr(conn, "current_user_id", None)
+
+    logger.info(
+        "openstack_connect_success",
+        auth_url=str(auth_url),
+        username=request.username,
+        project_id=project_id,
+        user_id=user_id,
+        region_name=credentials.region_name,
+        token_expires_at=token_expires,
+    )
+
     return OpenStackConnectResponse(
         authenticated=True,
-        project_id=getattr(conn, "current_project_id", None),
-        user_id=getattr(conn, "current_user_id", None),
+        project_id=project_id,
+        user_id=user_id,
         region_name=credentials.region_name,
         interface=credentials.interface,
         token_expires_at=token_expires,

@@ -4,8 +4,10 @@ from typing import Dict
 from fastapi import APIRouter
 
 from app.config import settings
+from app.logging import get_logger
 
 router = APIRouter(prefix="/health", tags=["Health"])
+logger = get_logger(__name__)
 
 
 def _check(detail: str, passed: bool) -> Dict[str, str]:
@@ -26,10 +28,19 @@ async def health():
     }
 
     status_flag = all(item["status"] == "pass" for item in config_checks.values())
+    overall_status = "ok" if status_flag else "degraded"
+
+    logger.info(
+        "health_check",
+        status=overall_status,
+        checks_passed=sum(1 for c in config_checks.values() if c["status"] == "pass"),
+        checks_total=len(config_checks),
+    )
+
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "status": "ok" if status_flag else "degraded",
+        "status": overall_status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": config_checks,
     }

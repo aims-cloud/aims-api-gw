@@ -17,6 +17,8 @@ services:
       - OS_AUTH_URL=${OS_AUTH_URL:-}
       - OS_REGION_NAME=${OS_REGION_NAME:-}
       - OS_INTERFACE=${OS_INTERFACE:-public}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JSON_LOGS=${JSON_LOGS:-true}
     volumes:
       - ./app:/app/app
       - ./.env:/app/.env

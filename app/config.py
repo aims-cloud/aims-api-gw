@@ -24,5 +24,9 @@ class Settings(BaseSettings):
     os_region_name: str | None = None
     os_interface: str | None = "public"
 
+    # Logging
+    log_level: str = "INFO"
+    json_logs: bool = False
+
 
 settings = Settings()

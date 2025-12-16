@@ -158,7 +158,43 @@ SERVER_PORT=8000
 OS_AUTH_URL=https://openstack.example.com:5000/v3
 OS_REGION_NAME=RegionOne
 OS_INTERFACE=public
+
+# Logging Configuration
+LOG_LEVEL=INFO          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+JSON_LOGS=false         # true for production (JSON format), false for development (colored)
 ```
+
+## 로깅
+
+애플리케이션은 구조화된 로깅(structlog)을 사용하여 일관된 로그 형식을 제공합니다.
+
+### 로그 레벨 설정
+
+환경 변수 `LOG_LEVEL`로 로그 레벨을 설정할 수 있습니다:
+- `DEBUG`: 상세한 디버깅 정보
+- `INFO`: 일반 정보 (기본값)
+- `WARNING`: 경고 메시지
+- `ERROR`: 에러 메시지
+- `CRITICAL`: 치명적 에러
+
+### 로그 포맷
+
+개발 환경에서는 컬러로 구분된 사람이 읽기 쉬운 형식으로 출력되며, 프로덕션 환경에서는 JSON 형식으로 출력되어 로그 수집 시스템과 통합하기 용이합니다.
+
+```bash
+# 개발 환경 (컬러 출력)
+LOG_LEVEL=DEBUG JSON_LOGS=false python run.py
+
+# 프로덕션 환경 (JSON 출력)
+LOG_LEVEL=INFO JSON_LOGS=true python run.py
+```
+
+### 주요 로그 이벤트
+
+- `application_startup`: 애플리케이션 시작
+- `login_attempt`, `login_success`, `login_failed`: 인증 이벤트
+- `openstack_connect_attempt`, `openstack_connect_success`, `openstack_connect_failed`: OpenStack 연결 이벤트
+- `health_check`: 헬스체크 요청
 
 ## 개발 조직
 

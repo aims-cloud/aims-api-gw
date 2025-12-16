@@ -160,13 +160,32 @@ OS_REGION_NAME=RegionOne
 OS_INTERFACE=public
 
 # Logging Configuration
-LOG_LEVEL=INFO          # DEBUG, INFO, WARNING, ERROR, CRITICAL
-JSON_LOGS=false         # true for production (JSON format), false for development (colored)
+LOG_LEVEL=INFO              # DEBUG, INFO, WARNING, ERROR, CRITICAL
+JSON_LOGS=false             # true for production (JSON format), false for development (colored)
+LOG_TO_FILE=true            # true to enable file logging
+LOG_FILE_PATH=logs/aims-api-gw.log
+LOG_FILE_MAX_BYTES=10485760 # 10MB
+LOG_FILE_BACKUP_COUNT=5     # Keep 5 backup files
 ```
 
 ## 로깅
 
 애플리케이션은 구조화된 로깅(structlog)을 사용하여 일관된 로그 형식을 제공합니다.
+
+### 로그 출력 방식
+
+로그는 **콘솔**과 **파일** 두 가지 방식으로 출력할 수 있습니다:
+
+#### 1. 콘솔 로깅 (항상 활성화)
+- 개발: 컬러로 구분된 사람이 읽기 쉬운 형식
+- 프로덕션: JSON 형식
+
+#### 2. 파일 로깅 (선택적)
+- 환경변수 `LOG_TO_FILE=true`로 활성화
+- 로그 파일 위치: `logs/aims-api-gw.log` (기본값)
+- **자동 로테이션**: 10MB마다 새 파일 생성
+- **백업 유지**: 최대 5개 백업 파일 보관
+- 형식: JSON (프로덕션) 또는 텍스트 (개발)
 
 ### 로그 레벨 설정
 
@@ -177,17 +196,42 @@ JSON_LOGS=false         # true for production (JSON format), false for developme
 - `ERROR`: 에러 메시지
 - `CRITICAL`: 치명적 에러
 
-### 로그 포맷
-
-개발 환경에서는 컬러로 구분된 사람이 읽기 쉬운 형식으로 출력되며, 프로덕션 환경에서는 JSON 형식으로 출력되어 로그 수집 시스템과 통합하기 용이합니다.
+### 로그 설정 예시
 
 ```bash
-# 개발 환경 (컬러 출력)
-LOG_LEVEL=DEBUG JSON_LOGS=false python run.py
+# 개발 환경 (컬러 콘솔 + 텍스트 파일)
+LOG_LEVEL=DEBUG
+JSON_LOGS=false
+LOG_TO_FILE=true
+LOG_FILE_PATH=logs/debug.log
 
-# 프로덕션 환경 (JSON 출력)
-LOG_LEVEL=INFO JSON_LOGS=true python run.py
+# 프로덕션 환경 (JSON 콘솔 + JSON 파일)
+LOG_LEVEL=INFO
+JSON_LOGS=true
+LOG_TO_FILE=true
+LOG_FILE_PATH=/var/log/aims-api-gw/app.log
+LOG_FILE_MAX_BYTES=52428800  # 50MB
+LOG_FILE_BACKUP_COUNT=10
+
+# 로그 파일 비활성화 (콘솔만)
+LOG_TO_FILE=false
 ```
+
+### 로그 파일 로테이션
+
+로그 파일은 설정된 크기에 도달하면 자동으로 로테이션됩니다:
+
+```
+logs/
+├── aims-api-gw.log         # 현재 로그 파일
+├── aims-api-gw.log.1       # 첫 번째 백업
+├── aims-api-gw.log.2       # 두 번째 백업
+├── aims-api-gw.log.3       # 세 번째 백업
+├── aims-api-gw.log.4       # 네 번째 백업
+└── aims-api-gw.log.5       # 다섯 번째 백업 (가장 오래된 파일)
+```
+
+오래된 백업 파일은 설정된 개수(`LOG_FILE_BACKUP_COUNT`)를 초과하면 자동으로 삭제됩니다.
 
 ### 주요 로그 이벤트
 

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     json_logs: bool = False
+    log_to_file: bool = False
+    log_file_path: str = "logs/aims-api-gw.log"
+    log_file_max_bytes: int = 10485760  # 10MB
+    log_file_backup_count: int = 5
 
 
 settings = Settings()

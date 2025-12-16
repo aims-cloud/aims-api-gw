@@ -5,7 +5,9 @@ Provides consistent, structured logging across the application with
 JSON output for production environments and human-readable output for development.
 """
 import logging
+import logging.handlers
 import sys
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -18,23 +20,55 @@ def add_app_context(logger: Any, method_name: str, event_dict: EventDict) -> Eve
     return event_dict
 
 
-def configure_logging(log_level: str = "INFO", json_logs: bool = False) -> None:
+def configure_logging(
+    log_level: str = "INFO",
+    json_logs: bool = False,
+    log_to_file: bool = False,
+    log_file_path: str = "logs/aims-api-gw.log",
+    log_file_max_bytes: int = 10485760,  # 10MB
+    log_file_backup_count: int = 5,
+) -> None:
     """
     Configure structured logging for the application.
 
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         json_logs: If True, output logs in JSON format (recommended for production)
+        log_to_file: If True, also write logs to file
+        log_file_path: Path to log file
+        log_file_max_bytes: Maximum size of log file before rotation
+        log_file_backup_count: Number of backup files to keep
     """
     # Convert string log level to logging constant
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    # Configure standard library logging
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=numeric_level,
-    )
+    # Remove any existing handlers
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(numeric_level)
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(numeric_level)
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    root_logger.addHandler(console_handler)
+
+    # File handler (if enabled)
+    if log_to_file:
+        # Create log directory if it doesn't exist
+        log_path = Path(log_file_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Rotating file handler
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file_path,
+            maxBytes=log_file_max_bytes,
+            backupCount=log_file_backup_count,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(numeric_level)
+        file_handler.setFormatter(logging.Formatter("%(message)s"))
+        root_logger.addHandler(file_handler)
 
     # Define processors for structlog
     processors: list[Processor] = [

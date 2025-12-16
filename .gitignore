@@ -65,7 +65,8 @@ dmypy.json
 .env.production
 
 # Logs
-logs/
+logs/*
+!logs/.gitkeep
 *.log
 *.log.*
 

@@ -6,7 +6,14 @@ from app.routers import api_router
 from app.logging import configure_logging, get_logger
 
 # Initialize logging
-configure_logging(log_level=settings.log_level, json_logs=settings.json_logs)
+configure_logging(
+    log_level=settings.log_level,
+    json_logs=settings.json_logs,
+    log_to_file=settings.log_to_file,
+    log_file_path=settings.log_file_path,
+    log_file_max_bytes=settings.log_file_max_bytes,
+    log_file_backup_count=settings.log_file_backup_count,
+)
 logger = get_logger(__name__)
 
 app = FastAPI(

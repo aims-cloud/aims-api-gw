@@ -14,5 +14,5 @@ if __name__ == "__main__":
         host=settings.server_host,
         port=settings.server_port,
         reload=True,
-        log_level="info"
+        log_level=settings.log_level.lower()
     )

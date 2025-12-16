@@ -37,4 +37,5 @@ def create_connection(creds: OpenStackCredentials):
             interface=creds.interface or settings.os_interface,
         )
     except SDKException as exc:
-        raise RuntimeError(f"Failed to create OpenStack connection: {exc}") from exc
+        # Re-raise SDKException to be handled by the router layer
+        raise

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 from fastapi import APIRouter
@@ -30,6 +30,6 @@ async def health():
         "app": settings.app_name,
         "version": settings.app_version,
         "status": "ok" if status_flag else "degraded",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": config_checks,
     }

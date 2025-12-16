@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "AIMS API Gateway"
     app_version: str = "0.1.0"
+    server_host: str = "0.0.0.0"
+    server_port: int = 8000
 
     # JWT
     secret_key: str

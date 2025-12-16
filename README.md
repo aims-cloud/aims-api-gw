@@ -150,6 +150,10 @@ aims-api-gw/
 ### 환경 변수 예시
 
 ```
+# Application Configuration
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+
 # OpenStack 연결 기본값
 OS_AUTH_URL=https://openstack.example.com:5000/v3
 OS_REGION_NAME=RegionOne

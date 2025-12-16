@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
+from openstack.exceptions import SDKException
 from pydantic import AnyHttpUrl, BaseModel, Field
 
 from app.config import settings
@@ -61,10 +62,15 @@ async def connect_openstack(request: OpenStackConnectRequest):
     try:
         conn = await run_in_threadpool(create_connection, credentials)
         token_result = await run_in_threadpool(conn.authorize)
-    except Exception as exc:  # noqa: BLE001
+    except SDKException as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"OpenStack connection failed: {exc}",
+            detail="OpenStack authentication failed. Please check your credentials and auth_url.",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during OpenStack connection.",
         ) from exc
 
     token_expires = None

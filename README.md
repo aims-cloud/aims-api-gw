@@ -89,7 +89,8 @@ API는 `http://localhost:8000`에서 실행됩니다.
 
 ## API 엔드포인트
 
-- `GET /` - Health check 및 기본 정보
+- `GET /` - 기본 상태 확인
+- `GET /health` - 환경 구성 검사 포함 상세 헬스체크
 - `POST /auth/login` - 사용자 인증 및 JWT 토큰 발급
 - `GET /auth/me` - 인증된 사용자 정보 조회
 - `POST /openstack/connect` - 오픈스택 인증정보로 연결 검증
@@ -129,7 +130,7 @@ aims-api-gw/
 │   │   └── routes.py        # 인증 관련 라우트
 │   └── routers/
 │       ├── __init__.py
-│       ├── hello.py         # Hello API 라우터
+│       ├── health.py        # 헬스체크 라우터
 │       └── openstack.py     # OpenStack 연결 라우터
 ├── app/services/
 │   ├── __init__.py

@@ -1,9 +1,3 @@
-"""
-Structured logging configuration using structlog.
-
-Provides consistent, structured logging across the application with
-JSON output for production environments and human-readable output for development.
-"""
 import logging
 import logging.handlers
 import sys

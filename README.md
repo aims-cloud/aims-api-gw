@@ -1,6 +1,6 @@
 # AIMS API Gateway
 
-마이크로 데이터센터 연동 스케일아웃 클라우드를 위한 API Gateway
+마이크로 데이터센터 연동 스케일아웃 클라우드를 위한 API Gateway!
 
 ## 프로젝트 개요
 

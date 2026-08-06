@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: aims-cloud-backend
+  # 프로파일을 지정하지 않고 IDE 에서 그냥 실행하면 local 로 뜬다.
+  profiles:
+    default: local
+
+  # ── 데이터소스 ──────────────────────────────────────────────
+  datasource:
+    url: ${AIMS_DB_URL}
+    username: ${AIMS_DB_USER}
+    password: ${AIMS_DB_PASSWORD}
+    driver-class-name: ${AIMS_DB_DRIVER:org.postgresql.Driver}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: public
+
+server:
+  port: ${AIMS_SERVER_PORT:8080}
+  # SIGTERM 을 받으면 진행 중인 요청을 마무리한 뒤 종료한다.
+  # systemd restart 시 요청이 끊기지 않게 해주는 설정.
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.innogrid.aims: INFO
+
+# ── Cloud-Barista 연동 설정 ─────────────────────────────────
+cloud-barista:
+  spider:
+    base-url: ${CB_SPIDER_URL}
+  tumblebug:
+    base-url: ${CB_TUMBLEBUG_URL}
+    username: ${CB_TUMBLEBUG_USER}
+    password: ${CB_TUMBLEBUG_PASS}
+
+# ── 메트릭 조회 설정 (Thanos Query — PromQL 호환) ──────────
+victoria-metrics:
+  base-url: ${METRICS_QUERY_URL}
+
+# ── 초기 관리자 계정 ───────────────────────────────────────
+aims:
+  admin:
+    email: ${AIMS_ADMIN_EMAIL}
+    password: ${AIMS_ADMIN_PASSWORD}
+    name: ${AIMS_ADMIN_NAME:관리자}
+
+# ── JWT 설정 ───────────────────────────────────────────────
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiration-ms: 1800000
+  refresh-expiration-ms: 604800000

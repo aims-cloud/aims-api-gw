@@ -1,0 +1,24 @@
+# VM(systemd) 실행용. SPRING_PROFILES_ACTIVE=vm 으로 활성화된다.
+# DB, Cloud-Barista 주소는 환경변수 또는 /etc/default/aims-cloud-backend 에서 주입한다.
+#
+# 필수 환경변수:
+#   AIMS_DB_URL          jdbc:postgresql://<host>:5432/aims
+#   AIMS_DB_USER         aims
+#   AIMS_DB_PASSWORD     <비밀번호>
+#   CB_SPIDER_URL        http://<cb-spider-host>:1024/spider
+#   CB_TUMBLEBUG_URL     http://<cb-tumblebug-host>:1323/tumblebug
+#   CB_TUMBLEBUG_USER    <사용자>
+#   CB_TUMBLEBUG_PASS    <비밀번호>
+
+logging:
+  level:
+    com.innogrid.aims: INFO
+    root: WARN
+  pattern:
+    # systemd journal 이 이미 타임스탬프를 붙이므로 콘솔 패턴에서는 생략한다.
+    console: "%-5level %logger{36} - %msg%n"
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never

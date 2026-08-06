@@ -1,0 +1,42 @@
+logging:
+  level:
+    com.innogrid.aims: DEBUG
+    org.springframework.web: DEBUG
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+server:
+  error:
+    include-stacktrace: always
+    include-message: always
+spring:
+  datasource:
+    url: jdbc:h2:mem:aims;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+cloud-barista:
+  spider:
+    base-url: http://localhost:1024/spider
+  tumblebug:
+    base-url: http://localhost:1323/tumblebug
+    username: default
+    password: default
+victoria-metrics:
+  base-url: http://localhost:19192
+aims:
+  admin:
+    email: ${AIMS_ADMIN_EMAIL:admin@aims.local}
+    password: ${AIMS_ADMIN_PASSWORD}
+jwt:
+  secret: ${JWT_SECRET}

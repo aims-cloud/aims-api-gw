@@ -1,0 +1,42 @@
+[Unit]
+Description=AIMS Cloud Backend (Spring Boot)
+Documentation=https://github.com/innogrid/aims-cloud-backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aims
+Group=aims
+WorkingDirectory=/opt/aims-cloud-backend
+
+# JAVA_OPTS / SPRING_PROFILES_ACTIVE 등을 여기서 조정한다.
+# 파일이 없어도 기동에 실패하지 않도록 앞에 '-' 를 붙였다.
+EnvironmentFile=-/etc/default/aims-cloud-backend
+
+# $JAVA_OPTS 를 확장하기 위해 sh -c 를 경유한다. sh 는 마지막 명령을 exec 하므로
+# 메인 PID 는 java 프로세스가 그대로 유지되고 systemd 의 시그널 처리도 정상 동작한다.
+ExecStart=/bin/sh -c '/usr/bin/java $JAVA_OPTS -jar /opt/aims-cloud-backend/app.jar'
+
+# Spring Boot 의 graceful shutdown 은 SIGTERM 수신 후 143 으로 종료된다.
+SuccessExitStatus=143
+TimeoutStopSec=40
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aims-cloud-backend
+
+# --- 최소 권한 ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

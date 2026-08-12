@@ -1,0 +1,64 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Thanos Receive로 데이터 전송
+remote_write:
+  - url: "http://thanos-receive:19291/api/v1/receive"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # MDC 노드 메트릭 (node_exporter)
+  # 실제 MDC 노드 IP로 변경 필요
+  - job_name: "mdc-nodes"
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - "mdc1-node1:9100"
+          - "mdc1-node2:9100"
+        labels:
+          mdc_id: "mdc-01"
+          mdc_name: "MDC-01"
+
+  # GPU 메트릭 (DCGM exporter)
+  - job_name: "gpu-metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - "mdc1-gpu-node1:9400"
+        labels:
+          mdc_id: "mdc-01"
+
+  # IPMI 메트릭 (ipmi_exporter)
+  - job_name: "ipmi-metrics"
+    scrape_interval: 60s
+    metrics_path: /ipmi
+    static_configs:
+      - targets:
+          - "mdc1-server1"
+        labels:
+          mdc_id: "mdc-01"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: "ipmi-exporter:9290"
+
+  # SNMP 메트릭 (SAN 스위치 등)
+  - job_name: "snmp-metrics"
+    scrape_interval: 60s
+    metrics_path: /snmp
+    static_configs:
+      - targets:
+          - "mdc1-san-switch1"
+        labels:
+          mdc_id: "mdc-01"
+          device_type: "san-switch"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: "snmp-exporter:9116"

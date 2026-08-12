@@ -1,0 +1,147 @@
+services:
+
+  # ── Thanos Receive ─────────────────────────────────────────
+  # 세부1, 세부3의 Prometheus가 remote_write로 데이터를 전송하는 수신 엔드포인트
+  thanos-receive:
+    image: thanosio/thanos:v0.37.2
+    container_name: thanos-receive
+    command:
+      - receive
+      - --tsdb.path=/data/receive
+      - --tsdb.retention=15d
+      - --grpc-address=0.0.0.0:10901
+      - --http-address=0.0.0.0:10902
+      - --remote-write.address=0.0.0.0:19291
+      - --objstore.config-file=/etc/thanos/bucket.yml
+      - --label=receive_replica="0"
+      - --label=receive_tenant="aims"
+    ports:
+      - "19291:19291"   # remote_write 수신 (세부1,3이 여기로 전송)
+      - "10902:10902"   # HTTP (상태 확인)
+    volumes:
+      - receive-data:/data/receive
+      - ./thanos-bucket.yml:/etc/thanos/bucket.yml
+    depends_on:
+      - minio
+    restart: unless-stopped
+
+  # ── Thanos Query ───────────────────────────────────────────
+  # PromQL 쿼리 엔드포인트 (AIMS Backend가 여기로 쿼리)
+  thanos-query:
+    image: thanosio/thanos:v0.37.2
+    container_name: thanos-query
+    command:
+      - query
+      - --grpc-address=0.0.0.0:10903
+      - --http-address=0.0.0.0:19192
+      - --store=thanos-receive:10901
+      - --store=thanos-store:10905
+    ports:
+      - "19192:19192"   # PromQL API (AIMS Backend가 사용)
+    depends_on:
+      - thanos-receive
+    restart: unless-stopped
+
+  # ── Thanos Store Gateway ───────────────────────────────────
+  # MinIO에 저장된 과거 데이터를 조회
+  thanos-store:
+    image: thanosio/thanos:v0.37.2
+    container_name: thanos-store
+    command:
+      - store
+      - --data-dir=/data/store
+      - --grpc-address=0.0.0.0:10905
+      - --http-address=0.0.0.0:10906
+      - --objstore.config-file=/etc/thanos/bucket.yml
+    volumes:
+      - store-data:/data/store
+      - ./thanos-bucket.yml:/etc/thanos/bucket.yml
+    depends_on:
+      - minio
+    restart: unless-stopped
+
+  # ── Thanos Compactor ───────────────────────────────────────
+  # 오래된 데이터 다운샘플링 및 정리
+  thanos-compactor:
+    image: thanosio/thanos:v0.37.2
+    container_name: thanos-compactor
+    command:
+      - compact
+      - --data-dir=/data/compact
+      - --objstore.config-file=/etc/thanos/bucket.yml
+      - --retention.resolution-raw=30d
+      - --retention.resolution-5m=90d
+      - --retention.resolution-1h=365d
+      - --wait
+    volumes:
+      - compact-data:/data/compact
+      - ./thanos-bucket.yml:/etc/thanos/bucket.yml
+    depends_on:
+      - minio
+    restart: unless-stopped
+
+  # ── MinIO (S3 호환 오브젝트 저장소) ─────────────────────────
+  # Thanos 장기 저장용
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"     # S3 API
+      - "9001:9001"     # MinIO Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  # ── MinIO 버킷 자동 생성 ───────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      - minio
+    environment:
+      MINIO_USER: ${MINIO_USER:-minioadmin}
+      MINIO_PASSWORD: ${MINIO_PASSWORD:-minioadmin}
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 $${MINIO_USER} $${MINIO_PASSWORD};
+      mc mb myminio/thanos-data --ignore-existing;
+      echo 'Bucket created';
+      "
+
+  # ── Prometheus (로컬 수집용) ────────────────────────────────
+  # 우리(세부2) MDC가 있을 경우 로컬 수집 + Thanos Receive로 전송
+  prometheus:
+    image: prom/prometheus:v3.3.1
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=3d"
+    restart: unless-stopped
+
+  # ── Grafana ────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASS:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  receive-data:
+  store-data:
+  compact-data:
+  minio-data:
+  grafana-data:

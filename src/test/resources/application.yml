@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: aims-cloud-backend
+  datasource:
+    url: jdbc:h2:mem:aims-test;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+
+cloud-barista:
+  spider:
+    base-url: http://localhost:1024/spider
+  tumblebug:
+    base-url: http://localhost:1323/tumblebug
+    username: default
+    password: default
+
+victoria-metrics:
+  base-url: http://localhost:19192
+
+aims:
+  admin:
+    email: test@test.local
+    password: testpassword123!
+
+jwt:
+  secret: test-secret-key-for-unit-tests-must-be-32bytes!!

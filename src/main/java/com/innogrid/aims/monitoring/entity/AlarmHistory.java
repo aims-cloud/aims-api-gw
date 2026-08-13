@@ -22,6 +22,7 @@ public class AlarmHistory {
     @Column(nullable = false, length = 100)
     private String instance;
 
+    @Column(name = "metric_value")
     private double value;
 
     @Column(nullable = false, length = 20)

@@ -41,8 +41,8 @@ class PowerAwareSchedulerTest {
         List<NodeResource> candidates = List.of(
                 // 이미 가동 중 (CPU 50%) → 전력 통합 보너스
                 createNode("mdc-01", "active", 8, 16384, 50, 40, 250, 500, 55),
-                // 거의 유휴 (CPU 5%) → 새로 깨우는 것보다 기존 서버 활용
-                createNode("mdc-01", "idle", 8, 16384, 5, 10, 150, 500, 45)
+                // 거의 유휴 (CPU 5%)인데 전력 소비가 높음 → 비효율적 서버
+                createNode("mdc-01", "idle", 8, 16384, 5, 10, 350, 500, 45)
         );
 
         SchedulingResult result = scheduler.schedule(workload, candidates, policy);

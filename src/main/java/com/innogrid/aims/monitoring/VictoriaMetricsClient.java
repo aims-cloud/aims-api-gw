@@ -1,7 +1,5 @@
 package com.innogrid.aims.monitoring;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -35,7 +33,7 @@ public class VictoriaMetricsClient {
      */
     public Map<String, Object> query(String promQL) {
         return restClient.get()
-                .uri("/api/v1/query?query={q}", encode(promQL))
+                .uri("/api/v1/query?query={q}", promQL)
                 .retrieve()
                 .body(MAP_TYPE);
     }
@@ -47,7 +45,7 @@ public class VictoriaMetricsClient {
     public Map<String, Object> queryRange(String promQL, Instant start, Instant end, String step) {
         return restClient.get()
                 .uri("/api/v1/query_range?query={q}&start={s}&end={e}&step={st}",
-                        encode(promQL), start.getEpochSecond(), end.getEpochSecond(), step)
+                        promQL, start.getEpochSecond(), end.getEpochSecond(), step)
                 .retrieve()
                 .body(MAP_TYPE);
     }
@@ -99,7 +97,4 @@ public class VictoriaMetricsClient {
         }
     }
 
-    private String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
 }

@@ -54,6 +54,10 @@ cloud-barista:
 victoria-metrics:
   base-url: ${METRICS_QUERY_URL}
 
+# ── 로그 조회 설정 (Loki — LogQL) ──────────────────────────
+loki:
+  base-url: ${LOKI_URL:http://localhost:3100}
+
 # ── 초기 관리자 계정 ───────────────────────────────────────
 aims:
   admin:

@@ -1,6 +1,8 @@
 package com.innogrid.aims.monitoring.service;
 
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -38,7 +40,7 @@ public class LokiLogService {
 
             for (List<String> entry : values) {
                 Map<String, Object> log = new LinkedHashMap<>();
-                log.put("timestamp", entry.get(0));
+                log.put("timestamp", nanoToIso(entry.get(0)));
                 log.put("message", entry.get(1));
                 log.put("labels", labels);
                 logs.add(log);
@@ -57,6 +59,14 @@ public class LokiLogService {
 
     public boolean isHealthy() {
         return lokiClient.isHealthy();
+    }
+
+    private static String nanoToIso(String nanoEpoch) {
+        long nanos = Long.parseLong(nanoEpoch);
+        Instant instant = Instant.ofEpochSecond(nanos / 1_000_000_000, nanos % 1_000_000_000);
+        return DateTimeFormatter.ISO_OFFSET_DATE_TIME
+                .withZone(ZoneOffset.UTC)
+                .format(instant);
     }
 
     private String buildLogQL(String job, String level, String keyword) {

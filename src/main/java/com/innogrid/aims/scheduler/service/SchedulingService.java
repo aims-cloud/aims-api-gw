@@ -86,7 +86,7 @@ public class SchedulingService {
             SchedulingHistory history = new SchedulingHistory(
                     workload.getId(), workload.getName(),
                     result.selectedMdcId(), result.selectedNodeId(),
-                    result.finalScore(), result.reason(), policy.getName());
+                    result.finalScore(), result.reason(), engineName, policy.getName());
             history.setCandidateCount(candidates.size());
 
             // 선택된 노드의 상세 정보 기록

@@ -47,6 +47,9 @@ public class SchedulingHistory {
     @Column(length = 500)
     private String reason;
 
+    @Column(length = 50)
+    private String engineName;
+
     @Column(length = 100)
     private String policyName;
 
@@ -58,13 +61,15 @@ public class SchedulingHistory {
     protected SchedulingHistory() {}
 
     public SchedulingHistory(Long workloadId, String workloadName, String selectedMdcId,
-                             String selectedNodeId, double finalScore, String reason, String policyName) {
+                             String selectedNodeId, double finalScore, String reason,
+                             String engineName, String policyName) {
         this.workloadId = workloadId;
         this.workloadName = workloadName;
         this.selectedMdcId = selectedMdcId;
         this.selectedNodeId = selectedNodeId;
         this.finalScore = finalScore;
         this.reason = reason;
+        this.engineName = engineName;
         this.policyName = policyName;
     }
 
@@ -86,6 +91,7 @@ public class SchedulingHistory {
     public double getNodeTemperature() { return nodeTemperature; }
     public int getCandidateCount() { return candidateCount; }
     public String getReason() { return reason; }
+    public String getEngineName() { return engineName; }
     public String getPolicyName() { return policyName; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 

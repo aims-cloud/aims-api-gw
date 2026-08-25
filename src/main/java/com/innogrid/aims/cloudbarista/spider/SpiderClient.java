@@ -4,12 +4,19 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import static com.innogrid.aims.cloudbarista.spider.SpiderRequestConverter.toSpider;
 
 /**
  * CB-Spider REST API 클라이언트.
  * 멀티 클라우드(AWS, GCP, Azure, NCP 등)에 대한 단일 통합 API를 제공한다.
+ *
+ * 쓰기 요청(POST/PUT)은 {@link SpiderRequestConverter}를 통해
+ * camelCase → CB-Spider PascalCase 필드명 변환을 수행한다.
+ * DELETE는 ConnectionName을 요청 본문으로 전달한다 (CB-Spider 규격).
  */
 @Component
 public class SpiderClient {
@@ -76,7 +83,7 @@ public class SpiderClient {
     // ── VPC / 서브넷 (NET-01 ~ NET-02) ─────────────────────────
 
     public Map<String, Object> createVpc(Map<String, Object> body) {
-        return rest.post().uri("/vpc").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/vpc").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listVpcs(String connectionName) {
@@ -89,23 +96,26 @@ public class SpiderClient {
     }
 
     public void deleteVpc(String connectionName, String vpcName) {
-        rest.delete().uri("/vpc/{name}?ConnectionName={c}", vpcName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/vpc/{name}", vpcName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
     public Map<String, Object> addSubnet(String vpcName, Map<String, Object> body) {
-        return rest.post().uri("/vpc/{vpc}/subnet", vpcName).body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/vpc/{vpc}/subnet", vpcName)
+                .body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public void deleteSubnet(String connectionName, String vpcName, String subnetName) {
-        rest.delete().uri("/vpc/{vpc}/subnet/{sub}?ConnectionName={c}", vpcName, subnetName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/vpc/{vpc}/subnet/{sub}", vpcName, subnetName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
     // ── 보안그룹 (NET-03 ~ NET-04) ──────────────────────────────
 
     public Map<String, Object> createSecurityGroup(Map<String, Object> body) {
-        return rest.post().uri("/securitygroup").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/securitygroup").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listSecurityGroups(String connectionName) {
@@ -119,23 +129,26 @@ public class SpiderClient {
     }
 
     public void deleteSecurityGroup(String connectionName, String sgName) {
-        rest.delete().uri("/securitygroup/{name}?ConnectionName={c}", sgName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/securitygroup/{name}", sgName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
     public Map<String, Object> addSecurityRules(String sgName, Map<String, Object> body) {
-        return rest.post().uri("/securitygroup/{sg}/rules", sgName).body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/securitygroup/{sg}/rules", sgName)
+                .body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public void deleteSecurityRules(String sgName, Map<String, Object> body) {
-        rest.method(org.springframework.http.HttpMethod.DELETE)
-                .uri("/securitygroup/{sg}/rules", sgName).body(body).retrieve().toBodilessEntity();
+        rest.method(HttpMethod.DELETE)
+                .uri("/securitygroup/{sg}/rules", sgName)
+                .body(toSpider(body)).retrieve().toBodilessEntity();
     }
 
     // ── 키페어 (NET-05) ─────────────────────────────────────────
 
     public Map<String, Object> createKeyPair(Map<String, Object> body) {
-        return rest.post().uri("/keypair").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/keypair").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listKeyPairs(String connectionName) {
@@ -143,14 +156,15 @@ public class SpiderClient {
     }
 
     public void deleteKeyPair(String connectionName, String keyPairName) {
-        rest.delete().uri("/keypair/{name}?ConnectionName={c}", keyPairName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/keypair/{name}", keyPairName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
     // ── VM (VM-01 ~ VM-06) ──────────────────────────────────────
 
     public Map<String, Object> createVm(Map<String, Object> body) {
-        return rest.post().uri("/vm").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/vm").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listVMs(String connectionName) {
@@ -173,14 +187,15 @@ public class SpiderClient {
     }
 
     public void deleteVM(String connectionName, String vmName) {
-        rest.delete().uri("/vm/{name}?ConnectionName={c}", vmName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/vm/{name}", vmName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
     // ── 디스크 (DSK-01 ~ DSK-05) ────────────────────────────────
 
     public Map<String, Object> createDisk(Map<String, Object> body) {
-        return rest.post().uri("/disk").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/disk").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listDisks(String connectionName) {
@@ -193,26 +208,30 @@ public class SpiderClient {
     }
 
     public Map<String, Object> resizeDisk(String diskName, Map<String, Object> body) {
-        return rest.put().uri("/disk/{name}/size", diskName).body(body).retrieve().body(MAP_TYPE);
+        return rest.put().uri("/disk/{name}/size", diskName)
+                .body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> attachDisk(String diskName, Map<String, Object> body) {
-        return rest.put().uri("/disk/{name}/attach", diskName).body(body).retrieve().body(MAP_TYPE);
+        return rest.put().uri("/disk/{name}/attach", diskName)
+                .body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> detachDisk(String diskName, Map<String, Object> body) {
-        return rest.put().uri("/disk/{name}/detach", diskName).body(body).retrieve().body(MAP_TYPE);
+        return rest.put().uri("/disk/{name}/detach", diskName)
+                .body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public void deleteDisk(String connectionName, String diskName) {
-        rest.delete().uri("/disk/{name}?ConnectionName={c}", diskName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/disk/{name}", diskName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
     // ── NLB (NLB-01 ~ NLB-03) ───────────────────────────────────
 
     public Map<String, Object> createNlb(Map<String, Object> body) {
-        return rest.post().uri("/nlb").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/nlb").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listNlbs(String connectionName) {
@@ -225,16 +244,19 @@ public class SpiderClient {
     }
 
     public Map<String, Object> addNlbVMs(String nlbName, Map<String, Object> body) {
-        return rest.post().uri("/nlb/{name}/vms", nlbName).body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/nlb/{name}/vms", nlbName)
+                .body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public void removeNlbVMs(String nlbName, Map<String, Object> body) {
-        rest.method(org.springframework.http.HttpMethod.DELETE)
-                .uri("/nlb/{name}/vms", nlbName).body(body).retrieve().toBodilessEntity();
+        rest.method(HttpMethod.DELETE)
+                .uri("/nlb/{name}/vms", nlbName)
+                .body(toSpider(body)).retrieve().toBodilessEntity();
     }
 
     public void deleteNlb(String connectionName, String nlbName) {
-        rest.delete().uri("/nlb/{name}?ConnectionName={c}", nlbName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/nlb/{name}", nlbName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 
@@ -261,7 +283,7 @@ public class SpiderClient {
     // ── 스냅샷/MyImage (VM-13, VM-14) ───────────────────────────
 
     public Map<String, Object> createMyImage(Map<String, Object> body) {
-        return rest.post().uri("/myimage").body(body).retrieve().body(MAP_TYPE);
+        return rest.post().uri("/myimage").body(toSpider(body)).retrieve().body(MAP_TYPE);
     }
 
     public Map<String, Object> listMyImages(String connectionName) {
@@ -269,7 +291,8 @@ public class SpiderClient {
     }
 
     public void deleteMyImage(String connectionName, String imageName) {
-        rest.delete().uri("/myimage/{name}?ConnectionName={c}", imageName, connectionName)
+        rest.method(HttpMethod.DELETE).uri("/myimage/{name}", imageName)
+                .body(Map.of("ConnectionName", connectionName))
                 .retrieve().toBodilessEntity();
     }
 

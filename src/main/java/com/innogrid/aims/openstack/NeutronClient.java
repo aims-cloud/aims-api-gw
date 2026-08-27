@@ -73,6 +73,11 @@ public class NeutronClient {
         return get("/v2.0/ports?network_id={id}", networkId);
     }
 
+    public Map<String, Object> listPortsBySubnet(String subnetId) {
+        // Neutron 규격: ?fixed_ips=subnet_id=<id> (query 값 내 '=' 는 인코딩 불필요)
+        return get("/v2.0/ports?fixed_ips=subnet_id={id}", subnetId);
+    }
+
     public Map<String, Object> getPort(String portId) {
         return get("/v2.0/ports/{id}", portId);
     }

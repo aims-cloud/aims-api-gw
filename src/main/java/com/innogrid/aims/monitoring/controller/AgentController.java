@@ -55,6 +55,13 @@ public class AgentController {
         return ApiResponse.ok(target);
     }
 
+    @Operation(summary = "수집 대상 별칭 설정", description = "토폴로지 별칭표기 토글에 사용. 빈값이면 별칭 해제")
+    @PutMapping("/{agentId}/alias")
+    public ApiResponse<?> updateAlias(@PathVariable Long agentId,
+                                      @RequestBody java.util.Map<String, String> request) {
+        return ApiResponse.ok(collectorService.updateAlias(agentId, request.get("alias")));
+    }
+
     @Operation(summary = "수집 대상 삭제")
     @DeleteMapping("/{agentId}")
     public ApiResponse<Void> removeAgent(@PathVariable Long agentId) {

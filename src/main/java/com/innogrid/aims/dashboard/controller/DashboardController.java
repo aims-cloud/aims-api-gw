@@ -17,6 +17,14 @@ public class DashboardController {
         this.dashboardService = dashboardService;
     }
 
+    @Operation(summary = "통합 토폴로지",
+            description = "mdcId=배포영역 필터, view=compute|network 토글. 노드에 alias/displayName(별칭표기) 포함")
+    @GetMapping("/topology")
+    public ApiResponse<?> getTopology(@RequestParam(required = false) String mdcId,
+                                      @RequestParam(required = false, defaultValue = "network") String view) {
+        return ApiResponse.ok(dashboardService.getTopology(mdcId, view));
+    }
+
     @Operation(summary = "네트워크 토폴로지")
     @GetMapping("/topology/network")
     public ApiResponse<?> getNetworkTopologyDashboard() {

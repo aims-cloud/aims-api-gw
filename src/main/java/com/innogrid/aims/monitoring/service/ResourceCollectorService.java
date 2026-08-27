@@ -52,6 +52,17 @@ public class ResourceCollectorService {
         return targetRepository.save(target);
     }
 
+    /** 토폴로지 별칭표기용 별칭 설정 (null/빈값이면 해제) */
+    @Transactional
+    public MonitoringTarget updateAlias(Long id, String alias) {
+        MonitoringTarget target = targetRepository.findById(id)
+                .orElseThrow(() -> new com.innogrid.aims.common.exception.BusinessException(
+                        org.springframework.http.HttpStatus.NOT_FOUND,
+                        "수집 대상을 찾을 수 없습니다: " + id));
+        target.setAlias(alias == null || alias.isBlank() ? null : alias);
+        return targetRepository.save(target);
+    }
+
     @Transactional
     public void removeTarget(Long id) {
         targetRepository.deleteById(id);

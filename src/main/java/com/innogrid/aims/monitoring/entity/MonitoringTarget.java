@@ -22,6 +22,10 @@ public class MonitoringTarget {
     @Column(nullable = false, length = 100)
     private String hostname;
 
+    /** 별칭 — 토폴로지 '별칭표기' 토글용 표시 이름 (미설정 시 hostname 사용) */
+    @Column(length = 100)
+    private String alias;
+
     @Column(nullable = false, length = 255)
     private String address;
 
@@ -61,8 +65,16 @@ public class MonitoringTarget {
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getLastSeenAt() { return lastSeenAt; }
 
+    public String getAlias() { return alias; }
+
+    /** 별칭 또는 hostname — 토폴로지 별칭표기 토글의 표시값 */
+    public String getDisplayName() {
+        return alias == null || alias.isBlank() ? hostname : alias;
+    }
+
     public void setStatus(TargetStatus status) { this.status = status; }
     public void setLastSeenAt(OffsetDateTime lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+    public void setAlias(String alias) { this.alias = alias; }
 
     /** 이 타겟의 Prometheus scrape 주소 */
     public String getScrapeEndpoint() {

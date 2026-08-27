@@ -121,24 +121,80 @@ public class DashboardService {
     }
 
     public Map<String, Object> getNetworkTopology() {
-        List<MonitoringTarget> targets = targetRepository.findAll();
+        return getTopology(null, "network");
+    }
 
-        // MDC별 노드 생성
-        Set<String> mdcIds = targets.stream().map(MonitoringTarget::getMdcId).collect(Collectors.toSet());
+    /**
+     * 통합 토폴로지.
+     *
+     * @param mdcId 배포영역 필터 (null이면 전체)
+     * @param view  "compute" — MDC 하위에 컴퓨트 노드(node/dcgm/ipmi exporter) 표시,
+     *              "network" — MDC 간 연결 + 네트워크 장비(snmp exporter) 표시 (기본)
+     * 노드에는 label(호스트명)과 alias, displayName(별칭표기 토글 표시값)이 함께 담긴다.
+     */
+    public Map<String, Object> getTopology(String mdcId, String view) {
+        boolean computeView = "compute".equalsIgnoreCase(view);
+
+        List<MonitoringTarget> targets = targetRepository.findAll().stream()
+                .filter(t -> mdcId == null || mdcId.isBlank() || t.getMdcId().equals(mdcId))
+                .toList();
+
+        Set<String> mdcIds = targets.stream()
+                .map(MonitoringTarget::getMdcId)
+                .collect(Collectors.toCollection(TreeSet::new));
+
         List<Map<String, Object>> nodes = new ArrayList<>();
-        int x = 100;
-        for (String mdcId : mdcIds) {
-            nodes.add(Map.of("id", mdcId, "type", "MDC", "label", mdcId, "x", x, "y", 200));
-            x += 200;
-        }
-
-        // MDC 간 연결 (인접 MDC끼리)
         List<Map<String, Object>> edges = new ArrayList<>();
-        List<String> mdcList = new ArrayList<>(mdcIds);
-        for (int i = 0; i < mdcList.size() - 1; i++) {
-            edges.add(Map.of("from", mdcList.get(i), "to", mdcList.get(i + 1), "status", "UP"));
+
+        int x = 100;
+        for (String id : mdcIds) {
+            nodes.add(Map.of("id", id, "type", "MDC", "label", id, "x", x, "y", 100));
+            x += 250;
         }
 
-        return Map.of("nodes", nodes, "edges", edges);
+        // 뷰별 하위 노드: compute = 컴퓨트 노드, network = 네트워크 장비
+        Set<MonitoringTarget.ExporterType> visibleTypes = computeView
+                ? Set.of(MonitoringTarget.ExporterType.NODE_EXPORTER,
+                        MonitoringTarget.ExporterType.DCGM_EXPORTER,
+                        MonitoringTarget.ExporterType.IPMI_EXPORTER)
+                : Set.of(MonitoringTarget.ExporterType.SNMP_EXPORTER);
+
+        Map<String, Integer> childOffset = new HashMap<>();
+        for (MonitoringTarget target : targets) {
+            if (!visibleTypes.contains(target.getExporterType())) continue;
+
+            int offset = childOffset.merge(target.getMdcId(), 1, Integer::sum);
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("id", "target-" + target.getId());
+            node.put("type", computeView ? "COMPUTE" : "NETWORK");
+            node.put("label", target.getHostname());
+            node.put("alias", target.getAlias());
+            node.put("displayName", target.getDisplayName());
+            node.put("mdcId", target.getMdcId());
+            node.put("exporterType", target.getExporterType().name());
+            node.put("status", target.getStatus().name());
+            node.put("x", 100 + (offset - 1) * 150);
+            node.put("y", 300);
+            nodes.add(node);
+
+            edges.add(Map.of("from", target.getMdcId(), "to", "target-" + target.getId(),
+                    "status", target.getStatus().name()));
+        }
+
+        // 네트워크 뷰: MDC 간 연결 (인접 MDC끼리)
+        if (!computeView) {
+            List<String> mdcList = new ArrayList<>(mdcIds);
+            for (int i = 0; i < mdcList.size() - 1; i++) {
+                edges.add(Map.of("from", mdcList.get(i), "to", mdcList.get(i + 1), "status", "UP"));
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("view", computeView ? "compute" : "network");
+        result.put("mdcFilter", mdcId);
+        result.put("mdcIds", mdcIds);
+        result.put("nodes", nodes);
+        result.put("edges", edges);
+        return result;
     }
 }

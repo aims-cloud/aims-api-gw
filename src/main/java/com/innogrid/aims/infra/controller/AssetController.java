@@ -8,42 +8,56 @@ import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
+import com.innogrid.aims.infra.service.AssetService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 물리/가상 자산 관리 API (MDC 자체 관리).
+ * 물리/가상 자산 관리 API.
  * [요구사항 #34] 물리/가상 자산 관리 — 사양·위치·상태 등 자산 정보 통합 등록·관리
+ * 물리 자산은 1세부 하드웨어 데이터를 수신하여 표출한다 (POST /ingest).
  */
-@Tag(name = "자산 관리", description = "물리/가상 자산 관리")
+@Tag(name = "자산 관리", description = "물리/가상 자산 관리 (물리 자산: 1세부 데이터 수신)")
 @RestController
 @RequestMapping("/api/v1/assets")
 public class AssetController {
 
     private final AssetRepository assetRepository;
+    private final AssetService assetService;
 
-    public AssetController(AssetRepository assetRepository) {
+    public AssetController(AssetRepository assetRepository, AssetService assetService) {
         this.assetRepository = assetRepository;
+        this.assetService = assetService;
     }
 
-    /** 자산 목록 조회 */
+    /** 자산 목록 조회 — 분류/상태/출처/키워드 필터 지원 */
+    @Operation(summary = "자산 목록",
+            description = "mdcId/type/status/categoryMajor/source 필터, keyword는 이름·모델·시리얼 부분 일치")
     @GetMapping
     public ApiResponse<List<Asset>> listAssets(@RequestParam(required = false) String mdcId,
-                                               @RequestParam(required = false) String type) {
-        List<Asset> assets;
-        if (mdcId != null && type != null) {
-            Asset.AssetType assetType = Asset.AssetType.valueOf(type.toUpperCase());
-            assets = assetRepository.findByMdcIdAndTypeOrderByCreatedAtDesc(mdcId, assetType);
-        } else if (mdcId != null) {
-            assets = assetRepository.findByMdcIdOrderByCreatedAtDesc(mdcId);
-        } else if (type != null) {
-            Asset.AssetType assetType = Asset.AssetType.valueOf(type.toUpperCase());
-            assets = assetRepository.findByTypeOrderByCreatedAtDesc(assetType);
-        } else {
-            assets = assetRepository.findAll();
-        }
-        return ApiResponse.ok(assets);
+                                               @RequestParam(required = false) String type,
+                                               @RequestParam(required = false) String status,
+                                               @RequestParam(required = false) String categoryMajor,
+                                               @RequestParam(required = false) String source,
+                                               @RequestParam(required = false) String keyword) {
+        return ApiResponse.ok(assetService.search(
+                mdcId,
+                type == null ? null : Asset.AssetType.valueOf(type.toUpperCase()),
+                status == null ? null : Asset.AssetStatus.valueOf(status.toUpperCase()),
+                categoryMajor,
+                source == null ? null : Asset.AssetSource.valueOf(source.toUpperCase()),
+                keyword));
+    }
+
+    /** 1세부 하드웨어 자산 데이터 수신 (일괄 upsert + 랙 실장 동기화) */
+    @Operation(summary = "1세부 자산 데이터 수신",
+            description = "externalId 기준 upsert. rackLocation이 있으면 랙 실장 위치를 동기화")
+    @PostMapping("/ingest")
+    public ApiResponse<Map<String, Object>> ingestAssets(
+            @RequestBody List<AssetService.IngestItem> items) {
+        return ApiResponse.ok(assetService.ingest(items));
     }
 
     /** 자산 등록 */
@@ -100,5 +114,14 @@ public class AssetController {
         if (request.containsKey("purchaseDate")) {
             asset.setPurchaseDate(LocalDate.parse((String) request.get("purchaseDate")));
         }
+        if (request.containsKey("categoryMajor")) asset.setCategoryMajor((String) request.get("categoryMajor"));
+        if (request.containsKey("categoryMiddle")) asset.setCategoryMiddle((String) request.get("categoryMiddle"));
+        if (request.containsKey("categoryMinor")) asset.setCategoryMinor((String) request.get("categoryMinor"));
+        if (request.containsKey("categoryDetail")) asset.setCategoryDetail((String) request.get("categoryDetail"));
+        if (request.containsKey("equipmentLocation")) asset.setEquipmentLocation((String) request.get("equipmentLocation"));
+        if (request.containsKey("rackLocation")) asset.setRackLocation((String) request.get("rackLocation"));
+        if (request.containsKey("mountPoint")) asset.setMountPoint((String) request.get("mountPoint"));
+        if (request.containsKey("unitSize")) asset.setUnitSize(((Number) request.get("unitSize")).intValue());
+        if (request.containsKey("systemType")) asset.setSystemType((String) request.get("systemType"));
     }
 }

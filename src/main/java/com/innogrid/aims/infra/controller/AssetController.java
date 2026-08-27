@@ -9,6 +9,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
 import com.innogrid.aims.infra.service.AssetService;
+import com.innogrid.aims.infra.service.VirtualAssetService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
@@ -26,10 +27,13 @@ public class AssetController {
 
     private final AssetRepository assetRepository;
     private final AssetService assetService;
+    private final VirtualAssetService virtualAssetService;
 
-    public AssetController(AssetRepository assetRepository, AssetService assetService) {
+    public AssetController(AssetRepository assetRepository, AssetService assetService,
+                           VirtualAssetService virtualAssetService) {
         this.assetRepository = assetRepository;
         this.assetService = assetService;
+        this.virtualAssetService = virtualAssetService;
     }
 
     /** 자산 목록 조회 — 분류/상태/출처/키워드 필터 지원 */
@@ -58,6 +62,25 @@ public class AssetController {
     public ApiResponse<Map<String, Object>> ingestAssets(
             @RequestBody List<AssetService.IngestItem> items) {
         return ApiResponse.ok(assetService.ingest(items));
+    }
+
+    // ── 가상화 자산 (CB-Spider 연동 퍼블릭 클라우드) ─────────────
+
+    /** 가상화 자산 — 호스트(배포영역) 목록 */
+    @Operation(summary = "가상화 자산 호스트 목록",
+            description = "CB-Spider 연결(배포영역)별 요약. 호스트 = 클라우드 연결(리전)")
+    @GetMapping("/virtual/hosts")
+    public ApiResponse<List<Map<String, Object>>> listVirtualHosts() {
+        return ApiResponse.ok(virtualAssetService.listHosts());
+    }
+
+    /** 가상화 자산 — 호스트 하위 VM 목록 (계층 확장) */
+    @Operation(summary = "가상화 자산 호스트 하위 VM 목록",
+            description = "호스트(연결) 확장 시 해당 연결의 VM 계층 조회")
+    @GetMapping("/virtual/hosts/{connectionName}/vms")
+    public ApiResponse<List<Map<String, Object>>> listVirtualHostVms(
+            @PathVariable String connectionName) {
+        return ApiResponse.ok(virtualAssetService.listHostVms(connectionName));
     }
 
     /** 자산 등록 */

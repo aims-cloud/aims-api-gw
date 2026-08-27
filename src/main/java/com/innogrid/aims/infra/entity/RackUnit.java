@@ -37,4 +37,7 @@ public class RackUnit {
     public String getPosition() { return position; }
     public String getAssetName() { return assetName; }
     public String getAssetType() { return assetType; }
+
+    public void setPosition(String position) { this.position = position; }
+    public void setAssetType(String assetType) { this.assetType = assetType; }
 }

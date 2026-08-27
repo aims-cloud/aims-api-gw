@@ -9,4 +9,6 @@ import com.innogrid.aims.infra.entity.RackUnit;
 public interface RackUnitRepository extends JpaRepository<RackUnit, Long> {
 
     List<RackUnit> findByRackId(Long rackId);
+
+    java.util.Optional<RackUnit> findFirstByRackIdAndAssetName(Long rackId, String assetName);
 }

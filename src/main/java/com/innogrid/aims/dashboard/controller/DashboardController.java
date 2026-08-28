@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "대시보드", description = "토폴로지, 노드, GPU, 인프라 대시보드")
+@Tag(name = "대시보드", description = "토폴로지, 노드, 인프라 대시보드")
 @RestController
 @RequestMapping("/api/v1/dashboards")
 public class DashboardController {
@@ -51,12 +51,6 @@ public class DashboardController {
     @GetMapping("/nodes")
     public ApiResponse<?> getNodeStatusDashboard() {
         return ApiResponse.ok(dashboardService.getNodeStatusDashboard());
-    }
-
-    @Operation(summary = "GPU 대시보드")
-    @GetMapping("/gpu")
-    public ApiResponse<?> getGpuDashboard() {
-        return ApiResponse.ok(dashboardService.getGpuDashboard());
     }
 
     @Operation(summary = "인프라 통합 대시보드")

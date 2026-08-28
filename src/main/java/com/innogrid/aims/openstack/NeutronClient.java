@@ -2,6 +2,7 @@ package com.innogrid.aims.openstack;
 
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,7 @@ public class NeutronClient {
     private final KeystoneClient keystone;
     private final RestClient rest;
 
+    @Autowired
     public NeutronClient(OpenStackProperties props, KeystoneClient keystone) {
         this(props, keystone, RestClient.builder()
                 .baseUrl(props.getNetworkUrl() == null ? "" : props.getNetworkUrl())

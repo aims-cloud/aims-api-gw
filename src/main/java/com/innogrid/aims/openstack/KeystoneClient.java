@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,7 @@ public class KeystoneClient {
     private volatile String cachedToken;
     private volatile Instant tokenExpiresAt = Instant.EPOCH;
 
+    @Autowired
     public KeystoneClient(OpenStackProperties props) {
         this(props, RestClient.builder()
                 .baseUrl(props.getAuthUrl() == null ? "" : props.getAuthUrl())

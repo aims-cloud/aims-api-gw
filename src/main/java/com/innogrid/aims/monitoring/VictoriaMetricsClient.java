@@ -38,6 +38,19 @@ public class VictoriaMetricsClient {
                 .body(MAP_TYPE);
     }
 
+    /** 즉시 쿼리 결과의 벡터 목록을 반환한다. */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> queryResults(String promQL) {
+        Map<String, Object> response = query(promQL);
+        if (response == null) return Collections.emptyList();
+
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        if (data == null) return Collections.emptyList();
+
+        List<Map<String, Object>> results = (List<Map<String, Object>>) data.get("result");
+        return results != null ? results : Collections.emptyList();
+    }
+
     /**
      * 범위 쿼리 — 시간 범위의 시계열 데이터를 반환.
      * GET /api/v1/query_range?query={promQL}&start={start}&end={end}&step={step}

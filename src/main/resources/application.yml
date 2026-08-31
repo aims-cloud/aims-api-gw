@@ -84,3 +84,8 @@ jwt:
   secret: ${JWT_SECRET}
   access-expiration-ms: 1800000
   refresh-expiration-ms: 604800000
+
+springdoc:
+  swagger-ui:
+    tags-sorter: alpha        # 태그 가나다순 정렬
+    operations-sorter: alpha  # (선택) 태그 안의 엔드포인트도 정렬

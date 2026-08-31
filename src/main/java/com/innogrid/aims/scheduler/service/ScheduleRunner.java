@@ -1,0 +1,201 @@
+package com.innogrid.aims.scheduler.service;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.SmartLifecycle;
+import org.springframework.stereotype.Component;
+
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.entity.Schedule;
+import com.innogrid.aims.scheduler.entity.ScheduleRun;
+import com.innogrid.aims.scheduler.entity.SchedulingHistory;
+import com.innogrid.aims.scheduler.repository.ScheduleRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
+import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
+
+/**
+ * 자동 실행 러너 — 실행할 때가 된 스케줄을 찾아 돌린다.
+ *
+ * <p><b>{@code @Scheduled} 를 쓰지 않는다.</b> 이 앱의 작업 스케줄러 풀 크기는 기본값 1
+ * 이고, 미터링 집계·알람 평가 등 다른 담당자의 작업 5건이 그 스레드 하나를 함께 쓴다.
+ * 여기에 배치 작업을 얹으면 노드 메트릭 조회가 끝날 때까지 그 작업들이 밀린다. 그래서
+ * 전용 executor 두 개(폴링용·실행용)를 따로 만든다.</p>
+ *
+ * <p>스레드는 모두 데몬이라 JVM 종료를 막지 않고, {@link #stop()} 에서 정리한다.
+ * 폴링 본문은 통째로 예외를 삼킨다 — 여기서 예외가 새어 나가면 스케줄러 스레드가
+ * 죽어 자동 실행이 조용히 멈춘다.</p>
+ *
+ * <p>기동 직후 {@code initial-delay-seconds}(기본 30초) 동안은 아무것도 하지 않는다.
+ * DB·외부 연동이 준비되기 전에 도는 것을 막고, 테스트 컨텍스트에서도 폴링이 일어나지
+ * 않게 한다.</p>
+ */
+@Component
+public class ScheduleRunner implements SmartLifecycle {
+
+    private static final Logger log = LoggerFactory.getLogger(ScheduleRunner.class);
+
+    private final ScheduleRepository scheduleRepository;
+    private final ScheduleRunRepository runRepository;
+    private final SchedulingHistoryRepository historyRepository;
+    private final ScheduleExecutionService executionService;
+    private final SchedulerProperties properties;
+
+    private final AtomicBoolean running = new AtomicBoolean(false);
+
+    private ScheduledExecutorService poller;
+    private ExecutorService worker;
+
+    /** 이력 정리를 마지막으로 수행한 날짜. 하루 한 번만 돌린다. */
+    private volatile LocalDate lastCleanupDate;
+
+    public ScheduleRunner(ScheduleRepository scheduleRepository,
+                          ScheduleRunRepository runRepository,
+                          SchedulingHistoryRepository historyRepository,
+                          ScheduleExecutionService executionService,
+                          SchedulerProperties properties) {
+        this.scheduleRepository = scheduleRepository;
+        this.runRepository = runRepository;
+        this.historyRepository = historyRepository;
+        this.executionService = executionService;
+        this.properties = properties;
+    }
+
+    // ── 수명 주기 ───────────────────────────────────────────────
+
+    @Override
+    public void start() {
+        if (!running.compareAndSet(false, true)) return;
+
+        poller = Executors.newSingleThreadScheduledExecutor(daemon("aims-schedule-poller"));
+        worker = Executors.newSingleThreadExecutor(daemon("aims-schedule-worker"));
+
+        poller.scheduleWithFixedDelay(this::pollQuietly,
+                properties.getInitialDelaySeconds() * 1000L,
+                properties.getPollIntervalMs(),
+                TimeUnit.MILLISECONDS);
+
+        log.info("스케줄 러너 시작: 확인 주기 {}ms, 최초 지연 {}초, 시간대 {}",
+                properties.getPollIntervalMs(), properties.getInitialDelaySeconds(),
+                properties.getTimezone());
+    }
+
+    @Override
+    public void stop() {
+        if (!running.compareAndSet(true, false)) return;
+        shutdown(poller, "poller");
+        shutdown(worker, "worker");
+        log.info("스케줄 러너 종료");
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    // ── 폴링 ───────────────────────────────────────────────────
+
+    /** 어떤 예외도 밖으로 내보내지 않는다. 한 번 새면 이후 폴링이 영영 멈춘다. */
+    private void pollQuietly() {
+        try {
+            runDueSchedules();
+            cleanupOnceADay();
+        } catch (Throwable e) {
+            log.error("스케줄 폴링 중 오류", e);
+        }
+    }
+
+    /** 실행할 때가 된 스케줄을 찾아 실행 스레드에 넘긴다. 폴링 스레드는 DB 조회만 한다. */
+    private void runDueSchedules() {
+        List<Schedule> due = scheduleRepository
+                .findByEnabledTrueAndAutoRunTrueAndNextRunAtLessThanEqual(OffsetDateTime.now());
+        if (due.isEmpty()) return;
+
+        log.debug("자동 실행 대상 스케줄 {}건", due.size());
+        for (Schedule schedule : due) {
+            worker.submit(() -> executeQuietly(schedule));
+        }
+    }
+
+    /**
+     * 자동 실행 1건.
+     *
+     * <p>예정 시각이 지난 스케줄은 <b>한 번만</b> 실행한다. 앱이 사흘 동안 꺼져 있었다고
+     * 사흘치를 몰아서 돌리지 않는다 — 배치 결과는 최신 노드 상태에 따라 달라지므로
+     * 지난 시각의 실행을 뒤늦게 재현하는 것은 의미가 없다. 다음 예정 시각은 실행이
+     * 끝날 때 현재 기준으로 다시 계산된다.</p>
+     */
+    private void executeQuietly(Schedule schedule) {
+        try {
+            ScheduleRun run = executionService.execute(
+                    schedule, ScheduleRun.TriggerType.AUTO, ScheduleActorResolver.SYSTEM);
+            if (run == null) {
+                log.debug("자동 실행 대상 없음: schedule={}", schedule.getScheduleId());
+            } else {
+                log.info("자동 실행 완료: schedule={}, status={}, {}",
+                        schedule.getScheduleId(), run.getStatus(), run.getMessage());
+            }
+        } catch (Exception e) {
+            // 실행 서비스가 이미 상태를 정리하고 이력에 사유를 남긴다. 여기서는 기록만 한다.
+            log.warn("자동 실행 실패: schedule={}, reason={}",
+                    schedule.getScheduleId(), e.getMessage());
+        }
+    }
+
+    // ── 이력 정리 ───────────────────────────────────────────────
+
+    /**
+     * 보존 기간이 지난 실행 이력을 하루 한 번 정리한다.
+     *
+     * <p>배치 결정 이력({@code scheduling_history})은 지우지 않고 연결만 끊는다.
+     * 연구 근거 자료이기 때문이다.</p>
+     */
+    private void cleanupOnceADay() {
+        LocalDate today = OffsetDateTime.now().toLocalDate();
+        if (today.equals(lastCleanupDate)) return;
+        lastCleanupDate = today;
+
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(properties.getRunRetentionDays());
+        List<ScheduleRun> expired = runRepository.findByStartedAtBefore(cutoff);
+        if (expired.isEmpty()) return;
+
+        List<Long> runIds = expired.stream().map(ScheduleRun::getId).toList();
+        List<SchedulingHistory> linked = historyRepository.findByScheduleRunIdIn(runIds);
+        linked.forEach(SchedulingHistory::unlinkRun);
+        historyRepository.saveAll(linked);
+        runRepository.deleteAll(expired);
+
+        log.info("실행 이력 정리: {}건 삭제 (보존 {}일), 결정 이력 {}건은 연결만 해제",
+                expired.size(), properties.getRunRetentionDays(), linked.size());
+    }
+
+    // ── 내부 ────────────────────────────────────────────────────
+
+    private java.util.concurrent.ThreadFactory daemon(String name) {
+        return runnable -> {
+            Thread thread = new Thread(runnable, name);
+            thread.setDaemon(true);
+            return thread;
+        };
+    }
+
+    private void shutdown(ExecutorService executor, String label) {
+        if (executor == null) return;
+        executor.shutdownNow();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("스케줄 러너 {} 스레드가 제때 종료되지 않았습니다", label);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}

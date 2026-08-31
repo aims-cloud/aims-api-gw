@@ -4,6 +4,7 @@ import java.util.Map;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -37,7 +38,7 @@ public class SchedulerController {
     public ApiResponse<?> listWorkloads(@RequestParam(required = false) String status) {
         if (status != null) {
             return ApiResponse.ok(workloadRepository.findByStatusOrderByCreatedAtDesc(
-                    Workload.WorkloadStatus.valueOf(status.toUpperCase())));
+                    parseEnum(Workload.WorkloadStatus.class, status, "상태")));
         }
         return ApiResponse.ok(workloadRepository.findAllByOrderByCreatedAtDesc());
     }
@@ -62,9 +63,51 @@ public class SchedulerController {
         if (request.containsKey("maxTemperatureCelsius"))
             workload.setMaxTemperatureCelsius(((Number) request.get("maxTemperatureCelsius")).doubleValue());
         if (request.containsKey("priority"))
-            workload.setPriority(Workload.WorkloadPriority.valueOf(((String) request.get("priority")).toUpperCase()));
+            workload.setPriority(parseEnum(Workload.WorkloadPriority.class,
+                    (String) request.get("priority"), "우선순위"));
+        if (request.containsKey("resourceType"))
+            workload.setResourceType(parseEnum(Workload.ResourceType.class,
+                    (String) request.get("resourceType"), "리소스 종류"));
+        if (request.containsKey("dataMdcId"))
+            workload.setDataMdcId((String) request.get("dataMdcId"));
 
         return ApiResponse.ok(workloadRepository.save(workload));
+    }
+
+    @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
+    @GetMapping("/workloads/resource-types")
+    public ApiResponse<?> getResourceTypes() {
+        return ApiResponse.ok(java.util.Arrays.stream(Workload.ResourceType.values())
+                .map(t -> Map.of("code", t.name(), "label", t.name()))
+                .toList());
+    }
+
+    @Operation(summary = "워크로드 실행 상태 전이",
+               description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다.")
+    @PatchMapping("/workloads/{workloadId}/status")
+    public ApiResponse<?> changeWorkloadStatus(@PathVariable Long workloadId,
+                                               @RequestBody Map<String, Object> request) {
+        Object raw = request.get("status");
+        if (raw == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "status 는 필수입니다");
+        }
+        Workload.WorkloadStatus target =
+                parseEnum(Workload.WorkloadStatus.class, raw.toString(), "상태");
+        return ApiResponse.ok(schedulingService.changeStatus(workloadId, target));
+    }
+
+    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. */
+    private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String label) {
+        if (value == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, label + " 값이 필요합니다");
+        }
+        try {
+            return Enum.valueOf(type, value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
+                    "지원하지 않는 %s 입니다: %s (가능한 값: %s)",
+                    label, value, java.util.Arrays.toString(type.getEnumConstants())));
+        }
     }
 
     @Operation(summary = "워크로드 상세 조회")
@@ -84,11 +127,16 @@ public class SchedulerController {
     // ── 스케줄링 실행 ───────────────────────────────────────────
 
     @Operation(summary = "워크로드 스케줄링 실행",
-               description = "engine: weighted(가중치), power(전력최적화), temperature(온도최적화)")
+               description = "engine: weighted(가중치), power(전력최적화), temperature(온도최적화). "
+                       + "dryRun=true 로 부르면 배치하지 않고 제약 평가 결과만 돌려줍니다 — "
+                       + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다.")
     @PostMapping("/workloads/{workloadId}/schedule")
     public ApiResponse<?> scheduleWorkload(@PathVariable Long workloadId,
-                                           @RequestParam(defaultValue = "weighted") String engine) {
-        return ApiResponse.ok(schedulingService.scheduleWorkload(workloadId, engine));
+                                           @RequestParam(defaultValue = "weighted") String engine,
+                                           @RequestParam(defaultValue = "false") boolean dryRun) {
+        return ApiResponse.ok(dryRun
+                ? schedulingService.dryRun(workloadId, engine)
+                : schedulingService.scheduleWorkload(workloadId, engine));
     }
 
     // ── 노드 자원 현황 ──────────────────────────────────────────
@@ -97,6 +145,31 @@ public class SchedulerController {
     @GetMapping("/nodes")
     public ApiResponse<?> getNodeResources() {
         return ApiResponse.ok(schedulingService.getNodeResources());
+    }
+
+    @Operation(summary = "노드 단건 자원 현황",
+               description = "가용량·예약분·전력·온도를 한 대만 조회합니다.")
+    @GetMapping("/nodes/{nodeId}")
+    public ApiResponse<?> getNodeResource(@PathVariable String nodeId) {
+        return ApiResponse.ok(schedulingService.getNodeResource(nodeId));
+    }
+
+    // ── 배치 진단 ──────────────────────────────────────────────
+
+    @Operation(summary = "배치 제약 조건 설명",
+               description = "배치 후보를 거를 때 어떤 제약이 어떤 순서로 적용되는지, "
+                       + "각 임계값이 어디서 오는지 설명합니다.")
+    @GetMapping("/constraints")
+    public ApiResponse<?> getConstraints() {
+        return ApiResponse.ok(ConstraintDescriptionResponse.all());
+    }
+
+    @Operation(summary = "냉각 대기 노드",
+               description = "임계 온도를 넘겨 일정 시간 배치 대상에서 제외된 노드와 남은 대기 시간입니다. "
+                       + "냉각 대기는 메모리에만 두므로 앱을 다시 시작하면 초기화됩니다.")
+    @GetMapping("/thermal/cooldowns")
+    public ApiResponse<?> getThermalCooldowns() {
+        return ApiResponse.ok(schedulingService.getCoolingDownNodes());
     }
 
     // ── 스케줄링 엔진 ───────────────────────────────────────────

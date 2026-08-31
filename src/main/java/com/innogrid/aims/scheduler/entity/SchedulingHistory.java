@@ -53,6 +53,18 @@ public class SchedulingHistory {
     @Column(length = 100)
     private String policyName;
 
+    /**
+     * 이 결정을 만든 스케줄 실행({@code schedule_runs.id}).
+     *
+     * <p>단건 스케줄링 API 로 만든 이력은 null 이다. 외래키를 두지 않았으므로 실행 이력을
+     * 지울 때 DB 가 알아서 정리해 주지 않는다 — 코드에서 명시적으로 null 로 만든다.
+     * 배치 결정 이력 자체는 연구 근거 자료라 함께 지우지 않는다.</p>
+     */
+    private Long scheduleRunId;
+
+    /** 배치 성공 여부. 기존 행은 성공한 결정만 저장했으므로 null 은 성공으로 본다. */
+    private Boolean success;
+
     private OffsetDateTime createdAt;
 
     @PrePersist
@@ -93,7 +105,18 @@ public class SchedulingHistory {
     public String getReason() { return reason; }
     public String getEngineName() { return engineName; }
     public String getPolicyName() { return policyName; }
+    public Long getScheduleRunId() { return scheduleRunId; }
+    public Boolean getSuccess() { return success; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
+
+    /** 스케줄 실행이 만든 결정임을 표시한다. */
+    public void linkToRun(Long scheduleRunId, boolean success) {
+        this.scheduleRunId = scheduleRunId;
+        this.success = success;
+    }
+
+    /** 실행 이력이 지워질 때 연결만 끊는다. 결정 내용은 남긴다. */
+    public void unlinkRun() { this.scheduleRunId = null; }
 
     // Setters for score details
     public void setScoreDetails(double cpu, double memory, double power, double temperature, double network) {

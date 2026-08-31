@@ -29,9 +29,21 @@ public class Workload {
     private int requiredGpu;
     private int requiredDiskGb;
 
+    /**
+     * 리소스 종류. 스케줄이 이 값으로 배치 대상을 고른다.
+     * 기존 행은 null 이며 {@link #resolveResourceType()} 이 VM 으로 해석한다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private ResourceType resourceType;
+
     // ── 제약 조건 ───────────────────────────────────────────────
     @Column(length = 50)
     private String preferredMdcId;
+
+    /** 이 워크로드가 다루는 데이터가 있는 MDC. MDC 간 링크 비용 계산에 쓴다. */
+    @Column(length = 50)
+    private String dataMdcId;
 
     private Double maxPowerBudgetWatts;
     private Double maxTemperatureCelsius;
@@ -56,6 +68,17 @@ public class Workload {
     @Column(length = 500)
     private String schedulingReason;
 
+    /**
+     * 배치 실패 누적 횟수.
+     *
+     * <p>스케줄 실행은 FAILED 워크로드도 대상으로 잡아 다시 배치한다. 그런데 자원이 영영
+     * 모자란 워크로드는 매 실행마다 실패해 실행 이력을 끝없이 채운다(5분 주기면 하루 288건).
+     * 이 값이 상한을 넘으면 대상에서 제외한다.</p>
+     *
+     * <p>기존 행은 null 이며 {@link #resolveRetryCount()} 가 0 으로 해석한다.</p>
+     */
+    private Integer retryCount;
+
     private OffsetDateTime createdAt;
     private OffsetDateTime scheduledAt;
 
@@ -78,6 +101,8 @@ public class Workload {
     public int getRequiredMemoryMb() { return requiredMemoryMb; }
     public int getRequiredGpu() { return requiredGpu; }
     public int getRequiredDiskGb() { return requiredDiskGb; }
+    public ResourceType getResourceType() { return resourceType; }
+    public String getDataMdcId() { return dataMdcId; }
     public String getPreferredMdcId() { return preferredMdcId; }
     public Double getMaxPowerBudgetWatts() { return maxPowerBudgetWatts; }
     public Double getMaxTemperatureCelsius() { return maxTemperatureCelsius; }
@@ -87,6 +112,7 @@ public class Workload {
     public WorkloadStatus getStatus() { return status; }
     public Double getSchedulingScore() { return schedulingScore; }
     public String getSchedulingReason() { return schedulingReason; }
+    public Integer getRetryCount() { return retryCount; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getScheduledAt() { return scheduledAt; }
 
@@ -96,6 +122,8 @@ public class Workload {
     public void setRequiredMemoryMb(int requiredMemoryMb) { this.requiredMemoryMb = requiredMemoryMb; }
     public void setRequiredGpu(int requiredGpu) { this.requiredGpu = requiredGpu; }
     public void setRequiredDiskGb(int requiredDiskGb) { this.requiredDiskGb = requiredDiskGb; }
+    public void setResourceType(ResourceType resourceType) { this.resourceType = resourceType; }
+    public void setDataMdcId(String dataMdcId) { this.dataMdcId = dataMdcId; }
     public void setPreferredMdcId(String preferredMdcId) { this.preferredMdcId = preferredMdcId; }
     public void setMaxPowerBudgetWatts(Double maxPowerBudgetWatts) { this.maxPowerBudgetWatts = maxPowerBudgetWatts; }
     public void setMaxTemperatureCelsius(Double maxTemperatureCelsius) { this.maxTemperatureCelsius = maxTemperatureCelsius; }
@@ -108,17 +136,77 @@ public class Workload {
         this.schedulingReason = reason;
         this.status = WorkloadStatus.SCHEDULED;
         this.scheduledAt = OffsetDateTime.now();
+        this.retryCount = 0;   // 배치에 성공했으므로 실패 누적을 지운다
     }
 
     public void markRunning() { this.status = WorkloadStatus.RUNNING; }
     public void markCompleted() { this.status = WorkloadStatus.COMPLETED; }
+
+    /** 배치에 실패했다. 재시도 횟수를 누적해 무한 재시도를 막는다. */
     public void markFailed(String reason) {
         this.status = WorkloadStatus.FAILED;
         this.schedulingReason = reason;
+        this.retryCount = resolveRetryCount() + 1;
+    }
+
+    /**
+     * 실행 상태를 전이한다. 허용되지 않는 전이는 false 를 돌려준다.
+     *
+     * <p>FAILED 에서 PENDING 으로 되돌릴 때는 재시도 횟수를 지운다. 그러지 않으면
+     * 되살려도 곧바로 상한에 걸려 다시 대상에서 빠진다.</p>
+     */
+    public boolean transitionTo(WorkloadStatus target) {
+        if (target == null || !status.canTransitionTo(target)) return false;
+        if (status == WorkloadStatus.FAILED && target == WorkloadStatus.PENDING) {
+            this.retryCount = 0;
+            this.schedulingReason = null;
+        }
+        this.status = target;
+        return true;
+    }
+
+    /** 값이 없으면 VM 으로 해석한 리소스 종류. */
+    public ResourceType resolveResourceType() {
+        return ResourceType.orDefault(resourceType);
+    }
+
+    /** 값이 없으면 0 으로 해석한 재시도 횟수. */
+    public int resolveRetryCount() {
+        return retryCount == null ? 0 : retryCount;
     }
 
     public enum WorkloadStatus {
-        PENDING, SCHEDULED, RUNNING, COMPLETED, FAILED
+        PENDING, SCHEDULED, RUNNING, COMPLETED, FAILED;
+
+        /**
+         * 이 상태에서 대상 상태로 넘어갈 수 있는지 판단한다.
+         * 배치(PENDING→SCHEDULED)와 실패 처리는 스케줄링 엔진이 직접 수행하므로
+         * 여기서는 배치 이후의 실행 흐름만 다룬다.
+         *
+         * <p>FAILED→PENDING 만 예외로 허용한다. 재시도 상한에 걸려 대상에서 빠진 워크로드를
+         * 운영자가 되살릴 유일한 경로다.</p>
+         */
+        public boolean canTransitionTo(WorkloadStatus target) {
+            return switch (this) {
+                case SCHEDULED -> target == RUNNING || target == FAILED;
+                case RUNNING -> target == COMPLETED || target == FAILED;
+                case FAILED -> target == PENDING;
+                default -> false;
+            };
+        }
+    }
+
+    /**
+     * 리소스 종류.
+     * 값을 추가할 때는 DB 의 CHECK 제약도 함께 바꿔야 한다(개발순서.md 부록 A).
+     */
+    public enum ResourceType {
+        VM, GPU, NPU, CONTAINER;
+
+        /** 기존 행처럼 값이 없으면 VM 으로 본다. */
+        public static ResourceType orDefault(ResourceType value) {
+            return value != null ? value : VM;
+        }
     }
 
     public enum WorkloadPriority {

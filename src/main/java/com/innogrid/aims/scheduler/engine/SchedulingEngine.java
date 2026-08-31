@@ -5,6 +5,7 @@ import java.util.List;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 /**
@@ -16,15 +17,27 @@ public interface SchedulingEngine {
     /**
      * 워크로드를 최적 노드에 배치한다.
      *
-     * @param workload   배치할 워크로드 (자원 요구사항 포함)
-     * @param candidates 후보 노드 목록 (실시간 자원 상태)
-     * @param policy     스케줄링 정책 (가중치, 제약 조건)
+     * @param workload 배치할 워크로드 (자원 요구사항 포함)
+     * @param context  배치 컨텍스트 (노드 상태, 정책, 예약 현황)
      * @return 스케줄링 결과 (선택된 노드, 점수, 근거)
      */
-    SchedulingResult schedule(Workload workload, List<NodeResource> candidates, SchedulingPolicy policy);
+    SchedulingResult schedule(Workload workload, PlacementContext context);
+
+    /**
+     * 후보 목록과 정책만으로 호출하는 형태.
+     * 예약 정보가 없는 단발 호출에 쓴다.
+     */
+    default SchedulingResult schedule(Workload workload, List<NodeResource> candidates, SchedulingPolicy policy) {
+        return schedule(workload, PlacementContext.of(candidates, policy));
+    }
 
     /**
      * 엔진 이름.
      */
     String getName();
+
+    /**
+     * 엔진 선택에 쓰는 식별자. 요청 파라미터의 engine 값과 대응한다.
+     */
+    String getId();
 }

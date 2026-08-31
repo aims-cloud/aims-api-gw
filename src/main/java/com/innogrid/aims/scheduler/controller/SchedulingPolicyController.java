@@ -5,6 +5,7 @@ import java.util.Map;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
+import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -65,6 +66,17 @@ public class SchedulingPolicyController {
     }
 
     private void applyWeights(SchedulingPolicy policy, Map<String, Object> request) {
+        if (request.containsKey("resourceType")) {
+            Object raw = request.get("resourceType");
+            policy.setResourceType(raw == null ? null : parseResourceType(raw.toString()));
+        }
+        if (request.containsKey("defaultEngine"))
+            policy.setDefaultEngine((String) request.get("defaultEngine"));
+        if (request.containsKey("warningTemperatureCelsius")) {
+            Object raw = request.get("warningTemperatureCelsius");
+            policy.setWarningTemperatureCelsius(raw == null ? null : ((Number) raw).doubleValue());
+        }
+        if (request.containsKey("active")) policy.setActive((Boolean) request.get("active"));
         if (request.containsKey("cpuWeight")) policy.setCpuWeight(((Number) request.get("cpuWeight")).doubleValue());
         if (request.containsKey("memoryWeight")) policy.setMemoryWeight(((Number) request.get("memoryWeight")).doubleValue());
         if (request.containsKey("powerWeight")) policy.setPowerWeight(((Number) request.get("powerWeight")).doubleValue());
@@ -76,5 +88,16 @@ public class SchedulingPolicyController {
         if (request.containsKey("maxPowerUsagePercent")) policy.setMaxPowerUsagePercent(((Number) request.get("maxPowerUsagePercent")).doubleValue());
         if (request.containsKey("powerAwareEnabled")) policy.setPowerAwareEnabled((Boolean) request.get("powerAwareEnabled"));
         if (request.containsKey("temperatureAwareEnabled")) policy.setTemperatureAwareEnabled((Boolean) request.get("temperatureAwareEnabled"));
+    }
+
+    /** 잘못된 리소스 종류가 500 이 아니라 400 이 되도록 감싼다. */
+    private Workload.ResourceType parseResourceType(String value) {
+        try {
+            return Workload.ResourceType.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
+                    "지원하지 않는 리소스 종류입니다: %s (가능한 값: %s)",
+                    value, java.util.Arrays.toString(Workload.ResourceType.values())));
+        }
     }
 }

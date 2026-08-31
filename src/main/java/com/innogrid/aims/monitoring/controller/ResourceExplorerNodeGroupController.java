@@ -4,11 +4,11 @@ import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.monitoring.dto.NodeGroupSummaryResponse;
-import com.innogrid.aims.monitoring.dto.NodeListItemResponse;
-import com.innogrid.aims.monitoring.dto.NodeMetric;
-import com.innogrid.aims.monitoring.dto.NodeStatus;
-import com.innogrid.aims.monitoring.dto.NodeTopResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeGroupSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeListItemResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeTopResponse;
 import com.innogrid.aims.monitoring.service.ResourceExplorerNodeGroupService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -74,3 +74,4 @@ public class ResourceExplorerNodeGroupController {
                 roleId, deploymentId, status, keyword, page, size, sort));
     }
 }
+

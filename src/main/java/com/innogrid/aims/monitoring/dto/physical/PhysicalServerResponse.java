@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.physical;
 
 import java.util.List;
 
@@ -25,3 +25,4 @@ public record PhysicalServerResponse(
             String unit
     ) {}
 }
+

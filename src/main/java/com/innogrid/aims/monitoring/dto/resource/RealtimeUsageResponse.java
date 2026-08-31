@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resource;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -15,3 +15,4 @@ public record RealtimeUsageResponse(
         @Schema(description = "네트워크 송신 속도 (bytes/sec)", example = "524288.0")
         double networkTxBps
 ) {}
+

@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.tree;
 
 import java.util.List;
 
@@ -14,3 +14,4 @@ public record ResourceTreeFilter(
         keyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
     }
 }
+

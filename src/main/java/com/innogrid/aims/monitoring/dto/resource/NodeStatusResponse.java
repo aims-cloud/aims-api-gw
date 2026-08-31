@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resource;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -19,3 +19,4 @@ public record NodeStatusResponse(
         @Schema(description = "디스크 사용률 (%)", example = "45.2")
         double diskUsage
 ) {}
+

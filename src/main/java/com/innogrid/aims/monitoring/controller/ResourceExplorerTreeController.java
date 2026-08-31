@@ -3,10 +3,10 @@ package com.innogrid.aims.monitoring.controller;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
-import com.innogrid.aims.monitoring.dto.ResourceTreeFilter;
-import com.innogrid.aims.monitoring.dto.ResourceTreeNodeResponse;
-import com.innogrid.aims.monitoring.dto.ResourceTreeNodeType;
-import com.innogrid.aims.monitoring.dto.ResourceTreeSearchResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeFilter;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeType;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeSearchResponse;
 import com.innogrid.aims.monitoring.service.ResourceExplorerTreeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -77,3 +77,4 @@ public class ResourceExplorerTreeController {
         return new ResourceTreeFilter(roleIds, deploymentIds, keyword);
     }
 }
+

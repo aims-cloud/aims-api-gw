@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.tree;
 
 /** 자원 탐색기 트리 항목 유형. */
 public enum ResourceTreeNodeType {
@@ -22,3 +22,4 @@ public enum ResourceTreeNodeType {
     GPU_GROUP,
     GPU_DEVICE
 }
+

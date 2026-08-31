@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resource;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -15,3 +15,4 @@ public record GpuStatusResponse(
         @Schema(description = "GPU 전력 소모 (W)", example = "250.0")
         double gpuPowerWatts
 ) {}
+

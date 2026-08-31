@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resource;
 
 import java.util.List;
 
@@ -21,3 +21,4 @@ public record MetricTrendResponse(
             double value
     ) {}
 }
+

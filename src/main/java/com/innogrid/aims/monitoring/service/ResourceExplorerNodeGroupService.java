@@ -3,11 +3,11 @@ package com.innogrid.aims.monitoring.service;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.monitoring.dto.NodeGroupSummaryResponse;
-import com.innogrid.aims.monitoring.dto.NodeListItemResponse;
-import com.innogrid.aims.monitoring.dto.NodeMetric;
-import com.innogrid.aims.monitoring.dto.NodeStatus;
-import com.innogrid.aims.monitoring.dto.NodeTopResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeGroupSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeListItemResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeTopResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,3 +47,4 @@ public class ResourceExplorerNodeGroupService {
                 "노드 지표 데이터와 자원 탐색기 노드그룹 패널의 매핑 구현 전입니다.");
     }
 }
+

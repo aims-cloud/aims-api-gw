@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.tree;
 
 import java.util.List;
 
@@ -11,3 +11,4 @@ public record ResourceTreeSearchResponse(
         path = path == null ? List.of() : List.copyOf(path);
     }
 }
+

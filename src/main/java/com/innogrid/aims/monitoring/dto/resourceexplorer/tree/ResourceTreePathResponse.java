@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.tree;
 
 /** 검색된 자원의 상위 경로 항목. */
 public record ResourceTreePathResponse(
@@ -7,3 +7,4 @@ public record ResourceTreePathResponse(
         ResourceTreeNodeType type
 ) {
 }
+

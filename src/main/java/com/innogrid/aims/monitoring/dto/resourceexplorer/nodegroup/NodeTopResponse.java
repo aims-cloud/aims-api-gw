@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup;
 
 /**
  * 노드 Top-N 항목. value 는 요청한 metric 의 값이고,
@@ -15,3 +15,4 @@ public record NodeTopResponse(
         double fileSystemUtilization
 ) {
 }
+

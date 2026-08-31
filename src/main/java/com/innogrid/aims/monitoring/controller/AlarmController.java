@@ -2,7 +2,7 @@ package com.innogrid.aims.monitoring.controller;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
-import com.innogrid.aims.monitoring.dto.MonitoringDto;
+import com.innogrid.aims.monitoring.dto.alarm.AlarmRuleRequest;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmRule;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
@@ -34,7 +34,7 @@ public class AlarmController {
 
     @Operation(summary = "알람 규칙 생성")
     @PostMapping("/rules")
-    public ApiResponse<?> createAlarmRule(@RequestBody MonitoringDto.AlarmRuleRequest request) {
+    public ApiResponse<?> createAlarmRule(@RequestBody AlarmRuleRequest request) {
         AlarmRule rule = new AlarmRule(request.name(), request.metricName(),
                 request.condition(), request.threshold(), request.severity(), request.notifyChannel());
         return ApiResponse.ok(ruleRepository.save(rule));
@@ -43,7 +43,7 @@ public class AlarmController {
     @Operation(summary = "알람 규칙 수정")
     @PutMapping("/rules/{ruleId}")
     public ApiResponse<?> updateAlarmRule(@PathVariable Long ruleId,
-                                          @RequestBody MonitoringDto.AlarmRuleRequest request) {
+                                          @RequestBody AlarmRuleRequest request) {
         AlarmRule rule = ruleRepository.findById(ruleId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "알람 규칙을 찾을 수 없습니다"));
         rule.setName(request.name());

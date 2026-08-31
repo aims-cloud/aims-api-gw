@@ -2,10 +2,10 @@ package com.innogrid.aims.monitoring.service;
 
 import java.util.List;
 
-import com.innogrid.aims.monitoring.dto.ResourceTreeFilter;
-import com.innogrid.aims.monitoring.dto.ResourceTreeNodeResponse;
-import com.innogrid.aims.monitoring.dto.ResourceTreeNodeType;
-import com.innogrid.aims.monitoring.dto.ResourceTreeSearchResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeFilter;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeType;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeSearchResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -48,3 +48,4 @@ public class ResourceExplorerTreeService {
                 "자원 관리 데이터와 자원 탐색기 트리의 매핑 구현 전입니다.");
     }
 }
+

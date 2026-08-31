@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.tree;
 
 import java.util.List;
 
@@ -23,3 +23,4 @@ public record ResourceTreeNodeResponse(
         children = children == null ? null : List.copyOf(children);
     }
 }
+

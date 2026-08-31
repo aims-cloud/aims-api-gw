@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 사용자 행위 로그(사용자/화면/작업/내용/결과) 목록과 상세(접속 IP 포함)를 제공한다.
  * Loki 분산 로그(LogController)·수집 서비스 로그(자원 탐색기)와는 별개의 감사 로그 도메인이다.
  */
-@Tag(name = "로그 관리 (감사 로그)", description = "사용자 행위 감사 로그 목록·상세 조회")
+@Tag(name = "관측 > 로그 관리 (감사 로그)", description = "사용자 행위 감사 로그 목록·상세 조회")
 @RestController
 @RequestMapping("/api/v1/monitoring/audit-logs")
 public class AuditLogController {

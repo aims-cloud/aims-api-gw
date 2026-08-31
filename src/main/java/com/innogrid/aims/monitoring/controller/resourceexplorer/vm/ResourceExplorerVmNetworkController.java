@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 개요 탭은 화면 설계 미확정 — 추가 시 CPU 패턴대로 확장한다.
  * VM 상세 패널은 ResourceExplorerVmController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (VM Network)", description = "VM Network 카테고리 — 모니터링 차트")
+@Tag(name = "관측 > 자원 탐색기 (VM Network)", description = "VM Network 카테고리 — 모니터링 차트")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/vm/{vmId}/network")
 public class ResourceExplorerVmNetworkController {

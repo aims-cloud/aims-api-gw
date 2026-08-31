@@ -40,7 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   모니터링     — 지표별 시계열 (화면 설계 확정 전, 잠정 지표 세트)
  * 노드 상세 패널은 ResourceExplorerNodeController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (노드 GPU)",
+@Tag(name = "관측 > 자원 탐색기 (노드 GPU)",
         description = "노드 GPU 카테고리 — 그룹/개별 GPU KPI, 상태 요약, GPU 목록·정보, 모니터링 차트")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/node/{nodeId}/gpu")

@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * KPI 카드(노드 수/Running/Stop/Error), 노드 Top-N, 노드 목록을 제공한다.
  * 왼쪽 트리는 ResourceExplorerTreeController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (노드그룹)", description = "노드그룹 개요 KPI, 노드 Top-N, 노드 목록 조회")
+@Tag(name = "관측 > 자원 탐색기 (노드그룹)", description = "노드그룹 개요 KPI, 노드 Top-N, 노드 목록 조회")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/node-group")
 public class ResourceExplorerNodeGroupController {

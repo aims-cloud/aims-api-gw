@@ -13,13 +13,34 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeMetricTrendRes
 import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogFileResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogLevel;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogListResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceRequest;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.ServiceTraceSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.ServiceTraceTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceDetailResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceEndpointStatResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceListResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceMethodDistributionResponse;
+import com.innogrid.aims.monitoring.service.ResourceExplorerNodeLogService;
+import com.innogrid.aims.monitoring.service.ResourceExplorerNodeTraceService;
 import com.innogrid.aims.monitoring.service.ResourceExplorerNodeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,18 +52,25 @@ import org.springframework.web.bind.annotation.RestController;
  *   개요 탭        — 주요 지표 카드 6종, 모니터링 요약 차트, 노드 정보 표
  *   가상머신 탭    — 노드에서 실행 중인 VM 목록
  *   자원 사용 현황 탭 — 카테고리별 상세 (화면 설계 확정 전)
- * 알람·로그 탭은 기존 AlarmController / LogController 를 instance 필터로 재사용한다.
+ *   로그/트레이스 탭 — 수집 서비스 관리(위저드 CRUD·탐지·검증), 서비스별 로그·트레이스 조회
+ * 알람 탭은 기존 AlarmController 를 instance 필터로 재사용한다.
  * 왼쪽 트리는 ResourceExplorerTreeController, 노드그룹 패널은 ResourceExplorerNodeGroupController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (노드)", description = "노드 상세 — 주요 지표, 모니터링 요약 차트, 노드 정보, 가상머신 목록, 자원 사용 현황")
+@Tag(name = "자원 탐색기 (노드)", description = "노드 상세 — 주요 지표, 모니터링 요약 차트, 노드 정보, 가상머신 목록, 자원 사용 현황, 수집 서비스·로그")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/node/{nodeId}")
 public class ResourceExplorerNodeController {
 
     private final ResourceExplorerNodeService resourceExplorerNodeService;
+    private final ResourceExplorerNodeLogService resourceExplorerNodeLogService;
+    private final ResourceExplorerNodeTraceService resourceExplorerNodeTraceService;
 
-    public ResourceExplorerNodeController(ResourceExplorerNodeService resourceExplorerNodeService) {
+    public ResourceExplorerNodeController(ResourceExplorerNodeService resourceExplorerNodeService,
+                                          ResourceExplorerNodeLogService resourceExplorerNodeLogService,
+                                          ResourceExplorerNodeTraceService resourceExplorerNodeTraceService) {
         this.resourceExplorerNodeService = resourceExplorerNodeService;
+        this.resourceExplorerNodeLogService = resourceExplorerNodeLogService;
+        this.resourceExplorerNodeTraceService = resourceExplorerNodeTraceService;
     }
 
     @Operation(summary = "노드 주요 지표",
@@ -105,6 +133,249 @@ public class ResourceExplorerNodeController {
         Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
         return ApiResponse.ok(resourceExplorerNodeService.getNodeUsage(
                 nodeId, category, fromInstant, toInstant));
+    }
+
+    // ── 로그/트레이스 탭 — 수집 서비스 관리 ─────────────────────
+
+    @Operation(summary = "수집 서비스 목록",
+            description = "로그/트레이스 탭 — 서비스명/상태/포트/PID/설명. 키워드 검색과 컬럼 정렬, 페이징을 지원합니다. "
+                    + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
+    @GetMapping("/services")
+    public ApiResponse<PageResponse<CollectServiceResponse>> getCollectServices(
+            @PathVariable String nodeId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "serviceName,asc") String sort) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.getCollectServices(
+                nodeId, keyword, page, size, sort));
+    }
+
+    @Operation(summary = "탐지된 수집 후보 서비스 목록",
+            description = "서비스 추가 위저드 1단계 드롭다운 — 노드 에이전트가 탐지한 서비스의 "
+                    + "이름/설명/PID/포트/수집 가능 유형(로그·트레이스)을 조회합니다.")
+    @GetMapping("/services/discovered")
+    public ApiResponse<List<DiscoveredServiceResponse>> getDiscoveredServices(@PathVariable String nodeId) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.getDiscoveredServices(nodeId));
+    }
+
+    @Operation(summary = "수집 설정 유효성 검증",
+            description = "위저드 2단계 '다음' 클릭 시 — 로그·트레이스 수집 중 하나 이상 활성화 여부와 "
+                    + "로그 경로·트레이스 포트 유효성을 검증합니다.")
+    @PostMapping("/services/validate")
+    public ApiResponse<CollectServiceValidationResponse> validateCollectService(
+            @PathVariable String nodeId,
+            @RequestBody CollectServiceRequest request) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.validateCollectService(nodeId, request));
+    }
+
+    @Operation(summary = "수집 서비스 추가",
+            description = "서비스 추가 위저드 3단계 '생성' — 선택한 탐지 서비스와 로그·트레이스 수집 설정을 등록합니다.")
+    @PostMapping("/services")
+    public ApiResponse<CollectServiceResponse> createCollectService(
+            @PathVariable String nodeId,
+            @RequestBody CollectServiceRequest request) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.createCollectService(nodeId, request));
+    }
+
+    @Operation(summary = "수집 서비스 편집")
+    @PutMapping("/services/{serviceId}")
+    public ApiResponse<CollectServiceResponse> updateCollectService(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestBody CollectServiceRequest request) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.updateCollectService(nodeId, serviceId, request));
+    }
+
+    @Operation(summary = "수집 서비스 삭제")
+    @DeleteMapping("/services/{serviceId}")
+    public ApiResponse<Void> deleteCollectService(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId) {
+        resourceExplorerNodeLogService.deleteCollectService(nodeId, serviceId);
+        return ApiResponse.ok(null);
+    }
+
+    // ── 로그/트레이스 탭 — 서비스 로그 (로그 서브탭 + 로그 상세 페이지) ──
+
+    @Operation(summary = "서비스 로그 파일 목록",
+            description = "로그 상세 페이지 좌측 체크박스용 — 수집 중인 로그 파일명과 파일별 건수를 조회합니다.")
+    @GetMapping("/services/{serviceId}/logs/files")
+    public ApiResponse<List<ServiceLogFileResponse>> getServiceLogFiles(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.getLogFiles(nodeId, serviceId));
+    }
+
+    @Operation(summary = "서비스 로그 KPI",
+            description = "로그 서브탭 카드 4종 — 수집 상태, 총 로그 수, Warning, Error. "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+    @GetMapping("/services/{serviceId}/logs/summary")
+    public ApiResponse<ServiceLogSummaryResponse> getServiceLogSummary(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) String file,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeLogService.getLogSummary(
+                nodeId, serviceId, file, fromInstant, toInstant));
+    }
+
+    @Operation(summary = "서비스 로그 발생 추이",
+            description = "레벨별(Info/Warning/Debug/Error) 스택 버킷 시계열. "
+                    + "분할 모드는 파일별 개별 호출, 병합 모드는 files 복수 지정으로 1회 호출합니다. "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+    @GetMapping("/services/{serviceId}/logs/trend")
+    public ApiResponse<ServiceLogTrendResponse> getServiceLogTrend(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) List<String> files,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "1h") String interval) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeLogService.getLogTrend(
+                nodeId, serviceId, files, fromInstant, toInstant, interval));
+    }
+
+    @Operation(summary = "서비스 로그 목록/검색",
+            description = "시간 역순 로그 목록 — files·levels 다중 필터, 키워드 검색, limit 지원. "
+                    + "'최근 에러' 위젯은 levels=ERROR 와 limit 로 동일 응답을 사용합니다. "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+    @GetMapping("/services/{serviceId}/logs")
+    public ApiResponse<ServiceLogListResponse> searchServiceLogs(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) List<String> files,
+            @RequestParam(required = false) List<ServiceLogLevel> levels,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeLogService.searchLogs(
+                nodeId, serviceId, files, levels, keyword, fromInstant, toInstant, limit));
+    }
+
+    // ── 로그/트레이스 탭 — 서비스 트레이스 (트레이스 서브탭 + 트레이스 상세 페이지) ──
+
+    @Operation(summary = "서비스 트레이스 KPI",
+            description = "트레이스 서브탭 카드 4종 — 수집 상태, 총 요청 수, 요청률(req/s), 평균 응답(ms). "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+    @GetMapping("/services/{serviceId}/traces/summary")
+    public ApiResponse<ServiceTraceSummaryResponse> getServiceTraceSummary(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceSummary(
+                nodeId, serviceId, fromInstant, toInstant));
+    }
+
+    @Operation(summary = "서비스 요청량 추이",
+            description = "버킷별 요청 수 막대 차트. 차트 드래그 구간 선택의 요청 수 합산은 프론트가 버킷 합으로 계산합니다. "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+    @GetMapping("/services/{serviceId}/traces/trend")
+    public ApiResponse<ServiceTraceTrendResponse> getServiceTraceTrend(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "1h") String interval) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceTrend(
+                nodeId, serviceId, fromInstant, toInstant, interval));
+    }
+
+    @Operation(summary = "메서드 분포",
+            description = "도넛 차트 — 총 요청 수와 HTTP 메서드(GET/HEAD/POST/PUT/DELETE)별 건수를 조회합니다.")
+    @GetMapping("/services/{serviceId}/traces/methods")
+    public ApiResponse<TraceMethodDistributionResponse> getServiceTraceMethods(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getMethodDistribution(
+                nodeId, serviceId, fromInstant, toInstant));
+    }
+
+    @Operation(summary = "엔드포인트 상위 목록",
+            description = "메서드별 상위 엔드포인트와 요청 수를 조회합니다.")
+    @GetMapping("/services/{serviceId}/traces/endpoints")
+    public ApiResponse<List<TraceEndpointStatResponse>> getServiceTraceEndpoints(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "5") @Min(1) @Max(50) int limit) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getTopEndpoints(
+                nodeId, serviceId, fromInstant, toInstant, limit));
+    }
+
+    @Operation(summary = "트레이스 포트 목록",
+            description = "트레이스 상세 페이지 좌측 체크박스용 — 관측된 포트 목록을 조회합니다.")
+    @GetMapping("/services/{serviceId}/traces/ports")
+    public ApiResponse<List<Integer>> getServiceTracePorts(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId) {
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getTracePorts(nodeId, serviceId));
+    }
+
+    @Operation(summary = "트레이스 목록/검색",
+            description = "시간 역순 트레이스 목록 — ports·statusClasses(2XX|4XX|5XX) 다중 필터, "
+                    + "엔드포인트 키워드, 최소 소요(ms), limit 지원. 최근 트레이스 위젯과 상세 페이지 목록에 공용입니다. "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+    @GetMapping("/services/{serviceId}/traces")
+    public ApiResponse<TraceListResponse> searchServiceTraces(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @RequestParam(required = false) List<Integer> ports,
+            @RequestParam(required = false) List<String> statusClasses,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer minDurationMs,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
+        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
+        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        return ApiResponse.ok(resourceExplorerNodeTraceService.searchTraces(
+                nodeId, serviceId, ports, statusClasses, keyword, minDurationMs,
+                fromInstant, toInstant, limit));
+    }
+
+    @Operation(summary = "트레이스 상세",
+            description = "트레이스 상세 패널 — 루트/시작/총 소요/스팬 수/상태/포트 요약 카드와 "
+                    + "스팬 워터폴(시작 오프셋·소요·전체 대비 %·부모 스팬)을 조회합니다.")
+    @GetMapping("/services/{serviceId}/traces/{traceId}")
+    public ApiResponse<TraceDetailResponse> getServiceTraceDetail(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @PathVariable String traceId) {
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceDetail(nodeId, serviceId, traceId));
+    }
+
+    @Operation(summary = "트레이스 관련 로그",
+            description = "트레이스 상세 패널 '관련 로그' 토글 — 트레이스 시간창의 로그를 조회합니다. "
+                    + "분할/병합 모드는 files 조합으로 처리하며 응답은 서비스 로그 목록과 동일 구조입니다.")
+    @GetMapping("/services/{serviceId}/traces/{traceId}/logs")
+    public ApiResponse<ServiceLogListResponse> getServiceTraceLogs(
+            @PathVariable String nodeId,
+            @PathVariable String serviceId,
+            @PathVariable String traceId,
+            @RequestParam(required = false) List<String> files) {
+        return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceLogs(
+                nodeId, serviceId, traceId, files));
     }
 
     /** from 기본값: 오늘 00:00:00 (서버 타임존) */

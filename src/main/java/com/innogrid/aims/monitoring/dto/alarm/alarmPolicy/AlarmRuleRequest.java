@@ -1,7 +1,8 @@
-package com.innogrid.aims.monitoring.dto.alarm;
+package com.innogrid.aims.monitoring.dto.alarm.alarmPolicy;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+@Deprecated
 @Schema(description = "알람 규칙 생성/수정 요청")
 public record AlarmRuleRequest(
         @Schema(description = "규칙 이름", example = "CPU 사용률 90% 초과", requiredMode = Schema.RequiredMode.REQUIRED)

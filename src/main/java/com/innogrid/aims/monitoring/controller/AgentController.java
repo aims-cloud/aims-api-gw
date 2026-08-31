@@ -1,7 +1,7 @@
 package com.innogrid.aims.monitoring.controller;
 
 import com.innogrid.aims.common.dto.ApiResponse;
-import com.innogrid.aims.monitoring.dto.MonitoringDto;
+import com.innogrid.aims.monitoring.dto.agent.RegisterAgentRequest;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.service.MetricCatalogService;
@@ -48,7 +48,7 @@ public class AgentController {
 
     @Operation(summary = "수집 대상 등록", description = "등록 후 Prometheus가 자동으로 수집을 시작합니다")
     @PostMapping
-    public ApiResponse<?> registerAgent(@RequestBody MonitoringDto.RegisterAgentRequest request) {
+    public ApiResponse<?> registerAgent(@RequestBody RegisterAgentRequest request) {
         MonitoringTarget target = collectorService.registerTarget(
                 request.mdcId(), request.hostname(), request.address(),
                 request.port(), request.exporterType());

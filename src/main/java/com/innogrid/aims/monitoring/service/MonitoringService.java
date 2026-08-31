@@ -8,7 +8,11 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
-import com.innogrid.aims.monitoring.dto.*;
+import com.innogrid.aims.monitoring.dto.physical.PhysicalServerResponse;
+import com.innogrid.aims.monitoring.dto.resource.GpuStatusResponse;
+import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resource.NodeStatusResponse;
+import com.innogrid.aims.monitoring.dto.resource.RealtimeUsageResponse;
 
 /**
  * VictoriaMetrics PromQL 쿼리를 통해 모니터링 데이터를 조회한다.

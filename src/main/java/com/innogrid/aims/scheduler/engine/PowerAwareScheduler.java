@@ -2,13 +2,20 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
@@ -32,9 +39,31 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 @Component
 public class PowerAwareScheduler implements SchedulingEngine {
 
-    private static final double IDLE_POWER_RATIO = 0.3; // 유휴 시 최대 전력의 30%
     private static final double COOLING_PENALTY_FACTOR = 0.3;
     private static final double CONSOLIDATION_BONUS = 0.15;
+
+    private final PowerModel powerModel;
+    private final ThermalModel thermalModel;
+
+    @Autowired
+    public PowerAwareScheduler(PowerModel powerModel, ThermalModel thermalModel) {
+        this.powerModel = powerModel;
+        this.thermalModel = thermalModel;
+    }
+
+    /** 스프링 컨텍스트 없이 쓰는 기본 생성자 (단위 테스트). 설정 기본값을 사용한다. */
+    public PowerAwareScheduler() {
+        this(new SchedulerProperties());
+    }
+
+    private PowerAwareScheduler(SchedulerProperties props) {
+        this(new PowerModel(props), new ThermalModel(props));
+    }
+
+    @Override
+    public String getId() {
+        return "power";
+    }
 
     @Override
     public String getName() {
@@ -42,30 +71,25 @@ public class PowerAwareScheduler implements SchedulingEngine {
     }
 
     @Override
-    public SchedulingResult schedule(Workload workload, List<NodeResource> candidates,
-                                     SchedulingPolicy policy) {
+    public SchedulingResult schedule(Workload workload, PlacementContext context) {
+        List<NodeResource> candidates = context.nodes();
         if (candidates.isEmpty()) {
             return SchedulingResult.failure("후보 노드가 없습니다");
         }
 
+        SchedulingPolicy policy = context.policy();
         List<NodeScore> scores = new ArrayList<>();
         NodeScore bestScore = null;
 
         for (NodeResource node : candidates) {
-            boolean eligible = node.canAccommodate(
-                    workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu());
-            String exclusionReason = eligible ? null : "자원 부족";
-
-            if (eligible && node.getCpuUsagePercent() > policy.getMaxCpuUsagePercent()) {
-                eligible = false;
-                exclusionReason = "CPU 사용률 초과";
-            }
+            String exclusionReason = context.exclusionReason(workload, node);
+            boolean eligible = (exclusionReason == null);
 
             // ── PEI (Power Efficiency Index) ─────────────────────
-            double pei = calculatePowerEfficiencyIndex(node);
+            double pei = powerModel.normalizedPei(node);
 
             // ── 전력 비례성 점수 ─────────────────────────────────
-            double proportionalityScore = calculatePowerProportionality(node);
+            double proportionalityScore = powerModel.proportionality(node);
 
             // ── 온도 보정 ───────────────────────────────────────
             double coolingCost = node.getTemperatureCelsius() / Math.max(policy.getMaxTemperatureCelsius(), 1);
@@ -85,14 +109,25 @@ public class PowerAwareScheduler implements SchedulingEngine {
                     + memScore * 0.15
                     + consolidationBonus * 0.10;
 
-            totalScore = Math.round(totalScore * 10000.0) / 10000.0;
+            totalScore = round(totalScore);
+
+            Map<String, Double> details = new LinkedHashMap<>();
+            details.put("PEI", round(pei));
+            details.put("전력비례성", round(proportionalityScore));
+            details.put("냉각보정점수", round(tempAdjustedScore));
+            details.put("전력통합보너스", round(consolidationBonus));
+            details.put("cpu여유", round(cpuScore));
+            details.put("메모리여유", round(memScore));
+            details.put("한계전력W", round(powerModel.marginalPower(node, workload.getRequiredCpu())));
+            details.put("배치후예상전력W", round(powerModel.predictedPower(node, workload.getRequiredCpu())));
+            details.put("배치후예상온도C", round(thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),
                     round(cpuScore), round(memScore),
                     round(pei), round(tempAdjustedScore),
                     round(consolidationBonus),
-                    totalScore, eligible, exclusionReason
+                    totalScore, eligible, exclusionReason, details
             );
             scores.add(ns);
 
@@ -109,40 +144,12 @@ public class PowerAwareScheduler implements SchedulingEngine {
         }
 
         String reason = String.format(
-                "[전력최적화] 점수 %.4f (PEI:%.2f 비례성:%.2f 냉각보정:%.2f 통합:%.2f) — %d개 후보",
+                "[전력최적화] 점수 %.4f (PEI:%.2f 냉각보정:%.2f 통합:%.2f) — %d개 후보",
                 bestScore.totalScore(), bestScore.powerScore(), bestScore.temperatureScore(),
-                bestScore.temperatureScore(), bestScore.networkScore(), candidates.size());
+                bestScore.networkScore(), candidates.size());
 
         return new SchedulingResult(true, bestScore.mdcId(), bestScore.nodeId(),
                 bestScore.totalScore(), reason, scores);
-    }
-
-    /**
-     * Power Efficiency Index (PEI):
-     * 단위 전력당 CPU 활용률. 높을수록 전력 대비 작업량이 많다.
-     */
-    private double calculatePowerEfficiencyIndex(NodeResource node) {
-        if (node.getPowerWatts() <= 0) return 0.5;
-        double efficiency = node.getCpuUsagePercent() / node.getPowerWatts();
-        // 정규화: 0~1 범위로 (최대 효율 = 0.5%/W 가정)
-        return Math.min(1.0, efficiency / 0.5);
-    }
-
-    /**
-     * 전력 비례성 (Energy Proportionality):
-     * 이상적인 전력 소비 곡선과의 편차. 1에 가까울수록 전력 비례적.
-     * P_ideal = P_idle + (P_max - P_idle) × utilization
-     */
-    private double calculatePowerProportionality(NodeResource node) {
-        double pMax = node.getPowerCapacityWatts();
-        if (pMax <= 0) return 0.5;
-
-        double pIdle = pMax * IDLE_POWER_RATIO;
-        double utilization = node.getCpuUsagePercent() / 100.0;
-        double pIdeal = pIdle + (pMax - pIdle) * utilization;
-        double deviation = Math.abs(node.getPowerWatts() - pIdeal) / pMax;
-
-        return Math.max(0, 1.0 - deviation);
     }
 
     private double round(double value) {

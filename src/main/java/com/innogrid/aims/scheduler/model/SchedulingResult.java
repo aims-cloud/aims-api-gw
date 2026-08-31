@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.model;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 스케줄링 엔진의 결정 결과.
@@ -15,6 +16,10 @@ public record SchedulingResult(
 ) {
     /**
      * 각 후보 노드의 개별 점수.
+     *
+     * <p>{@code cpuScore} ~ {@code networkScore} 는 엔진마다 담는 값의 의미가 달라
+     * 그대로 보면 오해하기 쉽다. 엔진이 실제로 무엇을 계산했는지는 {@code details} 에
+     * 항목 이름과 함께 담는다.</p>
      */
     public record NodeScore(
             String mdcId,
@@ -26,8 +31,18 @@ public record SchedulingResult(
             double networkScore,
             double totalScore,
             boolean eligible,
-            String exclusionReason
-    ) {}
+            String exclusionReason,
+            Map<String, Double> details
+    ) {
+        /** details 없이 만드는 기존 형태. */
+        public NodeScore(String mdcId, String nodeId,
+                         double cpuScore, double memoryScore, double powerScore,
+                         double temperatureScore, double networkScore, double totalScore,
+                         boolean eligible, String exclusionReason) {
+            this(mdcId, nodeId, cpuScore, memoryScore, powerScore,
+                    temperatureScore, networkScore, totalScore, eligible, exclusionReason, Map.of());
+        }
+    }
 
     public static SchedulingResult failure(String reason) {
         return new SchedulingResult(false, null, null, 0, reason, List.of());

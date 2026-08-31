@@ -4,6 +4,10 @@ package com.innogrid.aims.scheduler.model;
  * 노드의 실시간 자원 상태.
  * Thanos/Prometheus 메트릭에서 수집한 데이터를 담는다.
  * 스케줄링 엔진이 이 데이터를 기반으로 배치를 결정한다.
+ *
+ * <p>메트릭 사용률은 "이미 실행 중인" 부하만 반영하므로, 배치는 되었으나 아직 메트릭에
+ * 드러나지 않은 워크로드는 {@code reserved*} 로 따로 차감한다. 그래야 한 번의 스케줄링
+ * 실행 안에서 같은 노드에 과도하게 배치되는 것을 막을 수 있다.</p>
  */
 public class NodeResource {
 
@@ -29,6 +33,15 @@ public class NodeResource {
     private final double networkRxBps;
     private final double networkTxBps;
 
+    // ── 예약분 (배치 확정됐으나 메트릭에 아직 반영되지 않은 워크로드) ──
+    private int reservedCpu;
+    private long reservedMemoryMb;
+    private int reservedGpu;
+
+    // ── 부가 정보 (조회 응답용, 정책이 있어야 계산 가능) ──────────
+    private ThermalState thermalState;
+    private PowerSource powerSource = PowerSource.NONE;
+
     public NodeResource(String mdcId, String nodeId,
                         int totalCpu, long totalMemoryMb, int totalGpu,
                         double cpuUsagePercent, double memoryUsagePercent, double diskUsagePercent,
@@ -51,14 +64,19 @@ public class NodeResource {
 
     // ── 계산 메서드 ─────────────────────────────────────────────
 
-    /** 가용 CPU 코어 수 */
+    /** 가용 CPU 코어 수 (예약분 차감) */
     public double availableCpu() {
-        return totalCpu * (1.0 - cpuUsagePercent / 100.0);
+        return totalCpu * (1.0 - cpuUsagePercent / 100.0) - reservedCpu;
     }
 
-    /** 가용 메모리 (MB) */
+    /** 가용 메모리 (MB, 예약분 차감) */
     public long availableMemoryMb() {
-        return (long) (totalMemoryMb * (1.0 - memoryUsagePercent / 100.0));
+        return (long) (totalMemoryMb * (1.0 - memoryUsagePercent / 100.0)) - reservedMemoryMb;
+    }
+
+    /** 가용 GPU 개수 (예약분 차감) */
+    public int availableGpu() {
+        return totalGpu - reservedGpu;
     }
 
     /** 전력 효율성 (작업량/와트) — 높을수록 효율적 */
@@ -77,7 +95,30 @@ public class NodeResource {
     public boolean canAccommodate(int requiredCpu, int requiredMemMb, int requiredGpu) {
         return availableCpu() >= requiredCpu
                 && availableMemoryMb() >= requiredMemMb
-                && totalGpu >= requiredGpu;
+                && availableGpu() >= requiredGpu;
+    }
+
+    /**
+     * 배치 확정분을 예약으로 잡는다.
+     * 같은 스케줄링 실행 안에서 다음 워크로드가 이 노드를 평가할 때 차감된 값이 보인다.
+     */
+    public void reserve(int cpu, long memoryMb, int gpu) {
+        this.reservedCpu += cpu;
+        this.reservedMemoryMb += memoryMb;
+        this.reservedGpu += gpu;
+    }
+
+    /** 전력·온도 메트릭 수집 여부. */
+    public enum PowerSource {
+        /** IPMI 메트릭으로 실측한 값. */
+        IPMI,
+        /** 수집되지 않아 0 으로 채운 값. */
+        NONE
+    }
+
+    /** 온도 상태. 임계값은 정책에서 오므로 외부에서 계산해 넣는다. */
+    public enum ThermalState {
+        NORMAL, WARNING, CRITICAL
     }
 
     // Getters
@@ -94,4 +135,16 @@ public class NodeResource {
     public double getTemperatureCelsius() { return temperatureCelsius; }
     public double getNetworkRxBps() { return networkRxBps; }
     public double getNetworkTxBps() { return networkTxBps; }
+    public int getReservedCpu() { return reservedCpu; }
+    public long getReservedMemoryMb() { return reservedMemoryMb; }
+    public int getReservedGpu() { return reservedGpu; }
+    public ThermalState getThermalState() { return thermalState; }
+    public void setThermalState(ThermalState thermalState) { this.thermalState = thermalState; }
+    public PowerSource getPowerSource() { return powerSource; }
+    public void setPowerSource(PowerSource powerSource) { this.powerSource = powerSource; }
+
+    /** 조회 응답에서 가용량을 그대로 보여주기 위한 별칭. */
+    public double getAvailableCpu() { return availableCpu(); }
+    public long getAvailableMemoryMb() { return availableMemoryMb(); }
+    public int getAvailableGpu() { return availableGpu(); }
 }

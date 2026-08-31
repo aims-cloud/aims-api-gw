@@ -2,13 +2,21 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.NetworkModel;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
@@ -16,7 +24,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 가중치 스코어 기반 스케줄러.
  *
  * 논문 수준 알고리즘:
- * 1. 하드 제약 조건 필터링 (자원 부족, 임계치 초과 노드 제외)
+ * 1. 하드 제약 조건 필터링 (ConstraintEvaluator 가 담당)
  * 2. 소프트 스코어링 (5개 차원의 가중합)
  *    - CPU 여유율 스코어: (100 - cpuUsage) / 100
  *    - 메모리 여유율 스코어: (100 - memUsage) / 100
@@ -30,32 +38,60 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 @Component
 public class WeightedScoreScheduler implements SchedulingEngine {
 
+    private final PowerModel powerModel;
+    private final ThermalModel thermalModel;
+    private final NetworkModel networkModel;
+
+    @Autowired
+    public WeightedScoreScheduler(PowerModel powerModel, ThermalModel thermalModel, NetworkModel networkModel) {
+        this.powerModel = powerModel;
+        this.thermalModel = thermalModel;
+        this.networkModel = networkModel;
+    }
+
+    /** 스프링 컨텍스트 없이 쓰는 기본 생성자 (단위 테스트). 설정 기본값을 사용한다. */
+    public WeightedScoreScheduler() {
+        this(new SchedulerProperties());
+    }
+
+    private WeightedScoreScheduler(SchedulerProperties props) {
+        this(new PowerModel(props), new ThermalModel(props), new NetworkModel());
+    }
+
+    @Override
+    public String getId() {
+        return "weighted";
+    }
+
     @Override
     public String getName() {
         return "WeightedScoreScheduler";
     }
 
     @Override
-    public SchedulingResult schedule(Workload workload, List<NodeResource> candidates,
-                                     SchedulingPolicy policy) {
+    public SchedulingResult schedule(Workload workload, PlacementContext context) {
+        List<NodeResource> candidates = context.nodes();
         if (candidates.isEmpty()) {
             return SchedulingResult.failure("후보 노드가 없습니다");
         }
 
+        SchedulingPolicy policy = context.policy();
         List<NodeScore> scores = new ArrayList<>();
         NodeScore bestScore = null;
 
         for (NodeResource node : candidates) {
             // ── 1단계: 하드 제약 조건 필터링 ──────────────────────
-            String exclusionReason = checkHardConstraints(workload, node, policy);
+            String exclusionReason = context.exclusionReason(workload, node);
             boolean eligible = (exclusionReason == null);
 
             // ── 2단계: 소프트 스코어링 (5차원) ────────────────────
-            double cpuScore = calculateCpuScore(node);
-            double memScore = calculateMemoryScore(node);
-            double powerScore = calculatePowerScore(node, policy);
-            double tempScore = calculateTemperatureScore(node, policy);
-            double netScore = calculateNetworkScore(node);
+            double cpuScore = (100.0 - node.getCpuUsagePercent()) / 100.0;
+            double memScore = (100.0 - node.getMemoryUsagePercent()) / 100.0;
+            double powerScore = policy.isPowerAwareEnabled() ? powerModel.headroomScore(node) : 0.5;
+            double tempScore = policy.isTemperatureAwareEnabled()
+                    ? thermalModel.headroomScore(node.getTemperatureCelsius(), policy.getMaxTemperatureCelsius())
+                    : 0.5;
+            double netScore = networkModel.localTrafficScore(node);
 
             // ── 3단계: 가중합 ────────────────────────────────────
             double totalScore = cpuScore * policy.getCpuWeight()
@@ -73,13 +109,20 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             // 우선순위 보너스
             totalScore *= getPriorityMultiplier(workload.getPriority());
 
-            totalScore = Math.round(totalScore * 10000.0) / 10000.0;
+            totalScore = round(totalScore);
+
+            Map<String, Double> details = new LinkedHashMap<>();
+            details.put("cpu여유", round(cpuScore));
+            details.put("메모리여유", round(memScore));
+            details.put("전력여유", round(powerScore));
+            details.put("온도여유", round(tempScore));
+            details.put("네트워크한산도", round(netScore));
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),
                     round(cpuScore), round(memScore), round(powerScore),
                     round(tempScore), round(netScore), totalScore,
-                    eligible, exclusionReason
+                    eligible, exclusionReason, details
             );
             scores.add(ns);
 
@@ -104,63 +147,6 @@ public class WeightedScoreScheduler implements SchedulingEngine {
 
         return new SchedulingResult(true, bestScore.mdcId(), bestScore.nodeId(),
                 bestScore.totalScore(), reason, scores);
-    }
-
-    // ── 하드 제약 조건 ──────────────────────────────────────────
-
-    private String checkHardConstraints(Workload workload, NodeResource node, SchedulingPolicy policy) {
-        if (!node.canAccommodate(workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu())) {
-            return String.format("자원 부족 (필요 CPU:%d MEM:%dMB GPU:%d, 가용 CPU:%.1f MEM:%dMB)",
-                    workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu(),
-                    node.availableCpu(), node.availableMemoryMb());
-        }
-        if (node.getCpuUsagePercent() > policy.getMaxCpuUsagePercent()) {
-            return String.format("CPU 사용률 초과 (%.1f%% > %.1f%%)", node.getCpuUsagePercent(), policy.getMaxCpuUsagePercent());
-        }
-        if (node.getMemoryUsagePercent() > policy.getMaxMemoryUsagePercent()) {
-            return String.format("메모리 사용률 초과 (%.1f%% > %.1f%%)", node.getMemoryUsagePercent(), policy.getMaxMemoryUsagePercent());
-        }
-        if (policy.isTemperatureAwareEnabled() && node.getTemperatureCelsius() > policy.getMaxTemperatureCelsius()) {
-            return String.format("온도 초과 (%.1f°C > %.1f°C)", node.getTemperatureCelsius(), policy.getMaxTemperatureCelsius());
-        }
-        if (policy.isPowerAwareEnabled() && node.powerHeadroomPercent() < (100 - policy.getMaxPowerUsagePercent())) {
-            return String.format("전력 여유 부족 (여유 %.1f%%)", node.powerHeadroomPercent());
-        }
-        if (workload.getMaxTemperatureCelsius() != null && node.getTemperatureCelsius() > workload.getMaxTemperatureCelsius()) {
-            return String.format("워크로드 온도 제약 초과 (%.1f°C > %.1f°C)", node.getTemperatureCelsius(), workload.getMaxTemperatureCelsius());
-        }
-        if (workload.getMaxPowerBudgetWatts() != null && node.getPowerWatts() > workload.getMaxPowerBudgetWatts()) {
-            return String.format("워크로드 전력 제약 초과 (%.1fW > %.1fW)", node.getPowerWatts(), workload.getMaxPowerBudgetWatts());
-        }
-        return null;
-    }
-
-    // ── 소프트 스코어링 ─────────────────────────────────────────
-
-    private double calculateCpuScore(NodeResource node) {
-        return (100.0 - node.getCpuUsagePercent()) / 100.0;
-    }
-
-    private double calculateMemoryScore(NodeResource node) {
-        return (100.0 - node.getMemoryUsagePercent()) / 100.0;
-    }
-
-    private double calculatePowerScore(NodeResource node, SchedulingPolicy policy) {
-        if (!policy.isPowerAwareEnabled()) return 0.5;
-        return node.powerHeadroomPercent() / 100.0;
-    }
-
-    private double calculateTemperatureScore(NodeResource node, SchedulingPolicy policy) {
-        if (!policy.isTemperatureAwareEnabled()) return 0.5;
-        double maxTemp = policy.getMaxTemperatureCelsius();
-        if (maxTemp <= 0) return 0.5;
-        return Math.max(0, (maxTemp - node.getTemperatureCelsius()) / maxTemp);
-    }
-
-    private double calculateNetworkScore(NodeResource node) {
-        double totalBps = node.getNetworkRxBps() + node.getNetworkTxBps();
-        double loadMbps = totalBps / (1024 * 1024);
-        return 1.0 / (1.0 + loadMbps / 100.0); // 100Mbps 기준 감쇠
     }
 
     private double getPriorityMultiplier(Workload.WorkloadPriority priority) {

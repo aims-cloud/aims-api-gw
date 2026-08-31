@@ -6,6 +6,9 @@ import java.time.ZoneId;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceCollectStatusResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
@@ -13,6 +16,8 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuGroupSummar
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuXidErrorsResponse;
 import com.innogrid.aims.monitoring.service.ResourceExplorerNodeGpuService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 개요·모니터링 탭을 하나의 컨트롤러에서 제공한다.
  *   그룹 개요    — KPI 카드 4종, 상태 요약(이상 감지), GPU 목록 테이블
  *   개별 GPU 개요 — KPI 카드 6종, 상태 요약, GPU 정보 표
+ *   상태 요약 카드 상세 — 수집 상태(그룹/개별), XID Errors, PCIe Replay Counter, Clocks Event Reasons
  *   모니터링     — 지표별 시계열 (화면 설계 확정 전, 잠정 지표 세트)
  * 노드 상세 패널은 ResourceExplorerNodeController 가 담당한다.
  */
@@ -140,6 +146,57 @@ public class ResourceExplorerNodeGpuController {
         Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
         return ApiResponse.ok(resourceExplorerNodeGpuService.getDeviceMetricTrend(
                 nodeId, gpuId, metric, fromInstant, toInstant, step));
+    }
+
+    // ── 상태 요약 카드 상세 패널 ────────────────────────────────
+
+    @Operation(summary = "수집 상태 상세 (그룹)",
+            description = "상태 요약의 수집 상태 카드 상세 — 수집 대상/정상/오류 GPU 수, 최근 수집 시각, 수집 주기와 "
+                    + "GPU별 수집 상태(HEALTHY|FAILED|NO_DATA)·마지막 수집·수집 지표 수를 조회합니다.")
+    @GetMapping("/health/collect-status")
+    public ApiResponse<GpuCollectStatusResponse> getCollectStatus(@PathVariable String nodeId) {
+        return ApiResponse.ok(resourceExplorerNodeGpuService.getCollectStatus(nodeId));
+    }
+
+    @Operation(summary = "수집 상태 상세 (개별 GPU)",
+            description = "개별 GPU 의 수집 상태 상세 — 요약 표와 지표별 수집 성공 여부 체크리스트를 조회합니다.")
+    @GetMapping("/devices/{gpuId}/health/collect-status")
+    public ApiResponse<GpuDeviceCollectStatusResponse> getDeviceCollectStatus(
+            @PathVariable String nodeId,
+            @PathVariable String gpuId) {
+        return ApiResponse.ok(resourceExplorerNodeGpuService.getDeviceCollectStatus(nodeId, gpuId));
+    }
+
+    @Operation(summary = "XID Errors 상세",
+            description = "ECC DBE Errors 카드의 상세 — 총 발생 건수·최근 발생과 XID 오류별 "
+                    + "발생 컨텍스트(재발 빈도 24h, 발생 시점 워크로드), 해석 후보(원인 태그·조치 안내)를 조회합니다. "
+                    + "gpuId 미지정 시 그룹 전체입니다.")
+    @GetMapping("/health/xid-errors")
+    public ApiResponse<GpuXidErrorsResponse> getXidErrors(
+            @PathVariable String nodeId,
+            @RequestParam(required = false) String gpuId) {
+        return ApiResponse.ok(resourceExplorerNodeGpuService.getXidErrors(nodeId, gpuId));
+    }
+
+    @Operation(summary = "PCIe Replay Counter 상세",
+            description = "GPU별 누적값/최근 1시간/최근 24시간 증가와 최근 24시간 증가 추이(회/h)를 한 응답으로 조회합니다. "
+                    + "gpuId 미지정 시 그룹 전체입니다.")
+    @GetMapping("/health/pcie-replay")
+    public ApiResponse<GpuPcieReplayResponse> getPcieReplay(
+            @PathVariable String nodeId,
+            @RequestParam(required = false) String gpuId) {
+        return ApiResponse.ok(resourceExplorerNodeGpuService.getPcieReplay(nodeId, gpuId));
+    }
+
+    @Operation(summary = "Clocks Event Reasons 상세",
+            description = "GPU별 활성 이벤트(DISPLAY_CLK|HW_PWR_BRAKE|HW_THERMAL|SW_THERMAL|SYNC_BOOST|"
+                    + "HW_SLOWDOWN|SW_POWER_CAP|APP_CLOCKS|GPU_IDLE)와 안내 텍스트를 조회합니다. "
+                    + "활성 이벤트 매트릭스는 프론트가 activeReasons 로 렌더링합니다. gpuId 미지정 시 그룹 전체입니다.")
+    @GetMapping("/health/clocks-events")
+    public ApiResponse<GpuClocksEventsResponse> getClocksEvents(
+            @PathVariable String nodeId,
+            @RequestParam(required = false) String gpuId) {
+        return ApiResponse.ok(resourceExplorerNodeGpuService.getClocksEvents(nodeId, gpuId));
     }
 
     /** from 기본값: 오늘 00:00:00 (서버 타임존) */

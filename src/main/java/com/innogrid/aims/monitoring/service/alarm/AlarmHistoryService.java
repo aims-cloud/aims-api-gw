@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.service.Alarm;
+package com.innogrid.aims.monitoring.service.alarm;
 
 import java.time.Instant;
 import java.util.List;

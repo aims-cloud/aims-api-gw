@@ -14,7 +14,7 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmDeliveryResponse
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryListItemResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmMessageDetailResponse;
-import com.innogrid.aims.monitoring.service.Alarm.AlarmHistoryService;
+import com.innogrid.aims.monitoring.service.alarm.AlarmHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;

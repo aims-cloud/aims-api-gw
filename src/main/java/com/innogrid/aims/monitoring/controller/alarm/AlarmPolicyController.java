@@ -12,7 +12,7 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyRecipientRe
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyRequest;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyResourceResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRecipientCandidatesResponse;
-import com.innogrid.aims.monitoring.service.Alarm.AlarmPolicyService;
+import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;

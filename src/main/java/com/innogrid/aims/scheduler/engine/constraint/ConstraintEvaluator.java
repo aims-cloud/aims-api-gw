@@ -159,11 +159,17 @@ public class ConstraintEvaluator {
 
     /**
      * 정책 임계치를 적용한 노드의 온도 상태.
-     * 경고 온도는 아직 정책에 필드가 없어 설정 기본값을 쓴다.
+     * 경고 온도는 정책 값을 우선하고, 없으면 설정 기본값을 쓴다.
      */
     public ThermalState thermalState(NodeResource node, SchedulingPolicy policy) {
         return thermalModel.state(node.getTemperatureCelsius(),
-                thermalModel.defaultWarningCelsius(),
+                warningTemperatureOf(policy),
                 policy.getMaxTemperatureCelsius());
+    }
+
+    /** 정책의 경고 온도. 지정되지 않았으면 설정 기본값. */
+    public double warningTemperatureOf(SchedulingPolicy policy) {
+        Double configured = policy.getWarningTemperatureCelsius();
+        return configured != null ? configured : thermalModel.defaultWarningCelsius();
     }
 }

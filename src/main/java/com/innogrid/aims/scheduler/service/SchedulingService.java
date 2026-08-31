@@ -3,9 +3,11 @@ package com.innogrid.aims.scheduler.service;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -72,7 +74,7 @@ public class SchedulingService {
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
 
-        PlacementContext context = createContext(resolvePolicy());
+        PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
             return SchedulingResult.failure("활성 노드가 없습니다");
         }
@@ -95,7 +97,7 @@ public class SchedulingService {
      * 현재 노드 자원 상태를 조회한다 (스케줄링 전 미리보기).
      */
     public List<NodeResource> getNodeResources() {
-        SchedulingPolicy policy = policyRepository.findByActiveTrue()
+        SchedulingPolicy policy = policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
                 .orElseGet(() -> new SchedulingPolicy("default", "기본 스케줄링 정책"));
 
         PlacementContext context = createContext(policy);
@@ -112,10 +114,41 @@ public class SchedulingService {
         return engineRegistry.describe();
     }
 
-    /** 활성 정책을 찾고, 없으면 기본 정책을 만들어 둔다. */
-    public SchedulingPolicy resolvePolicy() {
-        return policyRepository.findByActiveTrue()
+    /**
+     * 리소스 종류에 맞는 활성 정책을 고른다.
+     * 종류별 활성 → 공통 활성 → 기본 정책 생성 순으로 찾는다.
+     */
+    public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
+        if (resourceType != null) {
+            Optional<SchedulingPolicy> byType =
+                    policyRepository.findFirstByActiveTrueAndResourceType(resourceType);
+            if (byType.isPresent()) return byType.get();
+        }
+        return policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
                 .orElseGet(() -> policyRepository.save(new SchedulingPolicy("default", "기본 스케줄링 정책")));
+    }
+
+    /** 종류를 지정하지 않은 호출(공통 정책 기준). */
+    public SchedulingPolicy resolvePolicy() {
+        return resolvePolicy(null);
+    }
+
+    /**
+     * 워크로드의 실행 상태를 전이한다.
+     * 배치 이후의 흐름(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
+     * 상태가 종료되면 예약 회계에서 빠져 노드 자원이 풀린다.
+     */
+    @Transactional
+    public Workload changeStatus(Long workloadId, Workload.WorkloadStatus target) {
+        Workload workload = workloadRepository.findById(workloadId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "워크로드를 찾을 수 없습니다: " + workloadId));
+
+        if (!workload.transitionTo(target)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
+                    "허용되지 않는 상태 전이입니다: %s → %s", workload.getStatus(), target));
+        }
+        return workloadRepository.save(workload);
     }
 
     /**

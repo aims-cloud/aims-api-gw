@@ -22,6 +22,24 @@ public class SchedulingPolicy {
     @Column(length = 300)
     private String description;
 
+    /**
+     * 이 정책이 적용될 리소스 종류. null 이면 종류를 가리지 않는 공통 정책이다.
+     * 활성 정책은 종류별 1개 + 공통 1개까지 공존할 수 있다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Workload.ResourceType resourceType;
+
+    /** 이 정책으로 스케줄링할 때 기본으로 쓸 엔진 id. null 이면 weighted. */
+    @Column(length = 30)
+    private String defaultEngine;
+
+    /**
+     * 경고 온도(℃). 이 값을 넘으면 배치를 막지는 않고 상태만 WARNING 으로 본다.
+     * null 이면 설정 기본값을 쓴다.
+     */
+    private Double warningTemperatureCelsius;
+
     // ── 스코어링 가중치 (합계 1.0) ──────────────────────────────
     private double cpuWeight = 0.25;
     private double memoryWeight = 0.25;
@@ -57,6 +75,9 @@ public class SchedulingPolicy {
     public Long getId() { return id; }
     public String getName() { return name; }
     public String getDescription() { return description; }
+    public Workload.ResourceType getResourceType() { return resourceType; }
+    public String getDefaultEngine() { return defaultEngine; }
+    public Double getWarningTemperatureCelsius() { return warningTemperatureCelsius; }
     public double getCpuWeight() { return cpuWeight; }
     public double getMemoryWeight() { return memoryWeight; }
     public double getPowerWeight() { return powerWeight; }
@@ -75,6 +96,9 @@ public class SchedulingPolicy {
     // Setters
     public void setName(String name) { this.name = name; }
     public void setDescription(String description) { this.description = description; }
+    public void setResourceType(Workload.ResourceType resourceType) { this.resourceType = resourceType; }
+    public void setDefaultEngine(String defaultEngine) { this.defaultEngine = defaultEngine; }
+    public void setWarningTemperatureCelsius(Double v) { this.warningTemperatureCelsius = v; }
     public void setCpuWeight(double cpuWeight) { this.cpuWeight = cpuWeight; }
     public void setMemoryWeight(double memoryWeight) { this.memoryWeight = memoryWeight; }
     public void setPowerWeight(double powerWeight) { this.powerWeight = powerWeight; }

@@ -37,7 +37,7 @@ public class SchedulerController {
     public ApiResponse<?> listWorkloads(@RequestParam(required = false) String status) {
         if (status != null) {
             return ApiResponse.ok(workloadRepository.findByStatusOrderByCreatedAtDesc(
-                    Workload.WorkloadStatus.valueOf(status.toUpperCase())));
+                    parseEnum(Workload.WorkloadStatus.class, status, "상태")));
         }
         return ApiResponse.ok(workloadRepository.findAllByOrderByCreatedAtDesc());
     }
@@ -62,9 +62,51 @@ public class SchedulerController {
         if (request.containsKey("maxTemperatureCelsius"))
             workload.setMaxTemperatureCelsius(((Number) request.get("maxTemperatureCelsius")).doubleValue());
         if (request.containsKey("priority"))
-            workload.setPriority(Workload.WorkloadPriority.valueOf(((String) request.get("priority")).toUpperCase()));
+            workload.setPriority(parseEnum(Workload.WorkloadPriority.class,
+                    (String) request.get("priority"), "우선순위"));
+        if (request.containsKey("resourceType"))
+            workload.setResourceType(parseEnum(Workload.ResourceType.class,
+                    (String) request.get("resourceType"), "리소스 종류"));
+        if (request.containsKey("dataMdcId"))
+            workload.setDataMdcId((String) request.get("dataMdcId"));
 
         return ApiResponse.ok(workloadRepository.save(workload));
+    }
+
+    @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
+    @GetMapping("/workloads/resource-types")
+    public ApiResponse<?> getResourceTypes() {
+        return ApiResponse.ok(java.util.Arrays.stream(Workload.ResourceType.values())
+                .map(t -> Map.of("code", t.name(), "label", t.name()))
+                .toList());
+    }
+
+    @Operation(summary = "워크로드 실행 상태 전이",
+               description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다.")
+    @PatchMapping("/workloads/{workloadId}/status")
+    public ApiResponse<?> changeWorkloadStatus(@PathVariable Long workloadId,
+                                               @RequestBody Map<String, Object> request) {
+        Object raw = request.get("status");
+        if (raw == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "status 는 필수입니다");
+        }
+        Workload.WorkloadStatus target =
+                parseEnum(Workload.WorkloadStatus.class, raw.toString(), "상태");
+        return ApiResponse.ok(schedulingService.changeStatus(workloadId, target));
+    }
+
+    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. */
+    private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String label) {
+        if (value == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, label + " 값이 필요합니다");
+        }
+        try {
+            return Enum.valueOf(type, value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
+                    "지원하지 않는 %s 입니다: %s (가능한 값: %s)",
+                    label, value, java.util.Arrays.toString(type.getEnumConstants())));
+        }
     }
 
     @Operation(summary = "워크로드 상세 조회")

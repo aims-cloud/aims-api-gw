@@ -1,8 +1,8 @@
-package com.innogrid.aims.monitoring.controller;
+package com.innogrid.aims.monitoring.controller.alarm;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
-import com.innogrid.aims.monitoring.dto.alarm.AlarmRuleRequest;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRuleRequest;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmRule;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+@Deprecated
 @Tag(name = "알람", description = "알람 규칙 설정, 알람 이력")
 @RestController
 @RequestMapping("/api/v1/monitoring/alarms")

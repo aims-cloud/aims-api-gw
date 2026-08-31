@@ -1,7 +1,8 @@
-package com.innogrid.aims.monitoring.dto.alarm;
+package com.innogrid.aims.monitoring.dto.alarm.alarmHistory;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+@Deprecated
 @Schema(description = "알람 처리 상태 변경 요청")
 public record AlarmStatusUpdateRequest(
         @Schema(description = "변경할 상태", example = "ACKNOWLEDGED",

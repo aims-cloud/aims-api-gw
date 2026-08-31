@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  * (/node/{nodeId}/{category}/summary|devices|metrics/trend)을 따른다.
  * 노드 상세 패널은 ResourceExplorerNodeController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (노드 CPU)", description = "노드 CPU 카테고리 — KPI 카드, CPU 목록, 모니터링 차트")
+@Tag(name = "관측 > 자원 탐색기 (노드 CPU)", description = "노드 CPU 카테고리 — KPI 카드, CPU 목록, 모니터링 차트")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/node/{nodeId}/cpu")
 public class ResourceExplorerNodeCpuController {

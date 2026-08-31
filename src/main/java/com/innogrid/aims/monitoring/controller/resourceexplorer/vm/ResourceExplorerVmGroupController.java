@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 노드그룹 패널(ResourceExplorerNodeGroupController)과 동형 구조이며,
  * 알람 탭은 기존 AlarmController 를 자원 스코프 필터로 재사용한다.
  */
-@Tag(name = "자원 탐색기 (가상머신 그룹)", description = "가상머신 그룹 개요 KPI, VM Top-N, VM 목록 조회")
+@Tag(name = "관측 > 자원 탐색기 (가상머신 그룹)", description = "가상머신 그룹 개요 KPI, VM Top-N, VM 목록 조회")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/vm-group")
 public class ResourceExplorerVmGroupController {

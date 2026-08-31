@@ -56,7 +56,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 알람 탭은 기존 AlarmController 를 instance 필터로 재사용한다.
  * 왼쪽 트리는 ResourceExplorerTreeController, 노드그룹 패널은 ResourceExplorerNodeGroupController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (노드)", description = "노드 상세 — 주요 지표, 모니터링 요약 차트, 노드 정보, 가상머신 목록, 자원 사용 현황, 수집 서비스·로그")
+@Tag(name = "관측 > 자원 탐색기 (노드)", description = "노드 상세 — 주요 지표, 모니터링 요약 차트, 노드 정보, 가상머신 목록, 자원 사용 현황, 수집 서비스·로그")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/node/{nodeId}")
 public class ResourceExplorerNodeController {

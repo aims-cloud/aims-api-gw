@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 기존 AlarmController 의 GET /history(명세서 계약)는 이 컨트롤러의 /histories 로 대체 예정이다.
  * 정책 탭은 화면 설계 확정 후 별도 개편한다.
  */
-@Tag(name = "알람 (발생 이력)", description = "알람 발생 이력 목록, 전송 이력, 메시지 상세, 알람 확인")
+@Tag(name = "관측 > 알람 (발생 이력)", description = "알람 발생 이력 목록, 전송 이력, 메시지 상세, 알람 확인")
 @RestController
 @RequestMapping("/api/v1/monitoring/alarms")
 public class AlarmHistoryController {

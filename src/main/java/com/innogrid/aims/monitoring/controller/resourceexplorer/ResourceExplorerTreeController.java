@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 역할을 루트로 물리 노드, 가상 머신 및 모니터링 항목의 계층 구조를 제공한다.
  * 노드그룹 선택 시 오른쪽 패널은 ResourceExplorerNodeGroupController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (트리)", description = "역할·노드·가상 머신·모니터링 항목 트리 조회 및 검색")
+@Tag(name = "관측 > 자원 탐색기 (트리)", description = "역할·노드·가상 머신·모니터링 항목 트리 조회 및 검색")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/tree")
 public class ResourceExplorerTreeController {

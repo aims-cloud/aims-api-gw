@@ -23,10 +23,30 @@ public class PlacementContext {
     private final SchedulingPolicy policy;
     private final ConstraintEvaluator evaluator;
 
+    /**
+     * 이번 실행 전체에 적용할 전력 예산(W). 스케줄이 지정했을 때만 값이 있다.
+     * 워크로드마다 따로 지정한 예산과 함께 검사한다 — 둘 중 하나라도 넘으면 제외된다.
+     */
+    private Double powerBudgetWatts;
+
     private PlacementContext(List<NodeResource> nodes, SchedulingPolicy policy, ConstraintEvaluator evaluator) {
         this.nodes = nodes == null ? Collections.emptyList() : nodes;
         this.policy = policy;
         this.evaluator = evaluator;
+    }
+
+    /**
+     * 실행 단위 전력 예산을 설정한다.
+     * 워크로드 엔티티를 건드리지 않고 제약을 적용하기 위한 통로다.
+     */
+    public PlacementContext withPowerBudget(Double watts) {
+        this.powerBudgetWatts = watts;
+        return this;
+    }
+
+    /** 실행 단위 전력 예산. 지정하지 않았으면 {@code null}. */
+    public Double powerBudgetWatts() {
+        return powerBudgetWatts;
     }
 
     /**

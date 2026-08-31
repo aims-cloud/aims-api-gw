@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.innogrid.aims.scheduler.entity.Workload;
 
@@ -28,4 +30,48 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
      */
     List<Workload> findByStatusAndResourceTypeIsNullOrderByPriorityDescCreatedAtAsc(
             Workload.WorkloadStatus status);
+
+    /**
+     * 스케줄 실행이 배치할 후보 워크로드.
+     *
+     * <p>재시도 횟수가 상한에 이른 워크로드는 제외한다. 자원이 영영 모자란 워크로드가
+     * 매 실행마다 다시 시도되어 이력을 채우는 것을 막는다. 값이 null 인 기존 행은
+     * 0회로 본다.</p>
+     *
+     * <p><b>정렬은 여기서 하지 않는다.</b> 우선순위가 문자열로 저장돼 있어 SQL 의
+     * {@code order by} 로는 CRITICAL·HIGH·LOW·NORMAL 순(사전순)이 되어 버린다.
+     * 호출부가 열거형 순서로 다시 정렬한다.</p>
+     *
+     * @param matchNullType 리소스 종류가 없는 기존 행까지 포함할지 (VM 대상 실행에서 true)
+     */
+    @Query("""
+           select w from Workload w
+            where w.status in :statuses
+              and (w.resourceType = :resourceType
+                   or (:matchNullType = true and w.resourceType is null))
+              and (w.retryCount is null or w.retryCount < :maxRetryCount)
+           """)
+    List<Workload> findSchedulingCandidates(
+            @Param("statuses") Collection<Workload.WorkloadStatus> statuses,
+            @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("matchNullType") boolean matchNullType,
+            @Param("maxRetryCount") int maxRetryCount);
+
+    /**
+     * 재시도 상한에 걸려 대상에서 빠진 워크로드 수.
+     * 실행 결과 메시지에 함께 적어, 대상 0건이 "할 일이 없어서"인지
+     * "전부 소진되어서"인지 구분할 수 있게 한다.
+     */
+    @Query("""
+           select count(w) from Workload w
+            where w.status = :status
+              and (w.resourceType = :resourceType
+                   or (:matchNullType = true and w.resourceType is null))
+              and w.retryCount is not null and w.retryCount >= :maxRetryCount
+           """)
+    long countRetryExhausted(
+            @Param("status") Workload.WorkloadStatus status,
+            @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("matchNullType") boolean matchNullType,
+            @Param("maxRetryCount") int maxRetryCount);
 }

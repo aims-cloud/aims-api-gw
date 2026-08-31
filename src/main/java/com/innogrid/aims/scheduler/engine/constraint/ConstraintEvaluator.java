@@ -62,7 +62,7 @@ public class ConstraintEvaluator {
         reason = checkThermal(workload, node, policy);
         if (reason != null) return reason;
 
-        return checkPower(workload, node, policy);
+        return checkPower(workload, node, policy, ctx.powerBudgetWatts());
     }
 
     /** 배치 가능 여부. */
@@ -130,7 +130,8 @@ public class ConstraintEvaluator {
 
     // ── C4. 전력 ───────────────────────────────────────────────
 
-    private String checkPower(Workload workload, NodeResource node, SchedulingPolicy policy) {
+    private String checkPower(Workload workload, NodeResource node, SchedulingPolicy policy,
+                             Double runPowerBudgetWatts) {
         if (policy.isPowerAwareEnabled()) {
             double requiredHeadroom = 100 - policy.getMaxPowerUsagePercent();
             if (node.powerHeadroomPercent() < requiredHeadroom) {
@@ -143,6 +144,12 @@ public class ConstraintEvaluator {
                 && node.getPowerWatts() > workload.getMaxPowerBudgetWatts()) {
             return String.format("워크로드 전력 제약 초과 (%.1fW > %.1fW)",
                     node.getPowerWatts(), workload.getMaxPowerBudgetWatts());
+        }
+
+        // 스케줄이 실행 단위로 지정한 예산. 워크로드 엔티티를 바꾸지 않고 적용한다.
+        if (runPowerBudgetWatts != null && node.getPowerWatts() > runPowerBudgetWatts) {
+            return String.format("스케줄 전력 예산 초과 (%.1fW > %.1fW)",
+                    node.getPowerWatts(), runPowerBudgetWatts);
         }
 
         if (policy.isPowerAwareEnabled() && node.getPowerCapacityWatts() > 0) {
@@ -171,5 +178,15 @@ public class ConstraintEvaluator {
     public double warningTemperatureOf(SchedulingPolicy policy) {
         Double configured = policy.getWarningTemperatureCelsius();
         return configured != null ? configured : thermalModel.defaultWarningCelsius();
+    }
+
+    /** 임계 온도를 넘겨 냉각 대기 중인 노드인지. */
+    public boolean isCoolingDown(String nodeId) {
+        return thermalModel.isCoolingDown(nodeId);
+    }
+
+    /** 냉각 대기가 풀릴 때까지 남은 시간(분). 대기 중이 아니면 0. */
+    public long remainingCooldownMinutes(String nodeId) {
+        return thermalModel.remainingCooldownMinutes(nodeId);
     }
 }

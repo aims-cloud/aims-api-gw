@@ -75,6 +75,61 @@ class WorkloadStatusTransitionTest {
         assertEquals(ResourceType.GPU, workload.resolveResourceType());
     }
 
+    // ── 재시도 ─────────────────────────────────────────────────
+
+    @Test
+    void 배치에_실패하면_재시도_횟수가_쌓인다() {
+        Workload workload = new Workload("job", 1, 1024);
+        assertEquals(0, workload.resolveRetryCount(), "값이 없으면 0으로 본다");
+
+        workload.markFailed("자원 부족");
+        workload.markFailed("자원 부족");
+
+        assertEquals(2, workload.resolveRetryCount());
+    }
+
+    @Test
+    void 배치에_성공하면_재시도_횟수가_지워진다() {
+        Workload workload = new Workload("job", 1, 1024);
+        workload.markFailed("자원 부족");
+
+        workload.assignTo("mdc-01", "node-1", 0.9, "배치됨");
+
+        assertEquals(0, workload.resolveRetryCount());
+    }
+
+    @Test
+    void 실패한_워크로드는_대기로_되돌릴_수_있다() {
+        // 재시도 상한에 걸린 워크로드를 살릴 유일한 경로다
+        Workload workload = scheduled();
+        workload.transitionTo(WorkloadStatus.RUNNING);
+        workload.transitionTo(WorkloadStatus.FAILED);
+
+        assertTrue(workload.transitionTo(WorkloadStatus.PENDING));
+        assertEquals(WorkloadStatus.PENDING, workload.getStatus());
+    }
+
+    @Test
+    void 대기로_되돌리면_재시도_횟수도_지워진다() {
+        // 지우지 않으면 되살려도 곧바로 상한에 걸려 다시 대상에서 빠진다
+        Workload workload = new Workload("job", 1, 1024);
+        workload.markFailed("자원 부족");
+        workload.markFailed("자원 부족");
+
+        assertTrue(workload.transitionTo(WorkloadStatus.PENDING));
+        assertEquals(0, workload.resolveRetryCount());
+    }
+
+    @Test
+    void 실패에서_다른_상태로는_넘어갈_수_없다() {
+        Workload workload = new Workload("job", 1, 1024);
+        workload.markFailed("자원 부족");
+
+        assertFalse(workload.transitionTo(WorkloadStatus.RUNNING));
+        assertFalse(workload.transitionTo(WorkloadStatus.SCHEDULED));
+        assertFalse(workload.transitionTo(WorkloadStatus.COMPLETED));
+    }
+
     @Test
     void 리소스_종류는_네_가지다() {
         assertArrayEquals(

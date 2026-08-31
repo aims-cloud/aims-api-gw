@@ -28,6 +28,43 @@ public class SchedulerProperties {
      */
     private int reservationTtlHours = 24;
 
+    /**
+     * <b>스케줄 cron 을 해석할 시간대.</b>
+     *
+     * <p>배포 VM 은 OS·DB 모두 {@code Etc/UTC} 이고 TZ 환경변수도 없어 JVM 기본 시간대가 UTC 다.
+     * 그대로 두면 화면에서 "매일 02:00" 으로 만든 스케줄이 한국 시간 오전 11시에 실행된다.
+     * cron 문자열에는 시간대 정보가 없으므로 <b>입력을 한국 시간(UTC+9)으로 가정</b>해 해석한다.</p>
+     *
+     * <p>이 값은 <b>cron 해석에만</b> 쓴다. 저장·응답 시각은 전부 UTC {@code OffsetDateTime} 이고
+     * 표출 변환은 프런트가 한다. JVM 전역 시간대는 바꾸지 않는다 — 그러면 미터링 집계·알람 평가 등
+     * 다른 담당자의 기능까지 함께 움직인다.</p>
+     *
+     * <p>Asia/Seoul 은 서머타임이 없어 존재하지 않는 시각·중복 시각 문제가 발생하지 않는다.
+     * 이 값을 바꾸면 기존 스케줄의 실행 시각이 전부 이동하므로 운영 공지가 필요하다.</p>
+     */
+    private String timezone = "Asia/Seoul";
+
+    /** 자동 실행 대상을 확인하는 주기(ms). 이 값보다 짧은 주기의 cron 은 등록 시 거부한다. */
+    private long pollIntervalMs = 10_000;
+
+    /**
+     * 러너가 첫 폴링을 시작하기까지 기다리는 시간(초).
+     * DB·외부 연동이 준비되기 전에 실행되지 않게 하고, 테스트 컨텍스트에서 폴링이 돌지 않게 한다.
+     */
+    private int initialDelaySeconds = 30;
+
+    /** 실행 이력 보존 기간(일). 러너가 하루 한 번 오래된 행을 지운다. */
+    private int runRetentionDays = 90;
+
+    /** 한 번의 실행에서 처리할 워크로드 상한. 초과분은 다음 실행으로 넘긴다. */
+    private int maxWorkloadsPerRun = 500;
+
+    /**
+     * FAILED 워크로드를 다시 배치 시도할 최대 횟수.
+     * 영영 배치할 수 없는 워크로드가 매 실행마다 재시도되어 이력을 채우는 것을 막는다.
+     */
+    private int maxRetryCount = 5;
+
     private final Power power = new Power();
     private final Thermal thermal = new Thermal();
     private final Network network = new Network();
@@ -38,6 +75,18 @@ public class SchedulerProperties {
     public void setDiskMountPoint(String diskMountPoint) { this.diskMountPoint = diskMountPoint; }
     public int getReservationTtlHours() { return reservationTtlHours; }
     public void setReservationTtlHours(int reservationTtlHours) { this.reservationTtlHours = reservationTtlHours; }
+    public String getTimezone() { return timezone; }
+    public void setTimezone(String timezone) { this.timezone = timezone; }
+    public long getPollIntervalMs() { return pollIntervalMs; }
+    public void setPollIntervalMs(long pollIntervalMs) { this.pollIntervalMs = pollIntervalMs; }
+    public int getInitialDelaySeconds() { return initialDelaySeconds; }
+    public void setInitialDelaySeconds(int initialDelaySeconds) { this.initialDelaySeconds = initialDelaySeconds; }
+    public int getRunRetentionDays() { return runRetentionDays; }
+    public void setRunRetentionDays(int runRetentionDays) { this.runRetentionDays = runRetentionDays; }
+    public int getMaxWorkloadsPerRun() { return maxWorkloadsPerRun; }
+    public void setMaxWorkloadsPerRun(int maxWorkloadsPerRun) { this.maxWorkloadsPerRun = maxWorkloadsPerRun; }
+    public int getMaxRetryCount() { return maxRetryCount; }
+    public void setMaxRetryCount(int maxRetryCount) { this.maxRetryCount = maxRetryCount; }
     public Power getPower() { return power; }
     public Thermal getThermal() { return thermal; }
     public Network getNetwork() { return network; }

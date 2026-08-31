@@ -108,6 +108,57 @@ public class SchedulingService {
     }
 
     /**
+     * 노드 한 대의 현재 상태. 없으면 404.
+     */
+    public NodeResource getNodeResource(String nodeId) {
+        return getNodeResources().stream()
+                .filter(n -> n.getNodeId().equals(nodeId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "노드를 찾을 수 없습니다: " + nodeId));
+    }
+
+    /**
+     * 임계 온도를 넘겨 냉각 대기 중인 노드 목록.
+     * 온도 제어(연구계획 B3)가 실제로 배치를 막고 있는지 밖에서 확인할 수단이다.
+     */
+    public List<Map<String, Object>> getCoolingDownNodes() {
+        return getNodeResources().stream()
+                .filter(n -> constraintEvaluator.isCoolingDown(n.getNodeId()))
+                .map(n -> Map.<String, Object>of(
+                        "mdcId", n.getMdcId(),
+                        "nodeId", n.getNodeId(),
+                        "temperatureCelsius", n.getTemperatureCelsius(),
+                        "thermalState", String.valueOf(n.getThermalState()),
+                        "remainingCooldownMinutes",
+                        constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
+                .toList();
+    }
+
+    /**
+     * 배치하지 않고 제약 평가만 수행한다.
+     *
+     * <p>워크로드 상태와 배치 이력을 전혀 건드리지 않는다. 어떤 노드가 왜 제외됐는지
+     * 확인해 제약 조건 기반 스케줄링(연구계획 A1)의 근거를 보이는 데 쓴다.</p>
+     */
+    public SchedulingResult dryRun(Long workloadId, String engineId) {
+        Workload workload = workloadRepository.findById(workloadId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "워크로드를 찾을 수 없습니다: " + workloadId));
+
+        if (engineId != null && !engineRegistry.contains(engineId)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST,
+                    "알 수 없는 스케줄링 엔진입니다: " + engineId);
+        }
+
+        PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
+        if (context.isEmpty()) {
+            return SchedulingResult.failure("활성 노드가 없습니다");
+        }
+        return engineRegistry.resolve(engineId).schedule(workload, context);
+    }
+
+    /**
      * 사용 가능한 스케줄링 엔진 목록.
      */
     public List<Map<String, String>> getAvailableEngines() {

@@ -44,6 +44,19 @@ public class PlacementService {
      */
     @Transactional
     public SchedulingResult place(Workload workload, PlacementContext context, String engineId) {
+        return place(workload, context, engineId, null);
+    }
+
+    /**
+     * 스케줄 실행의 일부로 배치한다.
+     *
+     * <p>{@code scheduleRunId} 가 있으면 <b>실패한 결정도 이력으로 남긴다.</b> 실행 상세에서
+     * 어떤 워크로드가 왜 배치되지 못했는지 보여야 명세 A1(제약 조건 기반 스케줄링)의 근거가
+     * 된다. 단건 스케줄링 API 로 부를 때는 기존과 같이 성공한 결정만 남긴다.</p>
+     */
+    @Transactional
+    public SchedulingResult place(Workload workload, PlacementContext context, String engineId,
+                                  Long scheduleRunId) {
         SchedulingEngine engine = engineRegistry.resolve(engineId);
 
         log.info("스케줄링 시작: workload={}, engine={}, candidates={}",
@@ -55,9 +68,16 @@ public class PlacementService {
             workload.assignTo(result.selectedMdcId(), result.selectedNodeId(),
                     result.finalScore(), result.reason());
             context.reserve(result.selectedNodeId(), workload);
-            historyRepository.save(toHistory(workload, context, result, engine));
+            SchedulingHistory history = toHistory(workload, context, result, engine);
+            if (scheduleRunId != null) history.linkToRun(scheduleRunId, true);
+            historyRepository.save(history);
         } else {
             workload.markFailed(result.reason());
+            if (scheduleRunId != null) {
+                SchedulingHistory history = toHistory(workload, context, result, engine);
+                history.linkToRun(scheduleRunId, false);
+                historyRepository.save(history);
+            }
         }
 
         workloadRepository.save(workload);

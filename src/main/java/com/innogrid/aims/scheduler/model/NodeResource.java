@@ -79,12 +79,6 @@ public class NodeResource {
         return totalGpu - reservedGpu;
     }
 
-    /** 전력 효율성 (작업량/와트) — 높을수록 효율적 */
-    public double powerEfficiency() {
-        if (powerWatts <= 0) return 0;
-        return cpuUsagePercent / powerWatts;
-    }
-
     /** 전력 여유율 (%) */
     public double powerHeadroomPercent() {
         if (powerCapacityWatts <= 0) return 100;

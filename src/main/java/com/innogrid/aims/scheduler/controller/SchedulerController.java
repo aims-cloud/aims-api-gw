@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 import com.innogrid.aims.common.dto.ApiResponse;
@@ -8,9 +9,11 @@ import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
+import com.innogrid.aims.scheduler.service.PowerEfficiencyService;
 import com.innogrid.aims.scheduler.service.SchedulingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,13 +23,16 @@ import org.springframework.web.bind.annotation.*;
 public class SchedulerController {
 
     private final SchedulingService schedulingService;
+    private final PowerEfficiencyService powerEfficiencyService;
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
 
     public SchedulerController(SchedulingService schedulingService,
+                               PowerEfficiencyService powerEfficiencyService,
                                WorkloadRepository workloadRepository,
                                SchedulingHistoryRepository historyRepository) {
         this.schedulingService = schedulingService;
+        this.powerEfficiencyService = powerEfficiencyService;
         this.workloadRepository = workloadRepository;
         this.historyRepository = historyRepository;
     }
@@ -152,6 +158,30 @@ public class SchedulerController {
     @GetMapping("/nodes/{nodeId}")
     public ApiResponse<?> getNodeResource(@PathVariable String nodeId) {
         return ApiResponse.ok(schedulingService.getNodeResource(nodeId));
+    }
+
+    // ── 전력 효율성 평가 ────────────────────────────────────────
+
+    @Operation(summary = "서버별 전력 효율성 평가",
+               description = "노드별 전력 효율 지표(PEI)·전력 비례성·여유율과 클러스터 내 상대 등급(A~D)·순위·권고를 조회합니다. "
+                       + "전력 메트릭이 없는 노드는 evaluable=false 이고 파생 지표가 null 입니다. "
+                       + "상대 등급은 평가 가능한 노드가 4대 이상일 때만 매겨집니다.")
+    @GetMapping("/nodes/power-efficiency")
+    public ApiResponse<?> getPowerEfficiency() {
+        return ApiResponse.ok(powerEfficiencyService.evaluateCurrent());
+    }
+
+    @Operation(summary = "노드 전력 효율 추세",
+               description = "전력·CPU 사용률·PEI 의 시계열을 조회합니다. 메트릭 저장소에서 그때그때 읽고 저장하지 않습니다. "
+                       + "from·to 를 비우면 최근 24시간, step 기본값은 5m 입니다(예: 30s, 5m, 1h, 1d). "
+                       + "데이터가 없으면 빈 배열과 사유를 돌려줍니다.")
+    @GetMapping("/nodes/{nodeId}/power-efficiency/trend")
+    public ApiResponse<?> getPowerEfficiencyTrend(
+            @PathVariable String nodeId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+            @RequestParam(required = false) String step) {
+        return ApiResponse.ok(powerEfficiencyService.trend(nodeId, from, to, step));
     }
 
     // ── 배치 진단 ──────────────────────────────────────────────

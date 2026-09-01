@@ -29,6 +29,19 @@ public class SchedulerProperties {
     private int reservationTtlHours = 24;
 
     /**
+     * 배치한 워크로드가 메트릭에 나타나기까지 걸리는 시간(분).
+     *
+     * <p>실행 중(RUNNING)인 워크로드는 이미 노드 사용률 메트릭에 포함돼 있다. 그것을 예약으로
+     * 또 잡으면 한 워크로드가 두 번 계산된다. 반대로 방금 시작한 워크로드는 아직 메트릭에
+     * 잡히지 않아 예약으로 봐야 한다. 그 경계가 이 값이다.</p>
+     *
+     * <p>기본 10분은 Prometheus 스크레이프 주기와 수집 쿼리의 {@code irate(...[5m])} 창을
+     * 함께 덮는 값이다. 이 값을 줄이면 갓 시작한 워크로드의 자원이 잠시 이중으로 비어
+     * 보이고, 늘리면 이중 계상 구간이 길어진다.</p>
+     */
+    private int metricLagMinutes = 10;
+
+    /**
      * <b>스케줄 cron 을 해석할 시간대.</b>
      *
      * <p>배포 VM 은 OS·DB 모두 {@code Etc/UTC} 이고 TZ 환경변수도 없어 JVM 기본 시간대가 UTC 다.
@@ -75,6 +88,8 @@ public class SchedulerProperties {
     public void setDiskMountPoint(String diskMountPoint) { this.diskMountPoint = diskMountPoint; }
     public int getReservationTtlHours() { return reservationTtlHours; }
     public void setReservationTtlHours(int reservationTtlHours) { this.reservationTtlHours = reservationTtlHours; }
+    public int getMetricLagMinutes() { return metricLagMinutes; }
+    public void setMetricLagMinutes(int metricLagMinutes) { this.metricLagMinutes = metricLagMinutes; }
     public String getTimezone() { return timezone; }
     public void setTimezone(String timezone) { this.timezone = timezone; }
     public long getPollIntervalMs() { return pollIntervalMs; }

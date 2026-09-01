@@ -110,6 +110,21 @@ public class SchedulerProperties {
         /** PEI 정규화 기준(%/W). 이 값을 1.0 으로 본다. */
         private double peiNormalizer = 0.5;
 
+        /** 전력 효율 추세의 기본 조회 구간(시간). from·to 를 주지 않으면 최근 이만큼을 본다. */
+        private int trendDefaultHours = 24;
+
+        /** 전력 효율 추세의 기본 간격. */
+        private String trendDefaultStep = "5m";
+
+        /**
+         * 추세 한 번에 돌려줄 최대 지점 수.
+         *
+         * <p>메트릭 저장소 클라이언트에 읽기 타임아웃이 걸려 있지 않아, 넓은 구간을 잘게
+         * 잘라 물으면 요청 스레드가 오래 붙잡힌다. 구간 ÷ 간격이 이 값을 넘으면 거절해
+         * 애초에 무거운 질의가 나가지 않게 한다.</p>
+         */
+        private int trendMaxPoints = 2000;
+
         public double getDefaultCapacityWatts() { return defaultCapacityWatts; }
         public void setDefaultCapacityWatts(double v) { this.defaultCapacityWatts = v; }
         public Map<String, Double> getCapacityByNode() { return capacityByNode; }
@@ -118,6 +133,12 @@ public class SchedulerProperties {
         public void setIdleRatio(double v) { this.idleRatio = v; }
         public double getPeiNormalizer() { return peiNormalizer; }
         public void setPeiNormalizer(double v) { this.peiNormalizer = v; }
+        public int getTrendDefaultHours() { return trendDefaultHours; }
+        public void setTrendDefaultHours(int v) { this.trendDefaultHours = v; }
+        public String getTrendDefaultStep() { return trendDefaultStep; }
+        public void setTrendDefaultStep(String v) { this.trendDefaultStep = v; }
+        public int getTrendMaxPoints() { return trendMaxPoints; }
+        public void setTrendMaxPoints(int v) { this.trendMaxPoints = v; }
     }
 
     /** 온도 모델 설정. */

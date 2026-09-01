@@ -21,7 +21,8 @@ public record ResourceExplorerTreeDataset(
     ) {}
 
     /** 물리 노드 1대 — gpuIds 가 있으면 트리에 GPU 그룹/장치 하위 항목이 생긴다.
-     *  별칭/IP/사용률은 역할 패널의 배포영역 노드 목록 테이블에 쓴다. */
+     *  별칭/IP/사용률은 노드그룹 패널의 노드 목록·Top-N 에 쓴다.
+     *  IP 는 노드당 여러 개(관리망/서비스망)일 수 있고, 메트릭(Double)이 null 이면 미수집("-")이다. */
     public record NodeInfo(
             String nodeId,
             String name,
@@ -29,15 +30,16 @@ public record ResourceExplorerTreeDataset(
             String roleId,
             String deploymentId,
             String status,
-            String ipAddress,
-            double cpuUtilization,
-            double memoryUsedGb,
-            double memoryTotalGb,
-            double fileSystemUsedGb,
-            double fileSystemTotalGb,
+            List<String> ipAddresses,
+            Double cpuUtilization,
+            Double memoryUsedGb,
+            Double memoryTotalGb,
+            Double fileSystemUsedGb,
+            Double fileSystemTotalGb,
             List<String> gpuIds
     ) {
         public NodeInfo {
+            ipAddresses = ipAddresses == null ? List.of() : List.copyOf(ipAddresses);
             gpuIds = gpuIds == null ? List.of() : List.copyOf(gpuIds);
         }
     }

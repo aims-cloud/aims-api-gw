@@ -48,20 +48,22 @@ public class AlarmPolicyController {
     }
 
     @Operation(summary = "알람 정책 목록",
-            description = "정책명/역할/배포영역/대상 자원 유형/기준/알람 레벨/생성자/생성 일시. "
-                    + "역할·배포영역·레벨·키워드 필터와 컬럼 정렬, 페이징을 지원합니다. "
+            description = "정책명/역할/배포영역/대상 자원 유형/대상 자원 수/기준/알람 레벨/생성자/생성 일시. "
+                    + "역할·배포영역·자원 유형·특정 자원(resourceId — 자원 탐색기 알람 탭에서 해당 자원이 대상에 포함된 "
+                    + "정책만 조회)·레벨·키워드 필터와 컬럼 정렬, 페이징을 지원합니다. "
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
     @GetMapping
     public ApiResponse<PageResponse<AlarmPolicyListItemResponse>> getPolicies(
             @RequestParam(required = false) String roleId,
             @RequestParam(required = false) String deploymentId,
+            @RequestParam(required = false) String resourceType,
+            @RequestParam(required = false) String resourceId,
             @RequestParam(required = false) AlarmLevel level,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        return ApiResponse.ok(alarmPolicyService.getPolicies(
-                roleId, deploymentId, level, keyword, page, size, sort));
+        return ApiResponse.ok(alarmPolicyService.getPolicies(roleId, deploymentId, resourceType, resourceId, level, keyword, page, size, sort));
     }
 
     @Operation(summary = "알람 정책 상세",

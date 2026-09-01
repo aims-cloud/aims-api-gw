@@ -70,8 +70,13 @@ public class MockDataProvider {
         return new ResourceExplorerTreeDataset(
                 List.of(new RoleInfo("ADMIN", "역할 A", "관리자", 1),
                         new RoleInfo("USER", "역할 B", "관리자", 1)),
-                List.of(new NodeInfo("node-01", "node 01", "GPU 학습 노드", "ADMIN", "Openstack-GPU", "RUNNING", "123.123.12.1", 32.5, 51.6, 128.0, 512.0, 1024.0, List.of("gpu-01", "gpu-02")),
-                        new NodeInfo("node-02", "node 02", "GPU 추론 노드", "USER", "Openstack-GPU2", "ERROR", "123.123.12.2", 78.1, 96.4, 128.0, 890.5, 1024.0, List.of("gpu-03", "gpu-04"))),
+                List.of(new NodeInfo("node-01", "node 01", "GPU 학습 노드", "ADMIN", "Openstack-GPU", "RUNNING",
+                                List.of("123.123.12.1"), 32.5, 51.6, 128.0, 512.0, 1024.0, List.of("gpu-01", "gpu-02")),
+                        new NodeInfo("node-02", "node 02", "GPU 추론 노드", "USER", "Openstack-GPU2", "ERROR",
+                                List.of("123.123.12.2", "172.20.0.44"), 78.1, 96.4, 128.0, 890.5, 1024.0, List.of("gpu-03", "gpu-04")),
+                        // 메트릭 미수집 노드 — 노드 목록/Top-N 의 "-"·미수집 표시 확인용
+                        new NodeInfo("node-03", "node 03", null, "USER", "Openstack-GPU2", "ERROR",
+                                List.of("123.123.180.82", "172.20.0.232"), null, null, null, null, null, List.of())),
                 List.of(new VmInfo("vm-01", "vm 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02")),
                         new VmInfo("vm-02", "vm 02", "USER", "Openstack-GPU2", "ERROR", List.of("gpu-03", "gpu-04")),
                         new VmInfo("vm-03", "vm 03", "USER", "Openstack-GPU3", "PENDING", List.of("gpu-05", "gpu-06"))));

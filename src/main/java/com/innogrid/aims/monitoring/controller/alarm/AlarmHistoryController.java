@@ -48,7 +48,8 @@ public class AlarmHistoryController {
 
     @Operation(summary = "알람 발생 이력 목록",
             description = "발생 일시/레벨/대상 자원/기준/관측값/역할/배포영역/정책명/전송 이력 수/확인 여부. "
-                    + "레벨(다중)·역할·배포영역·자원 유형·정책(policyId — 정책 탭 발생 이력에서 사용)·기간·키워드 필터와 "
+                    + "레벨(다중)·역할·배포영역·자원 유형·특정 자원(resourceId — 자원 탐색기 알람 탭에서 사용)·"
+                    + "정책(policyId — 정책 탭 발생 이력에서 사용)·기간·키워드 필터와 "
                     + "컬럼 정렬, 페이징을 지원합니다. "
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식, from/to 미지정 시 오늘 00시~현재입니다.")
     @GetMapping("/histories")
@@ -57,6 +58,7 @@ public class AlarmHistoryController {
             @RequestParam(required = false) String roleId,
             @RequestParam(required = false) String deploymentId,
             @RequestParam(required = false) String resourceType,
+            @RequestParam(required = false) String resourceId,
             @RequestParam(required = false) Long policyId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String from,
@@ -66,8 +68,7 @@ public class AlarmHistoryController {
             @RequestParam(defaultValue = "occurredAt,desc") String sort) {
         Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
         Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
-        return ApiResponse.ok(alarmHistoryService.getHistories(
-                level, roleId, deploymentId, resourceType, policyId, keyword, fromInstant, toInstant, page, size, sort));
+        return ApiResponse.ok(alarmHistoryService.getHistories(level, roleId, deploymentId, resourceType, resourceId, policyId, keyword, fromInstant, toInstant, page, size, sort));
     }
 
     @Operation(summary = "알람 전송 이력",

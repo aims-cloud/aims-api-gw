@@ -69,16 +69,18 @@ class ResourceExplorerRoleServiceTest {
         loginWithRoles("USER");
         ResourceStatusDistributionResponse nodeStatus = service.getNodeStatus("USER");
         assertThat(nodeStatus.resourceKind()).isEqualTo("NODE");
-        assertThat(nodeStatus.totalCount()).isEqualTo(1);            // node-02 만
+        assertThat(nodeStatus.totalCount()).isEqualTo(2);            // node-02, node-03
         assertThat(nodeStatus.statusCounts()).extracting(c -> c.status())
                 .containsExactly(ResourceStatus.RUNNING, ResourceStatus.ERROR,
                         ResourceStatus.PENDING, ResourceStatus.STOP);
         assertThat(nodeStatus.statusCounts()).extracting(c -> c.count())
-                .containsExactly(0L, 1L, 0L, 0L);
+                .containsExactly(0L, 2L, 0L, 0L);
 
         ResourceStatusDistributionResponse vmStatus = service.getVmStatus("USER");
         assertThat(vmStatus.resourceKind()).isEqualTo("VM");
-        assertThat(vmStatus.totalCount()).isEqualTo(1);
+        assertThat(vmStatus.totalCount()).isEqualTo(2);               // vm-02(ERROR) + vm-03(PENDING)
+        assertThat(vmStatus.statusCounts()).extracting(c -> c.count())
+                .containsExactly(0L, 1L, 1L, 0L);                     // Running/Error/Pending/Stop 순
     }
 
     @Test

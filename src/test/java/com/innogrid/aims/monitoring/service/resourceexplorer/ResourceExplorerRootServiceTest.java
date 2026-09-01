@@ -55,14 +55,15 @@ class ResourceExplorerRootServiceTest {
 
     @Test
     void 집계는_토큰의_역할_스코프로_제한된다() {
-        // 역할 B만 보유 → 역할 B 스코프(node-02/vm-02, ERROR)만 집계
+        // 역할 B만 보유 → 역할 B 스코프(node-02·node-03: ERROR, vm-02: ERROR, vm-03: PENDING)만 집계
         loginWithRoles("USER");
         RootSummaryResponse summary = service.getRootSummary();
         assertThat(summary.roleCount()).isEqualTo(1);
-        assertThat(summary.nodeCount()).isEqualTo(1);
-        assertThat(summary.vmCount()).isEqualTo(1);
+        assertThat(summary.nodeCount()).isEqualTo(2);
+        assertThat(summary.vmCount()).isEqualTo(2);
         assertThat(summary.runningCount()).isZero();
-        assertThat(summary.errorCount()).isEqualTo(2);
+        assertThat(summary.errorCount()).isEqualTo(3);
+        assertThat(summary.pendingCount()).isEqualTo(1);
         assertThat(service.getRoles(null, 1, 10, "name,asc").items())
                 .extracting(RoleListItemResponse::name).containsExactly("역할 B");
 

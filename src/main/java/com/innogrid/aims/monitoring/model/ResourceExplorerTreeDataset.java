@@ -12,18 +12,37 @@ public record ResourceExplorerTreeDataset(
         List<NodeInfo> nodes,
         List<VmInfo> vms
 ) {
-    /** 역할 1건 — roleId 는 토큰 roles 값(예: ADMIN)과 일치 */
-    public record RoleInfo(String roleId, String roleName) {}
+    /** 역할 1건 — roleId 는 토큰 roles 값(예: ADMIN)과 일치. 관리자/멤버 수는 전체 자원·역할 패널의 역할 테이블에 쓴다. */
+    public record RoleInfo(
+            String roleId,
+            String roleName,
+            String managerName,
+            long memberCount
+    ) {}
 
     /** 물리 노드 1대 — gpuIds 가 있으면 트리에 GPU 그룹/장치 하위 항목이 생긴다 */
-    public record NodeInfo(String nodeId, String name, String roleId, String deploymentId, String status, List<String> gpuIds) {
+    public record NodeInfo(
+            String nodeId,
+            String name,
+            String roleId,
+            String deploymentId,
+            String status,
+            List<String> gpuIds
+    ) {
         public NodeInfo {
             gpuIds = gpuIds == null ? List.of() : List.copyOf(gpuIds);
         }
     }
 
     /** 가상 머신 1대 */
-    public record VmInfo(String vmId, String name, String roleId, String deploymentId, String status, List<String> gpuIds) {
+    public record VmInfo(
+            String vmId,
+            String name,
+            String roleId,
+            String deploymentId,
+            String status,
+            List<String> gpuIds
+    ) {
         public VmInfo {
             gpuIds = gpuIds == null ? List.of() : List.copyOf(gpuIds);
         }

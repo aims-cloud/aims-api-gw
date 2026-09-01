@@ -68,9 +68,12 @@ public class MockDataProvider {
     // TODO:: 자원 관리 데이터(역할·노드·VM 원장) 연동 시 트리 Mock 데이터와 이 메서드 제거
     public ResourceExplorerTreeDataset getResourceExplorerTreeDataset() {
         return new ResourceExplorerTreeDataset(
-                List.of(new RoleInfo("ADMIN", "역할 A")),
-                List.of(new NodeInfo("node-01", "node 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02"))),
-                List.of(new VmInfo("vm-01", "vm 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02"))));
+                List.of(new RoleInfo("ADMIN", "역할 A", "관리자", 1),
+                        new RoleInfo("USER", "역할 B", "관리자", 1)),
+                List.of(new NodeInfo("node-01", "node 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02")),
+                        new NodeInfo("node-02", "node 02", "USER", "Openstack-GPU2", "ERROR", List.of("gpu-03", "gpu-04"))),
+                List.of(new VmInfo("vm-01", "vm 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02")),
+                        new VmInfo("vm-02", "vm 02", "USER", "Openstack-GPU2", "ERROR", List.of("gpu-03", "gpu-04"))));
     }
 
     // TODO:: 실제 Thanos 연동 시 GPU Mock 시계열 생성 헬퍼 제거

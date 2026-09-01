@@ -45,9 +45,14 @@ class ResourceExplorerTreeServiceTest {
         loginWithRoles("ADMIN", "USER");
         ResourceTreeNodeResponse root = service.getTree(noFilter());
         assertThat(root.children()).extracting(ResourceTreeNodeResponse::name)
-                .containsExactly("역할 A");
+                .containsExactly("역할 A", "역할 B");
 
-        loginWithRoles("USER");                                       // 데이터셋에 없는 역할만 보유
+        loginWithRoles("USER");                                       // 역할 B만 보유
+        root = service.getTree(noFilter());
+        assertThat(root.children()).extracting(ResourceTreeNodeResponse::name)
+                .containsExactly("역할 B");
+
+        loginWithRoles("GUEST");                                      // 데이터셋에 없는 역할만 보유
         root = service.getTree(noFilter());
         assertThat(root.children()).isEmpty();
     }

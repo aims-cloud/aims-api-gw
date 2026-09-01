@@ -15,6 +15,11 @@ public record RoleListItemResponse(
         long vmCount,
         StatusSummary vmStatus
 ) {
-    /** 상태 스택바 — Running/Error/Pending/Stop 카운트 (값 없음은 null → "-") */
-    public record StatusSummary(Long running, Long error, Long pending, Long stop) {}
+    /** 상태 스택바 — 총계와 Running/Error/Pending/Stop 카운트 (값 없음은 null → "-") */
+    public record StatusSummary(
+            long total,
+            Long running,
+            Long error,
+            Long pending,
+            Long stop) {}
 }

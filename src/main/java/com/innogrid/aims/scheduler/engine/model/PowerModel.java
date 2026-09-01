@@ -64,6 +64,25 @@ public class PowerModel {
     }
 
     /**
+     * 예약분까지 반영한 소비 전력(W).
+     *
+     * <p>실측 전력은 이미 실행 중인 부하만 담는다. 한 실행에서 여러 워크로드를 배치하면
+     * 예약만 쌓이고 실측값은 그대로라, "배치 후 예상 전력" 검사가 매번 <b>워크로드 하나만
+     * 얹은 값</b>을 돌려준다. 그 상태로는 용량을 넘겨도 걸러내지 못한다.</p>
+     *
+     * <p>전력을 수집하지 못한 노드(0W)는 더할 기준이 없으므로 0 을 유지한다 — 예약이 있다고
+     * 없던 전력을 만들어내면 판단 근거가 없는 숫자가 생긴다.</p>
+     */
+    public double effectivePowerWatts(NodeResource node) {
+        if (node.getPowerWatts() <= 0) return node.getPowerWatts();
+
+        double pMax = node.getPowerCapacityWatts();
+        if (pMax <= 0) return node.getPowerWatts();
+
+        return node.getPowerWatts() + (pMax - idlePower(node)) * node.reservedCpuRatio();
+    }
+
+    /**
      * 워크로드를 배치했을 때의 예상 전력(W).
      * P_after = P_now + (P_max − P_idle) × ΔU,  ΔU = 요구 CPU / 전체 CPU
      */

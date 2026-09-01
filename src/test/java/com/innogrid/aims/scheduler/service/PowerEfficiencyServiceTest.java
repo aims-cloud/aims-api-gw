@@ -281,6 +281,26 @@ class PowerEfficiencyServiceTest {
                 node("n9", 50, 0));          // IPMI 없음
     }
 
+    /**
+     * 전력 효율 평가는 <b>실측</b> 지표다. 배치 예약이 잡혀 있어도 지표가 흔들려서는 안 된다.
+     * 예약을 반영한 실효값은 제약 검사 전용이며, 이 API 로 새어 나오면 "지금 이 서버가
+     * 얼마나 효율적인가"라는 질문의 답이 예측치로 오염된다.
+     */
+    @Test
+    void 전력_효율_지표는_배치_예약에_영향받지_않는다() {
+        NodeResource node = node("n1", 80, 200);
+        NodeEfficiency before = evaluateOne(node);
+
+        node.reserve(4, 8192, 0);
+        NodeEfficiency after = evaluateOne(node);
+
+        assertEquals(before.peiRaw(), after.peiRaw(), EPS, "PEI 는 실측 기준이어야 한다");
+        assertEquals(before.powerWatts(), after.powerWatts(), EPS);
+        assertEquals(before.cpuUsagePercent(), after.cpuUsagePercent(), EPS);
+        assertEquals(before.proportionality(), after.proportionality(), EPS);
+        assertEquals(before.headroomPercent(), after.headroomPercent(), EPS);
+    }
+
     private NodeResource node(String id, double cpuPercent, double powerWatts) {
         NodeResource node = new NodeResource("mdc-01", id, 8, 16384, 0,
                 cpuPercent, 50, 30, powerWatts, 500, 40, 0, 0);

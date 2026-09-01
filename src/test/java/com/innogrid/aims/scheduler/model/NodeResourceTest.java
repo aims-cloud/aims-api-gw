@@ -68,6 +68,38 @@ class NodeResourceTest {
         assertEquals(100.0, node.powerHeadroomPercent(), 1e-9);
     }
 
+    @Test
+    void 예약이_없으면_실효_사용률은_실측값과_같다() {
+        NodeResource node = node(8, 16384, 2, 25, 50);
+
+        assertEquals(25.0, node.effectiveCpuUsagePercent(), 1e-9);
+        assertEquals(50.0, node.effectiveMemoryUsagePercent(), 1e-9);
+        assertEquals(0.0, node.reservedCpuRatio(), 1e-9);
+    }
+
+    @Test
+    void 실효_사용률은_예약분을_더한다() {
+        NodeResource node = node(8, 16384, 2, 20, 40);
+
+        node.reserve(2, 1638, 0);
+
+        // CPU 8코어 중 2코어 예약 → 25%p 가산
+        assertEquals(45.0, node.effectiveCpuUsagePercent(), 1e-9);
+        assertEquals(0.25, node.reservedCpuRatio(), 1e-9);
+        assertEquals(49.99, node.effectiveMemoryUsagePercent(), 0.01);
+    }
+
+    @Test
+    void 실효_사용률은_100을_넘지_않는다() {
+        NodeResource node = node(8, 16384, 2, 90, 95);
+
+        node.reserve(8, 16384, 0);
+
+        assertEquals(100.0, node.effectiveCpuUsagePercent(), 1e-9);
+        assertEquals(100.0, node.effectiveMemoryUsagePercent(), 1e-9);
+        assertEquals(1.0, node.reservedCpuRatio(), 1e-9);
+    }
+
     private NodeResource node(int cpu, long memMb, int gpu, double cpuUsage, double memUsage) {
         return new NodeResource("mdc-01", "node-1", cpu, memMb, gpu,
                 cpuUsage, memUsage, 30, 200, 500, 50, 1000, 500);

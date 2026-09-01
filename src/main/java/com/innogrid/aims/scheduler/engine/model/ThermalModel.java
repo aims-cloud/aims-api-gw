@@ -78,6 +78,22 @@ public class ThermalModel {
     }
 
     /**
+     * 예약분까지 반영한 온도(℃).
+     *
+     * <p>{@link #predictedTemperature} 와 같은 열관성 식을 예약분에 적용한다. 한 실행에서
+     * 여러 워크로드를 배치할 때 실측 온도만 보면 상승분이 누적되지 않아, 배치 후 예상 온도
+     * 검사가 <b>워크로드 하나만 얹은 값</b>에 머문다.</p>
+     *
+     * <p>온도를 수집하지 못한 노드(0℃)는 0 을 유지한다. 없는 값에 상승분을 얹으면 근거 없는
+     * 숫자가 된다.</p>
+     */
+    public double effectiveTemperature(NodeResource node) {
+        double current = node.getTemperatureCelsius();
+        if (current <= 0) return current;
+        return current * (1.0 + props.getInertiaK() * node.reservedCpuRatio());
+    }
+
+    /**
      * 온도 상태를 판정한다.
      * 온도를 수집하지 못한 노드(0℃)는 판단 근거가 없으므로 NORMAL 로 본다.
      */

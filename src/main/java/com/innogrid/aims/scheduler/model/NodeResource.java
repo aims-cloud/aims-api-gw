@@ -79,6 +79,34 @@ public class NodeResource {
         return totalGpu - reservedGpu;
     }
 
+    /**
+     * 예약분까지 반영한 CPU 사용률 (%).
+     *
+     * <p>메트릭은 "이미 실행 중인" 부하만 보여준다. 한 번의 스케줄링 실행에서 워크로드를
+     * 잇달아 배치하면 예약만 쌓이고 사용률은 그대로라, 제약 검사가 매번 같은 값을 보게 된다.
+     * 그래서 예약분을 사용률로 환산해 더한 값을 따로 둔다.</p>
+     *
+     * <p><b>이름에 {@code get} 을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
+     * 나가므로 {@code get} 접두어를 쓰면 API 에 필드가 늘어난다.
+     * {@code NodeResourceSerializationTest} 가 이 규칙을 지킨다.</p>
+     */
+    public double effectiveCpuUsagePercent() {
+        if (totalCpu <= 0) return cpuUsagePercent;
+        return Math.min(100.0, cpuUsagePercent + (double) reservedCpu / totalCpu * 100.0);
+    }
+
+    /** 예약분까지 반영한 메모리 사용률 (%). {@link #effectiveCpuUsagePercent} 와 같은 이유로 둔다. */
+    public double effectiveMemoryUsagePercent() {
+        if (totalMemoryMb <= 0) return memoryUsagePercent;
+        return Math.min(100.0, memoryUsagePercent + (double) reservedMemoryMb / totalMemoryMb * 100.0);
+    }
+
+    /** 예약분이 차지하는 CPU 비율 (0~1). 전력·온도 모델이 상승분을 계산할 때 쓴다. */
+    public double reservedCpuRatio() {
+        if (totalCpu <= 0) return 0;
+        return Math.min(1.0, (double) reservedCpu / totalCpu);
+    }
+
     /** 전력 여유율 (%) */
     public double powerHeadroomPercent() {
         if (powerCapacityWatts <= 0) return 100;

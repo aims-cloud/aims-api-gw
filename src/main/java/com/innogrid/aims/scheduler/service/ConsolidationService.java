@@ -121,9 +121,17 @@ public class ConsolidationService {
         Double ratio = powerModel.isActive(node) || node.getPowerWatts() <= 0 || idle <= 0
                 ? null : PowerOptimizationService.round(node.getPowerWatts() / idle);
 
+        // 스케줄러가 아는 워크로드가 없다고 노드가 빈 것은 아니다. 수동 배치나 다른 시스템의
+        // 부하는 메트릭에만 보인다. 실제로 놀고 있는지 부하로 한 번 더 확인하지 않으면
+        // 가동 중인 노드를 반납하라고 권고하게 된다.
         if (workloads.isEmpty()) {
+            if (powerModel.isActive(node)) {
+                return blocked(node, 0, idle, ratio, String.format(
+                        "스케줄러가 아는 워크로드는 없지만 CPU %.1f%% 로 다른 부하가 돌고 있습니다",
+                        node.getCpuUsagePercent()));
+            }
             return reclaimable(node, "ALREADY_EMPTY", 0, idle, 0, List.of(), ratio,
-                    String.format("배치된 워크로드가 없어 %.0fW 를 그대로 반납할 수 있습니다", idle));
+                    String.format("배치된 워크로드가 없고 부하도 없어 %.0fW 를 그대로 반납할 수 있습니다", idle));
         }
 
         // 이 노드를 뺀 나머지에만 배치를 시도한다. 컨텍스트는 여기서 새로 만든다 —
@@ -151,6 +159,16 @@ public class ConsolidationService {
 
             // 다음 워크로드가 같은 노드에 몰리지 않도록 예약을 쌓는다. 샌드박스라 안전하다.
             sandbox.reserve(result.selectedNodeId(), workload);
+        }
+
+        // 워크로드를 전부 옮겨도 노드가 비지 않으면 반납할 수 없다. 옮기는 워크로드가 차지하던
+        // 몫을 빼고도 부하가 남으면 스케줄러 밖의 무언가가 돌고 있다는 뜻이다.
+        double movedCpuShare = workloads.stream()
+                .mapToInt(Workload::getRequiredCpu).sum() * 100.0 / Math.max(node.getTotalCpu(), 1);
+        double remaining = node.getCpuUsagePercent() - movedCpuShare;
+        if (remaining > props.getActiveCpuPercent()) {
+            return blocked(node, workloads.size(), idle, ratio, String.format(
+                    "워크로드를 모두 옮겨도 CPU %.1f%% 의 부하가 남아 반납할 수 없습니다", remaining));
         }
 
         double net = idle - cost;

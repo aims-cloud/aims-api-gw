@@ -118,6 +118,35 @@ class ConsolidationServiceTest {
         assertTrue(c.blockedReason().contains("옮길 다른 노드가 없습니다"), c.blockedReason());
     }
 
+    /**
+     * 스케줄러가 아는 워크로드가 없다고 노드가 빈 것은 아니다. 수동 배치나 다른 시스템의
+     * 부하는 메트릭에만 보인다. 이 검사를 빠뜨리면 가동 중인 노드를 반납하라고 권고한다 —
+     * 배포 VM 이 정확히 이 상태다(워크로드 0건, CPU 12%).
+     */
+    @Test
+    void 워크로드가_없어도_부하가_있으면_반납하지_않는다() {
+        given(List.of(node("busy-but-unmanaged", 12, 30, 200), node("host", 30, 30, 240)), List.of());
+
+        Candidate c = find(service.diagnose(), "busy-but-unmanaged");
+
+        assertFalse(c.reclaimable(), "CPU 12% 로 무언가 돌고 있다");
+        assertTrue(c.blockedReason().contains("다른 부하가 돌고 있습니다"), c.blockedReason());
+    }
+
+    /** 옮길 워크로드를 다 빼도 부하가 남으면 반납할 수 없다. */
+    @Test
+    void 워크로드를_다_옮겨도_부하가_남으면_반납하지_않는다() {
+        // CPU 40% 인데 옮기는 워크로드는 1코어(12.5%p) 뿐 → 27.5% 가 남는다
+        NodeResource node = node("partly-managed", 40, 30, 250);
+        NodeResource host = node("host", 20, 20, 210);
+        given(List.of(node, host), List.of(workload(1L, "w1", 1)));
+
+        Candidate c = find(service.diagnose(), "partly-managed");
+
+        assertFalse(c.reclaimable());
+        assertTrue(c.blockedReason().contains("부하가 남아"), c.blockedReason());
+    }
+
     // ── 상한 ──────────────────────────────────────────────────
 
     /** 60건 중 50건만 옮겨보고 "반납 가능" 이라 하면 거짓이다. */

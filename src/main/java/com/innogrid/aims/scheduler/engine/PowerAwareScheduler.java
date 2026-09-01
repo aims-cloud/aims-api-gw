@@ -116,8 +116,10 @@ public class PowerAwareScheduler implements SchedulingEngine {
             double thermalScore = hasThermal ? thermalScore(node, policy) : 0.5;
 
             // ── 자원 여유 ──────────────────────────────────────
-            double cpuScore = (100.0 - node.getCpuUsagePercent()) / 100.0;
-            double memScore = (100.0 - node.getMemoryUsagePercent()) / 100.0;
+            // 예약분을 반영한다. 실측만 보면 한 번의 실행에서 워크로드를 잇달아 배치할 때
+            // 점수가 고정되어 같은 노드가 계속 뽑히고, 제약이 막을 때까지 한쪽으로 몰린다.
+            double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
+            double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
 
             double totalScore = round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
 

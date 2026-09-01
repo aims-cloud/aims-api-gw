@@ -137,9 +137,15 @@ public class PowerModel {
         return 1.0 - Math.min(1.0, overdraw / pMax);
     }
 
-    /** 노드가 가동 중인지. 이 아래면 사실상 빈 노드로 보고 깨우는 비용을 따로 센다. */
+    /**
+     * 노드가 가동 중인지. 이 아래면 사실상 빈 노드로 보고 깨우는 비용을 따로 센다.
+     *
+     * <p><b>예약분을 반영한 사용률로 판단한다.</b> 실측만 보면 한 번의 실행에서 같은 빈 노드에
+     * 워크로드를 잇달아 배치할 때 <b>유휴 전력이 매번 새로 드는 것처럼</b> 계산된다. 첫 배치로
+     * 이미 깨운 노드인데도 두 번째, 세 번째 배치가 또 깨우는 비용을 무는 셈이다.</p>
+     */
     public boolean isActive(NodeResource node) {
-        return node.getCpuUsagePercent() > props.getActiveCpuPercent();
+        return node.effectiveCpuUsagePercent() > props.getActiveCpuPercent();
     }
 
     /**

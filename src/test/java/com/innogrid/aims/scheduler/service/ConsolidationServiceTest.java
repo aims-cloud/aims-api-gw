@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -190,6 +191,36 @@ class ConsolidationServiceTest {
 
         assertEquals(0, idle.getReservedCpu(), "진단이 조회용 노드를 더럽혔다");
         assertEquals(0, host.getReservedCpu(), "진단이 조회용 노드를 더럽혔다");
+    }
+
+    /**
+     * 후보마다 메트릭을 다시 수집하면 노드당 아홉 종의 질의가 후보 수만큼 되풀이된다.
+     * 메트릭 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.
+     */
+    @Test
+    void 후보가_여럿이어도_메트릭은_한_번만_수집한다() {
+        given(List.of(node("a", 2, 10, 150), node("b", 3, 10, 150), node("c", 4, 10, 150)),
+                List.of(workload(1L, "w1", 1)));
+
+        service.diagnose();
+
+        verify(schedulingService, times(1)).createContext(any());
+    }
+
+    /** 샌드박스는 사본이라 한 후보의 예약이 다음 후보 판정에 섞이면 안 된다. */
+    @Test
+    void 앞_후보의_예약이_다음_후보_판정에_섞이지_않는다() {
+        NodeResource a = node("a", 2, 10, 150);
+        NodeResource b = node("b", 2, 10, 150);
+        NodeResource host = node("host", 30, 30, 240);
+        given(List.of(a, b, host), List.of(workload(1L, "w1", 1)));
+
+        ConsolidationResponse result = service.diagnose();
+
+        // a 와 b 는 조건이 같으므로 옮기는 비용도 같아야 한다.
+        assertEquals(find(result, "a").relocationCostWatts(),
+                find(result, "b").relocationCostWatts(), 1e-9,
+                "앞 후보가 쌓은 예약이 남아 뒤 후보의 비용이 달라졌다");
     }
 
     // ── 요약 ──────────────────────────────────────────────────

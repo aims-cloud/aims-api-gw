@@ -64,6 +64,10 @@ public class ConsolidationService {
         List<NodeResource> nodes = schedulingService.getNodeResources();
         OffsetDateTime now = OffsetDateTime.now();
 
+        // 시뮬레이션 기준이 될 스냅샷을 한 번만 수집한다. 후보마다 다시 수집하면 노드당
+        // 아홉 종의 메트릭 질의가 후보 수만큼 되풀이된다.
+        List<NodeResource> base = schedulingService.createContext(policy).nodes();
+
         List<NodeResource> ranked = firstPassFilter(nodes, policy);
         int limit = Math.max(0, props.getMaxConsolidationCandidates());
 
@@ -76,7 +80,7 @@ public class ConsolidationService {
                         String.format("후보 상한 %d대를 초과했습니다", limit)));
                 continue;
             }
-            candidates.add(evaluate(node, nodes, policy));
+            candidates.add(evaluate(node, base, policy));
             evaluated++;
         }
 
@@ -101,7 +105,7 @@ public class ConsolidationService {
 
     // ── 2차 판정 — 순절감 ──────────────────────────────────────
 
-    private Candidate evaluate(NodeResource node, List<NodeResource> allNodes, SchedulingPolicy policy) {
+    private Candidate evaluate(NodeResource node, List<NodeResource> base, SchedulingPolicy policy) {
         List<Workload> workloads = workloadsOn(node);
         int perNodeLimit = Math.max(0, props.getMaxRelocationsPerNode());
 
@@ -124,7 +128,7 @@ public class ConsolidationService {
 
         // 이 노드를 뺀 나머지에만 배치를 시도한다. 컨텍스트는 여기서 새로 만든다 —
         // NodeResource 는 가변이라(reserve) 조회용 스냅샷에 예약을 쌓으면 응답이 오염된다.
-        PlacementContext sandbox = sandboxWithout(node, policy);
+        PlacementContext sandbox = sandboxWithout(node, base, policy);
         if (sandbox.isEmpty()) {
             return blocked(node, workloads.size(), idle, ratio, "옮길 다른 노드가 없습니다");
         }
@@ -162,11 +166,16 @@ public class ConsolidationService {
 
     /**
      * 후보 노드를 제외한 배치 컨텍스트.
-     * 조회용으로 받은 노드 목록을 재사용하지 않고 새 스냅샷을 만든다.
+     *
+     * <p>기준 스냅샷을 <b>복사해서</b> 쓴다. 그대로 넘기면 시뮬레이션이 쌓는 예약이 다음 후보의
+     * 판정에 섞이고, 조회용으로 나간 객체까지 오염된다. 메트릭을 다시 수집하지 않는 이유는
+     * {@link NodeResource#snapshot()} 주석에 적었다.</p>
      */
-    private PlacementContext sandboxWithout(NodeResource excluded, SchedulingPolicy policy) {
-        List<NodeResource> others = schedulingService.createContext(policy).nodes().stream()
+    private PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
+                                            SchedulingPolicy policy) {
+        List<NodeResource> others = base.stream()
                 .filter(n -> !n.getNodeId().equals(excluded.getNodeId()))
+                .map(NodeResource::snapshot)
                 .toList();
         return PlacementContext.of(others, policy);
     }

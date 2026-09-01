@@ -174,16 +174,4 @@ public class PowerOptimizationService {
     static double round(double value) {
         return Math.round(value * 100.0) / 100.0;
     }
-
-    SchedulerProperties.Power props() {
-        return props;
-    }
-
-    SchedulingService schedulingService() {
-        return schedulingService;
-    }
-
-    PowerModel powerModel() {
-        return powerModel;
-    }
 }

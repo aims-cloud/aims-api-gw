@@ -107,6 +107,32 @@ public class NodeResource {
         return Math.min(1.0, (double) reservedCpu / totalCpu);
     }
 
+    /**
+     * 예약분까지 그대로 옮겨 담은 사본.
+     *
+     * <p>이 클래스는 {@link #reserve} 로 상태가 바뀌는 <b>가변</b> 객체다. 배치를 시뮬레이션할
+     * 때 조회용으로 받은 객체에 예약을 쌓으면 응답이 오염되므로 사본을 쓴다.</p>
+     *
+     * <p>메트릭을 다시 수집하지 않고 복사하는 이유는 비용이다 — 수집기는 노드당 아홉 종의
+     * 질의를 날리므로, 후보 노드마다 새로 수집하면 한 요청에 수백 건이 나간다. 게다가 메트릭
+     * 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.</p>
+     *
+     * <p><b>이름에 {@code get} 을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
+     * 나가므로 {@code get} 접두어를 쓰면 API 에 필드가 늘어난다.</p>
+     */
+    public NodeResource snapshot() {
+        NodeResource copy = new NodeResource(mdcId, nodeId, totalCpu, totalMemoryMb, totalGpu,
+                cpuUsagePercent, memoryUsagePercent, diskUsagePercent,
+                powerWatts, powerCapacityWatts, temperatureCelsius,
+                networkRxBps, networkTxBps);
+        copy.reservedCpu = reservedCpu;
+        copy.reservedMemoryMb = reservedMemoryMb;
+        copy.reservedGpu = reservedGpu;
+        copy.thermalState = thermalState;
+        copy.powerSource = powerSource;
+        return copy;
+    }
+
     /** 전력 여유율 (%) */
     public double powerHeadroomPercent() {
         if (powerCapacityWatts <= 0) return 100;

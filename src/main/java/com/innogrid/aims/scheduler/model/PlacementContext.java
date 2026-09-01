@@ -94,6 +94,48 @@ public class PlacementContext {
                 .average().orElse(0);
     }
 
+    /**
+     * 후보 전체의 현재 소비 전력 합(W).
+     *
+     * <p>배치 결정은 노드 하나만 보고 내리지만, 전력 최적화의 목표는 <b>클러스터 총 전력</b>이다.
+     * 열 쪽에는 {@link #averageTemperature} 라는 클러스터 지표가 있는데 전력에는 없어서,
+     * 엔진이 "이 배치가 전체 전력을 얼마나 올리는가"를 볼 수단이 없었다.</p>
+     *
+     * <p>전력을 수집하지 못한 노드는 0 이므로 그대로 더해도 합계를 부풀리지 않는다.</p>
+     */
+    public double totalPowerWatts() {
+        return nodes.stream().mapToDouble(NodeResource::getPowerWatts).sum();
+    }
+
+    /**
+     * 가동 중인 노드 수. 기준 CPU 사용률(%)을 넘는 노드를 센다.
+     *
+     * <p>클러스터 총 전력 = Σ(가동 노드의 유휴 전력 + 동적 전력) 이므로, 이 수를 줄이는 것이
+     * 곧 전력 절감이다. 판정 기준은 엔진이 {@code PowerModel} 설정에서 가져와 넘긴다 —
+     * 이 클래스는 설정을 알지 못한다.</p>
+     */
+    public int activeNodeCount(double activeCpuPercent) {
+        return (int) nodes.stream()
+                .filter(n -> n.getCpuUsagePercent() > activeCpuPercent)
+                .count();
+    }
+
+    /**
+     * 비어 있는 노드들의 유휴 전력 합(W) — <b>반납 가능 전력</b>.
+     *
+     * <p>워크로드를 통합해 노드를 비우면 이만큼을 아낄 수 있다는 뜻이다. 다만 이 시스템에는
+     * 노드 전원을 끄는 수단도, 이미 배치된 워크로드를 옮기는 수단도 없다. 그래서 이 값은
+     * <b>실현된 절감이 아니라 "통합했다면 아낄 수 있었을 양"</b>이다. 실현 불가능한 절감을
+     * 주장하지 않으면서 알고리즘 효과를 재기 위한 지표이며, 나중에 전원 제어가 생기면 그대로
+     * 실현 값이 된다.</p>
+     */
+    public double reclaimableIdleWatts(double activeCpuPercent, double idleRatio) {
+        return nodes.stream()
+                .filter(n -> n.getCpuUsagePercent() <= activeCpuPercent)
+                .mapToDouble(n -> n.getPowerCapacityWatts() * idleRatio)
+                .sum();
+    }
+
     public Optional<NodeResource> node(String nodeId) {
         return nodes.stream().filter(n -> n.getNodeId().equals(nodeId)).findFirst();
     }

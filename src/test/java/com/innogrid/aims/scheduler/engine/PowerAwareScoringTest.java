@@ -14,6 +14,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -213,9 +215,64 @@ class PowerAwareScoringTest {
         assertTrue(top.details().containsKey("실질한계전력W"));
     }
 
+    // ── 계측되지 않은 값의 표시 ──────────────────────────────────
+
+    /**
+     * 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않는다.
+     * 0 이나 0.5 를 넣으면 "측정했더니 그 값" 으로 읽혀 판단 근거가 없다는 사실이 가려진다.
+     */
+    @Test
+    void 계측되지_않으면_파생_항목을_null로_둔다() {
+        List<NodeResource> nodes = List.of(node("no-ipmi", 40, 40, 0, 0));
+
+        NodeScore s = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
+
+        assertEquals(0.0, s.details().get("전력계측"), 1e-9);
+        assertEquals(0.0, s.details().get("온도계측"), 1e-9);
+        assertNull(s.details().get("PEI"), "실측 전력으로 나누는 값이라 낼 수 없다");
+        assertNull(s.details().get("비낭비"), "이상 곡선과 비교할 실측값이 없다");
+        assertNull(s.details().get("배치후예상전력W"), "기준 전력을 모르면 절대값을 낼 수 없다");
+        assertNull(s.details().get("배치후예상온도C"), "0℃ 로 오해된다");
+
+        // 키는 그대로 있어야 한다 — 빠지면 노드마다 항목 구성이 달라진다
+        for (String key : List.of("PEI", "비낭비", "배치후예상전력W", "배치후예상온도C")) {
+            assertTrue(s.details().containsKey(key), key + " 키는 남아 있어야 한다");
+        }
+    }
+
+    /**
+     * 실질 한계 전력은 실측 전력을 쓰지 않는다 — 용량과 CPU 사용률만으로 구하는 증분이라
+     * 계측이 없어도 성립한다. 낼 수 있는 값까지 비우면 정보를 버리는 것이다.
+     */
+    @Test
+    void 계측이_없어도_한계_전력_증분은_낸다() {
+        List<NodeResource> nodes = List.of(node("no-ipmi", 40, 40, 0, 0));
+
+        NodeScore s = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
+
+        assertNotNull(s.details().get("실질한계전력W"));
+        assertEquals(87.5, s.details().get("실질한계전력W"), 1e-4, "용량 500W · 8코어 중 2코어");
+        assertNotNull(s.details().get("실질한계전력점수"));
+        assertEquals(0.5, s.details().get("전력점수"), 1e-9, "점수는 의도된 중립값이라 채운다");
+    }
+
+    /** 계측된 노드는 모든 항목이 채워진다. */
+    @Test
+    void 계측되면_모든_항목이_채워진다() {
+        List<NodeResource> nodes = List.of(node("ipmi", 40, 40, 250, 55));
+
+        NodeScore s = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
+
+        assertEquals(1.0, s.details().get("전력계측"), 1e-9);
+        assertEquals(1.0, s.details().get("온도계측"), 1e-9);
+        for (String key : s.details().keySet()) {
+            assertNotNull(s.details().get(key), key + " 가 비어 있다");
+        }
+    }
+
     // ── 헬퍼 ────────────────────────────────────────────────────
 
-    private double detail(SchedulingResult result, String nodeId, String key) {
+    private Double detail(SchedulingResult result, String nodeId, String key) {
         return result.candidateScores().stream()
                 .filter(s -> s.nodeId().equals(nodeId))
                 .findFirst().orElseThrow()

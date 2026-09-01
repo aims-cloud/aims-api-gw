@@ -239,9 +239,12 @@ class PowerAwareScenarioTest {
                 "노드", "총점", "전력", "열", "PEI", "실질ΔP", "비고");
         for (NodeScore s : result.candidateScores()) {
             Map<String, Double> d = new LinkedHashMap<>(s.details());
-            System.out.printf("  %-16s %7.4f %7.3f %7.3f %7.3f %8.1fW %s%n",
+            Double pei = d.get("PEI");
+            Double dp = d.get("실질한계전력W");
+            System.out.printf("  %-16s %7.4f %7.3f %7.3f %7s %8sW %s%n",
                     s.nodeId(), s.totalScore(), s.powerScore(), s.temperatureScore(),
-                    d.getOrDefault("PEI", 0.0), d.getOrDefault("실질한계전력W", 0.0),
+                    pei == null ? "N/A" : String.format("%.3f", pei),
+                    dp == null ? "N/A" : String.format("%.1f", dp),
                     s.eligible() ? (s.nodeId().equals(result.selectedNodeId()) ? "← 선택" : "") : "제외: " + s.exclusionReason());
         }
         System.out.println("  근거: " + result.reason());
@@ -255,7 +258,7 @@ class PowerAwareScenarioTest {
         throw new IllegalArgumentException(nodeId);
     }
 
-    private double detail(SchedulingResult result, String nodeId, String key) {
+    private Double detail(SchedulingResult result, String nodeId, String key) {
         return result.candidateScores().stream()
                 .filter(s -> s.nodeId().equals(nodeId))
                 .findFirst().orElseThrow()

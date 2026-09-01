@@ -127,9 +127,18 @@ public class PowerAwareScheduler implements SchedulingEngine {
             // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
             double netScore = networkModel.localTrafficScore(node);
 
+            // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다. 0 이나 0.5 를
+            // 넣으면 "측정했더니 그 값" 으로 읽혀, 판단 근거가 없다는 사실이 가려진다.
+            // 전력 효율 평가 API 도 같은 방식을 쓴다(PowerEfficiencyResponse 주석).
+            //
+            // 다만 실질 한계 전력은 실측 전력을 쓰지 않는다 — 용량과 CPU 사용률만으로 계산하는
+            // 증분이라 계측이 없어도 성립한다. 반대로 배치 후 예상 전력은 실측값을 기준으로
+            // 더하는 절대값이라 기준을 모르면 의미가 없다.
             Map<String, Double> details = new LinkedHashMap<>();
-            details.put("PEI", round(pei));
-            details.put("비낭비", round(waste));
+            details.put("전력계측", hasPower ? 1.0 : 0.0);
+            details.put("온도계측", hasThermal ? 1.0 : 0.0);
+            details.put("PEI", measured(hasPower, pei));
+            details.put("비낭비", measured(hasPower, waste));
             details.put("실질한계전력점수", round(marginal));
             details.put("전력점수", round(powerScore));
             details.put("열점수", round(thermalScore));
@@ -137,8 +146,10 @@ public class PowerAwareScheduler implements SchedulingEngine {
             details.put("메모리여유", round(memScore));
             details.put("네트워크한산도", round(netScore));
             details.put("실질한계전력W", round(powerModel.realMarginalPower(node, workload.getRequiredCpu())));
-            details.put("배치후예상전력W", round(powerModel.predictedPower(node, workload.getRequiredCpu())));
-            details.put("배치후예상온도C", round(thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
+            details.put("배치후예상전력W",
+                    measured(hasPower, powerModel.predictedPower(node, workload.getRequiredCpu())));
+            details.put("배치후예상온도C",
+                    measured(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
             details.put("가동중", powerModel.isActive(node) ? 1.0 : 0.0);
 
             NodeScore ns = new NodeScore(
@@ -219,6 +230,14 @@ public class PowerAwareScheduler implements SchedulingEngine {
                 context.totalPowerWatts(),
                 context.activeNodeCount(props.getActiveCpuPercent()),
                 context.reclaimableIdleWatts(props.getActiveCpuPercent(), props.getIdleRatio()));
+    }
+
+    /**
+     * 계측된 값만 담고, 아니면 {@code null} 을 돌려준다.
+     * 삼항 연산자를 그대로 쓰면 자동 언박싱 때문에 NPE 가 날 수 있어 메서드로 감싼다.
+     */
+    private Double measured(boolean present, double value) {
+        return present ? Double.valueOf(round(value)) : null;
     }
 
     private double clamp01(double v) {

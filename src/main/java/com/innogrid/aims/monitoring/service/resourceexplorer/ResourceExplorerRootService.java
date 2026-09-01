@@ -41,10 +41,13 @@ public class ResourceExplorerRootService {
     private final ResourceExplorerProperties properties;
     // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장 조회로 교체
     private final MockDataProvider mockDataProvider;
+    // TODO:: AuthService 로 공통화
+    private final ResourceExplorerTreeService resourceExplorerTreeService;
 
-    public ResourceExplorerRootService(ResourceExplorerProperties properties, MockDataProvider mockDataProvider) {
+    public ResourceExplorerRootService(ResourceExplorerProperties properties, MockDataProvider mockDataProvider, ResourceExplorerTreeService resourceExplorerTreeService) {
         this.properties = properties;
         this.mockDataProvider = mockDataProvider;
+        this.resourceExplorerTreeService = resourceExplorerTreeService;
     }
 
     // ── 공개 API ────────────────────────────────────────────────
@@ -105,30 +108,13 @@ public class ResourceExplorerRootService {
     /** 데이터셋을 현재 사용자 토큰의 역할 스코프로 축소한다 — 트리와 같은 범위를 집계하게 된다. */
     private ResourceExplorerTreeDataset userScopedDataset() {
         ResourceExplorerTreeDataset dataset = loadDataset();
-        Set<String> userRoles = currentUserRoleIds();
+        Set<String> userRoles = resourceExplorerTreeService.currentUserRoleIds();
         return new ResourceExplorerTreeDataset(
                 dataset.roles().stream().filter(r -> userRoles.contains(r.roleId())).toList(),
                 dataset.nodes().stream().filter(n -> userRoles.contains(n.roleId())).toList(),
                 dataset.vms().stream().filter(v -> userRoles.contains(v.roleId())).toList());
     }
 
-    /** 현재 사용자 토큰의 권한(ROLE_*)에서 역할 ID 를 추출한다. 미인증이면 빈 집합.
-     *  TODO:: AuthService 로 공통화 (ResourceExplorerTreeService 와 중복)
-     * */
-    private Set<String> currentUserRoleIds() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getAuthorities() == null) {
-            return Set.of();
-        }
-        Set<String> roles = new LinkedHashSet<>();
-        for (GrantedAuthority authority : auth.getAuthorities()) {
-            String name = authority.getAuthority();
-            if (name != null && name.startsWith("ROLE_")) {
-                roles.add(name.substring("ROLE_".length()));
-            }
-        }
-        return roles;
-    }
 
     private ResourceExplorerTreeDataset loadDataset() {
         // TODO:: 자원 관리 데이터(역할·노드·VM 원장) 연동 시 Mock 분기를 실제 조회로 교체

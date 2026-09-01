@@ -120,7 +120,7 @@ public class ResourceExplorerTreeService {
     /** 현재 사용자 토큰의 권한(ROLE_*)에서 역할 ID 를 추출한다. 미인증이면 빈 집합.
      *  TODO:: AuthService 로 위치 변경 필요
      * */
-    private Set<String> currentUserRoleIds() {
+    public Set<String> currentUserRoleIds() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getAuthorities() == null) {
             return Set.of();

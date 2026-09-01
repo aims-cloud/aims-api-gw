@@ -20,13 +20,21 @@ public record ResourceExplorerTreeDataset(
             long memberCount
     ) {}
 
-    /** 물리 노드 1대 — gpuIds 가 있으면 트리에 GPU 그룹/장치 하위 항목이 생긴다 */
+    /** 물리 노드 1대 — gpuIds 가 있으면 트리에 GPU 그룹/장치 하위 항목이 생긴다.
+     *  별칭/IP/사용률은 역할 패널의 배포영역 노드 목록 테이블에 쓴다. */
     public record NodeInfo(
             String nodeId,
             String name,
+            String alias,
             String roleId,
             String deploymentId,
             String status,
+            String ipAddress,
+            double cpuUtilization,
+            double memoryUsedGb,
+            double memoryTotalGb,
+            double fileSystemUsedGb,
+            double fileSystemTotalGb,
             List<String> gpuIds
     ) {
         public NodeInfo {

@@ -22,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
  * 자원 탐색기 > 왼쪽 자원 트리 API.
  *
  * 역할을 루트로 물리 노드, 가상 머신 및 모니터링 항목의 계층 구조를 제공한다.
+ * 역할(ROLE)은 요청 파라미터가 아니라 현재 사용자 토큰의 권한에서 추출한다 —
+ * 사용자는 자신에게 부여된 역할의 자원 트리만 조회할 수 있다.
  * 노드그룹 선택 시 오른쪽 패널은 ResourceExplorerNodeGroupController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (트리)", description = "역할·노드·가상 머신·모니터링 항목 트리 조회 및 검색")
+@Tag(name = "관측 > 자원 탐색기 (트리)", description = "역할·노드·가상 머신·모니터링 항목 트리 조회 및 검색")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/tree")
 public class ResourceExplorerTreeController {
@@ -36,23 +38,23 @@ public class ResourceExplorerTreeController {
     }
 
     @Operation(summary = "전체 자원 트리 조회",
-            description = "필터 조건에 해당하는 역할과 하위 자원 계층을 전체 조회합니다.")
+            description = "현재 사용자 토큰의 역할에 해당하는 자원 계층을 전체 조회합니다. "
+                    + "배포영역·키워드 필터를 지원합니다.")
     @GetMapping
     public ApiResponse<ResourceTreeNodeResponse> getTree(
-            @RequestParam(required = false) List<String> roleIds,
             @RequestParam(required = false) List<String> deploymentIds,
             @RequestParam(required = false) String keyword) {
-        return ApiResponse.ok(resourceExplorerService.getTree(filter(roleIds, deploymentIds, keyword)));
+        return ApiResponse.ok(resourceExplorerService.getTree(filter(deploymentIds, keyword)));
     }
 
     @Operation(summary = "자원 트리 루트 조회",
-            description = "Lazy Loading 방식의 트리 구성을 위한 최상위 역할 목록을 조회합니다.")
+            description = "Lazy Loading 방식의 트리 구성을 위한 최상위 역할 목록 — "
+                    + "현재 사용자 토큰에 부여된 역할만 조회됩니다.")
     @GetMapping("/roots")
     public ApiResponse<List<ResourceTreeNodeResponse>> getTreeRoots(
-            @RequestParam(required = false) List<String> roleIds,
             @RequestParam(required = false) List<String> deploymentIds,
             @RequestParam(required = false) String keyword) {
-        return ApiResponse.ok(resourceExplorerService.getRoots(filter(roleIds, deploymentIds, keyword)));
+        return ApiResponse.ok(resourceExplorerService.getRoots(filter(deploymentIds, keyword)));
     }
 
     @Operation(summary = "자원 트리 자식 조회",
@@ -72,9 +74,9 @@ public class ResourceExplorerTreeController {
         return ApiResponse.ok(resourceExplorerService.search(keyword, types, limit));
     }
 
-    private ResourceTreeFilter filter(
-            List<String> roleIds, List<String> deploymentIds, String keyword) {
-        return new ResourceTreeFilter(roleIds, deploymentIds, keyword);
+    /** 역할은 서비스가 사용자 토큰에서 추출하므로 필터의 roleIds 는 사용하지 않는다 */
+    private ResourceTreeFilter filter(List<String> deploymentIds, String keyword) {
+        return new ResourceTreeFilter(null, deploymentIds, keyword);
     }
 }
 

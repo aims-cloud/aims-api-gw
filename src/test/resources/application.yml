@@ -29,6 +29,9 @@ aims:
   gpu-dashboard:
     # TODO:: 실제 Thanos 연동이 완료되어 테스트가 Thanos 대역을 사용하면 Mock 설정 제거
     mock-enabled: true
+  resource-explorer:
+    # TODO:: 자원 관리 데이터 연동이 완료되면 Mock 설정 제거
+    mock-enabled: true
 
 jwt:
   secret: test-secret-key-for-unit-tests-must-be-32bytes!!

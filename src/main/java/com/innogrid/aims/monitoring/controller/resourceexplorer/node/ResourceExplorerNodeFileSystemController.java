@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 마운트 경로에 '/' 가 포함되므로 개별 마운트는 mountPath 쿼리 파라미터로 식별한다.
  * 노드 상세 패널은 ResourceExplorerNodeController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (노드 File system)",
+@Tag(name = "관측 > 자원 탐색기 (노드 File system)",
         description = "노드 File system 카테고리 — 그룹/개별 마운트 KPI, 마운트 목록, 모니터링 차트")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/node/{nodeId}/file-system")

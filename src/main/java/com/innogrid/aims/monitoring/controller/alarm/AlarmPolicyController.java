@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 조건 설정의 미리보기 차트는 자원 탐색기 trend API 를 재사용한다.
  * 기존 AlarmController 의 규칙 CRUD(/rules)는 이 컨트롤러로 대체 예정이다.
  */
-@Tag(name = "알람 (정책)", description = "알람 정책 목록·상세·CRUD·복제, 대상 자원/전송 대상, 생성 위저드 보조")
+@Tag(name = "관측 > 알람 (정책)", description = "알람 정책 목록·상세·CRUD·복제, 대상 자원/전송 대상, 생성 위저드 보조")
 @RestController
 @RequestMapping("/api/v1/monitoring/alarms/policies")
 public class AlarmPolicyController {

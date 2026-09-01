@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   모니터링         — 지표별 시계열 (화면 설계 확정 전, 잠정 지표 세트)
  * 노드의 물리 GPU 패널은 ResourceExplorerNodeGpuController, VM 상세는 ResourceExplorerVmController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (VM GPU)",
+@Tag(name = "관측 > 자원 탐색기 (VM GPU)",
         description = "VM GPU 카테고리 — 그룹/개별 인스턴스 KPI, 인스턴스 목록, 할당·기본 정보, 모니터링 차트")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/vm/{vmId}/gpu")

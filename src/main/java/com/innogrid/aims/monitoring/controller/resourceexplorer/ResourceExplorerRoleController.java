@@ -1,0 +1,79 @@
+package com.innogrid.aims.monitoring.controller.resourceexplorer;
+
+import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeListItemResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleSummaryResponse;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceExplorerRoleService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 자원 탐색기 > 역할 패널 API.
+ *
+ * 트리에서 역할을 선택했을 때 오른쪽 패널의 데이터를 제공한다.
+ *   KPI 카드 8종     — 멤버/배포영역/노드/가상머신 수, Running/Pending/Stop/Error
+ *   노드/가상머신 상태 — 상태별 분포 도넛 (전체 자원 패널과 동일 구조)
+ *   배포영역 섹션    — 노드 목록 테이블 (노드그룹 목록과 동일 컬럼)
+ * 왼쪽 트리는 ResourceExplorerTreeController, 하위 그룹 패널은 노드그룹/VM그룹 컨트롤러가 담당한다.
+ */
+@Tag(name = "관측 > 자원 탐색기 (역할)", description = "역할 패널 — KPI 카드, 노드/가상머신 상태, 배포영역 노드 목록")
+@RestController
+@RequestMapping("/api/v1/monitoring/resource-explorer/role/{roleId}")
+public class ResourceExplorerRoleController {
+
+    private final ResourceExplorerRoleService resourceExplorerRoleService;
+
+    public ResourceExplorerRoleController(ResourceExplorerRoleService resourceExplorerRoleService) {
+        this.resourceExplorerRoleService = resourceExplorerRoleService;
+    }
+
+    @Operation(summary = "역할 개요 KPI",
+            description = "카드 8종 — 멤버 수, 배포영역 수, 노드 수, 가상머신 수와 "
+                    + "Running/Pending/Stop/Error 상태 카운트를 조회합니다. "
+                    + "상태 카운트의 집계 대상(노드+VM 합산 여부)은 확정 전입니다.")
+    @GetMapping("/summary")
+    public ApiResponse<RoleSummaryResponse> getRoleSummary(@PathVariable String roleId) {
+        return ApiResponse.ok(resourceExplorerRoleService.getRoleSummary(roleId));
+    }
+
+    @Operation(summary = "역할 노드 상태",
+            description = "노드 상태 도넛 — 총계와 Running/Error/Pending/Stop 상태별 카운트를 조회합니다.")
+    @GetMapping("/node-status")
+    public ApiResponse<ResourceStatusDistributionResponse> getNodeStatus(@PathVariable String roleId) {
+        return ApiResponse.ok(resourceExplorerRoleService.getNodeStatus(roleId));
+    }
+
+    @Operation(summary = "역할 가상머신 상태",
+            description = "가상머신 상태 도넛 — 총계와 Running/Error/Pending/Stop 상태별 카운트를 조회합니다.")
+    @GetMapping("/vm-status")
+    public ApiResponse<ResourceStatusDistributionResponse> getVmStatus(@PathVariable String roleId) {
+        return ApiResponse.ok(resourceExplorerRoleService.getVmStatus(roleId));
+    }
+
+    @Operation(summary = "역할 배포영역 노드 목록",
+            description = "배포영역 섹션 테이블 — 이름/별칭/상태/IP/CPU/Memory(사용·전체)/File system. "
+                    + "상태·배포영역·키워드(이름/별칭/IP) 필터와 컬럼 정렬, 페이징을 지원합니다. "
+                    + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
+    @GetMapping("/nodes")
+    public ApiResponse<PageResponse<NodeListItemResponse>> getRoleNodes(
+            @PathVariable String roleId,
+            @RequestParam(required = false) String deploymentId,
+            @RequestParam(required = false) NodeStatus status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "name,asc") String sort) {
+        return ApiResponse.ok(resourceExplorerRoleService.getRoleNodes(
+                roleId, deploymentId, status, keyword, page, size, sort));
+    }
+}

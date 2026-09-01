@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * VM 하위 카테고리(CPU/Disk/…/GPU)는 화면 확정 시 노드 카테고리 패턴으로 별도 추가한다.
  * 가상머신 그룹 패널은 ResourceExplorerVmGroupController 가 담당한다.
  */
-@Tag(name = "자원 탐색기 (VM)", description = "VM 상세 — 주요 지표, 모니터링 요약 차트, VM 정보")
+@Tag(name = "관측 > 자원 탐색기 (VM)", description = "VM 상세 — 주요 지표, 모니터링 요약 차트, VM 정보")
 @RestController
 @RequestMapping("/api/v1/monitoring/resource-explorer/vm/{vmId}")
 public class ResourceExplorerVmController {

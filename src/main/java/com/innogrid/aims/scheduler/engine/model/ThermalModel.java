@@ -68,13 +68,19 @@ public class ThermalModel {
 
     /**
      * 워크로드 배치 후 예상 온도(℃).
-     * ΔT = k × (요구 CPU / 전체 CPU) × 현재 온도
+     * ΔT = k × (요구 CPU / 전체 CPU) × 기준 온도
+     *
+     * <p>기준은 실측이 아니라 <b>예약분까지 반영한 실효 온도</b>다. 한 실행에서 여러 워크로드를
+     * 배치할 때 실측만 보면 상승분이 누적되지 않아, 몇 개를 얹든 "하나 얹은 값"이 나온다.</p>
+     *
+     * <p>지금 평가 중인 워크로드는 아직 예약되지 않았으므로 이중으로 더해지지 않는다.</p>
      */
     public double predictedTemperature(NodeResource node, int requiredCpu) {
+        double base = effectiveTemperature(node);
         double rise = props.getInertiaK()
                 * ((double) requiredCpu / Math.max(node.getTotalCpu(), 1))
-                * node.getTemperatureCelsius();
-        return node.getTemperatureCelsius() + rise;
+                * base;
+        return base + rise;
     }
 
     /**

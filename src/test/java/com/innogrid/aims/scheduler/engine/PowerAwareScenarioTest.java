@@ -46,36 +46,34 @@ class PowerAwareScenarioTest {
 
         SchedulingResult result = run("시나리오 1 — 혼재 클러스터", nodes, workload(2), policy());
 
-        // 전력 항만 보면 효율-적정부하(0.73)가 유휴-대기(0.44)를 크게 앞선다.
+        assertEquals("효율-적정부하", result.selectedNodeId(),
+                "PEI 가 좋고 이상 곡선을 넘지 않으며 가동 중이라 깨우는 비용도 없다");
         assertTrue(detail(result, "효율-적정부하", "전력점수") > detail(result, "유휴-대기", "전력점수") + 0.2,
-                "전력 판단 자체는 효율적인 노드를 확실히 선호해야 한다");
-        assertTrue(rank(result, "효율-적정부하") < rank(result, "낭비-저부하"),
-                "낭비하는 노드보다는 위여야 한다");
-
-        // 그런데 총점 1위는 유휴-대기다. 빈 노드는 열과 자원 양쪽에서 유리해
-        // 전력 열세를 뒤집는다. 자원 몫(기본 0.20)을 낮추면 순위가 바뀐다 — 6-F 알려진 한계.
-        assertEquals("유휴-대기", result.selectedNodeId(),
-                "현재 가중치에서의 실제 동작을 고정해 둔다. 바뀌면 가중치를 손댄 것이다");
+                "전력 판단이 효율적인 노드를 확실히 선호해야 한다");
+        assertTrue(rank(result, "효율-적정부하") < rank(result, "낭비-저부하"));
     }
 
     /**
-     * 시나리오 1-b — 자원 몫을 낮추면 전력 판단이 앞선다.
-     * 통합이 가중치에 얼마나 민감한지 눈으로 보이게 남긴다.
+     * 시나리오 1-b — 자원 몫을 올리면 빈 노드가 이긴다.
+     *
+     * <p>기본값을 0.10 으로 정한 근거를 테스트로 남긴다. 빈 노드는 자원 여유와 온도 양쪽에서
+     * 보상을 받아, 자원 몫이 커지면 유휴 전력 150W 를 새로 쓰면서까지 선택된다.</p>
      */
     @Test
-    void 시나리오_자원_몫을_낮추면_효율적인_노드가_1위가_된다() {
+    void 시나리오_자원_몫을_올리면_빈_노드가_이긴다() {
         SchedulerProperties props = new SchedulerProperties();
-        props.getPower().setResourceShare(0.10);
-        PowerAwareScheduler powerFirst = new PowerAwareScheduler(props);
+        props.getPower().setResourceShare(0.20);
+        PowerAwareScheduler resourceFirst = new PowerAwareScheduler(props);
 
         List<NodeResource> nodes = List.of(
                 node("효율-적정부하", 55, 45, 230, 48),
                 node("유휴-대기", 2, 8, 160, 32));
 
-        SchedulingResult result = powerFirst.schedule(workload(2), nodes, policy());
-        print("시나리오 1-b — 자원 몫 0.10", result);
+        SchedulingResult result = resourceFirst.schedule(workload(2), nodes, policy());
+        print("시나리오 1-b — 자원 몫 0.20 (기본값 근거)", result);
 
-        assertEquals("효율-적정부하", result.selectedNodeId());
+        assertEquals("유휴-대기", result.selectedNodeId(),
+                "자원 몫이 크면 전력 판단이 뒤집힌다 — 그래서 기본값을 0.10 으로 뒀다");
     }
 
     /**
@@ -131,23 +129,13 @@ class PowerAwareScenarioTest {
 
         SchedulingResult result = run("시나리오 4 — 전력 통합", nodes, workload(2), policy());
 
-        // 깨우는 비용은 정확히 유휴 전력만큼 계산된다 — 모델은 의도대로 동작한다.
+        assertEquals("가동중", result.selectedNodeId(),
+                "빈 노드를 깨우면 유휴 150W 가 새로 든다");
         assertEquals(150.0,
                 detail(result, "비어있음", "실질한계전력W") - detail(result, "가동중", "실질한계전력W"),
                 1.0, "차이가 곧 유휴 전력이다");
         assertTrue(detail(result, "가동중", "전력점수") > detail(result, "비어있음", "전력점수"),
                 "전력 판단은 가동 중인 노드를 선호한다");
-
-        // 그럼에도 총점은 비어있음이 이긴다. 빈 노드는 열(시원함)과 자원(여유)에서
-        // 동시에 보상받아 2:1 로 전력 항을 누른다 — 6-F 알려진 한계.
-        assertEquals("비어있음", result.selectedNodeId(),
-                "현재 가중치에서의 실제 동작. 자원 몫 0.10 이하면 가동중이 이긴다");
-
-        SchedulerProperties props = new SchedulerProperties();
-        props.getPower().setResourceShare(0.10);
-        assertEquals("가동중",
-                new PowerAwareScheduler(props).schedule(workload(2), nodes, policy()).selectedNodeId(),
-                "자원 몫을 낮추면 통합이 살아난다");
     }
 
     /**

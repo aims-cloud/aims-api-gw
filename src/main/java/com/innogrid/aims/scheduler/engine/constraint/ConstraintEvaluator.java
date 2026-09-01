@@ -84,13 +84,15 @@ public class ConstraintEvaluator {
     // ── C2. 사용률 임계 ─────────────────────────────────────────
 
     private String checkUsageThreshold(NodeResource node, SchedulingPolicy policy) {
-        if (node.getCpuUsagePercent() > policy.getMaxCpuUsagePercent()) {
+        double cpu = node.effectiveCpuUsagePercent();
+        if (cpu > policy.getMaxCpuUsagePercent()) {
             return String.format("CPU 사용률 초과 (%.1f%% > %.1f%%)",
-                    node.getCpuUsagePercent(), policy.getMaxCpuUsagePercent());
+                    cpu, policy.getMaxCpuUsagePercent());
         }
-        if (node.getMemoryUsagePercent() > policy.getMaxMemoryUsagePercent()) {
+        double memory = node.effectiveMemoryUsagePercent();
+        if (memory > policy.getMaxMemoryUsagePercent()) {
             return String.format("메모리 사용률 초과 (%.1f%% > %.1f%%)",
-                    node.getMemoryUsagePercent(), policy.getMaxMemoryUsagePercent());
+                    memory, policy.getMaxMemoryUsagePercent());
         }
         return null;
     }
@@ -105,6 +107,9 @@ public class ConstraintEvaluator {
                 return String.format("냉각 대기 중 (%d분 남음)",
                         thermalModel.remainingCooldownMinutes(node.getNodeId()));
             }
+            // 냉각 대기는 실제로 뜨거웠던 노드에만 건다. 여기서 실효 온도(예약분 포함)를 쓰면
+            // 배치 예정 부하만으로 10분간 배제되는 노드가 생긴다. 예약까지 반영한 판단은
+            // 아래 "배치 후 예상 온도"가 맡으며, 그쪽은 이번 배치만 거르고 기록을 남기지 않는다.
             if (node.getTemperatureCelsius() > maxTemp) {
                 thermalModel.markCritical(node.getNodeId());
                 return String.format("온도 초과 (%.1f°C > %.1f°C)",
@@ -134,8 +139,12 @@ public class ConstraintEvaluator {
                              Double runPowerBudgetWatts) {
         if (policy.isPowerAwareEnabled()) {
             double requiredHeadroom = 100 - policy.getMaxPowerUsagePercent();
-            if (node.powerHeadroomPercent() < requiredHeadroom) {
-                return String.format("전력 여유 부족 (여유 %.1f%%)", node.powerHeadroomPercent());
+            // 예약분을 반영한 여유율을 본다. 실측만 보면 배치를 아무리 쌓아도 여유가 그대로라
+            // 전력 상한이 적용되지 않는다. 특히 요구 CPU 가 0 인 워크로드는 아래 예상 전력
+            // 검사도 그냥 통과하므로, 여기서 걸러야 상한이 실제로 지켜진다.
+            double headroom = powerModel.effectiveHeadroomPercent(node);
+            if (headroom < requiredHeadroom) {
+                return String.format("전력 여유 부족 (여유 %.1f%%)", headroom);
             }
         }
 

@@ -205,17 +205,38 @@ public class SchedulingService {
     /**
      * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.
      * 오래 남아 있는 워크로드가 자원을 영구히 묶지 않도록 TTL 을 넘긴 것은 제외한다.
+     *
+     * <p><b>실행 중인 워크로드는 메트릭에 잡힌 뒤부터 예약에서 뺀다.</b> 그러지 않으면 같은
+     * 워크로드가 노드 사용률 메트릭에 한 번, 예약으로 또 한 번 계산된다. 이 클래스의 예약은
+     * "배치됐지만 아직 메트릭에 없는 것"을 뜻하므로, 메트릭 지연 시간이 지난 RUNNING 은
+     * 정의상 예약이 아니다.</p>
      */
     private void applyReservations(PlacementContext context) {
         if (context.isEmpty()) return;
 
-        OffsetDateTime cutoff = OffsetDateTime.now().minusHours(properties.getReservationTtlHours());
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime cutoff = now.minusHours(properties.getReservationTtlHours());
+        OffsetDateTime metricCutoff = now.minusMinutes(properties.getMetricLagMinutes());
 
         for (Workload workload : workloadRepository.findByStatusIn(RESERVED_STATUSES)) {
             if (workload.getAssignedNodeId() == null) continue;
             if (workload.getScheduledAt() != null && workload.getScheduledAt().isBefore(cutoff)) continue;
+            if (alreadyInMetrics(workload, metricCutoff)) continue;
 
             context.reserve(workload.getAssignedNodeId(), workload);
         }
+    }
+
+    /**
+     * 워크로드의 부하가 이미 노드 사용률 메트릭에 반영됐는지.
+     *
+     * <p>SCHEDULED 는 아직 실행 전이라 메트릭에 있을 수 없으므로 언제나 예약으로 남긴다.
+     * RUNNING 은 시작한 지 메트릭 지연 시간이 지났으면 메트릭에 있다고 본다. 배치 시각을
+     * 모르는 행(기존 데이터)은 판단 근거가 없으니 예약으로 남겨 보수적으로 다룬다.</p>
+     */
+    private boolean alreadyInMetrics(Workload workload, OffsetDateTime metricCutoff) {
+        if (workload.getStatus() != Workload.WorkloadStatus.RUNNING) return false;
+        if (workload.getScheduledAt() == null) return false;
+        return workload.getScheduledAt().isBefore(metricCutoff);
     }
 }

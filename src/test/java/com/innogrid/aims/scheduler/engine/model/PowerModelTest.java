@@ -71,6 +71,31 @@ class PowerModelTest {
         assertEquals(1200.0, custom.capacityOf("node-special"), 1e-9);
     }
 
+    @Test
+    void 예약이_없으면_실효_전력은_실측값과_같다() {
+        assertEquals(250.0, model.effectivePowerWatts(node(40, 250, 500)), 1e-9);
+    }
+
+    @Test
+    void 실효_전력은_예약분의_동적_전력을_더한다() {
+        NodeResource node = node(40, 250, 500);
+
+        node.reserve(2, 0, 0);
+
+        // P_idle = 500 x 0.3 = 150, 동적 범위 350W, 8코어 중 2코어 = 0.25 → +87.5W
+        assertEquals(337.5, model.effectivePowerWatts(node), 1e-9);
+    }
+
+    @Test
+    void 전력을_수집하지_못한_노드는_예약이_있어도_0을_유지한다() {
+        NodeResource node = node(40, 0, 500);
+
+        node.reserve(4, 0, 0);
+
+        assertEquals(0.0, model.effectivePowerWatts(node), 1e-9,
+                "없는 전력에 예약분을 얹으면 근거 없는 숫자가 생긴다");
+    }
+
     private NodeResource node(double cpuUsage, double powerWatts, double capacityWatts) {
         return new NodeResource("mdc-01", "node-1", 8, 16384, 0,
                 cpuUsage, 30, 30, powerWatts, capacityWatts, 50, 1000, 500);

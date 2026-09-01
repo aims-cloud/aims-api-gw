@@ -15,7 +15,7 @@ public record ResourceTreeNodeResponse(
         String roleId,
         String deploymentId,
         String status,
-        boolean leaf,
+        boolean leaf,               // 최종 노드 Flag 값
         int childCount,
         List<ResourceTreeNodeResponse> children
 ) {

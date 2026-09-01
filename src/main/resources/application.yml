@@ -75,9 +75,12 @@ aims:
     email: ${AIMS_ADMIN_EMAIL}
     password: ${AIMS_ADMIN_PASSWORD}
     name: ${AIMS_ADMIN_NAME:관리자}
-  AIMS_GPU_DASHBOARD_MOCK_ENABLED:
+  gpu-dashboard:
     # TODO:: 실제 Thanos 연동이 완료되면 Mock 설정 제거
     mock-enabled: ${AIMS_GPU_DASHBOARD_MOCK_ENABLED:false}
+  resource-explorer:
+    # TODO:: 자원 관리 데이터(역할·노드·VM 원장) 연동이 완료되면 Mock 설정 제거
+    mock-enabled: ${AIMS_RESOURCE_EXPLORER_MOCK_ENABLED:false}
 
 # ── JWT 설정 ───────────────────────────────────────────────
 jwt:

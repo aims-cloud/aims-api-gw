@@ -178,6 +178,30 @@ public class SchedulerProperties {
          */
         private double activeCpuPercent = 5.0;
 
+        // ── 통합 가능성 진단 상한 ──────────────────────────────────
+
+        /**
+         * 통합 가능성을 따져볼 후보 노드 수 상한.
+         *
+         * <p>판정은 노드마다 워크로드를 실제로 재배치해 보는 방식이라, 총 채점 횟수가
+         * <b>후보 노드 수 × 워크로드 수 × 클러스터 노드 수</b>로 늘어난다. 상한 10 · 50 에
+         * 50노드 클러스터라도 25,000회 남짓이고 DB·네트워크를 타지 않아 100ms 안쪽이다.
+         * 성능 방어선이라기보다 <b>폭주 방지용</b>이다.</p>
+         *
+         * <p>후보는 절감 잠재량(유휴 전력)이 큰 순서로 돈다. 상한에 걸려도 가장 가치 있는
+         * 후보는 이미 평가된 상태가 된다.</p>
+         */
+        private int maxConsolidationCandidates = 10;
+
+        /**
+         * 노드 하나에서 옮겨볼 워크로드 수 상한.
+         *
+         * <p><b>이 값을 넘는 노드는 반납 가능으로 판정하지 않는다.</b> 60건 중 50건만 옮겨보고
+         * "반납 가능"이라 하면 거짓이다 — 남은 10건이 그 노드를 붙잡고 있다. 평가하지 않았다는
+         * 사실을 사유와 함께 돌려준다.</p>
+         */
+        private int maxRelocationsPerNode = 50;
+
         /** 전력 효율 추세의 기본 조회 구간(시간). from·to 를 주지 않으면 최근 이만큼을 본다. */
         private int trendDefaultHours = 24;
 
@@ -213,6 +237,10 @@ public class SchedulerProperties {
         public void setCurveAlpha(double v) { this.curveAlpha = v; }
         public double getActiveCpuPercent() { return activeCpuPercent; }
         public void setActiveCpuPercent(double v) { this.activeCpuPercent = v; }
+        public int getMaxConsolidationCandidates() { return maxConsolidationCandidates; }
+        public void setMaxConsolidationCandidates(int v) { this.maxConsolidationCandidates = v; }
+        public int getMaxRelocationsPerNode() { return maxRelocationsPerNode; }
+        public void setMaxRelocationsPerNode(int v) { this.maxRelocationsPerNode = v; }
         public int getTrendDefaultHours() { return trendDefaultHours; }
         public void setTrendDefaultHours(int v) { this.trendDefaultHours = v; }
         public String getTrendDefaultStep() { return trendDefaultStep; }

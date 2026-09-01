@@ -125,6 +125,59 @@ public class SchedulerProperties {
         /** PEI 정규화 기준(%/W). 이 값을 1.0 으로 본다. */
         private double peiNormalizer = 0.5;
 
+        // ── 전력 기반 배치 점수 (PowerAwareScheduler 전용) ────────
+
+        /**
+         * 총점에서 자원 여유(CPU·메모리)가 차지하는 몫. 나머지가 전력·열이다.
+         *
+         * <p>정책의 가중치를 그대로 쓰지 않는 이유가 여기 있다. 정책 기본값은
+         * {@code cpu .25 + memory .25 = 0.50} 대 {@code power .20} 이라, 그대로 쓰면 전력 항이
+         * 소수파가 되어 전력 엔진이 전력 엔진이 아니게 된다. 그래서 전력·열 대 자원의 배분은
+         * 엔진 고유값으로 두고, 정책 가중치는 <b>전력↔열·CPU↔메모리의 비율로만</b> 쓴다.</p>
+         *
+         * <p><b>0.10 을 쓰는 이유는 실측으로 정했다.</b> 빈 노드는 "비어 있다"는 사실 하나로
+         * 자원 여유와 온도 <b>양쪽에서</b> 보상을 받는다 — 부하가 없으니 여유도 많고 온도도 낮다.
+         * 전력 항 하나가 그 둘을 상대하는 구조라, 자원 몫이 0.12 이상이면 유휴 전력 150W 를
+         * 새로 쓰면서까지 빈 노드를 깨우는 판단이 나온다. 0.10 이하에서 전력 판단이 이긴다.</p>
+         *
+         * <p>0.30 까지 올리면 기존 판단(가동 중 서버 선호)도 뒤집힌다. 반대로 0 으로 두면 자원
+         * 여유를 전혀 보지 않아 한 노드에 몰리는데, 그건 사용률 임계 제약이 막는다.</p>
+         */
+        private double resourceShare = 0.10;
+
+        /** 전력 점수 안에서 PEI(단위 전력당 활용률)가 차지하는 비중. */
+        private double peiWeight = 0.40;
+
+        /** 전력 점수 안에서 비낭비(이상 곡선 초과분 없음)가 차지하는 비중. */
+        private double wasteWeight = 0.25;
+
+        /** 전력 점수 안에서 실질 한계 전력(배치로 늘어나는 전력)이 차지하는 비중. */
+        private double marginalWeight = 0.35;
+
+        /**
+         * 전력 곡선의 볼록 지수. P(u) = P_idle + (P_max − P_idle) × u^α
+         *
+         * <p><b>기본값 1.0 은 기존 선형 모델과 완전히 같다.</b> 실제 서버는 부하가 높을수록
+         * 단위 부하당 전력이 더 드는 볼록 곡선에 가깝지만, 그 값을 기본으로 켜면 배치 결과가
+         * 바뀐다. 기능만 넣어 두고 실험은 설정으로 한다.</p>
+         *
+         * <p>α&gt;1 이면 같은 워크로드라도 이미 바쁜 노드에 얹을 때 ΔP 가 커진다. 이것이
+         * 통합(유휴 서버 반납)과 맞서는 지점이다.</p>
+         */
+        private double curveAlpha = 1.0;
+
+        /**
+         * 노드를 "가동 중"으로 볼 CPU 사용률(%) 기준.
+         *
+         * <p>이 값 이하면 사실상 빈 노드로 보고, 여기에 배치하면 <b>유휴 전력이 새로 드는 것</b>
+         * 으로 계산한다. 클러스터 총 전력은 "활성 노드의 유휴 전력 + 동적 전력"의 합이므로,
+         * 노드를 새로 깨우는 비용이 곧 그 노드의 유휴 전력이다. 이 한 줄이 전력 통합을 임의의
+         * 보너스가 아니라 물리량으로 만든다.</p>
+         *
+         * <p>5% 는 OS·에이전트만 도는 상태와 실제 워크로드가 도는 상태를 가르는 값이다.</p>
+         */
+        private double activeCpuPercent = 5.0;
+
         /** 전력 효율 추세의 기본 조회 구간(시간). from·to 를 주지 않으면 최근 이만큼을 본다. */
         private int trendDefaultHours = 24;
 
@@ -148,6 +201,18 @@ public class SchedulerProperties {
         public void setIdleRatio(double v) { this.idleRatio = v; }
         public double getPeiNormalizer() { return peiNormalizer; }
         public void setPeiNormalizer(double v) { this.peiNormalizer = v; }
+        public double getResourceShare() { return resourceShare; }
+        public void setResourceShare(double v) { this.resourceShare = v; }
+        public double getPeiWeight() { return peiWeight; }
+        public void setPeiWeight(double v) { this.peiWeight = v; }
+        public double getWasteWeight() { return wasteWeight; }
+        public void setWasteWeight(double v) { this.wasteWeight = v; }
+        public double getMarginalWeight() { return marginalWeight; }
+        public void setMarginalWeight(double v) { this.marginalWeight = v; }
+        public double getCurveAlpha() { return curveAlpha; }
+        public void setCurveAlpha(double v) { this.curveAlpha = v; }
+        public double getActiveCpuPercent() { return activeCpuPercent; }
+        public void setActiveCpuPercent(double v) { this.activeCpuPercent = v; }
         public int getTrendDefaultHours() { return trendDefaultHours; }
         public void setTrendDefaultHours(int v) { this.trendDefaultHours = v; }
         public String getTrendDefaultStep() { return trendDefaultStep; }

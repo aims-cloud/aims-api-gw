@@ -29,10 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * {@code NodeResourceSerializationTest} 가 같은 방식으로 고정하고 있다.</p>
  */
 @SpringBootTest
-class ResponseJsonGoldenTest {
+public class ResponseJsonGoldenTest {
 
     /** 워크로드 응답 필드 21개. */
-    static final Set<String> WORKLOAD_FIELDS = new TreeSet<>(Set.of(
+    public static final Set<String> WORKLOAD_FIELDS = new TreeSet<>(Set.of(
             "id", "name", "description",
             "requiredCpu", "requiredMemoryMb", "requiredGpu", "requiredDiskGb",
             "resourceType", "dataMdcId", "preferredMdcId",
@@ -42,7 +42,7 @@ class ResponseJsonGoldenTest {
             "createdAt", "scheduledAt"));
 
     /** 배치 이력 응답 필드 22개. */
-    static final Set<String> HISTORY_FIELDS = new TreeSet<>(Set.of(
+    public static final Set<String> HISTORY_FIELDS = new TreeSet<>(Set.of(
             "id", "workloadId", "workloadName", "selectedMdcId", "selectedNodeId",
             "finalScore", "cpuScore", "memoryScore", "powerScore", "temperatureScore", "networkScore",
             "nodeCpuUsage", "nodeMemoryUsage", "nodePowerWatts", "nodeTemperature",
@@ -50,7 +50,7 @@ class ResponseJsonGoldenTest {
             "scheduleRunId", "success", "createdAt"));
 
     /** 배치 정책 응답 필드 20개. */
-    static final Set<String> POLICY_FIELDS = new TreeSet<>(Set.of(
+    public static final Set<String> POLICY_FIELDS = new TreeSet<>(Set.of(
             "id", "name", "description", "resourceType", "defaultEngine", "warningTemperatureCelsius",
             "cpuWeight", "memoryWeight", "powerWeight", "temperatureWeight", "networkWeight",
             "maxCpuUsagePercent", "maxMemoryUsagePercent", "maxTemperatureCelsius", "maxPowerUsagePercent",

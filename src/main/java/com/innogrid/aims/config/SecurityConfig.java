@@ -1,5 +1,6 @@
 package com.innogrid.aims.config;
 
+import org.springframework.boot.security.autoconfigure.web.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -36,8 +37,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/ping", "/actuator/**").permitAll()
                         // 인증 API (로그인, 회원가입, 토큰 검증)
                         .requestMatchers("/api/v1/auth/**").permitAll()
-                        // H2 콘솔 (로컬 개발용)
-                        .requestMatchers("/h2-console/**").permitAll()
+                        // H2 콘솔 (로컬 개발용) — 별도 서블릿이라 문자열 매처가 아닌 PathRequest 로 매칭한다
+                        .requestMatchers(PathRequest.toH2Console()).permitAll()
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )

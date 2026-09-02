@@ -56,9 +56,10 @@ class MdcLinkApiContractTest {
             assertEquals("user", d.get("createdBy"));
             assertNull(d.get("packetLossPercent"));
 
-            // 생성 == 조회
+            // 생성 == 조회 — 시각은 제외한다. 생성 응답은 메모리의 나노초, 조회는 DB 에 저장된 마이크로초라
+            // 같은 시각이 다른 문자열로 나온다(SchedulerApiContractTest 와 같은 사정).
             MvcResult fetched = mockMvc.perform(get(BASE + "/" + d.get("id"))).andExpect(status().isOk()).andReturn();
-            assertEquals(d, data(fetched));
+            assertEquals(withoutTimestamps(d), withoutTimestamps(data(fetched)));
         } finally {
             cleanup(d);
         }
@@ -180,6 +181,13 @@ class MdcLinkApiContractTest {
     private Map<String, Object> data(MvcResult r) throws Exception {
         Map<String, Object> body = objectMapper.readValue(r.getResponse().getContentAsString(), Map.class);
         return (Map<String, Object>) body.get("data");
+    }
+
+    private static Map<String, Object> withoutTimestamps(Map<String, Object> d) {
+        Map<String, Object> copy = new java.util.HashMap<>(d);
+        copy.remove("createdAt");
+        copy.remove("updatedAt");
+        return copy;
     }
 
     private void cleanup(Map<String, Object> d) throws Exception {

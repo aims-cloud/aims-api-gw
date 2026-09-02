@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -76,10 +78,25 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure("활성 노드가 없습니다");
+            return SchedulingResult.failure(noActiveNodesReason(context));
         }
 
         return placementService.place(workload, context, engineId);
+    }
+
+    /**
+     * 후보가 하나도 없을 때의 사유.
+     *
+     * <p>수집기가 핵심 메트릭을 알 수 없어 뺀 노드가 있으면 그 사실을 함께 적는다. "활성 노드가
+     * 없습니다"만 남기면 노드가 다 꺼진 것인지 메트릭 저장소가 아픈 것인지 구분할 수 없다.
+     * 뺀 노드가 없으면 문구는 예전과 같다.</p>
+     */
+    public static String noActiveNodesReason(PlacementContext context) {
+        List<ExcludedNode> excluded = context.excludedNodes();
+        if (excluded.isEmpty()) return "활성 노드가 없습니다";
+        return String.format("활성 노드가 없습니다 — 핵심 메트릭을 알 수 없어 제외한 노드 %d대: %s",
+                excluded.size(),
+                excluded.stream().map(ExcludedNode::nodeId).collect(Collectors.joining(", ")));
     }
 
     /**
@@ -87,16 +104,19 @@ public class SchedulingService {
      * 실행 1회당 한 번만 호출해 모든 워크로드가 같은 스냅샷을 보게 한다.
      */
     public PlacementContext createContext(SchedulingPolicy policy) {
+        NodeResourceCollector.Snapshot snapshot = nodeCollector.collect();
         PlacementContext context =
-                PlacementContext.of(nodeCollector.collectAll(), policy, constraintEvaluator);
+                PlacementContext.of(snapshot.nodes(), policy, constraintEvaluator)
+                        .withExcluded(snapshot.excluded());
         applyReservations(context);
         return context;
     }
 
     /**
-     * 현재 노드 자원 상태를 조회한다 (스케줄링 전 미리보기).
+     * 현재 노드 상태 스냅샷 — 후보 노드(열 상태 부여)와 수집 단계에서 제외된 노드를 함께 담는다.
+     * 조회·진단이 공유한다. 배치 실행은 {@link #createContext} 를 직접 쓴다.
      */
-    public List<NodeResource> getNodeResources() {
+    public PlacementContext nodeSnapshot() {
         SchedulingPolicy policy = policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
                 .orElseGet(() -> new SchedulingPolicy("default", "기본 스케줄링 정책"));
 
@@ -104,18 +124,32 @@ public class SchedulingService {
         for (NodeResource node : context.nodes()) {
             node.setThermalState(constraintEvaluator.thermalState(node, policy));
         }
-        return context.nodes();
+        return context;
+    }
+
+    /**
+     * 현재 노드 자원 상태를 조회한다 (스케줄링 전 미리보기).
+     * 제외 노드는 담지 않는다 — 이 목록은 DTO 없이 그대로 응답으로 나가 필드를 늘릴 수 없다.
+     */
+    public List<NodeResource> getNodeResources() {
+        return nodeSnapshot().nodes();
     }
 
     /**
      * 노드 한 대의 현재 상태. 없으면 404.
+     * 수집 단계에서 제외된 노드라면 404 사유에 그 이유를 적는다 — "없다"와 "알 수 없다"는 다르다.
      */
     public NodeResource getNodeResource(String nodeId) {
-        return getNodeResources().stream()
+        PlacementContext snapshot = nodeSnapshot();
+        return snapshot.nodes().stream()
                 .filter(n -> n.getNodeId().equals(nodeId))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
-                        "노드를 찾을 수 없습니다: " + nodeId));
+                        snapshot.excludedNodes().stream()
+                                .filter(e -> e.nodeId().equals(nodeId))
+                                .findFirst()
+                                .map(e -> "노드를 찾을 수 없습니다: " + nodeId + " — 수집 제외 (" + e.reason() + ")")
+                                .orElse("노드를 찾을 수 없습니다: " + nodeId)));
     }
 
     /**
@@ -153,7 +187,7 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure("활성 노드가 없습니다");
+            return SchedulingResult.failure(noActiveNodesReason(context));
         }
         return engineRegistry.resolve(engineId).schedule(workload, context);
     }
@@ -205,17 +239,38 @@ public class SchedulingService {
     /**
      * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.
      * 오래 남아 있는 워크로드가 자원을 영구히 묶지 않도록 TTL 을 넘긴 것은 제외한다.
+     *
+     * <p><b>실행 중인 워크로드는 메트릭에 잡힌 뒤부터 예약에서 뺀다.</b> 그러지 않으면 같은
+     * 워크로드가 노드 사용률 메트릭에 한 번, 예약으로 또 한 번 계산된다. 이 클래스의 예약은
+     * "배치됐지만 아직 메트릭에 없는 것"을 뜻하므로, 메트릭 지연 시간이 지난 RUNNING 은
+     * 정의상 예약이 아니다.</p>
      */
     private void applyReservations(PlacementContext context) {
         if (context.isEmpty()) return;
 
-        OffsetDateTime cutoff = OffsetDateTime.now().minusHours(properties.getReservationTtlHours());
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime cutoff = now.minusHours(properties.getReservationTtlHours());
+        OffsetDateTime metricCutoff = now.minusMinutes(properties.getMetricLagMinutes());
 
         for (Workload workload : workloadRepository.findByStatusIn(RESERVED_STATUSES)) {
             if (workload.getAssignedNodeId() == null) continue;
             if (workload.getScheduledAt() != null && workload.getScheduledAt().isBefore(cutoff)) continue;
+            if (alreadyInMetrics(workload, metricCutoff)) continue;
 
             context.reserve(workload.getAssignedNodeId(), workload);
         }
+    }
+
+    /**
+     * 워크로드의 부하가 이미 노드 사용률 메트릭에 반영됐는지.
+     *
+     * <p>SCHEDULED 는 아직 실행 전이라 메트릭에 있을 수 없으므로 언제나 예약으로 남긴다.
+     * RUNNING 은 시작한 지 메트릭 지연 시간이 지났으면 메트릭에 있다고 본다. 배치 시각을
+     * 모르는 행(기존 데이터)은 판단 근거가 없으니 예약으로 남겨 보수적으로 다룬다.</p>
+     */
+    private boolean alreadyInMetrics(Workload workload, OffsetDateTime metricCutoff) {
+        if (workload.getStatus() != Workload.WorkloadStatus.RUNNING) return false;
+        if (workload.getScheduledAt() == null) return false;
+        return workload.getScheduledAt().isBefore(metricCutoff);
     }
 }

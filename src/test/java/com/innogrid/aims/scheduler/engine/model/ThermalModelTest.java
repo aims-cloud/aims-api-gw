@@ -110,6 +110,30 @@ class ThermalModelTest {
         assertFalse(cooling.isCoolingDown("node-1"));
     }
 
+    @Test
+    void 예약이_없으면_실효_온도는_실측값과_같다() {
+        assertEquals(60.0, model.effectiveTemperature(node(60)), 1e-9);
+    }
+
+    @Test
+    void 실효_온도는_예약분의_상승을_더한다() {
+        NodeResource node = node(60);
+
+        node.reserve(2, 0, 0);
+
+        // k=0.15, 8코어 중 2코어 = 0.25 → 60 x (1 + 0.0375) = 62.25
+        assertEquals(62.25, model.effectiveTemperature(node), 1e-9);
+    }
+
+    @Test
+    void 온도를_수집하지_못한_노드는_예약이_있어도_0을_유지한다() {
+        NodeResource node = node(0);
+
+        node.reserve(4, 0, 0);
+
+        assertEquals(0.0, model.effectiveTemperature(node), 1e-9);
+    }
+
     private NodeResource node(double temperature) {
         return new NodeResource("mdc-01", "node-1", 8, 16384, 0,
                 30, 30, 30, 200, 500, temperature, 1000, 500);

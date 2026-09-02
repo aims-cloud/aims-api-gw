@@ -1,32 +1,58 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
+
+import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
+import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
+import com.innogrid.aims.scheduler.dto.NodeResponse;
+import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
+import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
+import com.innogrid.aims.scheduler.service.EnumSupport;
+import com.innogrid.aims.scheduler.service.PowerEfficiencyService;
 import com.innogrid.aims.scheduler.service.SchedulingService;
+import com.innogrid.aims.scheduler.service.WorkloadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 워크로드·노드·배치 이력 API.
+ *
+ * <p>응답은 전부 {@code dto} 패키지의 record 로 나간다. 예전에는 엔티티·모델을 그대로 직렬화해
+ * {@code get} 메서드 하나를 추가하면 API 필드가 조용히 늘었다. 응답 형태의 주인은 이제 DTO 이고,
+ * 필드 계약은 {@code ResponseJsonGoldenTest}·{@code NodeResourceSerializationTest} 가 고정한다.</p>
+ */
 @Tag(name = "스케줄러", description = "워크로드 스케줄링 (제약조건/전력/온도 기반)")
 @RestController
 @RequestMapping("/api/v1/scheduler")
 public class SchedulerController {
 
     private final SchedulingService schedulingService;
+    private final PowerEfficiencyService powerEfficiencyService;
+    private final WorkloadService workloadService;
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
 
     public SchedulerController(SchedulingService schedulingService,
+                               PowerEfficiencyService powerEfficiencyService,
+                               WorkloadService workloadService,
                                WorkloadRepository workloadRepository,
                                SchedulingHistoryRepository historyRepository) {
         this.schedulingService = schedulingService;
+        this.powerEfficiencyService = powerEfficiencyService;
+        this.workloadService = workloadService;
         this.workloadRepository = workloadRepository;
         this.historyRepository = historyRepository;
     }
@@ -35,43 +61,20 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 목록 조회")
     @GetMapping("/workloads")
-    public ApiResponse<?> listWorkloads(@RequestParam(required = false) String status) {
-        if (status != null) {
-            return ApiResponse.ok(workloadRepository.findByStatusOrderByCreatedAtDesc(
-                    parseEnum(Workload.WorkloadStatus.class, status, "상태")));
-        }
-        return ApiResponse.ok(workloadRepository.findAllByOrderByCreatedAtDesc());
+    public ApiResponse<List<WorkloadResponse>> listWorkloads(@RequestParam(required = false) String status) {
+        List<Workload> found = status != null
+                ? workloadRepository.findByStatusOrderByCreatedAtDesc(
+                        parseEnum(Workload.WorkloadStatus.class, status, "상태"))
+                : workloadRepository.findAllByOrderByCreatedAtDesc();
+        return ApiResponse.ok(found.stream().map(WorkloadResponse::from).toList());
     }
 
-    @Operation(summary = "워크로드 생성")
+    @Operation(summary = "워크로드 생성",
+               description = "name·requiredCpu(≥1)·requiredMemoryMb(≥1) 는 필수입니다. 값이 잘못되면 400 과 사유를 돌려줍니다. "
+                       + "resourceType·priority 는 대소문자를 가리지 않습니다.")
     @PostMapping("/workloads")
-    public ApiResponse<?> createWorkload(@RequestBody Map<String, Object> request) {
-        Workload workload = new Workload(
-                (String) request.get("name"),
-                ((Number) request.get("requiredCpu")).intValue(),
-                ((Number) request.get("requiredMemoryMb")).intValue());
-        if (request.containsKey("description"))
-            workload.setDescription((String) request.get("description"));
-        if (request.containsKey("requiredGpu"))
-            workload.setRequiredGpu(((Number) request.get("requiredGpu")).intValue());
-        if (request.containsKey("requiredDiskGb"))
-            workload.setRequiredDiskGb(((Number) request.get("requiredDiskGb")).intValue());
-        if (request.containsKey("preferredMdcId"))
-            workload.setPreferredMdcId((String) request.get("preferredMdcId"));
-        if (request.containsKey("maxPowerBudgetWatts"))
-            workload.setMaxPowerBudgetWatts(((Number) request.get("maxPowerBudgetWatts")).doubleValue());
-        if (request.containsKey("maxTemperatureCelsius"))
-            workload.setMaxTemperatureCelsius(((Number) request.get("maxTemperatureCelsius")).doubleValue());
-        if (request.containsKey("priority"))
-            workload.setPriority(parseEnum(Workload.WorkloadPriority.class,
-                    (String) request.get("priority"), "우선순위"));
-        if (request.containsKey("resourceType"))
-            workload.setResourceType(parseEnum(Workload.ResourceType.class,
-                    (String) request.get("resourceType"), "리소스 종류"));
-        if (request.containsKey("dataMdcId"))
-            workload.setDataMdcId((String) request.get("dataMdcId"));
-
-        return ApiResponse.ok(workloadRepository.save(workload));
+    public ApiResponse<WorkloadResponse> createWorkload(@RequestBody WorkloadRequest request) {
+        return ApiResponse.ok(WorkloadResponse.from(workloadService.create(request)));
     }
 
     @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
@@ -85,42 +88,34 @@ public class SchedulerController {
     @Operation(summary = "워크로드 실행 상태 전이",
                description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다.")
     @PatchMapping("/workloads/{workloadId}/status")
-    public ApiResponse<?> changeWorkloadStatus(@PathVariable Long workloadId,
-                                               @RequestBody Map<String, Object> request) {
-        Object raw = request.get("status");
-        if (raw == null) {
+    public ApiResponse<WorkloadResponse> changeWorkloadStatus(@PathVariable Long workloadId,
+                                                              @RequestBody StatusChangeRequest request) {
+        if (request == null || request.status() == null) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "status 는 필수입니다");
         }
-        Workload.WorkloadStatus target =
-                parseEnum(Workload.WorkloadStatus.class, raw.toString(), "상태");
-        return ApiResponse.ok(schedulingService.changeStatus(workloadId, target));
+        Workload.WorkloadStatus target = parseEnum(Workload.WorkloadStatus.class, request.status(), "상태");
+        return ApiResponse.ok(WorkloadResponse.from(schedulingService.changeStatus(workloadId, target)));
     }
 
-    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. */
+    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. 요청 DTO 와 같은 규칙({@link EnumSupport}). */
     private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String label) {
-        if (value == null) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, label + " 값이 필요합니다");
-        }
-        try {
-            return Enum.valueOf(type, value.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
-                    "지원하지 않는 %s 입니다: %s (가능한 값: %s)",
-                    label, value, java.util.Arrays.toString(type.getEnumConstants())));
-        }
+        return EnumSupport.parse(type, value, label);
     }
 
     @Operation(summary = "워크로드 상세 조회")
     @GetMapping("/workloads/{workloadId}")
-    public ApiResponse<?> getWorkload(@PathVariable Long workloadId) {
+    public ApiResponse<WorkloadResponse> getWorkload(@PathVariable Long workloadId) {
         return ApiResponse.ok(workloadRepository.findById(workloadId)
+                .map(WorkloadResponse::from)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다")));
     }
 
-    @Operation(summary = "워크로드 삭제")
+    @Operation(summary = "워크로드 삭제",
+               description = "없으면 404. 실행 중(SCHEDULED·RUNNING)이면 409 — 먼저 상태를 COMPLETED/FAILED 로 바꿔야 합니다. "
+                       + "배치 이력은 연구 근거라 함께 지우지 않습니다.")
     @DeleteMapping("/workloads/{workloadId}")
     public ApiResponse<Void> deleteWorkload(@PathVariable Long workloadId) {
-        workloadRepository.deleteById(workloadId);
+        workloadService.delete(workloadId);
         return ApiResponse.ok(null);
     }
 
@@ -143,15 +138,48 @@ public class SchedulerController {
 
     @Operation(summary = "실시간 노드 자원 현황", description = "스케줄링 전 후보 노드 상태 미리보기")
     @GetMapping("/nodes")
-    public ApiResponse<?> getNodeResources() {
-        return ApiResponse.ok(schedulingService.getNodeResources());
+    public ApiResponse<List<NodeResponse>> getNodeResources() {
+        return ApiResponse.ok(schedulingService.getNodeResources().stream().map(NodeResponse::from).toList());
+    }
+
+    @Operation(summary = "수집 제외 노드 목록",
+               description = "핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
+                       + "노드 목록(/nodes)은 배열 계약을 지키느라 이들을 담지 않으므로 여기서 확인합니다. 정상이면 빈 배열입니다.")
+    @GetMapping("/nodes/excluded")
+    public ApiResponse<List<ExcludedNodeResponse>> getExcludedNodes() {
+        return ApiResponse.ok(schedulingService.nodeSnapshot().excludedNodes().stream()
+                .map(ExcludedNodeResponse::from).toList());
     }
 
     @Operation(summary = "노드 단건 자원 현황",
                description = "가용량·예약분·전력·온도를 한 대만 조회합니다.")
     @GetMapping("/nodes/{nodeId}")
-    public ApiResponse<?> getNodeResource(@PathVariable String nodeId) {
-        return ApiResponse.ok(schedulingService.getNodeResource(nodeId));
+    public ApiResponse<NodeResponse> getNodeResource(@PathVariable String nodeId) {
+        return ApiResponse.ok(NodeResponse.from(schedulingService.getNodeResource(nodeId)));
+    }
+
+    // ── 전력 효율성 평가 ────────────────────────────────────────
+
+    @Operation(summary = "서버별 전력 효율성 평가",
+               description = "노드별 전력 효율 지표(PEI)·전력 비례성·여유율과 클러스터 내 상대 등급(A~D)·순위·권고를 조회합니다. "
+                       + "전력 메트릭이 없는 노드는 evaluable=false 이고 파생 지표가 null 입니다. "
+                       + "상대 등급은 평가 가능한 노드가 4대 이상일 때만 매겨집니다.")
+    @GetMapping("/nodes/power-efficiency")
+    public ApiResponse<?> getPowerEfficiency() {
+        return ApiResponse.ok(powerEfficiencyService.evaluateCurrent());
+    }
+
+    @Operation(summary = "노드 전력 효율 추세",
+               description = "전력·CPU 사용률·PEI 의 시계열을 조회합니다. 메트릭 저장소에서 그때그때 읽고 저장하지 않습니다. "
+                       + "from·to 를 비우면 최근 24시간, step 기본값은 5m 입니다(예: 30s, 5m, 1h, 1d). "
+                       + "데이터가 없으면 빈 배열과 사유를 돌려줍니다.")
+    @GetMapping("/nodes/{nodeId}/power-efficiency/trend")
+    public ApiResponse<?> getPowerEfficiencyTrend(
+            @PathVariable String nodeId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+            @RequestParam(required = false) String step) {
+        return ApiResponse.ok(powerEfficiencyService.trend(nodeId, from, to, step));
     }
 
     // ── 배치 진단 ──────────────────────────────────────────────
@@ -184,13 +212,15 @@ public class SchedulerController {
 
     @Operation(summary = "스케줄링 이력 조회")
     @GetMapping("/history")
-    public ApiResponse<?> getHistory() {
-        return ApiResponse.ok(historyRepository.findAllByOrderByCreatedAtDesc());
+    public ApiResponse<List<SchedulingHistoryResponse>> getHistory() {
+        return ApiResponse.ok(historyRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(SchedulingHistoryResponse::from).toList());
     }
 
     @Operation(summary = "워크로드별 스케줄링 이력")
     @GetMapping("/workloads/{workloadId}/history")
-    public ApiResponse<?> getWorkloadHistory(@PathVariable Long workloadId) {
-        return ApiResponse.ok(historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId));
+    public ApiResponse<List<SchedulingHistoryResponse>> getWorkloadHistory(@PathVariable Long workloadId) {
+        return ApiResponse.ok(historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId).stream()
+                .map(SchedulingHistoryResponse::from).toList());
     }
 }

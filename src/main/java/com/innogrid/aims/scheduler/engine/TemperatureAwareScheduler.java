@@ -39,6 +39,13 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 4. 냉각 비용 최소화
  *    → 높은 온도의 서버에 워크로드를 추가하면 냉각 비용이 비선형적으로 증가
  *    → cooling_cost = (T / T_max)^2 (제곱 비용 모델)
+ *
+ * <p><b>온도·자원 점수는 예약분까지 반영한 실효값으로 계산한다.</b> 한 실행에서 워크로드를
+ * 잇달아 배치하면 방금 배치한 부하는 메트릭에 없다. 실측만 보면 점수가 매번 같아 가장
+ * 시원한 노드 하나로 몰린다 — 열관성 예측({@code predictedTemperature})은 이미 실효 기준이었는데
+ * 점수만 실측이었다. 열적 균형의 기준인 <b>클러스터 평균도 실효 온도의 평균</b>으로 맞춘다.
+ * 두 피연산자가 다른 시점을 보면 "0.5 = 평균 수준"이라는 기준점의 의미가 흐려진다.
+ * 예약이 없으면 실효=실측이므로 단건 배치의 결과는 달라지지 않는다.</p>
  */
 @Component
 public class TemperatureAwareScheduler implements SchedulingEngine {
@@ -80,8 +87,8 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
         SchedulingPolicy policy = context.policy();
         double maxTemp = policy.getMaxTemperatureCelsius();
 
-        // 전체 노드 평균 온도 (열적 균형용)
-        double avgTemperature = context.averageTemperature();
+        // 전체 노드 평균 온도 (열적 균형용) — 노드 온도와 같은 기준(실효)으로 맞춘다
+        double avgTemperature = context.averageTemperature(thermalModel);
 
         List<NodeScore> scores = new ArrayList<>();
         NodeScore bestScore = null;
@@ -91,18 +98,21 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
             String exclusionReason = context.exclusionReason(workload, node);
             boolean eligible = (exclusionReason == null);
 
+            // 예약분까지 반영한 온도. 실측만 보면 다건 배치가 한 노드로 몰린다.
+            double temperature = thermalModel.effectiveTemperature(node);
+
             // ── 1. 열적 여유 스코어 ─────────────────────────────
-            double headroomScore = thermalModel.headroomScore(node.getTemperatureCelsius(), maxTemp);
+            double headroomScore = thermalModel.headroomScore(temperature, maxTemp);
 
             // ── 2. 열적 균형 스코어 ─────────────────────────────
-            double balanceScore = thermalModel.balanceScore(node.getTemperatureCelsius(), avgTemperature);
+            double balanceScore = thermalModel.balanceScore(temperature, avgTemperature);
 
             // ── 3. 냉각 비용 스코어 (제곱 비용 모델) ─────────────
-            double coolingScore = thermalModel.coolingScore(node.getTemperatureCelsius(), maxTemp);
+            double coolingScore = thermalModel.coolingScore(temperature, maxTemp);
 
-            // ── 4. 자원 여유 스코어 ─────────────────────────────
-            double resourceScore = ((100 - node.getCpuUsagePercent()) / 100.0 * 0.5)
-                    + ((100 - node.getMemoryUsagePercent()) / 100.0 * 0.5);
+            // ── 4. 자원 여유 스코어 (예약분 반영) ─────────────────
+            double resourceScore = ((100 - node.effectiveCpuUsagePercent()) / 100.0 * 0.5)
+                    + ((100 - node.effectiveMemoryUsagePercent()) / 100.0 * 0.5);
 
             // ── 가중합 ─────────────────────────────────────────
             double totalScore = headroomScore * HEADROOM_WEIGHT

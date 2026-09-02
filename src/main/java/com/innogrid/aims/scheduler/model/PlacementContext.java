@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 
@@ -29,6 +30,9 @@ public class PlacementContext {
      */
     private Double powerBudgetWatts;
 
+    /** 수집 단계에서 핵심 메트릭을 알 수 없어 후보에 넣지 않은 노드. 진단이 "왜 빠졌는지"를 말할 근거다. */
+    private List<ExcludedNode> excluded = Collections.emptyList();
+
     private PlacementContext(List<NodeResource> nodes, SchedulingPolicy policy, ConstraintEvaluator evaluator) {
         this.nodes = nodes == null ? Collections.emptyList() : nodes;
         this.policy = policy;
@@ -47,6 +51,20 @@ public class PlacementContext {
     /** 실행 단위 전력 예산. 지정하지 않았으면 {@code null}. */
     public Double powerBudgetWatts() {
         return powerBudgetWatts;
+    }
+
+    /** 수집기가 뺀 노드를 컨텍스트에 실어 둔다. 배치 판단에는 쓰지 않고 진단·사유 문구에만 쓴다. */
+    public PlacementContext withExcluded(List<ExcludedNode> excludedNodes) {
+        this.excluded = excludedNodes == null ? Collections.emptyList() : List.copyOf(excludedNodes);
+        return this;
+    }
+
+    /**
+     * 수집 단계에서 제외된 노드. 후보({@link #nodes()})에는 없다.
+     * 이름에 {@code get} 을 붙이지 않는 관례를 따른다(직렬화 대상이 아니다).
+     */
+    public List<ExcludedNode> excludedNodes() {
+        return excluded;
     }
 
     /**
@@ -85,13 +103,64 @@ public class PlacementContext {
     }
 
     /**
-     * 후보 전체의 평균 온도. 열적 균형 계산에 쓴다.
+     * 후보 전체의 평균 온도(실효). 열적 균형 계산에 쓴다.
      * 제외된 노드까지 포함해야 클러스터 전체의 열 분포를 반영할 수 있다.
+     *
+     * <p><b>예약분까지 반영한 실효 온도의 평균</b>이다. 엔진이 노드 온도를 실효로 보면서 평균만
+     * 실측으로 두면 균형 점수의 두 피연산자가 다른 시점을 보게 된다 — 예약이 쌓일수록 노드만
+     * 뜨거워지고 기준선은 그대로라 "0.5 = 평균 수준"이라는 의미가 흐려진다. 순위를 바꾸는
+     * 수정은 아니고 기준점의 일관성을 지키는 것이다.</p>
      */
-    public double averageTemperature() {
+    public double averageTemperature(ThermalModel thermalModel) {
         return nodes.stream()
-                .mapToDouble(NodeResource::getTemperatureCelsius)
+                .mapToDouble(thermalModel::effectiveTemperature)
                 .average().orElse(0);
+    }
+
+    /**
+     * 후보 전체의 현재 소비 전력 합(W).
+     *
+     * <p>배치 결정은 노드 하나만 보고 내리지만, 전력 최적화의 목표는 <b>클러스터 총 전력</b>이다.
+     * 열 쪽에는 {@link #averageTemperature} 라는 클러스터 지표가 있는데 전력에는 없어서,
+     * 엔진이 "이 배치가 전체 전력을 얼마나 올리는가"를 볼 수단이 없었다.</p>
+     *
+     * <p>전력을 수집하지 못한 노드는 0 이므로 그대로 더해도 합계를 부풀리지 않는다.</p>
+     */
+    public double totalPowerWatts() {
+        return nodes.stream().mapToDouble(NodeResource::getPowerWatts).sum();
+    }
+
+    /**
+     * 가동 중인 노드 수. 기준 CPU 사용률(%)을 넘는 노드를 센다.
+     *
+     * <p>클러스터 총 전력 = Σ(가동 노드의 유휴 전력 + 동적 전력) 이므로, 이 수를 줄이는 것이
+     * 곧 전력 절감이다. 판정 기준은 엔진이 {@code PowerModel} 설정에서 가져와 넘긴다 —
+     * 이 클래스는 설정을 알지 못한다.</p>
+     *
+     * <p>{@code PowerModel.isActive} 와 같은 <b>실효 사용률</b>로 판정한다. 노드별 "가동중"은 실효,
+     * 클러스터 요약은 실측이면 같은 응답 안에서 기준이 어긋난다. 이번 실행에서 워크로드를 받아
+     * 깨어난 빈 노드는 이후 요약에서 가동 중으로 세어야 맞다.</p>
+     */
+    public int activeNodeCount(double activeCpuPercent) {
+        return (int) nodes.stream()
+                .filter(n -> n.effectiveCpuUsagePercent() > activeCpuPercent)
+                .count();
+    }
+
+    /**
+     * 비어 있는 노드들의 유휴 전력 합(W) — <b>반납 가능 전력</b>.
+     *
+     * <p>워크로드를 통합해 노드를 비우면 이만큼을 아낄 수 있다는 뜻이다. 다만 이 시스템에는
+     * 노드 전원을 끄는 수단도, 이미 배치된 워크로드를 옮기는 수단도 없다. 그래서 이 값은
+     * <b>실현된 절감이 아니라 "통합했다면 아낄 수 있었을 양"</b>이다. 실현 불가능한 절감을
+     * 주장하지 않으면서 알고리즘 효과를 재기 위한 지표이며, 나중에 전원 제어가 생기면 그대로
+     * 실현 값이 된다.</p>
+     */
+    public double reclaimableIdleWatts(double activeCpuPercent, double idleRatio) {
+        return nodes.stream()
+                .filter(n -> n.effectiveCpuUsagePercent() <= activeCpuPercent)   // activeNodeCount 와 같은 기준
+                .mapToDouble(n -> n.getPowerCapacityWatts() * idleRatio)
+                .sum();
     }
 
     public Optional<NodeResource> node(String nodeId) {

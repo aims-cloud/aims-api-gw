@@ -25,6 +25,9 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long>, JpaSp
 
     boolean existsByScheduleId(String scheduleId);
 
+    /** 이 정책을 가리키는 스케줄이 있는지 — 정책 삭제 전에 본다. */
+    boolean existsByPolicyId(Long policyId);
+
     /** 자동 실행 대상. 러너가 폴링할 때 쓴다. */
     List<Schedule> findByEnabledTrueAndAutoRunTrueAndNextRunAtLessThanEqual(OffsetDateTime now);
 

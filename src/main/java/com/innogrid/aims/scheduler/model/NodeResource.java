@@ -79,10 +79,58 @@ public class NodeResource {
         return totalGpu - reservedGpu;
     }
 
-    /** 전력 효율성 (작업량/와트) — 높을수록 효율적 */
-    public double powerEfficiency() {
-        if (powerWatts <= 0) return 0;
-        return cpuUsagePercent / powerWatts;
+    /**
+     * 예약분까지 반영한 CPU 사용률 (%).
+     *
+     * <p>메트릭은 "이미 실행 중인" 부하만 보여준다. 한 번의 스케줄링 실행에서 워크로드를
+     * 잇달아 배치하면 예약만 쌓이고 사용률은 그대로라, 제약 검사가 매번 같은 값을 보게 된다.
+     * 그래서 예약분을 사용률로 환산해 더한 값을 따로 둔다.</p>
+     *
+     * <p><b>이름에 {@code get} 을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
+     * 나가므로 {@code get} 접두어를 쓰면 API 에 필드가 늘어난다.
+     * {@code NodeResourceSerializationTest} 가 이 규칙을 지킨다.</p>
+     */
+    public double effectiveCpuUsagePercent() {
+        if (totalCpu <= 0) return cpuUsagePercent;
+        return Math.min(100.0, cpuUsagePercent + (double) reservedCpu / totalCpu * 100.0);
+    }
+
+    /** 예약분까지 반영한 메모리 사용률 (%). {@link #effectiveCpuUsagePercent} 와 같은 이유로 둔다. */
+    public double effectiveMemoryUsagePercent() {
+        if (totalMemoryMb <= 0) return memoryUsagePercent;
+        return Math.min(100.0, memoryUsagePercent + (double) reservedMemoryMb / totalMemoryMb * 100.0);
+    }
+
+    /** 예약분이 차지하는 CPU 비율 (0~1). 전력·온도 모델이 상승분을 계산할 때 쓴다. */
+    public double reservedCpuRatio() {
+        if (totalCpu <= 0) return 0;
+        return Math.min(1.0, (double) reservedCpu / totalCpu);
+    }
+
+    /**
+     * 예약분까지 그대로 옮겨 담은 사본.
+     *
+     * <p>이 클래스는 {@link #reserve} 로 상태가 바뀌는 <b>가변</b> 객체다. 배치를 시뮬레이션할
+     * 때 조회용으로 받은 객체에 예약을 쌓으면 응답이 오염되므로 사본을 쓴다.</p>
+     *
+     * <p>메트릭을 다시 수집하지 않고 복사하는 이유는 비용이다 — 수집기는 노드당 아홉 종의
+     * 질의를 날리므로, 후보 노드마다 새로 수집하면 한 요청에 수백 건이 나간다. 게다가 메트릭
+     * 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.</p>
+     *
+     * <p><b>이름에 {@code get} 을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
+     * 나가므로 {@code get} 접두어를 쓰면 API 에 필드가 늘어난다.</p>
+     */
+    public NodeResource snapshot() {
+        NodeResource copy = new NodeResource(mdcId, nodeId, totalCpu, totalMemoryMb, totalGpu,
+                cpuUsagePercent, memoryUsagePercent, diskUsagePercent,
+                powerWatts, powerCapacityWatts, temperatureCelsius,
+                networkRxBps, networkTxBps);
+        copy.reservedCpu = reservedCpu;
+        copy.reservedMemoryMb = reservedMemoryMb;
+        copy.reservedGpu = reservedGpu;
+        copy.thermalState = thermalState;
+        copy.powerSource = powerSource;
+        return copy;
     }
 
     /** 전력 여유율 (%) */

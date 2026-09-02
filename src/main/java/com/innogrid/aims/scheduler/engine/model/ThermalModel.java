@@ -68,13 +68,35 @@ public class ThermalModel {
 
     /**
      * 워크로드 배치 후 예상 온도(℃).
-     * ΔT = k × (요구 CPU / 전체 CPU) × 현재 온도
+     * ΔT = k × (요구 CPU / 전체 CPU) × 기준 온도
+     *
+     * <p>기준은 실측이 아니라 <b>예약분까지 반영한 실효 온도</b>다. 한 실행에서 여러 워크로드를
+     * 배치할 때 실측만 보면 상승분이 누적되지 않아, 몇 개를 얹든 "하나 얹은 값"이 나온다.</p>
+     *
+     * <p>지금 평가 중인 워크로드는 아직 예약되지 않았으므로 이중으로 더해지지 않는다.</p>
      */
     public double predictedTemperature(NodeResource node, int requiredCpu) {
+        double base = effectiveTemperature(node);
         double rise = props.getInertiaK()
                 * ((double) requiredCpu / Math.max(node.getTotalCpu(), 1))
-                * node.getTemperatureCelsius();
-        return node.getTemperatureCelsius() + rise;
+                * base;
+        return base + rise;
+    }
+
+    /**
+     * 예약분까지 반영한 온도(℃).
+     *
+     * <p>{@link #predictedTemperature} 와 같은 열관성 식을 예약분에 적용한다. 한 실행에서
+     * 여러 워크로드를 배치할 때 실측 온도만 보면 상승분이 누적되지 않아, 배치 후 예상 온도
+     * 검사가 <b>워크로드 하나만 얹은 값</b>에 머문다.</p>
+     *
+     * <p>온도를 수집하지 못한 노드(0℃)는 0 을 유지한다. 없는 값에 상승분을 얹으면 근거 없는
+     * 숫자가 된다.</p>
+     */
+    public double effectiveTemperature(NodeResource node) {
+        double current = node.getTemperatureCelsius();
+        if (current <= 0) return current;
+        return current * (1.0 + props.getInertiaK() * node.reservedCpuRatio());
     }
 
     /**

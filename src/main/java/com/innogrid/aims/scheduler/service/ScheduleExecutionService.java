@@ -144,7 +144,8 @@ public class ScheduleExecutionService {
                     .withPowerBudget(schedule.getMaxPowerBudgetWatts());
             if (context.isEmpty()) {
                 run.recordCounts(targets.size(), 0, 0, truncated);
-                return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt, "활성 노드가 없습니다");
+                return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt,
+                        SchedulingService.noActiveNodesReason(context));
             }
 
             int success = 0;

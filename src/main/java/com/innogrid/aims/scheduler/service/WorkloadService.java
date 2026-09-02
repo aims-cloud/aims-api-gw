@@ -70,6 +70,28 @@ public class WorkloadService {
         return workloadRepository.save(workload);
     }
 
+    /**
+     * 삭제. 없으면 404, 실행 중(SCHEDULED·RUNNING)이면 409.
+     *
+     * <p>스케줄러의 예약 장부는 별도 테이블이 아니라 <b>워크로드 행 자체</b>다(배치 노드가 적힌 SCHEDULED·RUNNING 행).
+     * 실행 중인 행을 지우면 노드에서 실제로 도는 부하는 그대로인데 장부만 사라져, 그 노드가 비어 보이고
+     * 다음 배치가 몰린다. 이력도 고아가 된다. 먼저 상태를 COMPLETED/FAILED 로 바꾸게 한다 —
+     * 스케줄 삭제(실행 중 409)와 같은 규칙이다.</p>
+     */
+    @Transactional
+    public void delete(Long id) {
+        Workload workload = workloadRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다: " + id));
+
+        Workload.WorkloadStatus status = workload.getStatus();
+        if (status == Workload.WorkloadStatus.SCHEDULED || status == Workload.WorkloadStatus.RUNNING) {
+            throw new BusinessException(HttpStatus.CONFLICT, String.format(
+                    "실행 중인 워크로드는 삭제할 수 없습니다 (상태 %s, 노드 %s). 먼저 상태를 COMPLETED 또는 FAILED 로 바꾸세요",
+                    status, workload.getAssignedNodeId()));
+        }
+        workloadRepository.delete(workload);
+    }
+
     // ── 검증 헬퍼 ───────────────────────────────────────────────
 
     private static String requireText(String value, String label, int max) {

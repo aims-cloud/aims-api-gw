@@ -8,6 +8,7 @@ import java.util.List;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
+import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
@@ -109,10 +110,12 @@ public class SchedulerController {
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다")));
     }
 
-    @Operation(summary = "워크로드 삭제")
+    @Operation(summary = "워크로드 삭제",
+               description = "없으면 404. 실행 중(SCHEDULED·RUNNING)이면 409 — 먼저 상태를 COMPLETED/FAILED 로 바꿔야 합니다. "
+                       + "배치 이력은 연구 근거라 함께 지우지 않습니다.")
     @DeleteMapping("/workloads/{workloadId}")
     public ApiResponse<Void> deleteWorkload(@PathVariable Long workloadId) {
-        workloadRepository.deleteById(workloadId);
+        workloadService.delete(workloadId);
         return ApiResponse.ok(null);
     }
 
@@ -137,6 +140,15 @@ public class SchedulerController {
     @GetMapping("/nodes")
     public ApiResponse<List<NodeResponse>> getNodeResources() {
         return ApiResponse.ok(schedulingService.getNodeResources().stream().map(NodeResponse::from).toList());
+    }
+
+    @Operation(summary = "수집 제외 노드 목록",
+               description = "핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
+                       + "노드 목록(/nodes)은 배열 계약을 지키느라 이들을 담지 않으므로 여기서 확인합니다. 정상이면 빈 배열입니다.")
+    @GetMapping("/nodes/excluded")
+    public ApiResponse<List<ExcludedNodeResponse>> getExcludedNodes() {
+        return ApiResponse.ok(schedulingService.nodeSnapshot().excludedNodes().stream()
+                .map(ExcludedNodeResponse::from).toList());
     }
 
     @Operation(summary = "노드 단건 자원 현황",

@@ -57,10 +57,11 @@ public class SchedulingPolicyController {
         return ApiResponse.ok(SchedulingPolicyResponse.from(service.update(policyId, request)));
     }
 
-    @Operation(summary = "정책 삭제")
+    @Operation(summary = "정책 삭제",
+               description = "없으면 404. 스케줄이 참조 중이면 409 — 먼저 스케줄의 정책을 바꾸거나 스케줄을 삭제해야 합니다.")
     @DeleteMapping("/{policyId}")
     public ApiResponse<Void> deletePolicy(@PathVariable Long policyId) {
-        repository.deleteById(policyId);
+        service.delete(policyId);
         return ApiResponse.ok(null);
     }
 }

@@ -11,6 +11,7 @@ import com.innogrid.aims.scheduler.dto.SchedulingPolicyRequest;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 
 import tools.jackson.databind.JsonNode;
@@ -33,11 +34,32 @@ public class SchedulingPolicyService {
     static final int DESCRIPTION_MAX = 300;
 
     private final SchedulingPolicyRepository repository;
+    private final ScheduleRepository scheduleRepository;
     private final EngineRegistry engineRegistry;
 
-    public SchedulingPolicyService(SchedulingPolicyRepository repository, EngineRegistry engineRegistry) {
+    public SchedulingPolicyService(SchedulingPolicyRepository repository,
+                                   ScheduleRepository scheduleRepository,
+                                   EngineRegistry engineRegistry) {
         this.repository = repository;
+        this.scheduleRepository = scheduleRepository;
         this.engineRegistry = engineRegistry;
+    }
+
+    /**
+     * 삭제. 없으면 404, 스케줄이 참조 중이면 409.
+     *
+     * <p>스케줄은 정책을 번호로만 가리키고 외래키가 없다. 정책을 지우면 그 스케줄의 다음 실행이
+     * "정책을 찾을 수 없습니다"로 실패한다 — 지우는 시점에 막는 것이 맞다.</p>
+     */
+    @Transactional
+    public void delete(Long id) {
+        SchedulingPolicy policy = require(id);
+        if (scheduleRepository.existsByPolicyId(id)) {
+            throw new BusinessException(HttpStatus.CONFLICT, String.format(
+                    "스케줄이 참조하는 정책은 삭제할 수 없습니다: %s(%d). 먼저 스케줄의 정책을 바꾸거나 스케줄을 삭제하세요",
+                    policy.getName(), id));
+        }
+        repository.delete(policy);
     }
 
     @Transactional

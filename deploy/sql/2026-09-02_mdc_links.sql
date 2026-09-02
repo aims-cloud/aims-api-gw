@@ -48,6 +48,11 @@ ALTER TABLE mdc_links DROP CONSTRAINT IF EXISTS mdc_links_source_check;
 ALTER TABLE mdc_links ADD CONSTRAINT mdc_links_source_check
     CHECK (source IN ('MANUAL', 'PROBE'));
 
+-- ── 정정 이력 ────────────────────────────────────────────────
+-- 2026-09-02 첫 배포본은 엔티티 필드 mdcA/mdcB 가 스프링의 카멜→스네이크 변환에서 마지막 글자를 건너
+-- mdca/mdcb 컬럼으로 생성되었다(빈 테이블). 엔티티에 @Column(name = "mdc_a"/"mdc_b") 를 명시한 뒤
+-- VM 에서 DROP TABLE mdc_links 후 재배포해 이 스크립트와 같은 이름으로 재생성했다.
+
 -- ── 확인 ─────────────────────────────────────────────────────
 -- SELECT column_name, data_type, is_nullable
 --   FROM information_schema.columns WHERE table_name = 'mdc_links' ORDER BY ordinal_position;

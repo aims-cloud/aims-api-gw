@@ -43,6 +43,10 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 예약이 없으면 실효=실측이므로 단건 배치의 결과는 달라지지 않는다.</p>
  *
  * <p>네트워크 점수만 실측을 유지한다 — 예약(코어·메모리)을 트래픽으로 환산할 근거가 없다.</p>
+ *
+ * <p><b>전력·온도를 수집하지 못한 노드는 그 차원에서 중립 0.5 를 받는다.</b> 0W·0°C 를 그대로
+ * 계산하면 여유 100% 로 읽혀 IPMI 가 없는 노드가 전력·온도 만점(가중치 합 0.35)을 받고, IPMI 가
+ * 섞인 클러스터에서 계측된 노드보다 체계적으로 유리해진다. {@code power} 엔진과 같은 원칙이다.</p>
  */
 @Component
 public class WeightedScoreScheduler implements SchedulingEngine {
@@ -96,13 +100,15 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             // ── 2단계: 소프트 스코어링 (5차원, 예약분 반영 실효값) ──
             double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
             double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
-            double powerScore = policy.isPowerAwareEnabled()
-                    ? powerModel.effectiveHeadroomPercent(node) / 100.0
-                    : 0.5;
-            double tempScore = policy.isTemperatureAwareEnabled()
-                    ? thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
-                                                 policy.getMaxTemperatureCelsius())
-                    : 0.5;
+            // 전력·온도를 수집하지 못한 노드(0W·0°C)는 판단 근거가 없으므로 중립 0.5.
+            // 실측 0 을 그대로 계산하면 여유 100% 로 읽혀 미계측 노드가 만점을 받는다.
+            double powerScore = !policy.isPowerAwareEnabled() || node.getPowerWatts() <= 0
+                    ? 0.5
+                    : powerModel.effectiveHeadroomPercent(node) / 100.0;
+            double tempScore = !policy.isTemperatureAwareEnabled() || node.getTemperatureCelsius() <= 0
+                    ? 0.5
+                    : thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
+                                                 policy.getMaxTemperatureCelsius());
             double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
 
             // ── 3단계: 가중합 ────────────────────────────────────

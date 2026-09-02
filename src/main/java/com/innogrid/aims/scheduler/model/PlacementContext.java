@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 
@@ -85,12 +86,17 @@ public class PlacementContext {
     }
 
     /**
-     * 후보 전체의 평균 온도. 열적 균형 계산에 쓴다.
+     * 후보 전체의 평균 온도(실효). 열적 균형 계산에 쓴다.
      * 제외된 노드까지 포함해야 클러스터 전체의 열 분포를 반영할 수 있다.
+     *
+     * <p><b>예약분까지 반영한 실효 온도의 평균</b>이다. 엔진이 노드 온도를 실효로 보면서 평균만
+     * 실측으로 두면 균형 점수의 두 피연산자가 다른 시점을 보게 된다 — 예약이 쌓일수록 노드만
+     * 뜨거워지고 기준선은 그대로라 "0.5 = 평균 수준"이라는 의미가 흐려진다. 순위를 바꾸는
+     * 수정은 아니고 기준점의 일관성을 지키는 것이다.</p>
      */
-    public double averageTemperature() {
+    public double averageTemperature(ThermalModel thermalModel) {
         return nodes.stream()
-                .mapToDouble(NodeResource::getTemperatureCelsius)
+                .mapToDouble(thermalModel::effectiveTemperature)
                 .average().orElse(0);
     }
 
@@ -113,10 +119,14 @@ public class PlacementContext {
      * <p>클러스터 총 전력 = Σ(가동 노드의 유휴 전력 + 동적 전력) 이므로, 이 수를 줄이는 것이
      * 곧 전력 절감이다. 판정 기준은 엔진이 {@code PowerModel} 설정에서 가져와 넘긴다 —
      * 이 클래스는 설정을 알지 못한다.</p>
+     *
+     * <p>{@code PowerModel.isActive} 와 같은 <b>실효 사용률</b>로 판정한다. 노드별 "가동중"은 실효,
+     * 클러스터 요약은 실측이면 같은 응답 안에서 기준이 어긋난다. 이번 실행에서 워크로드를 받아
+     * 깨어난 빈 노드는 이후 요약에서 가동 중으로 세어야 맞다.</p>
      */
     public int activeNodeCount(double activeCpuPercent) {
         return (int) nodes.stream()
-                .filter(n -> n.getCpuUsagePercent() > activeCpuPercent)
+                .filter(n -> n.effectiveCpuUsagePercent() > activeCpuPercent)
                 .count();
     }
 
@@ -131,7 +141,7 @@ public class PlacementContext {
      */
     public double reclaimableIdleWatts(double activeCpuPercent, double idleRatio) {
         return nodes.stream()
-                .filter(n -> n.getCpuUsagePercent() <= activeCpuPercent)
+                .filter(n -> n.effectiveCpuUsagePercent() <= activeCpuPercent)   // activeNodeCount 와 같은 기준
                 .mapToDouble(n -> n.getPowerCapacityWatts() * idleRatio)
                 .sum();
     }

@@ -13,6 +13,7 @@ import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -276,6 +277,36 @@ class ConsolidationServiceTest {
         given(List.of(node("no-ipmi", 1, 5, 0), node("host", 30, 30, 0)), List.of());
 
         assertNull(service.diagnose().summary().savingPercent());
+    }
+
+    @Test
+    void 요청당_메트릭_수집은_한_번이다() {
+        // 예전에는 getNodeResources() 와 createContext() 가 각각 수집해 요청당 두 번이었다.
+        // 두 스냅샷의 시점이 달라 1차 필터가 본 노드와 시뮬레이션 기준 노드가 어긋날 수 있었다.
+        given(List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250)),
+                List.of(workload(1L, "w1", 1)));
+
+        service.diagnose();
+
+        verify(schedulingService, times(1)).createContext(any());
+        verify(schedulingService, never()).getNodeResources();
+    }
+
+    @Test
+    void 수집_단계에서_제외된_노드는_요약에_수와_사유로_실린다() {
+        List<NodeResource> nodes = List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250));
+        given(nodes, List.of());
+        SchedulingPolicy policy = new SchedulingPolicy("test", "test");
+        when(schedulingService.createContext(any())).thenAnswer(inv ->
+                PlacementContext.of(copy(nodes), policy).withExcluded(List.of(
+                        new ExcludedNode("mdc-01", "broken", List.of("cpu사용률")))));
+
+        ConsolidationResponse r = service.diagnose();
+
+        assertEquals(2, r.summary().candidateCount(), "제외 노드는 후보 심사를 받지 않는다");
+        assertEquals(1, r.summary().excludedNodes());
+        assertEquals("broken", r.summary().excluded().get(0).nodeId());
+        assertTrue(r.summary().excluded().get(0).reason().contains("cpu사용률"));
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

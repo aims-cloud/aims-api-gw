@@ -106,7 +106,8 @@ class SchedulingServiceReservationTest {
     private int reservedCpuAfterContext(Workload workload) {
         NodeResource node = new NodeResource("mdc-01", "node-1", 8, 16384, 0,
                 20, 30, 30, 250, 500, 50, 1000, 500);
-        when(nodeCollector.collectAll()).thenReturn(List.of(node));
+        when(nodeCollector.collect())
+                .thenReturn(new NodeResourceCollector.Snapshot(List.of(node), List.of()));
         when(workloadRepository.findByStatusIn(anyList())).thenReturn(List.of(workload));
 
         PlacementContext context = service.createContext(new SchedulingPolicy("test", "test"));

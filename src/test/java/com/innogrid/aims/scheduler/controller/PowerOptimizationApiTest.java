@@ -37,6 +37,8 @@ class PowerOptimizationApiTest {
                 .andExpect(jsonPath("$.data.cluster.totalNodes").value(0))
                 .andExpect(jsonPath("$.data.cluster.measured").value(false))
                 .andExpect(jsonPath("$.data.cluster.unmeasuredReason").isNotEmpty())
+                .andExpect(jsonPath("$.data.cluster.excludedNodes").value(0))
+                .andExpect(jsonPath("$.data.cluster.excluded").isArray())
                 .andExpect(jsonPath("$.data.findings").isArray())
                 .andExpect(jsonPath("$.data.summary.findingCount").value(0));
     }
@@ -49,6 +51,8 @@ class PowerOptimizationApiTest {
                 .andExpect(jsonPath("$.data.feasible").value(false))
                 .andExpect(jsonPath("$.data.candidates").isArray())
                 .andExpect(jsonPath("$.data.summary.reclaimableNodes").value(0))
+                .andExpect(jsonPath("$.data.summary.excludedNodes").value(0))
+                .andExpect(jsonPath("$.data.summary.excluded").isArray())
                 .andExpect(jsonPath("$.data.limitation").isNotEmpty());
     }
 

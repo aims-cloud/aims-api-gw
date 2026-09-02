@@ -33,6 +33,10 @@ public record PowerOptimizationResponse(
      *                             워크로드를 옮길 수단이 없어 <b>실현된 절감이 아니다</b>
      * @param measured             전력을 수집한 노드가 하나라도 있는지
      * @param unmeasuredReason     수집하지 못했을 때의 사유. 화면에 그대로 띄운다
+     * @param excludedNodes        핵심 메트릭을 알 수 없어 수집 단계에서 뺀 노드 수.
+     *                             {@code totalNodes} 는 판단 가능한 노드만 센다 — 이 값이 0 이 아니면
+     *                             클러스터가 실제로는 더 크다는 뜻이다
+     * @param excluded             뺀 노드와 사유
      */
     public record Cluster(
             int totalNodes,
@@ -41,8 +45,14 @@ public record PowerOptimizationResponse(
             double totalPowerWatts,
             double reclaimableIdleWatts,
             boolean measured,
-            String unmeasuredReason
-    ) {}
+            String unmeasuredReason,
+            int excludedNodes,
+            List<ExcludedNodeResponse> excluded
+    ) {
+        public Cluster {
+            excluded = excluded == null ? List.of() : List.copyOf(excluded);
+        }
+    }
 
     /**
      * 진단 항목 하나.

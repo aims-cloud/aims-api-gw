@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -76,10 +78,25 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure("활성 노드가 없습니다");
+            return SchedulingResult.failure(noActiveNodesReason(context));
         }
 
         return placementService.place(workload, context, engineId);
+    }
+
+    /**
+     * 후보가 하나도 없을 때의 사유.
+     *
+     * <p>수집기가 핵심 메트릭을 알 수 없어 뺀 노드가 있으면 그 사실을 함께 적는다. "활성 노드가
+     * 없습니다"만 남기면 노드가 다 꺼진 것인지 메트릭 저장소가 아픈 것인지 구분할 수 없다.
+     * 뺀 노드가 없으면 문구는 예전과 같다.</p>
+     */
+    public static String noActiveNodesReason(PlacementContext context) {
+        List<ExcludedNode> excluded = context.excludedNodes();
+        if (excluded.isEmpty()) return "활성 노드가 없습니다";
+        return String.format("활성 노드가 없습니다 — 핵심 메트릭을 알 수 없어 제외한 노드 %d대: %s",
+                excluded.size(),
+                excluded.stream().map(ExcludedNode::nodeId).collect(Collectors.joining(", ")));
     }
 
     /**
@@ -96,9 +113,10 @@ public class SchedulingService {
     }
 
     /**
-     * 현재 노드 자원 상태를 조회한다 (스케줄링 전 미리보기).
+     * 현재 노드 상태 스냅샷 — 후보 노드(열 상태 부여)와 수집 단계에서 제외된 노드를 함께 담는다.
+     * 조회·진단이 공유한다. 배치 실행은 {@link #createContext} 를 직접 쓴다.
      */
-    public List<NodeResource> getNodeResources() {
+    public PlacementContext nodeSnapshot() {
         SchedulingPolicy policy = policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
                 .orElseGet(() -> new SchedulingPolicy("default", "기본 스케줄링 정책"));
 
@@ -106,18 +124,32 @@ public class SchedulingService {
         for (NodeResource node : context.nodes()) {
             node.setThermalState(constraintEvaluator.thermalState(node, policy));
         }
-        return context.nodes();
+        return context;
+    }
+
+    /**
+     * 현재 노드 자원 상태를 조회한다 (스케줄링 전 미리보기).
+     * 제외 노드는 담지 않는다 — 이 목록은 DTO 없이 그대로 응답으로 나가 필드를 늘릴 수 없다.
+     */
+    public List<NodeResource> getNodeResources() {
+        return nodeSnapshot().nodes();
     }
 
     /**
      * 노드 한 대의 현재 상태. 없으면 404.
+     * 수집 단계에서 제외된 노드라면 404 사유에 그 이유를 적는다 — "없다"와 "알 수 없다"는 다르다.
      */
     public NodeResource getNodeResource(String nodeId) {
-        return getNodeResources().stream()
+        PlacementContext snapshot = nodeSnapshot();
+        return snapshot.nodes().stream()
                 .filter(n -> n.getNodeId().equals(nodeId))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
-                        "노드를 찾을 수 없습니다: " + nodeId));
+                        snapshot.excludedNodes().stream()
+                                .filter(e -> e.nodeId().equals(nodeId))
+                                .findFirst()
+                                .map(e -> "노드를 찾을 수 없습니다: " + nodeId + " — 수집 제외 (" + e.reason() + ")")
+                                .orElse("노드를 찾을 수 없습니다: " + nodeId)));
     }
 
     /**
@@ -155,7 +187,7 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure("활성 노드가 없습니다");
+            return SchedulingResult.failure(noActiveNodesReason(context));
         }
         return engineRegistry.resolve(engineId).schedule(workload, context);
     }

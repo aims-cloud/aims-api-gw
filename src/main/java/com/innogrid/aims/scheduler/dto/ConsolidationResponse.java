@@ -93,6 +93,9 @@ public record ConsolidationResponse(
      * @param truncated       상한에 걸려 평가하지 못한 후보가 있는지.
      *                        <b>이 값을 숨기면 부분 결과가 전수 조사처럼 보인다</b>
      * @param savingPercent   절감 가능 비율(%). 총 전력이 0 이면 null
+     * @param excludedNodes   핵심 메트릭을 알 수 없어 수집 단계에서 뺀 노드 수. 후보 심사 자체를 받지
+     *                        못한 노드라 {@code candidateCount} 에 들어 있지 않다
+     * @param excluded        뺀 노드와 사유
      */
     public record Summary(
             int candidateCount,
@@ -100,6 +103,12 @@ public record ConsolidationResponse(
             double reclaimableWatts,
             Double savingPercent,
             boolean truncated,
-            String truncatedReason
-    ) {}
+            String truncatedReason,
+            int excludedNodes,
+            List<ExcludedNodeResponse> excluded
+    ) {
+        public Summary {
+            excluded = excluded == null ? List.of() : List.copyOf(excluded);
+        }
+    }
 }

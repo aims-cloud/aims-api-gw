@@ -11,10 +11,12 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse;
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse.Candidate;
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse.Move;
+import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -85,7 +87,7 @@ public class ConsolidationService {
             evaluated++;
         }
 
-        return summarize(now, candidates, nodes);
+        return summarize(now, candidates, nodes, base.excludedNodes());
     }
 
     // ── 1차 필터 ───────────────────────────────────────────────
@@ -227,7 +229,8 @@ public class ConsolidationService {
     }
 
     private ConsolidationResponse summarize(OffsetDateTime now, List<Candidate> candidates,
-                                            List<NodeResource> nodes) {
+                                            List<NodeResource> nodes,
+                                            List<ExcludedNode> excluded) {
         List<Candidate> reclaimable = candidates.stream()
                 .filter(c -> c.evaluated() && c.reclaimable()).toList();
 
@@ -244,7 +247,9 @@ public class ConsolidationService {
                         candidates.size(), reclaimable.size(),
                         PowerOptimizationService.round(watts),
                         PowerOptimizationService.percentOf(watts, totalPower),
-                        skipped > 0, truncatedReason),
+                        skipped > 0, truncatedReason,
+                        excluded.size(),
+                        excluded.stream().map(ExcludedNodeResponse::from).toList()),
                 ConsolidationResponse.LIMITATION);
     }
 }

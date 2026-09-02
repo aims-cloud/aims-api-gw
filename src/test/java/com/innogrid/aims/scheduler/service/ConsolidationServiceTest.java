@@ -13,6 +13,7 @@ import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -289,6 +290,23 @@ class ConsolidationServiceTest {
 
         verify(schedulingService, times(1)).createContext(any());
         verify(schedulingService, never()).getNodeResources();
+    }
+
+    @Test
+    void 수집_단계에서_제외된_노드는_요약에_수와_사유로_실린다() {
+        List<NodeResource> nodes = List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250));
+        given(nodes, List.of());
+        SchedulingPolicy policy = new SchedulingPolicy("test", "test");
+        when(schedulingService.createContext(any())).thenAnswer(inv ->
+                PlacementContext.of(copy(nodes), policy).withExcluded(List.of(
+                        new ExcludedNode("mdc-01", "broken", List.of("cpu사용률")))));
+
+        ConsolidationResponse r = service.diagnose();
+
+        assertEquals(2, r.summary().candidateCount(), "제외 노드는 후보 심사를 받지 않는다");
+        assertEquals(1, r.summary().excludedNodes());
+        assertEquals("broken", r.summary().excluded().get(0).nodeId());
+        assertTrue(r.summary().excluded().get(0).reason().contains("cpu사용률"));
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

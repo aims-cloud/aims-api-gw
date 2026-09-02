@@ -11,15 +11,20 @@ import java.util.List;
  * 데도 쓴다.</p>
  */
 public record ConstraintDescriptionResponse(
-        String code,            // C1 ~ C4
+        String code,            // C0 ~ C4
         String name,
         String description,
         String source,          // 임계값의 출처 (정책 필드 / 워크로드 필드 / 설정)
         boolean togglable       // 정책에서 켜고 끌 수 있는지
 ) {
-    /** 현재 구현된 제약 파이프라인. 평가 순서대로다. */
+    /** 현재 구현된 제약 파이프라인. 평가 순서대로다. C0 은 제약 평가 이전, 수집 단계에서 걸러진다. */
     public static List<ConstraintDescriptionResponse> all() {
         return List.of(
+                new ConstraintDescriptionResponse("C0", "핵심 메트릭 수집",
+                        "CPU 사용률·코어 수·메모리 총량·가용량 중 하나라도 조회 실패나 시리즈 없음으로 알 수 없는 "
+                                + "노드는 후보 목록에 넣지 않는다. 0 으로 채우면 빈 노드로 오판되기 때문이다. "
+                                + "제외된 노드는 진단 응답의 excludedNodes 와 배치 실패 사유에 표기된다.",
+                        "메트릭 저장소 응답 (설정의 node-job 으로 대상 노드 선택)", false),
                 new ConstraintDescriptionResponse("C1", "자원 가용성",
                         "예약분을 뺀 가용 CPU·메모리·GPU 가 워크로드 요구량 이상이어야 한다. "
                                 + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다.",

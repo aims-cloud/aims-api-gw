@@ -8,11 +8,14 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Cluster;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Finding;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.PlacementContext;
 
 /**
  * 클러스터 전력 최적화 진단.
@@ -49,22 +52,34 @@ public class PowerOptimizationService {
         this.props = properties.getPower();
     }
 
-    /** 현재 노드 상태로 진단한다. */
+    /** 현재 노드 상태로 진단한다. 수집 단계에서 제외된 노드도 응답에 표기한다. */
     public PowerOptimizationResponse diagnoseCurrent() {
-        return diagnose(schedulingService.getNodeResources());
+        PlacementContext snapshot = schedulingService.nodeSnapshot();
+        return diagnose(snapshot.nodes(), snapshot.excludedNodes());
     }
 
     /**
-     * 주어진 노드 스냅샷으로 진단한다.
+     * 주어진 노드 스냅샷으로 진단한다(제외 노드 없음).
      * 테스트가 합성 클러스터를 넣을 수 있도록 열어 둔다 — 배포 환경은 노드가 1대뿐이라
      * 여러 노드가 섞인 판단을 실환경에서 검증할 수 없다.
      */
     public PowerOptimizationResponse diagnose(List<NodeResource> nodes) {
+        return diagnose(nodes, List.of());
+    }
+
+    /**
+     * 주어진 노드 스냅샷과 제외 노드 목록으로 진단한다.
+     *
+     * <p>제외 노드는 판단에 쓰지 않는다 — 판단할 값이 없어서 뺀 노드다. 하지만 응답에는 싣는다.
+     * 그러지 않으면 {@code totalNodes} 가 조용히 줄어 "10대 중 1대 제외"가 "9대 클러스터"로 보인다.</p>
+     */
+    public PowerOptimizationResponse diagnose(List<NodeResource> nodes, List<ExcludedNode> excluded) {
         OffsetDateTime now = OffsetDateTime.now();
         List<NodeResource> safe = nodes == null ? List.of() : nodes;
+        List<ExcludedNode> safeExcluded = excluded == null ? List.of() : excluded;
 
         boolean measured = safe.stream().anyMatch(this::hasPower);
-        Cluster cluster = cluster(safe, measured);
+        Cluster cluster = cluster(safe, measured, safeExcluded);
 
         // 전력을 하나도 수집하지 못했으면 진단할 근거가 없다. 빈 배열과 사유를 돌려준다 —
         // 0 건이라고 "문제 없음" 으로 읽히면 안 되므로 사유를 클러스터에 함께 담는다.
@@ -82,7 +97,7 @@ public class PowerOptimizationService {
 
     // ── 클러스터 현황 ───────────────────────────────────────────
 
-    private Cluster cluster(List<NodeResource> nodes, boolean measured) {
+    private Cluster cluster(List<NodeResource> nodes, boolean measured, List<ExcludedNode> excluded) {
         int active = (int) nodes.stream().filter(powerModel::isActive).count();
         double total = nodes.stream().mapToDouble(NodeResource::getPowerWatts).sum();
         double reclaimable = nodes.stream()
@@ -91,7 +106,8 @@ public class PowerOptimizationService {
 
         return new Cluster(nodes.size(), active, nodes.size() - active,
                 round(total), round(measured ? reclaimable : 0),
-                measured, measured ? null : NO_POWER_METRIC);
+                measured, measured ? null : NO_POWER_METRIC,
+                excluded.size(), excluded.stream().map(ExcludedNodeResponse::from).toList());
     }
 
     // ── 진단 항목 ──────────────────────────────────────────────

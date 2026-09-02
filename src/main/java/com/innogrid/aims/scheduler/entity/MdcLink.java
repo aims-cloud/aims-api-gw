@@ -20,10 +20,10 @@ import jakarta.persistence.*;
  */
 @Entity
 @Table(name = "mdc_links",
-       uniqueConstraints = @UniqueConstraint(name = "uq_mdc_links_pair", columnNames = {"mdcA", "mdcB"}),
+       uniqueConstraints = @UniqueConstraint(name = "uq_mdc_links_pair", columnNames = {"mdc_a", "mdc_b"}),
        indexes = {
-           @Index(name = "idx_mdc_links_mdc_a", columnList = "mdcA"),
-           @Index(name = "idx_mdc_links_mdc_b", columnList = "mdcB")
+           @Index(name = "idx_mdc_links_mdc_a", columnList = "mdc_a"),
+           @Index(name = "idx_mdc_links_mdc_b", columnList = "mdc_b")
        })
 public class MdcLink {
 
@@ -37,12 +37,18 @@ public class MdcLink {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 사전순으로 작은 MDC 식별자. */
-    @Column(nullable = false, length = 50)
+    /**
+     * 사전순으로 작은 MDC 식별자.
+     *
+     * <p>컬럼 이름을 명시한다 — 스프링의 카멜→스네이크 변환은 <b>마지막 글자</b>를 검사하지 않아
+     * {@code mdcA} 가 {@code mdc_a} 가 아니라 {@code mdca} 로 만들어진다(2026-09-02 배포에서 실측).
+     * DDL 스크립트와 같은 이름이 되도록 고정한다.</p>
+     */
+    @Column(name = "mdc_a", nullable = false, length = 50)
     private String mdcA;
 
-    /** 사전순으로 큰 MDC 식별자. */
-    @Column(nullable = false, length = 50)
+    /** 사전순으로 큰 MDC 식별자. 컬럼 이름을 명시하는 이유는 {@link #mdcA} 와 같다. */
+    @Column(name = "mdc_b", nullable = false, length = 50)
     private String mdcB;
 
     /** 왕복 지연(ms). 0 이상. 필수 — 비용 함수의 주 입력이다. */

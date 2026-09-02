@@ -33,6 +33,12 @@ public class PlacementContext {
     /** 수집 단계에서 핵심 메트릭을 알 수 없어 후보에 넣지 않은 노드. 진단이 "왜 빠졌는지"를 말할 근거다. */
     private List<ExcludedNode> excluded = Collections.emptyList();
 
+    /**
+     * 이번 실행이 보는 MDC 링크 원장 스냅샷. 정책이 {@code affinityEnabled} 일 때만 채워지고,
+     * 아니면 {@link LinkMatrix#EMPTY} 다 — 게이트가 꺼진 실행은 원장을 읽지도 않는다.
+     */
+    private LinkMatrix linkMatrix = LinkMatrix.EMPTY;
+
     private PlacementContext(List<NodeResource> nodes, SchedulingPolicy policy, ConstraintEvaluator evaluator) {
         this.nodes = nodes == null ? Collections.emptyList() : nodes;
         this.policy = policy;
@@ -65,6 +71,27 @@ public class PlacementContext {
      */
     public List<ExcludedNode> excludedNodes() {
         return excluded;
+    }
+
+    /** MDC 링크 스냅샷을 싣는다. null 이면 빈 매트릭스. */
+    public PlacementContext withLinkMatrix(LinkMatrix matrix) {
+        this.linkMatrix = matrix == null ? LinkMatrix.EMPTY : matrix;
+        return this;
+    }
+
+    /** 이번 실행의 MDC 링크 스냅샷. 게이트가 꺼진 실행은 항상 비어 있다. */
+    public LinkMatrix linkMatrix() {
+        return linkMatrix;
+    }
+
+    /**
+     * 링크 반영 게이트 — 정책이 {@code affinityEnabled} 이고 워크로드에 {@code dataMdcId} 가 있을 때만 참.
+     * 제약(C5)과 weighted 점수 혼합이 같은 조건을 봐야 하므로 한곳에 둔다.
+     * 기존 정책은 전부 false 라 배포 직후 배치 결과가 바뀌지 않는다.
+     */
+    public boolean linkAware(Workload workload) {
+        return policy != null && policy.isAffinityEnabled()
+                && workload != null && workload.getDataMdcId() != null && !workload.getDataMdcId().isBlank();
     }
 
     /**

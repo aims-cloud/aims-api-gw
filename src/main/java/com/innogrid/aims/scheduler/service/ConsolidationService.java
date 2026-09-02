@@ -17,6 +17,7 @@ import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -83,7 +84,7 @@ public class ConsolidationService {
                         String.format("후보 상한 %d대를 초과했습니다", limit)));
                 continue;
             }
-            candidates.add(evaluate(node, nodes, policy));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes 는 오염되지 않는다
+            candidates.add(evaluate(node, nodes, policy, base.linkMatrix()));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes 는 오염되지 않는다
             evaluated++;
         }
 
@@ -108,7 +109,7 @@ public class ConsolidationService {
 
     // ── 2차 판정 — 순절감 ──────────────────────────────────────
 
-    private Candidate evaluate(NodeResource node, List<NodeResource> base, SchedulingPolicy policy) {
+    private Candidate evaluate(NodeResource node, List<NodeResource> base, SchedulingPolicy policy, LinkMatrix links) {
         List<Workload> workloads = workloadsOn(node);
         int perNodeLimit = Math.max(0, props.getMaxRelocationsPerNode());
 
@@ -139,7 +140,7 @@ public class ConsolidationService {
 
         // 이 노드를 뺀 나머지에만 배치를 시도한다. 컨텍스트는 여기서 새로 만든다 —
         // NodeResource 는 가변이라(reserve) 조회용 스냅샷에 예약을 쌓으면 응답이 오염된다.
-        PlacementContext sandbox = sandboxWithout(node, base, policy);
+        PlacementContext sandbox = sandboxWithout(node, base, policy, links);
         if (sandbox.isEmpty()) {
             return blocked(node, workloads.size(), idle, ratio, "옮길 다른 노드가 없습니다");
         }
@@ -192,13 +193,15 @@ public class ConsolidationService {
      * 판정에 섞이고, 조회용으로 나간 객체까지 오염된다. 메트릭을 다시 수집하지 않는 이유는
      * {@link NodeResource#snapshot()} 주석에 적었다.</p>
      */
-    private PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
-                                            SchedulingPolicy policy) {
+    PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
+                                    SchedulingPolicy policy, LinkMatrix links) {
         List<NodeResource> others = base.stream()
                 .filter(n -> !n.getNodeId().equals(excluded.getNodeId()))
                 .map(NodeResource::snapshot)
                 .toList();
-        return PlacementContext.of(others, policy);
+        // 링크 스냅샷은 실제 배치 컨텍스트의 것을 그대로 잇는다. 빠뜨리면 게이트가 켜진 정책에서
+        // 시뮬레이션은 "옮길 수 있다"고 답하고 실제 배치는 C5 로 막히는 어긋남이 생긴다(4-D ㄱ).
+        return PlacementContext.of(others, policy).withLinkMatrix(links);
     }
 
     private List<Workload> workloadsOn(NodeResource node) {

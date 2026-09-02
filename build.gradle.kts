@@ -25,6 +25,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	runtimeOnly("org.postgresql:postgresql")
 	runtimeOnly("com.h2database:h2")
+	// H2 웹 콘솔 (Boot 4 에서 별도 모듈로 분리) — 로컬 프로파일에서만 spring.h2.console.enabled 로 활성화
+	implementation("org.springframework.boot:spring-boot-h2console")
 	implementation("com.fasterxml.jackson.core:jackson-databind")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
 	implementation("io.jsonwebtoken:jjwt-api:0.12.6")

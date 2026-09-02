@@ -34,6 +34,15 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 3. 가중합 = Σ(weight_i × score_i)
  * 4. 선호도 보너스: preferredMdcId 일치 시 +10%
  * 5. 최고 점수 노드 선택
+ *
+ * <p><b>점수는 실측이 아니라 예약분까지 반영한 실효값으로 계산한다.</b> 스케줄 실행은
+ * 메트릭을 실행당 한 번만 수집하므로, 한 실행에서 워크로드를 잇달아 배치하면 방금 배치한
+ * 부하는 메트릭에 없다. 실측만 보면 점수가 매번 같아 최고점 노드 하나로 몰리고, 제약
+ * (C1·C2)이 막아설 때까지 계속된다 — 제약은 실효값을 보는데 점수는 실측을 보는 셈이다.
+ * 배포 VM 에서 2코어 노드에 1코어를 예약한 뒤에도 cpu여유가 0.8733 그대로였던 것이 이 결함이다.
+ * 예약이 없으면 실효=실측이므로 단건 배치의 결과는 달라지지 않는다.</p>
+ *
+ * <p>네트워크 점수만 실측을 유지한다 — 예약(코어·메모리)을 트래픽으로 환산할 근거가 없다.</p>
  */
 @Component
 public class WeightedScoreScheduler implements SchedulingEngine {
@@ -84,14 +93,17 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             String exclusionReason = context.exclusionReason(workload, node);
             boolean eligible = (exclusionReason == null);
 
-            // ── 2단계: 소프트 스코어링 (5차원) ────────────────────
-            double cpuScore = (100.0 - node.getCpuUsagePercent()) / 100.0;
-            double memScore = (100.0 - node.getMemoryUsagePercent()) / 100.0;
-            double powerScore = policy.isPowerAwareEnabled() ? powerModel.headroomScore(node) : 0.5;
-            double tempScore = policy.isTemperatureAwareEnabled()
-                    ? thermalModel.headroomScore(node.getTemperatureCelsius(), policy.getMaxTemperatureCelsius())
+            // ── 2단계: 소프트 스코어링 (5차원, 예약분 반영 실효값) ──
+            double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
+            double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
+            double powerScore = policy.isPowerAwareEnabled()
+                    ? powerModel.effectiveHeadroomPercent(node) / 100.0
                     : 0.5;
-            double netScore = networkModel.localTrafficScore(node);
+            double tempScore = policy.isTemperatureAwareEnabled()
+                    ? thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
+                                                 policy.getMaxTemperatureCelsius())
+                    : 0.5;
+            double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
 
             // ── 3단계: 가중합 ────────────────────────────────────
             double totalScore = cpuScore * policy.getCpuWeight()

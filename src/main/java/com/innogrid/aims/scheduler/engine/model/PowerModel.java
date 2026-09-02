@@ -85,11 +85,12 @@ public class PowerModel {
     /**
      * 예약분까지 반영한 전력 여유율 (%).
      *
-     * <p>제약 검사용이다. 실측 여유율({@link NodeResource#powerHeadroomPercent})만 보면 예약이
-     * 아무리 쌓여도 여유가 그대로라, 전력 상한이 배치 누적에 대해 적용되지 않는다.</p>
+     * <p>제약 검사와 배치 점수가 함께 쓴다. 실측 여유율({@link NodeResource#powerHeadroomPercent})만
+     * 보면 예약이 아무리 쌓여도 여유가 그대로라, 전력 상한이 배치 누적에 대해 적용되지 않고
+     * 점수도 매번 같아 한 노드로 몰린다.</p>
      *
-     * <p>점수 계산용 {@link #headroomScore} 는 실측을 그대로 쓴다 — 그쪽은 "지금 이 노드에
-     * 얼마나 여유가 있나"를 재는 지표라 예측치를 섞으면 의미가 흐려진다.</p>
+     * <p>{@link #headroomScore} 는 실측 그대로다 — 진단·조회처럼 "지금 이 노드에 얼마나 여유가
+     * 있나"를 보여주는 자리에서 쓴다. 배치 엔진은 이 메서드를 쓴다.</p>
      */
     public double effectiveHeadroomPercent(NodeResource node) {
         double pMax = node.getPowerCapacityWatts();

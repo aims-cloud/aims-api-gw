@@ -246,8 +246,12 @@ public class ScheduleExecutionService {
      *
      * <p>저장된 정책을 고치지 않으려고 <b>영속되지 않는 사본</b>을 만들어 쓴다.
      * 정책은 여러 스케줄이 공유하므로 한 스케줄의 설정이 남으면 안 된다.</p>
+     *
+     * <p>사본은 정책의 <b>모든 판단 필드</b>를 옮겨야 한다. {@code affinityEnabled} 가 빠져 있어
+     * 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가 조용히 꺼지던 결함이 있었다
+     * (2026-09-02, 단계 4-② 설계 중 발견). 테스트 {@code ScheduleOverridePolicyCopyTest} 가 고정한다.</p>
      */
-    private SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
+    SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
         if (schedule.getMaxTemperatureCelsius() == null) {
             return policy;
         }
@@ -265,6 +269,7 @@ public class ScheduleExecutionService {
         copy.setMaxPowerUsagePercent(policy.getMaxPowerUsagePercent());
         copy.setPowerAwareEnabled(policy.isPowerAwareEnabled());
         copy.setTemperatureAwareEnabled(policy.isTemperatureAwareEnabled());
+        copy.setAffinityEnabled(policy.isAffinityEnabled());
         copy.setMaxTemperatureCelsius(schedule.getMaxTemperatureCelsius());
         return copy;
     }

@@ -5,6 +5,7 @@ import java.util.stream.Collectors;
 import com.innogrid.aims.common.dto.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -46,5 +47,27 @@ public class SchedulerExceptionAdvice {
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(message.isBlank() ? "요청 파라미터가 올바르지 않습니다" : message));
+    }
+
+    /**
+     * 요청 본문을 읽지 못한 경우 — 깨진 JSON, 숫자 자리에 문자열, 빈 본문.
+     *
+     * <p>파라미터 검증과 같은 함정이다. 처리기가 없으면 스프링 기본 처리가 {@code sendError} 로
+     * {@code /error} 를 다시 태우고, 그 재요청에 인증이 실리지 않아 클라이언트는 400 이 아니라
+     * 403 을 받는다. 요청 DTO 를 도입하면 이 경로를 타는 요청이 생기므로 먼저 막는다.</p>
+     *
+     * <p>사유에는 가장 안쪽 원인의 한 줄만 담는다. Jackson 의 전체 메시지는 클래스 이름과 위치
+     * 정보가 길게 붙어 화면에 그대로 띄우기 어렵다.</p>
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        String detail = cause.getMessage() == null ? "" : cause.getMessage().split("\n", 2)[0].trim();
+        if (detail.length() > 200) detail = detail.substring(0, 200) + "…";
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(detail.isBlank()
+                        ? "요청 본문을 읽을 수 없습니다"
+                        : "요청 본문을 읽을 수 없습니다: " + detail));
     }
 }

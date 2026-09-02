@@ -8,14 +8,19 @@ import java.util.List;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
+import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
+import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
+import com.innogrid.aims.scheduler.service.EnumSupport;
 import com.innogrid.aims.scheduler.service.PowerEfficiencyService;
 import com.innogrid.aims.scheduler.service.SchedulingService;
+import com.innogrid.aims.scheduler.service.WorkloadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -36,15 +41,18 @@ public class SchedulerController {
 
     private final SchedulingService schedulingService;
     private final PowerEfficiencyService powerEfficiencyService;
+    private final WorkloadService workloadService;
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
 
     public SchedulerController(SchedulingService schedulingService,
                                PowerEfficiencyService powerEfficiencyService,
+                               WorkloadService workloadService,
                                WorkloadRepository workloadRepository,
                                SchedulingHistoryRepository historyRepository) {
         this.schedulingService = schedulingService;
         this.powerEfficiencyService = powerEfficiencyService;
+        this.workloadService = workloadService;
         this.workloadRepository = workloadRepository;
         this.historyRepository = historyRepository;
     }
@@ -61,35 +69,12 @@ public class SchedulerController {
         return ApiResponse.ok(found.stream().map(WorkloadResponse::from).toList());
     }
 
-    @Operation(summary = "워크로드 생성")
+    @Operation(summary = "워크로드 생성",
+               description = "name·requiredCpu(≥1)·requiredMemoryMb(≥1) 는 필수입니다. 값이 잘못되면 400 과 사유를 돌려줍니다. "
+                       + "resourceType·priority 는 대소문자를 가리지 않습니다.")
     @PostMapping("/workloads")
-    public ApiResponse<WorkloadResponse> createWorkload(@RequestBody Map<String, Object> request) {
-        Workload workload = new Workload(
-                (String) request.get("name"),
-                ((Number) request.get("requiredCpu")).intValue(),
-                ((Number) request.get("requiredMemoryMb")).intValue());
-        if (request.containsKey("description"))
-            workload.setDescription((String) request.get("description"));
-        if (request.containsKey("requiredGpu"))
-            workload.setRequiredGpu(((Number) request.get("requiredGpu")).intValue());
-        if (request.containsKey("requiredDiskGb"))
-            workload.setRequiredDiskGb(((Number) request.get("requiredDiskGb")).intValue());
-        if (request.containsKey("preferredMdcId"))
-            workload.setPreferredMdcId((String) request.get("preferredMdcId"));
-        if (request.containsKey("maxPowerBudgetWatts"))
-            workload.setMaxPowerBudgetWatts(((Number) request.get("maxPowerBudgetWatts")).doubleValue());
-        if (request.containsKey("maxTemperatureCelsius"))
-            workload.setMaxTemperatureCelsius(((Number) request.get("maxTemperatureCelsius")).doubleValue());
-        if (request.containsKey("priority"))
-            workload.setPriority(parseEnum(Workload.WorkloadPriority.class,
-                    (String) request.get("priority"), "우선순위"));
-        if (request.containsKey("resourceType"))
-            workload.setResourceType(parseEnum(Workload.ResourceType.class,
-                    (String) request.get("resourceType"), "리소스 종류"));
-        if (request.containsKey("dataMdcId"))
-            workload.setDataMdcId((String) request.get("dataMdcId"));
-
-        return ApiResponse.ok(WorkloadResponse.from(workloadRepository.save(workload)));
+    public ApiResponse<WorkloadResponse> createWorkload(@RequestBody WorkloadRequest request) {
+        return ApiResponse.ok(WorkloadResponse.from(workloadService.create(request)));
     }
 
     @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
@@ -104,28 +89,17 @@ public class SchedulerController {
                description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다.")
     @PatchMapping("/workloads/{workloadId}/status")
     public ApiResponse<WorkloadResponse> changeWorkloadStatus(@PathVariable Long workloadId,
-                                                              @RequestBody Map<String, Object> request) {
-        Object raw = request.get("status");
-        if (raw == null) {
+                                                              @RequestBody StatusChangeRequest request) {
+        if (request == null || request.status() == null) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "status 는 필수입니다");
         }
-        Workload.WorkloadStatus target =
-                parseEnum(Workload.WorkloadStatus.class, raw.toString(), "상태");
+        Workload.WorkloadStatus target = parseEnum(Workload.WorkloadStatus.class, request.status(), "상태");
         return ApiResponse.ok(WorkloadResponse.from(schedulingService.changeStatus(workloadId, target)));
     }
 
-    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. */
+    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. 요청 DTO 와 같은 규칙({@link EnumSupport}). */
     private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String label) {
-        if (value == null) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, label + " 값이 필요합니다");
-        }
-        try {
-            return Enum.valueOf(type, value.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
-                    "지원하지 않는 %s 입니다: %s (가능한 값: %s)",
-                    label, value, java.util.Arrays.toString(type.getEnumConstants())));
-        }
+        return EnumSupport.parse(type, value, label);
     }
 
     @Operation(summary = "워크로드 상세 조회")
@@ -136,10 +110,12 @@ public class SchedulerController {
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다")));
     }
 
-    @Operation(summary = "워크로드 삭제")
+    @Operation(summary = "워크로드 삭제",
+               description = "없으면 404. 실행 중(SCHEDULED·RUNNING)이면 409 — 먼저 상태를 COMPLETED/FAILED 로 바꿔야 합니다. "
+                       + "배치 이력은 연구 근거라 함께 지우지 않습니다.")
     @DeleteMapping("/workloads/{workloadId}")
     public ApiResponse<Void> deleteWorkload(@PathVariable Long workloadId) {
-        workloadRepository.deleteById(workloadId);
+        workloadService.delete(workloadId);
         return ApiResponse.ok(null);
     }
 
@@ -164,6 +140,15 @@ public class SchedulerController {
     @GetMapping("/nodes")
     public ApiResponse<List<NodeResponse>> getNodeResources() {
         return ApiResponse.ok(schedulingService.getNodeResources().stream().map(NodeResponse::from).toList());
+    }
+
+    @Operation(summary = "수집 제외 노드 목록",
+               description = "핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
+                       + "노드 목록(/nodes)은 배열 계약을 지키느라 이들을 담지 않으므로 여기서 확인합니다. 정상이면 빈 배열입니다.")
+    @GetMapping("/nodes/excluded")
+    public ApiResponse<List<ExcludedNodeResponse>> getExcludedNodes() {
+        return ApiResponse.ok(schedulingService.nodeSnapshot().excludedNodes().stream()
+                .map(ExcludedNodeResponse::from).toList());
     }
 
     @Operation(summary = "노드 단건 자원 현황",

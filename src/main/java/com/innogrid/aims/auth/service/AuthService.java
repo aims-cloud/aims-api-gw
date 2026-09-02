@@ -1,8 +1,13 @@
 package com.innogrid.aims.auth.service;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -100,5 +105,20 @@ public class AuthService {
         return apiKeyRepository.findByKeyValue(key)
                 .map(ApiKey::isValid)
                 .orElse(false);
+    }
+
+    public Set<String> currentUserRoleIds() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getAuthorities() == null) {
+            return Set.of();
+        }
+        Set<String> roles = new LinkedHashSet<>();
+        for (GrantedAuthority authority : auth.getAuthorities()) {
+            String name = authority.getAuthority();
+            if (name != null && name.startsWith("ROLE_")) {
+                roles.add(name.substring("ROLE_".length()));
+            }
+        }
+        return roles;
     }
 }

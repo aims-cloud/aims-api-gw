@@ -61,12 +61,13 @@ public class ConsolidationService {
      */
     public ConsolidationResponse diagnose() {
         SchedulingPolicy policy = schedulingService.resolvePolicy();
-        List<NodeResource> nodes = schedulingService.getNodeResources();
         OffsetDateTime now = OffsetDateTime.now();
 
-        // 시뮬레이션 기준이 될 스냅샷을 한 번만 수집한다. 후보마다 다시 수집하면 노드당
-        // 아홉 종의 메트릭 질의가 후보 수만큼 되풀이된다.
-        List<NodeResource> base = schedulingService.createContext(policy).nodes();
+        // 메트릭은 요청당 한 번만 수집한다. 1차 필터·시뮬레이션·요약이 전부 같은 스냅샷을 본다 —
+        // 따로 수집하면 노드당 아홉 종의 질의가 두 배가 되고, 두 시점의 노드 상태가 어긋나
+        // 필터가 본 노드와 시뮬레이션 기준 노드가 달라진다. 후보마다 재수집하지 않는 이유도 같다.
+        PlacementContext base = schedulingService.createContext(policy);
+        List<NodeResource> nodes = base.nodes();
 
         List<NodeResource> ranked = firstPassFilter(nodes, policy);
         int limit = Math.max(0, props.getMaxConsolidationCandidates());
@@ -80,7 +81,7 @@ public class ConsolidationService {
                         String.format("후보 상한 %d대를 초과했습니다", limit)));
                 continue;
             }
-            candidates.add(evaluate(node, base, policy));
+            candidates.add(evaluate(node, nodes, policy));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes 는 오염되지 않는다
             evaluated++;
         }
 

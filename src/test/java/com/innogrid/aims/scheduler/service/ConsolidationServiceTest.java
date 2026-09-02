@@ -278,6 +278,19 @@ class ConsolidationServiceTest {
         assertNull(service.diagnose().summary().savingPercent());
     }
 
+    @Test
+    void 요청당_메트릭_수집은_한_번이다() {
+        // 예전에는 getNodeResources() 와 createContext() 가 각각 수집해 요청당 두 번이었다.
+        // 두 스냅샷의 시점이 달라 1차 필터가 본 노드와 시뮬레이션 기준 노드가 어긋날 수 있었다.
+        given(List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250)),
+                List.of(workload(1L, "w1", 1)));
+
+        service.diagnose();
+
+        verify(schedulingService, times(1)).createContext(any());
+        verify(schedulingService, never()).getNodeResources();
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     /** 노드 목록과 "모든 노드에 공통으로 배치된" 워크로드를 세팅한다. */

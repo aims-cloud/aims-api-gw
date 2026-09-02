@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.mock.MockDataProvider;
@@ -40,13 +41,12 @@ public class ResourceExplorerRoleService {
     private final ResourceExplorerProperties properties;
     // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장 조회로 교체
     private final MockDataProvider mockDataProvider;
-    // TODO:: AuthService 로 공통화
-    private final ResourceExplorerTreeService resourceExplorerTreeService;
+    private final AuthService authService;
 
-    public ResourceExplorerRoleService(ResourceExplorerProperties properties, MockDataProvider mockDataProvider, ResourceExplorerTreeService resourceExplorerTreeService) {
+    public ResourceExplorerRoleService(ResourceExplorerProperties properties, MockDataProvider mockDataProvider, AuthService authService) {
         this.properties = properties;
         this.mockDataProvider = mockDataProvider;
-        this.resourceExplorerTreeService = resourceExplorerTreeService;
+        this.authService = authService;
     }
 
     // ── 공개 API ────────────────────────────────────────────────
@@ -122,7 +122,7 @@ public class ResourceExplorerRoleService {
     private ResourceExplorerTreeDataset.RoleInfo accessibleRole(ResourceExplorerTreeDataset dataset, String roleId) {
         return dataset.roles().stream()
                 .filter(r -> r.roleId().equals(roleId))
-                .filter(r -> resourceExplorerTreeService.currentUserRoleIds().contains(r.roleId()))
+                .filter(r -> authService.currentUserRoleIds().contains(r.roleId()))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(
                         HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleId));

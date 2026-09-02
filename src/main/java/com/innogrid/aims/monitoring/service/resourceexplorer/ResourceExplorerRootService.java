@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.mock.MockDataProvider;
@@ -41,13 +42,12 @@ public class ResourceExplorerRootService {
     private final ResourceExplorerProperties properties;
     // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장 조회로 교체
     private final MockDataProvider mockDataProvider;
-    // TODO:: AuthService 로 공통화
-    private final ResourceExplorerTreeService resourceExplorerTreeService;
+    private final AuthService authService;
 
-    public ResourceExplorerRootService(ResourceExplorerProperties properties, MockDataProvider mockDataProvider, ResourceExplorerTreeService resourceExplorerTreeService) {
+    public ResourceExplorerRootService(ResourceExplorerProperties properties, MockDataProvider mockDataProvider, AuthService authService) {
         this.properties = properties;
         this.mockDataProvider = mockDataProvider;
-        this.resourceExplorerTreeService = resourceExplorerTreeService;
+        this.authService = authService;
     }
 
     // ── 공개 API ────────────────────────────────────────────────
@@ -108,7 +108,7 @@ public class ResourceExplorerRootService {
     /** 데이터셋을 현재 사용자 토큰의 역할 스코프로 축소한다 — 트리와 같은 범위를 집계하게 된다. */
     private ResourceExplorerTreeDataset userScopedDataset() {
         ResourceExplorerTreeDataset dataset = loadDataset();
-        Set<String> userRoles = resourceExplorerTreeService.currentUserRoleIds();
+        Set<String> userRoles = authService.currentUserRoleIds();
         return new ResourceExplorerTreeDataset(
                 dataset.roles().stream().filter(r -> userRoles.contains(r.roleId())).toList(),
                 dataset.nodes().stream().filter(n -> userRoles.contains(n.roleId())).toList(),

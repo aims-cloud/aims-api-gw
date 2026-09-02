@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
+import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.mock.MockDataProvider;
 import com.innogrid.aims.monitoring.ResourceExplorerProperties;
@@ -42,11 +43,14 @@ public class ResourceExplorerTreeService {
     private final ResourceExplorerProperties properties;
     // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장 조회로 교체
     private final MockDataProvider mockDataProvider;
+    private final AuthService authService;
 
     public ResourceExplorerTreeService(ResourceExplorerProperties properties,
-                                       MockDataProvider mockDataProvider) {
+                                       MockDataProvider mockDataProvider,
+                                       AuthService authService) {
         this.properties = properties;
         this.mockDataProvider = mockDataProvider;
+        this.authService = authService;
     }
 
     // ── 공개 API ────────────────────────────────────────────────
@@ -54,7 +58,7 @@ public class ResourceExplorerTreeService {
     /** ROOT부터 모든 하위 계층을 포함한 전체 트리를 구성한다. 역할은 사용자 토큰 파싱 값 기준. */
     public ResourceTreeNodeResponse getTree(ResourceTreeFilter filter) {
         ResourceExplorerTreeDataset dataset = loadDataset();
-        Set<String> userRoles = currentUserRoleIds();
+        Set<String> userRoles = authService.currentUserRoleIds();
 
         List<ResourceTreeNodeResponse> roles = dataset.roles().stream()
                 .filter(r -> userRoles.contains(r.roleId()))
@@ -113,26 +117,6 @@ public class ResourceExplorerTreeService {
         collectMatches(getTree(new ResourceTreeFilter(null, null, null)),
                 new ArrayList<>(), lower, types, limit, results);
         return results;
-    }
-
-    // ── 사용자 역할 추출 ────────────────────────────────────────
-
-    /** 현재 사용자 토큰의 권한(ROLE_*)에서 역할 ID 를 추출한다. 미인증이면 빈 집합.
-     *  TODO:: AuthService 로 위치 변경 필요
-     * */
-    public Set<String> currentUserRoleIds() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getAuthorities() == null) {
-            return Set.of();
-        }
-        Set<String> roles = new LinkedHashSet<>();
-        for (GrantedAuthority authority : auth.getAuthorities()) {
-            String name = authority.getAuthority();
-            if (name != null && name.startsWith("ROLE_")) {
-                roles.add(name.substring("ROLE_".length()));
-            }
-        }
-        return roles;
     }
 
     // ── 트리 구성 내부 ──────────────────────────────────────────

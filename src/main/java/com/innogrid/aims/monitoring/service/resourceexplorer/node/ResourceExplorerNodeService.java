@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.*;
 
+import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.mock.MockDataProvider;
@@ -55,15 +56,14 @@ public class ResourceExplorerNodeService {
     private final ResourceExplorerProperties properties;
     // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장·Thanos 조회로 교체
     private final MockDataProvider mockDataProvider;
-    // TODO:: AuthService 로 공통화
-    private final ResourceExplorerTreeService resourceExplorerTreeService;
+    private final AuthService authService;
 
     public ResourceExplorerNodeService(ResourceExplorerProperties properties,
                                        MockDataProvider mockDataProvider,
-                                       ResourceExplorerTreeService resourceExplorerTreeService) {
+                                       AuthService authService) {
         this.properties = properties;
         this.mockDataProvider = mockDataProvider;
-        this.resourceExplorerTreeService = resourceExplorerTreeService;
+        this.authService = authService;
     }
 
     // ── 공개 API ────────────────────────────────────────────────
@@ -252,7 +252,7 @@ public class ResourceExplorerNodeService {
     private NodeInfo accessibleNode(String nodeId) {
         return loadDataset().nodes().stream()
                 .filter(n -> n.nodeId().equals(nodeId))
-                .filter(n -> resourceExplorerTreeService.currentUserRoleIds().contains(n.roleId()))
+                .filter(n -> authService.currentUserRoleIds().contains(n.roleId()))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(
                         HttpStatus.NOT_FOUND, "노드를 찾을 수 없습니다: " + nodeId));

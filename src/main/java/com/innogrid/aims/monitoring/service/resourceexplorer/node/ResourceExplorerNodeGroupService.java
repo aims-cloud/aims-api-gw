@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
+import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.mock.MockDataProvider;
@@ -40,15 +41,14 @@ public class ResourceExplorerNodeGroupService {
     private final ResourceExplorerProperties properties;
     // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장·Thanos 조회로 교체
     private final MockDataProvider mockDataProvider;
-    // TODO:: AuthService 로 공통화
-    private final ResourceExplorerTreeService resourceExplorerTreeService;
+    private final AuthService authService;
 
     public ResourceExplorerNodeGroupService(ResourceExplorerProperties properties,
                                             MockDataProvider mockDataProvider,
-                                            ResourceExplorerTreeService resourceExplorerTreeService) {
+                                            AuthService authService) {
         this.properties = properties;
         this.mockDataProvider = mockDataProvider;
-        this.resourceExplorerTreeService = resourceExplorerTreeService;
+        this.authService = authService;
     }
 
     // ── 공개 API ────────────────────────────────────────────────
@@ -99,7 +99,7 @@ public class ResourceExplorerNodeGroupService {
 
     /** 사용자 토큰 역할 스코프의 노드에 roleId/deploymentId 필터를 적용한다. */
     private List<NodeInfo> scopedNodes(String roleId, String deploymentId) {
-        Set<String> userRoles = resourceExplorerTreeService.currentUserRoleIds();
+        Set<String> userRoles = authService.currentUserRoleIds();
         return loadDataset().nodes().stream()
                 .filter(n -> userRoles.contains(n.roleId()))
                 .filter(n -> roleId == null || n.roleId().equals(roleId))

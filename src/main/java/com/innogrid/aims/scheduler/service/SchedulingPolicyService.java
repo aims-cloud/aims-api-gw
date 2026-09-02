@@ -151,6 +151,7 @@ public class SchedulingPolicyService {
 
         if (r.powerAwareEnabled() != null) policy.setPowerAwareEnabled(r.powerAwareEnabled());
         if (r.temperatureAwareEnabled() != null) policy.setTemperatureAwareEnabled(r.temperatureAwareEnabled());
+        if (r.affinityEnabled() != null) policy.setAffinityEnabled(r.affinityEnabled());
         if (r.active() != null) policy.setActive(r.active());
     }
 

@@ -18,7 +18,7 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
  * 같은 방식으로 적용되게 한다. 엔진은 이 평가를 통과한 노드만 점수화한다.</p>
  *
  * <pre>
- * C1 자원 가용성 (예약분 반영)
+ * C1 자원 가용성 (예약분 반영 — CPU·메모리·GPU, 디스크는 총량을 아는 노드에서만)
  * C2 사용률 임계 (CPU / 메모리)
  * C3 열 상태     (쿨다운, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
  * C4 전력        (여유율, 워크로드 예산, 배치 후 예상 전력)
@@ -73,12 +73,19 @@ public class ConstraintEvaluator {
     // ── C1. 자원 가용성 ─────────────────────────────────────────
 
     private String checkResources(Workload workload, NodeResource node) {
-        if (node.canAccommodate(workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu())) {
-            return null;
+        if (!node.canAccommodate(workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu())) {
+            return String.format("자원 부족 (필요 CPU:%d MEM:%dMB GPU:%d, 가용 CPU:%.1f MEM:%dMB GPU:%d)",
+                    workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu(),
+                    node.availableCpu(), node.availableMemoryMb(), node.availableGpu());
         }
-        return String.format("자원 부족 (필요 CPU:%d MEM:%dMB GPU:%d, 가용 CPU:%.1f MEM:%dMB GPU:%d)",
-                workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu(),
-                node.availableCpu(), node.availableMemoryMb(), node.availableGpu());
+        // 디스크는 총량을 아는 노드에서만 본다. 총량 0 은 "모름"이고, 모르는 값으로 배치를 막지 않는다 —
+        // 없는 값에 숫자를 채우던 결함(단계 9)의 반대 방향 실수를 피한다. 요구량 0 이면 검사할 것이 없다.
+        if (workload.getRequiredDiskGb() > 0 && node.diskCapacityGb() > 0
+                && node.availableDiskGb() < workload.getRequiredDiskGb()) {
+            return String.format("디스크 부족 (필요 %dGB, 가용 %dGB / 총량 %dGB)",
+                    workload.getRequiredDiskGb(), node.availableDiskGb(), node.diskCapacityGb());
+        }
+        return null;
     }
 
     // ── C2. 사용률 임계 ─────────────────────────────────────────

@@ -27,8 +27,9 @@ public record ConstraintDescriptionResponse(
                         "메트릭 저장소 응답 (설정의 node-job 으로 대상 노드 선택)", false),
                 new ConstraintDescriptionResponse("C1", "자원 가용성",
                         "예약분을 뺀 가용 CPU·메모리·GPU 가 워크로드 요구량 이상이어야 한다. "
-                                + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다.",
-                        "워크로드의 requiredCpu / requiredMemoryMb / requiredGpu", false),
+                                + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다. "
+                                + "디스크(requiredDiskGb)는 노드의 파일시스템 총량을 알 때만 검사하고, 총량을 모르면 건너뛴다.",
+                        "워크로드의 requiredCpu / requiredMemoryMb / requiredGpu / requiredDiskGb", false),
                 new ConstraintDescriptionResponse("C2", "사용률 임계",
                         "노드의 현재 CPU·메모리 사용률이 정책 임계치를 넘으면 제외한다.",
                         "정책의 maxCpuUsagePercent / maxMemoryUsagePercent", false),

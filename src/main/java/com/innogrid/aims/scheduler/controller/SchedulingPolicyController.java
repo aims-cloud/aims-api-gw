@@ -1,9 +1,11 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.util.List;
 import java.util.Map;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.scheduler.dto.SchedulingPolicyResponse;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
@@ -25,37 +27,38 @@ public class SchedulingPolicyController {
 
     @Operation(summary = "정책 목록")
     @GetMapping
-    public ApiResponse<?> listPolicies() {
-        return ApiResponse.ok(repository.findAll());
+    public ApiResponse<List<SchedulingPolicyResponse>> listPolicies() {
+        return ApiResponse.ok(repository.findAll().stream().map(SchedulingPolicyResponse::from).toList());
     }
 
     @Operation(summary = "정책 생성")
     @PostMapping
-    public ApiResponse<?> createPolicy(@RequestBody Map<String, Object> request) {
+    public ApiResponse<SchedulingPolicyResponse> createPolicy(@RequestBody Map<String, Object> request) {
         SchedulingPolicy policy = new SchedulingPolicy(
                 (String) request.get("name"),
                 (String) request.getOrDefault("description", ""));
         applyWeights(policy, request);
-        return ApiResponse.ok(repository.save(policy));
+        return ApiResponse.ok(SchedulingPolicyResponse.from(repository.save(policy)));
     }
 
     @Operation(summary = "정책 상세")
     @GetMapping("/{policyId}")
-    public ApiResponse<?> getPolicy(@PathVariable Long policyId) {
+    public ApiResponse<SchedulingPolicyResponse> getPolicy(@PathVariable Long policyId) {
         return ApiResponse.ok(repository.findById(policyId)
+                .map(SchedulingPolicyResponse::from)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "정책을 찾을 수 없습니다")));
     }
 
     @Operation(summary = "정책 수정")
     @PutMapping("/{policyId}")
-    public ApiResponse<?> updatePolicy(@PathVariable Long policyId,
-                                       @RequestBody Map<String, Object> request) {
+    public ApiResponse<SchedulingPolicyResponse> updatePolicy(@PathVariable Long policyId,
+                                                              @RequestBody Map<String, Object> request) {
         SchedulingPolicy policy = repository.findById(policyId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "정책을 찾을 수 없습니다"));
         if (request.containsKey("name")) policy.setName((String) request.get("name"));
         if (request.containsKey("description")) policy.setDescription((String) request.get("description"));
         applyWeights(policy, request);
-        return ApiResponse.ok(repository.save(policy));
+        return ApiResponse.ok(SchedulingPolicyResponse.from(repository.save(policy)));
     }
 
     @Operation(summary = "정책 삭제")

@@ -3,9 +3,14 @@ package com.innogrid.aims.scheduler.controller;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
+import java.util.List;
+
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
+import com.innogrid.aims.scheduler.dto.NodeResponse;
+import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
+import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -17,6 +22,13 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 워크로드·노드·배치 이력 API.
+ *
+ * <p>응답은 전부 {@code dto} 패키지의 record 로 나간다. 예전에는 엔티티·모델을 그대로 직렬화해
+ * {@code get} 메서드 하나를 추가하면 API 필드가 조용히 늘었다. 응답 형태의 주인은 이제 DTO 이고,
+ * 필드 계약은 {@code ResponseJsonGoldenTest}·{@code NodeResourceSerializationTest} 가 고정한다.</p>
+ */
 @Tag(name = "스케줄러", description = "워크로드 스케줄링 (제약조건/전력/온도 기반)")
 @RestController
 @RequestMapping("/api/v1/scheduler")
@@ -41,17 +53,17 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 목록 조회")
     @GetMapping("/workloads")
-    public ApiResponse<?> listWorkloads(@RequestParam(required = false) String status) {
-        if (status != null) {
-            return ApiResponse.ok(workloadRepository.findByStatusOrderByCreatedAtDesc(
-                    parseEnum(Workload.WorkloadStatus.class, status, "상태")));
-        }
-        return ApiResponse.ok(workloadRepository.findAllByOrderByCreatedAtDesc());
+    public ApiResponse<List<WorkloadResponse>> listWorkloads(@RequestParam(required = false) String status) {
+        List<Workload> found = status != null
+                ? workloadRepository.findByStatusOrderByCreatedAtDesc(
+                        parseEnum(Workload.WorkloadStatus.class, status, "상태"))
+                : workloadRepository.findAllByOrderByCreatedAtDesc();
+        return ApiResponse.ok(found.stream().map(WorkloadResponse::from).toList());
     }
 
     @Operation(summary = "워크로드 생성")
     @PostMapping("/workloads")
-    public ApiResponse<?> createWorkload(@RequestBody Map<String, Object> request) {
+    public ApiResponse<WorkloadResponse> createWorkload(@RequestBody Map<String, Object> request) {
         Workload workload = new Workload(
                 (String) request.get("name"),
                 ((Number) request.get("requiredCpu")).intValue(),
@@ -77,7 +89,7 @@ public class SchedulerController {
         if (request.containsKey("dataMdcId"))
             workload.setDataMdcId((String) request.get("dataMdcId"));
 
-        return ApiResponse.ok(workloadRepository.save(workload));
+        return ApiResponse.ok(WorkloadResponse.from(workloadRepository.save(workload)));
     }
 
     @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
@@ -91,15 +103,15 @@ public class SchedulerController {
     @Operation(summary = "워크로드 실행 상태 전이",
                description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다.")
     @PatchMapping("/workloads/{workloadId}/status")
-    public ApiResponse<?> changeWorkloadStatus(@PathVariable Long workloadId,
-                                               @RequestBody Map<String, Object> request) {
+    public ApiResponse<WorkloadResponse> changeWorkloadStatus(@PathVariable Long workloadId,
+                                                              @RequestBody Map<String, Object> request) {
         Object raw = request.get("status");
         if (raw == null) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "status 는 필수입니다");
         }
         Workload.WorkloadStatus target =
                 parseEnum(Workload.WorkloadStatus.class, raw.toString(), "상태");
-        return ApiResponse.ok(schedulingService.changeStatus(workloadId, target));
+        return ApiResponse.ok(WorkloadResponse.from(schedulingService.changeStatus(workloadId, target)));
     }
 
     /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. */
@@ -118,8 +130,9 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 상세 조회")
     @GetMapping("/workloads/{workloadId}")
-    public ApiResponse<?> getWorkload(@PathVariable Long workloadId) {
+    public ApiResponse<WorkloadResponse> getWorkload(@PathVariable Long workloadId) {
         return ApiResponse.ok(workloadRepository.findById(workloadId)
+                .map(WorkloadResponse::from)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다")));
     }
 
@@ -149,15 +162,15 @@ public class SchedulerController {
 
     @Operation(summary = "실시간 노드 자원 현황", description = "스케줄링 전 후보 노드 상태 미리보기")
     @GetMapping("/nodes")
-    public ApiResponse<?> getNodeResources() {
-        return ApiResponse.ok(schedulingService.getNodeResources());
+    public ApiResponse<List<NodeResponse>> getNodeResources() {
+        return ApiResponse.ok(schedulingService.getNodeResources().stream().map(NodeResponse::from).toList());
     }
 
     @Operation(summary = "노드 단건 자원 현황",
                description = "가용량·예약분·전력·온도를 한 대만 조회합니다.")
     @GetMapping("/nodes/{nodeId}")
-    public ApiResponse<?> getNodeResource(@PathVariable String nodeId) {
-        return ApiResponse.ok(schedulingService.getNodeResource(nodeId));
+    public ApiResponse<NodeResponse> getNodeResource(@PathVariable String nodeId) {
+        return ApiResponse.ok(NodeResponse.from(schedulingService.getNodeResource(nodeId)));
     }
 
     // ── 전력 효율성 평가 ────────────────────────────────────────
@@ -214,13 +227,15 @@ public class SchedulerController {
 
     @Operation(summary = "스케줄링 이력 조회")
     @GetMapping("/history")
-    public ApiResponse<?> getHistory() {
-        return ApiResponse.ok(historyRepository.findAllByOrderByCreatedAtDesc());
+    public ApiResponse<List<SchedulingHistoryResponse>> getHistory() {
+        return ApiResponse.ok(historyRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(SchedulingHistoryResponse::from).toList());
     }
 
     @Operation(summary = "워크로드별 스케줄링 이력")
     @GetMapping("/workloads/{workloadId}/history")
-    public ApiResponse<?> getWorkloadHistory(@PathVariable Long workloadId) {
-        return ApiResponse.ok(historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId));
+    public ApiResponse<List<SchedulingHistoryResponse>> getWorkloadHistory(@PathVariable Long workloadId) {
+        return ApiResponse.ok(historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId).stream()
+                .map(SchedulingHistoryResponse::from).toList());
     }
 }

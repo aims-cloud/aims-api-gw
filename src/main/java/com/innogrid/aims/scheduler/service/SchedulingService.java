@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -34,6 +36,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  */
 @Service
 public class SchedulingService {
+
+    private static final Logger log = LoggerFactory.getLogger(SchedulingService.class);
 
     /** 예약으로 잡아 둘 워크로드 상태. 배치됐지만 아직 끝나지 않은 것들이다. */
     private static final List<Workload.WorkloadStatus> RESERVED_STATUSES =
@@ -232,18 +236,50 @@ public class SchedulingService {
         return engineRegistry.describe();
     }
 
+    /** 활성 정책이 하나도 없을 때 쓰는 기본 정책의 이름. */
+    public static final String DEFAULT_POLICY_NAME = "default";
+
     /**
      * 리소스 종류에 맞는 활성 정책을 고른다.
-     * 종류별 활성 → 공통 활성 → 기본 정책 생성 순으로 찾는다.
+     * 종류별 활성 → 공통 활성 → 기본 정책 순으로 찾는다.
+     *
+     * <p>활성 정책은 종류당 하나가 규칙이지만(단계 13, {@code SchedulingPolicyService} 가 409 로 지킨다) API 밖에서
+     * 들어온 데이터로 둘 이상일 수 있다. 그때는 <b>이름 사전순 첫 번째</b>를 골라 결과가 DB 순서에 흔들리지 않게
+     * 하고 WARN 을 남긴다.</p>
+     *
+     * <p>공통 활성이 없으면 기본 정책을 쓴다. 이름이 {@value #DEFAULT_POLICY_NAME} 인 정책이 이미 있으면(전환이나
+     * 비활성화로 꺼진 경우) 그 행을 <b>저장·재활성화하지 않고 값만</b> 쓴다 — 예전에는 같은 이름으로 다시 저장하려다
+     * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 단계 13 점검). 없을 때만 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
         if (resourceType != null) {
             Optional<SchedulingPolicy> byType =
-                    policyRepository.findFirstByActiveTrueAndResourceType(resourceType);
+                    pickOne(policyRepository.findByActiveTrueAndResourceTypeOrderByNameAsc(resourceType), resourceType.name())
+                            .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
             if (byType.isPresent()) return byType.get();
         }
-        return policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
-                .orElseGet(() -> policyRepository.save(new SchedulingPolicy("default", "기본 스케줄링 정책")));
+        // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
+        // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
+        Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
+                .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
+        if (common.isPresent()) return common.get();
+
+        Optional<SchedulingPolicy> existing = policyRepository.findByName(DEFAULT_POLICY_NAME);
+        if (existing.isPresent()) {
+            log.warn("활성 배치 정책이 없어 비활성 상태의 '{}' 정책 값으로 배치합니다 (저장·상태 변경 없음)", DEFAULT_POLICY_NAME);
+            return existing.get();
+        }
+        return policyRepository.save(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"));
+    }
+
+    /** 활성 정책 목록에서 하나를 결정적으로 고른다(이름순 첫 번째). 둘 이상이면 WARN. */
+    private static Optional<SchedulingPolicy> pickOne(List<SchedulingPolicy> actives, String scope) {
+        if (actives.isEmpty()) return Optional.empty();
+        if (actives.size() > 1) {
+            log.warn("{} 활성 배치 정책이 {}개입니다 — 이름순 첫 번째 '{}' 를 씁니다: {}", scope, actives.size(),
+                    actives.get(0).getName(), actives.stream().map(SchedulingPolicy::getName).toList());
+        }
+        return Optional.of(actives.get(0));
     }
 
     /** 종류를 지정하지 않은 호출(공통 정책 기준). */

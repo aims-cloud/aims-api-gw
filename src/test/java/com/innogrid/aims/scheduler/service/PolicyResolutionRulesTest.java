@@ -1,0 +1,86 @@
+package com.innogrid.aims.scheduler.service;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
+import com.innogrid.aims.scheduler.entity.Workload.ResourceType;
+import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 활성 정책 선택 규칙 — 둘 이상이면 이름순으로 결정적, 활성이 없으면 {@code default} 를 <b>다시 저장하지 않는다</b>.
+ *
+ * <p>예전 {@code resolvePolicy} 는 공통 활성이 없으면 {@code new SchedulingPolicy("default")} 를 저장했다. 이름이 유니크라
+ * 비활성 {@code default} 가 이미 있으면 유니크 위반으로 배치 경로 전체가 500 이었다(단계 13 점검, 2026-09-02).</p>
+ */
+@SpringBootTest
+@Transactional
+class PolicyResolutionRulesTest {
+
+    @Autowired SchedulingService schedulingService;
+    @Autowired SchedulingPolicyRepository repository;
+
+    @BeforeEach
+    void clean() {
+        repository.deleteAll();
+    }
+
+    @Test
+    void 같은_종류_활성이_둘이면_이름순_첫_번째로_결정된다() {
+        repository.save(active("zeta", ResourceType.GPU));
+        repository.save(active("alpha", ResourceType.GPU));
+        repository.save(active("mid", ResourceType.GPU));
+
+        assertEquals("alpha", schedulingService.resolvePolicy(ResourceType.GPU).getName());
+        assertEquals("alpha", schedulingService.resolvePolicy(ResourceType.GPU).getName(), "반복해도 같다");
+    }
+
+    @Test
+    void 공통_활성이_둘이어도_이름순이고_종류별_활성이_우선한다() {
+        repository.save(active("common-b", null));
+        repository.save(active("common-a", null));
+        repository.save(active("gpu", ResourceType.GPU));
+
+        assertEquals("common-a", schedulingService.resolvePolicy().getName());
+        assertEquals("common-a", schedulingService.resolvePolicy(ResourceType.VM).getName());
+        assertEquals("gpu", schedulingService.resolvePolicy(ResourceType.GPU).getName());
+    }
+
+    @Test
+    void 비활성_default_가_있으면_다시_저장하지_않고_그_값을_쓴다_예전엔_유니크_위반_500() {
+        SchedulingPolicy off = new SchedulingPolicy(SchedulingService.DEFAULT_POLICY_NAME, "기본");
+        off.setActive(false);
+        off.setCpuWeight(0.9);
+        repository.save(off);
+
+        SchedulingPolicy used = assertDoesNotThrow(() -> schedulingService.resolvePolicy(ResourceType.VM));
+
+        assertEquals("default", used.getName());
+        assertEquals(0.9, used.getCpuWeight(), "저장된 default 의 값");
+        assertEquals(1, repository.count(), "새 행을 만들지 않는다");
+        assertFalse(repository.findByName("default").orElseThrow().isActive(), "재활성화하지 않는다");
+    }
+
+    @Test
+    void 아무_정책도_없으면_예전처럼_default_를_만들어_저장한다() {
+        assertEquals(0, repository.count());
+
+        SchedulingPolicy created = schedulingService.resolvePolicy(ResourceType.NPU);
+
+        assertEquals("default", created.getName());
+        assertTrue(created.isActive());
+        assertEquals(1, repository.count());
+    }
+
+    private static SchedulingPolicy active(String name, ResourceType type) {
+        SchedulingPolicy p = new SchedulingPolicy(name, "d");
+        p.setResourceType(type);
+        p.setActive(true);
+        return p;
+    }
+}

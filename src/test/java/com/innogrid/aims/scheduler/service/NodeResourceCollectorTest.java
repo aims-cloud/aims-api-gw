@@ -176,6 +176,37 @@ class NodeResourceCollectorTest {
     }
 
     @Test
+    void 디스크_총량과_가용량으로_총량_GB_와_사용률을_만든다() {
+        up(N1);
+        healthy(N1, 12.67, 2, 4e9, 1.25e9);
+        when(vm.queryScalar(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            if (q.startsWith("node_filesystem_size_bytes")) return 500.0 * 1024 * 1024 * 1024;
+            if (q.startsWith("node_filesystem_avail_bytes")) return 300.0 * 1024 * 1024 * 1024;
+            return 0.0;
+        });
+
+        NodeResource n = collector.collectAll().get(0);
+
+        assertEquals(500, n.diskCapacityGb());
+        assertEquals(40.0, n.getDiskUsagePercent(), 1e-9);      // 1 - 300/500
+        assertEquals(300, n.availableDiskGb());
+    }
+
+    @Test
+    void 디스크_총량을_못_얻어도_노드는_수집되고_총량은_0_모름_이다() {
+        up(N1);
+        healthy(N1, 12.67, 2, 4e9, 1.25e9);
+        // queryScalar 기본 스텁이 0.0 — 시리즈 없음과 같다
+
+        List<NodeResource> nodes = collector.collectAll();
+
+        assertEquals(1, nodes.size(), "디스크는 부가 메트릭이라 제외 사유가 아니다");
+        assertEquals(0, nodes.get(0).diskCapacityGb());
+        assertEquals(0.0, nodes.get(0).getDiskUsagePercent(), 1e-9);
+    }
+
+    @Test
     void up_질의가_실패하면_빈_목록이다() {
         when(vm.query(startsWith("up{"))).thenThrow(new RuntimeException("connection refused"));
 

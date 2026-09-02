@@ -28,7 +28,7 @@ import com.innogrid.aims.scheduler.model.NodeResource.PowerSource;
  * 모르는 노드는 후보가 아니다. 제외 사실은 WARN 로그로 남긴다.</p>
  *
  * <p>디스크·네트워크·전력·온도는 없으면 0 으로 둔다. 전력·온도는 {@link PowerSource} 플래그가
- * "수집 안 됨"을 표시하고, 디스크·네트워크는 배치 결정에서 비중이 작다.</p>
+ * "수집 안 됨"을 표시하고, 디스크 총량 0 은 "모름"이라 C1 디스크 검사가 그 노드를 건너뛴다.</p>
  */
 @Service
 public class NodeResourceCollector {
@@ -145,10 +145,14 @@ public class NodeResourceCollector {
 
         // ── 부가 메트릭: 없으면 0 ────────────────────────────────
         // 마운트 포인트를 고정하지 않으면 여러 시리즈 중 첫 건이 잡혀 값이 흔들린다.
-        double diskUsage = safeQuery(String.format(
-                "(1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"%s\",instance=\"%s\"}"
-                        + " / node_filesystem_size_bytes{mountpoint=\"%s\",instance=\"%s\"})) * 100",
-                mount, instance, mount, instance));
+        // 총량과 가용량을 따로 받아 사용률은 여기서 계산한다 — 총량(GB)이 디스크 제약(C1)의 기준이 된다.
+        // 총량을 못 얻으면 0 = "모름" 이고, 그 노드는 디스크 검사를 받지 않는다(부가 메트릭이라 제외 사유가 아니다).
+        double diskSize = safeQuery(String.format(
+                "node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"%s\",instance=\"%s\"}", mount, instance));
+        double diskAvail = safeQuery(String.format(
+                "node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"%s\",instance=\"%s\"}", mount, instance));
+        double diskUsage = diskSize > 0 ? (1 - diskAvail / diskSize) * 100 : 0;
+        long diskCapacityGb = (long) (diskSize / 1024 / 1024 / 1024);
 
         double powerWatts = safeQuery("ipmi_dcmi_power_consumption_watts" + filter);
         // 괄호를 닫지 않으면 PromQL 파싱 오류가 나고 값이 항상 0이 된다.
@@ -161,7 +165,8 @@ public class NodeResourceCollector {
                 totalCpu, totalMemMb, totalGpu,
                 cpuUsage.getAsDouble(), memUsage, diskUsage,
                 powerWatts, powerModel.capacityOf(instance), temperature,
-                networkRx, networkTx);
+                networkRx, networkTx)
+                .withDiskCapacityGb(diskCapacityGb);
 
         // IPMI 값이 하나도 없으면 전력·온도 판단 근거가 없다는 뜻이다.
         node.setPowerSource(powerWatts > 0 || temperature > 0 ? PowerSource.IPMI : PowerSource.NONE);

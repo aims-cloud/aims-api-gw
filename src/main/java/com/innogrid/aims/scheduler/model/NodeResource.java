@@ -37,6 +37,16 @@ public class NodeResource {
     private int reservedCpu;
     private long reservedMemoryMb;
     private int reservedGpu;
+    private long reservedDiskGb;
+
+    /**
+     * 디스크 총량(GB). 0 이면 <b>모른다</b>는 뜻이다 — 수집기가 파일시스템 크기를 얻지 못한 경우.
+     *
+     * <p>생성자에 넣지 않고 세터로 둔다. 생성자는 테스트 26개 파일이 위치 인자로 쓰고 있어 시그니처를
+     * 바꾸면 전부 손대야 한다. 디스크는 부가 메트릭이라 "없으면 0" 이 자연스럽고, 제약 검사는 총량을
+     * 아는 노드에서만 한다.</p>
+     */
+    private long diskCapacityGb;
 
     // ── 부가 정보 (조회 응답용, 정책이 있어야 계산 가능) ──────────
     private ThermalState thermalState;
@@ -77,6 +87,32 @@ public class NodeResource {
     /** 가용 GPU 개수 (예약분 차감) */
     public int availableGpu() {
         return totalGpu - reservedGpu;
+    }
+
+    /** 디스크 총량(GB). 0 = 모름. 이름에 {@code get} 을 붙이지 않는다(응답 계약은 {@code NodeResponse} 가 정한다). */
+    public long diskCapacityGb() {
+        return diskCapacityGb;
+    }
+
+    /** 디스크 예약분(GB). */
+    public long reservedDiskGb() {
+        return reservedDiskGb;
+    }
+
+    /**
+     * 가용 디스크(GB, 예약분 차감). 총량을 모르면(0) 0 을 돌려준다 — 이 값으로 배치를 막으려면
+     * 호출부가 {@link #diskCapacityGb()} 가 0 이 아닌지 먼저 봐야 한다.
+     */
+    public long availableDiskGb() {
+        if (diskCapacityGb <= 0) return 0;
+        long available = (long) (diskCapacityGb * (1.0 - diskUsagePercent / 100.0)) - reservedDiskGb;
+        return Math.max(0, available);
+    }
+
+    /** 수집기가 파일시스템 총량을 얻었을 때 넣는다. 0 은 "모름". */
+    public NodeResource withDiskCapacityGb(long gb) {
+        this.diskCapacityGb = Math.max(0, gb);
+        return this;
     }
 
     /**
@@ -128,6 +164,8 @@ public class NodeResource {
         copy.reservedCpu = reservedCpu;
         copy.reservedMemoryMb = reservedMemoryMb;
         copy.reservedGpu = reservedGpu;
+        copy.reservedDiskGb = reservedDiskGb;
+        copy.diskCapacityGb = diskCapacityGb;
         copy.thermalState = thermalState;
         copy.powerSource = powerSource;
         return copy;
@@ -151,9 +189,15 @@ public class NodeResource {
      * 같은 스케줄링 실행 안에서 다음 워크로드가 이 노드를 평가할 때 차감된 값이 보인다.
      */
     public void reserve(int cpu, long memoryMb, int gpu) {
+        reserve(cpu, memoryMb, gpu, 0);
+    }
+
+    /** 디스크까지 예약하는 형태. 기존 3인자 호출(38곳)은 디스크 0 으로 위임된다. */
+    public void reserve(int cpu, long memoryMb, int gpu, long diskGb) {
         this.reservedCpu += cpu;
         this.reservedMemoryMb += memoryMb;
         this.reservedGpu += gpu;
+        this.reservedDiskGb += Math.max(0, diskGb);
     }
 
     /** 전력·온도 메트릭 수집 여부. */

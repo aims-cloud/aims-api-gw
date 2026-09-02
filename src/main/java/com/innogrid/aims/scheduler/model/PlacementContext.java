@@ -167,11 +167,12 @@ public class PlacementContext {
         return nodes.stream().filter(n -> n.getNodeId().equals(nodeId)).findFirst();
     }
 
-    /** 배치가 확정된 워크로드의 요구량을 해당 노드의 예약으로 잡는다. */
+    /** 배치가 확정된 워크로드의 요구량(CPU·메모리·GPU·디스크)을 해당 노드의 예약으로 잡는다. */
     public void reserve(String nodeId, Workload workload) {
         node(nodeId).ifPresent(n -> n.reserve(
                 workload.getRequiredCpu(),
                 workload.getRequiredMemoryMb(),
-                workload.getRequiredGpu()));
+                workload.getRequiredGpu(),
+                workload.getRequiredDiskGb()));
     }
 }

@@ -190,8 +190,14 @@ public class PowerEfficiencyService {
                         + "전력 메트릭이 있는 노드가 늘어나면 자동으로 매겨집니다.",
                 evaluable.size(), MIN_NODES_FOR_GRADE);
 
+        // 절대 기준값 — 4분위 등급은 클러스터 전체가 비효율이어도 누군가는 A 를 받으므로 최소·최대 원값을 함께 낸다
+        Double minPei = evaluable.isEmpty() ? null
+                : round(evaluable.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::peiRaw).min().orElse(0));
+        Double maxPei = evaluable.isEmpty() ? null
+                : round(evaluable.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::peiRaw).max().orElse(0));
+
         return new PowerEfficiencyResponse.Summary(
-                nodes.size(), evaluable.size(), averagePei,
+                nodes.size(), evaluable.size(), averagePei, minPei, maxPei,
                 round(nodes.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::powerWatts).sum()),
                 round(nodes.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::powerCapacityWatts).sum()),
                 gradeAvailable, reason);

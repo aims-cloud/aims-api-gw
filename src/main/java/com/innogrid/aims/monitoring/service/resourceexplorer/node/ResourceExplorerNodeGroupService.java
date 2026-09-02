@@ -19,6 +19,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeTopResponse;
 import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset;
 import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeInfo;
+import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeMetrics;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceExplorerTreeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -120,9 +121,12 @@ public class ResourceExplorerNodeGroupService {
     private static NodeTopResponse topRow(NodeInfo node, NodeMetric metric, NodeMetricInterval interval) {
         // TODO:: Thanos 연동 시 avg_over_time(...[interval.window()]) 평균 조회로 교체하고 Mock 감쇠 제거
         double factor = mockIntervalFactor(interval);
-        Double cpu = scale(node.cpuUtilization(), factor);
-        Double memory = scale(utilization(node.memoryUsedGb(), node.memoryTotalGb()), factor);
-        Double fileSystem = scale(utilization(node.fileSystemUsedGb(), node.fileSystemTotalGb()), factor);
+        Double cpu = scale(metric(node, NodeMetrics::cpuUtilization), factor);
+        Double memory = scale(utilization(
+                metric(node, NodeMetrics::memoryUsedGb), metric(node, NodeMetrics::memoryTotalGb)), factor);
+        Double fileSystemUsed = metric(node, NodeMetrics::fileSystemUsedGb);
+        Double fileSystemTotal = metric(node, NodeMetrics::fileSystemTotalGb);
+        Double fileSystem = scale(utilization(fileSystemUsed, fileSystemTotal), factor);
         Double value = switch (metric) {
             case CPU -> cpu;
             case MEMORY -> memory;
@@ -131,14 +135,14 @@ public class ResourceExplorerNodeGroupService {
         if (value == null) {
             return null;
         }
-        Double fileSystemFree = node.fileSystemUsedGb() == null || node.fileSystemTotalGb() == null
-                ? null : node.fileSystemTotalGb() - node.fileSystemUsedGb();
+        Double fileSystemFree = fileSystemUsed == null || fileSystemTotal == null
+                ? null : fileSystemTotal - fileSystemUsed;
         return new NodeTopResponse(
                 node.nodeId(), node.name(), node.alias(),
                 NodeStatus.valueOf(node.status().toUpperCase(Locale.ROOT)),
                 value, cpu, memory, fileSystem,
                 fileSystemFree,
-                node.fileSystemTotalGb());
+                fileSystemTotal);
     }
 
     /** Mock 전용 — 기간이 길수록 평균이 완만해지는 것을 흉내 내는 감쇠 배율.
@@ -149,6 +153,8 @@ public class ResourceExplorerNodeGroupService {
             case LAST_1H -> 0.95;
             case LAST_6H -> 0.85;
             case LAST_24H -> 0.7;
+            case LAST_30D -> 0.6;
+            case LAST_90D -> 0.5;
         };
     }
 
@@ -159,9 +165,14 @@ public class ResourceExplorerNodeGroupService {
                 node.alias(),
                 NodeStatus.valueOf(node.status().toUpperCase(Locale.ROOT)),
                 node.ipAddresses(),
-                node.cpuUtilization(),
-                utilization(node.memoryUsedGb(), node.memoryTotalGb()),
-                utilization(node.fileSystemUsedGb(), node.fileSystemTotalGb()));
+                metric(node, NodeMetrics::cpuUtilization),
+                utilization(metric(node, NodeMetrics::memoryUsedGb), metric(node, NodeMetrics::memoryTotalGb)),
+                utilization(metric(node, NodeMetrics::fileSystemUsedGb), metric(node, NodeMetrics::fileSystemTotalGb)));
+    }
+
+    /** 미수집(metrics == null) 노드를 안전하게 다루는 지표 추출 헬퍼 */
+    private static Double metric(NodeInfo node, java.util.function.Function<NodeMetrics, Double> getter) {
+        return node.metrics() == null ? null : getter.apply(node.metrics());
     }
 
     /** 사용률(%) — 소수 1자리 반올림. 미수집(null)이면 null, 전체 용량이 0이면 0. */

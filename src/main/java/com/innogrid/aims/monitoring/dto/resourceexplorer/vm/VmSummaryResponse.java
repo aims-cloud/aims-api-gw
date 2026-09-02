@@ -11,7 +11,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryRespons
  */
 public record VmSummaryResponse(
         OffsetDateTime lastUpdatedAt,
-        NodeSummaryResponse.MetricCard cpu,
+        NodeSummaryResponse.CpuCard cpu,        // coreCount 는 VM 에서는 vCPU 수
         NodeSummaryResponse.CapacityMetricCard memory,
         NodeSummaryResponse.CapacityMetricCard fileSystem,
         NodeSummaryResponse.NetworkTrafficCard networkTraffic,

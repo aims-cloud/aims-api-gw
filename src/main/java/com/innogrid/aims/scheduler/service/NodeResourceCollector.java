@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.NodeResource.PowerSource;
 
@@ -47,24 +48,43 @@ public class NodeResourceCollector {
     }
 
     /**
-     * 모든 활성 노드의 실시간 자원 상태를 수집한다.
-     * 핵심 메트릭을 알 수 없는 노드는 목록에 들어가지 않는다.
+     * 수집 결과 — 후보 노드와, 핵심 메트릭을 알 수 없어 뺀 노드.
+     *
+     * <p>뺀 노드를 함께 돌려주는 이유는 진단 때문이다. 로그에만 남기면 클러스터 진단의 노드 수가
+     * 조용히 줄어들어 "10대 중 1대 제외"가 "9대 클러스터"로 보인다.</p>
      */
-    @SuppressWarnings("unchecked")
+    public record Snapshot(List<NodeResource> nodes, List<ExcludedNode> excluded) {
+        public Snapshot {
+            nodes = nodes == null ? List.of() : List.copyOf(nodes);
+            excluded = excluded == null ? List.of() : List.copyOf(excluded);
+        }
+    }
+
+    /**
+     * 모든 활성 노드의 실시간 자원 상태를 수집한다.
+     * 핵심 메트릭을 알 수 없는 노드는 목록에 들어가지 않는다 — 제외 목록은 {@link #collect()} 가 준다.
+     */
     public List<NodeResource> collectAll() {
+        return collect().nodes();
+    }
+
+    /** 후보 노드와 제외 노드를 함께 수집한다. */
+    @SuppressWarnings("unchecked")
+    public Snapshot collect() {
         List<NodeResource> nodes = new ArrayList<>();
+        List<ExcludedNode> excluded = new ArrayList<>();
 
         try {
             // up == 1인 노드만 수집
             Map<String, Object> upResponse = vmClient.query(
                     String.format("up{job=\"%s\"} == 1", properties.getNodeJob()));
-            if (upResponse == null) return nodes;
+            if (upResponse == null) return new Snapshot(nodes, excluded);
 
             Map<String, Object> data = (Map<String, Object>) upResponse.get("data");
-            if (data == null) return nodes;
+            if (data == null) return new Snapshot(nodes, excluded);
 
             List<Map<String, Object>> results = (List<Map<String, Object>>) data.get("result");
-            if (results == null) return nodes;
+            if (results == null) return new Snapshot(nodes, excluded);
 
             // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다.
             Map<String, Integer> gpuCounts = collectGpuCounts();
@@ -76,7 +96,7 @@ public class NodeResourceCollector {
 
                 try {
                     NodeResource node = collectNodeMetrics(mdcId, instance,
-                            gpuCounts.getOrDefault(instance, 0));
+                            gpuCounts.getOrDefault(instance, 0), excluded);
                     if (node != null) {
                         nodes.add(node);
                     }
@@ -88,13 +108,14 @@ public class NodeResourceCollector {
             log.warn("노드 자원 수집 실패: {}", e.getMessage());
         }
 
-        return nodes;
+        return new Snapshot(nodes, excluded);
     }
 
     /**
-     * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 {@code null}.
+     * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 {@code excluded} 에 기록하고 {@code null}.
      */
-    private NodeResource collectNodeMetrics(String mdcId, String instance, int totalGpu) {
+    private NodeResource collectNodeMetrics(String mdcId, String instance, int totalGpu,
+                                            List<ExcludedNode> excluded) {
         String filter = String.format("{instance=\"%s\"}", instance);
         String mount = properties.getDiskMountPoint();
 
@@ -114,6 +135,7 @@ public class NodeResourceCollector {
         if (!missing.isEmpty()) {
             log.warn("노드 수집 제외: instance={} — 판단 불가 메트릭 {} (질의 실패 또는 시리즈 없음). "
                     + "0 으로 채우면 빈 노드로 오판하므로 후보에서 뺀다", instance, missing);
+            excluded.add(new ExcludedNode(mdcId, instance, missing));
             return null;
         }
 

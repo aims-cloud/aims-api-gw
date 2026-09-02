@@ -87,8 +87,10 @@ public class SchedulingService {
      * 실행 1회당 한 번만 호출해 모든 워크로드가 같은 스냅샷을 보게 한다.
      */
     public PlacementContext createContext(SchedulingPolicy policy) {
+        NodeResourceCollector.Snapshot snapshot = nodeCollector.collect();
         PlacementContext context =
-                PlacementContext.of(nodeCollector.collectAll(), policy, constraintEvaluator);
+                PlacementContext.of(snapshot.nodes(), policy, constraintEvaluator)
+                        .withExcluded(snapshot.excluded());
         applyReservations(context);
         return context;
     }

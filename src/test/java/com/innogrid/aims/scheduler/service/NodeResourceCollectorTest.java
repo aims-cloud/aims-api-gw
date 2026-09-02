@@ -138,6 +138,44 @@ class NodeResourceCollectorTest {
     }
 
     @Test
+    void 제외된_노드는_어떤_메트릭을_몰랐는지와_함께_스냅샷에_남는다() {
+        up(N1, N2);
+        healthy(N1, 12.67, 2, 4e9, 1.25e9);
+        healthy(N2, 40.0, 8, 16e9, 8e9);
+        answers.put(cpuKey(N1), null);                               // 시리즈 없음
+        answers.put(coresKey(N1), new RuntimeException("HTTP 400"));
+
+        NodeResourceCollector.Snapshot snapshot = collector.collect();
+
+        assertEquals(List.of(N2), snapshot.nodes().stream().map(NodeResource::getNodeId).toList());
+        assertEquals(1, snapshot.excluded().size());
+        assertEquals(N1, snapshot.excluded().get(0).nodeId());
+        assertEquals("mdc-01", snapshot.excluded().get(0).mdcId());
+        assertEquals(List.of("cpu사용률", "코어수"), snapshot.excluded().get(0).missingMetrics());
+    }
+
+    @Test
+    void 전부_정상이면_제외_목록이_빈다() {
+        up(N1);
+        healthy(N1, 12.67, 2, 4e9, 1.25e9);
+
+        NodeResourceCollector.Snapshot snapshot = collector.collect();
+
+        assertEquals(1, snapshot.nodes().size());
+        assertTrue(snapshot.excluded().isEmpty());
+    }
+
+    @Test
+    void collectAll_은_스냅샷의_후보_목록과_같다() {
+        up(N1, N2);
+        healthy(N1, 12.67, 2, 4e9, 1.25e9);
+        healthy(N2, 40.0, 8, 16e9, 8e9);
+        answers.put(cpuKey(N2), null);
+
+        assertEquals(List.of(N1), collector.collectAll().stream().map(NodeResource::getNodeId).toList());
+    }
+
+    @Test
     void up_질의가_실패하면_빈_목록이다() {
         when(vm.query(startsWith("up{"))).thenThrow(new RuntimeException("connection refused"));
 

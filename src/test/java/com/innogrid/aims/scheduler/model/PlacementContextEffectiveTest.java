@@ -58,6 +58,19 @@ class PlacementContextEffectiveTest {
                 "없는 값에 상승분을 얹지 않는다");
     }
 
+    @Test
+    void 제외_노드는_기본적으로_비어_있고_실어_주면_후보와_분리되어_보인다() {
+        PlacementContext ctx = context(node("A", 30, 50));
+        assertEquals(List.of(), ctx.excludedNodes());
+
+        ctx.withExcluded(List.of(new ExcludedNode("mdc-01", "B", List.of("cpu사용률"))));
+
+        assertEquals(1, ctx.excludedNodes().size());
+        assertEquals(1, ctx.nodes().size(), "제외 노드는 후보에 섞이지 않는다");
+        assertEquals("핵심 메트릭 판단 불가: cpu사용률 (질의 실패 또는 시리즈 없음)",
+                ctx.excludedNodes().get(0).reason());
+    }
+
     // ── 픽스처 ──────────────────────────────────────────────────
 
     private PlacementContext context(NodeResource... nodes) {

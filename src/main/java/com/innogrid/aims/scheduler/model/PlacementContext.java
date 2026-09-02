@@ -30,6 +30,9 @@ public class PlacementContext {
      */
     private Double powerBudgetWatts;
 
+    /** 수집 단계에서 핵심 메트릭을 알 수 없어 후보에 넣지 않은 노드. 진단이 "왜 빠졌는지"를 말할 근거다. */
+    private List<ExcludedNode> excluded = Collections.emptyList();
+
     private PlacementContext(List<NodeResource> nodes, SchedulingPolicy policy, ConstraintEvaluator evaluator) {
         this.nodes = nodes == null ? Collections.emptyList() : nodes;
         this.policy = policy;
@@ -48,6 +51,20 @@ public class PlacementContext {
     /** 실행 단위 전력 예산. 지정하지 않았으면 {@code null}. */
     public Double powerBudgetWatts() {
         return powerBudgetWatts;
+    }
+
+    /** 수집기가 뺀 노드를 컨텍스트에 실어 둔다. 배치 판단에는 쓰지 않고 진단·사유 문구에만 쓴다. */
+    public PlacementContext withExcluded(List<ExcludedNode> excludedNodes) {
+        this.excluded = excludedNodes == null ? Collections.emptyList() : List.copyOf(excludedNodes);
+        return this;
+    }
+
+    /**
+     * 수집 단계에서 제외된 노드. 후보({@link #nodes()})에는 없다.
+     * 이름에 {@code get} 을 붙이지 않는 관례를 따른다(직렬화 대상이 아니다).
+     */
+    public List<ExcludedNode> excludedNodes() {
+        return excluded;
     }
 
     /**

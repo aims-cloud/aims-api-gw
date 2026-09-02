@@ -27,7 +27,10 @@ class PolicyResolutionRulesTest {
 
     @BeforeEach
     void clean() {
+        // 트랜잭션 안에서는 Hibernate 가 INSERT 를 DELETE 보다 먼저 내보낸다. 다른 테스트가 남긴 "default" 행이 있으면
+        // 아래 테스트의 같은 이름 저장이 삭제보다 먼저 실행되어 유니크 위반이 나므로, 삭제를 즉시 반영한다.
         repository.deleteAll();
+        repository.flush();
     }
 
     @Test

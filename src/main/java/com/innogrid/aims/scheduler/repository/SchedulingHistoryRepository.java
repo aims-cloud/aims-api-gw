@@ -4,10 +4,12 @@ import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 
-public interface SchedulingHistoryRepository extends JpaRepository<SchedulingHistory, Long> {
+public interface SchedulingHistoryRepository extends JpaRepository<SchedulingHistory, Long>,
+        JpaSpecificationExecutor<SchedulingHistory> {
 
     List<SchedulingHistory> findByWorkloadIdOrderByCreatedAtDesc(Long workloadId);
 

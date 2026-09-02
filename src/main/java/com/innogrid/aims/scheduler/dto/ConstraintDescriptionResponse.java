@@ -11,7 +11,7 @@ import java.util.List;
  * 데도 쓴다.</p>
  */
 public record ConstraintDescriptionResponse(
-        String code,            // C0 ~ C4
+        String code,            // C0 ~ C5
         String name,
         String description,
         String source,          // 임계값의 출처 (정책 필드 / 워크로드 필드 / 설정)
@@ -43,6 +43,12 @@ public record ConstraintDescriptionResponse(
                         "전력 여유율이 정책 기준에 못 미치거나, 워크로드가 지정한 전력 예산을 넘거나, "
                                 + "배치 후 예상 전력이 노드 용량을 넘으면 제외한다.",
                         "정책의 maxPowerUsagePercent, 워크로드의 maxPowerBudgetWatts, 설정의 전력 용량",
+                        true),
+                new ConstraintDescriptionResponse("C5", "MDC 링크",
+                        "정책이 affinityEnabled 이고 워크로드에 dataMdcId 가 있을 때만 검사한다. 데이터 MDC 와 노드 MDC 사이의 "
+                                + "링크(MDC 링크 원장)가 DOWN 이면 제외한다. 같은 MDC·미등록 쌍은 통과하고, UP·DEGRADED 의 "
+                                + "지연·손실은 제약이 아니라 weighted 엔진의 네트워크 점수에 반영된다.",
+                        "정책의 affinityEnabled, 워크로드의 dataMdcId, MDC 링크 원장(/scheduler/mdc-links)의 status",
                         true));
     }
 }

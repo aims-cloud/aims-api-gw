@@ -7,6 +7,7 @@ import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.NodeResource.ThermalState;
 import com.innogrid.aims.scheduler.model.PlacementContext;
@@ -22,6 +23,7 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
  * C2 사용률 임계 (CPU / 메모리)
  * C3 열 상태     (쿨다운, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
  * C4 전력        (여유율, 워크로드 예산, 배치 후 예상 전력)
+ * C5 MDC 링크    (데이터 MDC ↔ 노드 MDC 링크가 DOWN 이면 제외 — 정책 affinityEnabled + 워크로드 dataMdcId 일 때만)
  * </pre>
  */
 @Component
@@ -62,7 +64,31 @@ public class ConstraintEvaluator {
         reason = checkThermal(workload, node, policy);
         if (reason != null) return reason;
 
-        return checkPower(workload, node, policy, ctx.powerBudgetWatts());
+        reason = checkPower(workload, node, policy, ctx.powerBudgetWatts());
+        if (reason != null) return reason;
+
+        return checkLink(workload, node, ctx);
+    }
+
+    // ── C5. MDC 링크 ───────────────────────────────────────────
+
+    /**
+     * 데이터가 있는 MDC 와 노드가 있는 MDC 사이 링크가 <b>끊겼으면</b> 제외한다.
+     *
+     * <p>게이트({@link PlacementContext#linkAware})가 꺼져 있으면 아무것도 하지 않는다 — 기존 정책은 전부
+     * 꺼져 있어 배치 결과가 바뀌지 않는다. 같은 MDC·미등록 쌍·라벨 없는 노드는 통과시킨다(모르는 값으로
+     * 배치를 막지 않는다). UP·DEGRADED 는 제약이 아니라 점수(weighted)에서 다룬다.</p>
+     */
+    private String checkLink(Workload workload, NodeResource node, PlacementContext ctx) {
+        if (!ctx.linkAware(workload)) return null;
+        String dataMdc = workload.getDataMdcId();
+        String nodeMdc = node.getMdcId();
+        if (nodeMdc == null || nodeMdc.equals(dataMdc)) return null;
+
+        return ctx.linkMatrix().between(dataMdc, nodeMdc)
+                .filter(LinkMatrix.Quality::isDown)
+                .map(q -> String.format("MDC 링크 단절 (%s ↔ %s DOWN)", dataMdc, nodeMdc))
+                .orElse(null);
     }
 
     /** 배치 가능 여부. */

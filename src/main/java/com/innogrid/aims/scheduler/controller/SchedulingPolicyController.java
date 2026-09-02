@@ -36,7 +36,8 @@ public class SchedulingPolicyController {
 
     @Operation(summary = "정책 생성",
                description = "name 은 필수·중복 불가(409). 가중치는 0 이상이고 합이 0 보다 커야 하며(합≠1 허용), "
-                       + "사용률 임계는 0 초과 100 이하, 온도 임계는 0 초과. defaultEngine 은 등록된 엔진이어야 합니다.")
+                       + "사용률 임계는 0 초과 100 이하, 온도 임계는 0 초과. defaultEngine 은 등록된 엔진이어야 합니다. "
+                       + "affinityEnabled 를 켜면 dataMdcId 가 있는 워크로드에 MDC 링크 제약(C5)과 링크 점수가 적용됩니다(기본 꺼짐).")
     @PostMapping
     public ApiResponse<SchedulingPolicyResponse> createPolicy(@RequestBody SchedulingPolicyRequest request) {
         return ApiResponse.ok(SchedulingPolicyResponse.from(service.create(request)));

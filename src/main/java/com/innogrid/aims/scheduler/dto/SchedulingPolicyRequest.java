@@ -38,5 +38,7 @@ public record SchedulingPolicyRequest(
 
         Boolean powerAwareEnabled,
         Boolean temperatureAwareEnabled,
+        /** MDC 링크 반영 게이트. 켜면 dataMdcId 가 있는 워크로드에 C5 와 링크 점수가 적용된다. 응답에는 이미 있던 필드다. */
+        Boolean affinityEnabled,
         Boolean active
 ) {}

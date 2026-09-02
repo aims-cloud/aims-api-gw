@@ -281,9 +281,17 @@ public class SchedulerProperties {
         /** DEGRADED 링크에 더할 비용. */
         private double degradedPenalty = 0.3;
 
+        /**
+         * 네트워크 점수에서 링크 점수가 차지하는 비중(0~1). 나머지는 노드 트래픽 점수.
+         * 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜진 배치에서만 쓰인다.
+         */
+        private double linkWeight = 0.5;
+
         public double getLatencyScaleMs() { return latencyScaleMs; }
         public void setLatencyScaleMs(double v) { this.latencyScaleMs = v; }
         public double getDegradedPenalty() { return degradedPenalty; }
         public void setDegradedPenalty(double v) { this.degradedPenalty = v; }
+        public double getLinkWeight() { return linkWeight; }
+        public void setLinkWeight(double v) { this.linkWeight = v; }
     }
 }

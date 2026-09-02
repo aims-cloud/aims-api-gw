@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +18,11 @@ import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
+import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -44,13 +47,18 @@ public class SchedulingService {
     private final ConstraintEvaluator constraintEvaluator;
     private final SchedulerProperties properties;
 
+    /** MDC 링크 원장. null 이면(원장 없이 조립한 테스트 경로) 링크 스냅샷은 항상 비어 있다. */
+    private final MdcLinkRepository linkRepository;
+
+    @Autowired
     public SchedulingService(WorkloadRepository workloadRepository,
                              SchedulingPolicyRepository policyRepository,
                              NodeResourceCollector nodeCollector,
                              PlacementService placementService,
                              EngineRegistry engineRegistry,
                              ConstraintEvaluator constraintEvaluator,
-                             SchedulerProperties properties) {
+                             SchedulerProperties properties,
+                             MdcLinkRepository linkRepository) {
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.nodeCollector = nodeCollector;
@@ -58,6 +66,19 @@ public class SchedulingService {
         this.engineRegistry = engineRegistry;
         this.constraintEvaluator = constraintEvaluator;
         this.properties = properties;
+        this.linkRepository = linkRepository;
+    }
+
+    /** 링크 원장 없이 조립하는 형태 — 기존 단위 테스트 경로. 링크 스냅샷은 항상 {@link LinkMatrix#EMPTY}. */
+    public SchedulingService(WorkloadRepository workloadRepository,
+                             SchedulingPolicyRepository policyRepository,
+                             NodeResourceCollector nodeCollector,
+                             PlacementService placementService,
+                             EngineRegistry engineRegistry,
+                             ConstraintEvaluator constraintEvaluator,
+                             SchedulerProperties properties) {
+        this(workloadRepository, policyRepository, nodeCollector, placementService, engineRegistry,
+             constraintEvaluator, properties, null);
     }
 
     /**
@@ -107,9 +128,21 @@ public class SchedulingService {
         NodeResourceCollector.Snapshot snapshot = nodeCollector.collect();
         PlacementContext context =
                 PlacementContext.of(snapshot.nodes(), policy, constraintEvaluator)
-                        .withExcluded(snapshot.excluded());
+                        .withExcluded(snapshot.excluded())
+                        .withLinkMatrix(loadLinkMatrix(policy));
         applyReservations(context);
         return context;
+    }
+
+    /**
+     * 정책이 링크 반영을 켰을 때만 원장을 <b>실행당 1회</b> 읽는다. 꺼져 있으면 조회 자체를 하지 않아
+     * 기존 정책(전부 false)의 배치 비용과 결과가 그대로다.
+     */
+    private LinkMatrix loadLinkMatrix(SchedulingPolicy policy) {
+        if (linkRepository == null || policy == null || !policy.isAffinityEnabled()) {
+            return LinkMatrix.EMPTY;
+        }
+        return LinkMatrix.of(linkRepository.findAll());
     }
 
     /**

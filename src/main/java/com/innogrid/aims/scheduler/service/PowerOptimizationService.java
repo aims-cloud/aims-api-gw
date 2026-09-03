@@ -1,17 +1,28 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.DoubleSummaryStatistics;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Cluster;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Finding;
+import com.innogrid.aims.scheduler.dto.PowerOptimizationTrendResponse;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -31,6 +42,8 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
 @Service
 public class PowerOptimizationService {
 
+    private static final Logger log = LoggerFactory.getLogger(PowerOptimizationService.class);
+
     /** 이상 전력 곡선을 이 비율 이상 넘기면 낭비로 본다. */
     private static final double WASTE_THRESHOLD = 0.8;
 
@@ -42,14 +55,30 @@ public class PowerOptimizationService {
 
     private final SchedulingService schedulingService;
     private final PowerModel powerModel;
+    private final SchedulerProperties properties;
     private final SchedulerProperties.Power props;
+    private final VictoriaMetricsClient metricsClient;
+    private final MetricsQueryGuard guard;
 
+    @Autowired
+    public PowerOptimizationService(SchedulingService schedulingService,
+                                    PowerModel powerModel,
+                                    SchedulerProperties properties,
+                                    VictoriaMetricsClient metricsClient,
+                                    MetricsQueryGuard guard) {
+        this.schedulingService = schedulingService;
+        this.powerModel = powerModel;
+        this.properties = properties;
+        this.props = properties.getPower();
+        this.metricsClient = metricsClient;
+        this.guard = guard;
+    }
+
+    /** 스프링 없이 조립하는 형태(기존 단위 테스트) — 현재 시점 진단만 쓸 수 있고 추세는 저장소가 없어 호출할 수 없다. */
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties) {
-        this.schedulingService = schedulingService;
-        this.powerModel = powerModel;
-        this.props = properties.getPower();
+        this(schedulingService, powerModel, properties, null, new MetricsQueryGuard(1));
     }
 
     /** 현재 노드 상태로 진단한다. 수집 단계에서 제외된 노드도 응답에 표기한다. */
@@ -93,6 +122,115 @@ public class PowerOptimizationService {
         return new PowerOptimizationResponse(now, cluster, findings,
                 new PowerOptimizationResponse.Summary(
                         findings.size(), round(saving), percentOf(saving, cluster.totalPowerWatts())));
+    }
+
+    // ── 추세 — 과거 구간을 조회 시점에 계산 ─────────────────────────
+
+    /**
+     * 클러스터 전력 최적화 추세. {@code /optimization/power} 가 현재 시점에 계산하는 것을 메트릭 저장소의 구간 질의로
+     * <b>과거 시각마다 다시 계산</b>한다. 저장하지 않는다 — 원시 시계열은 Thanos 에 이미 있고 우리는 조회 시점에 정제한다.
+     *
+     * <p>질의는 노드 수와 무관하게 <b>2회</b>다: CPU 사용률(스냅샷 수집과 같은 식, 대상 job)과 IPMI 전력을 instance 별로
+     * 받는다. 시각마다 instance 별 임시 노드를 만들어 현재 진단과 같은 {@link PowerModel}(가동 판정·유휴 전력)과
+     * PEI(CPU% ÷ W) 식을 적용한다 — 새 수식은 없다. 전력이 있는 노드가 없는 시각은 {@code measured=false} 이고 전력
+     * 지표는 null 이다(0 으로 채우지 않는다). 저장소가 응답하지 않으면 예외를 올리지 않고 사유를 담은 빈 결과다.</p>
+     */
+    public PowerOptimizationTrendResponse trend(OffsetDateTime from, OffsetDateTime to, String step) {
+        if (metricsClient == null) throw new IllegalStateException("메트릭 저장소 없이 조립된 서비스는 추세를 낼 수 없다");
+        OffsetDateTime end = to != null ? to : OffsetDateTime.now();
+        OffsetDateTime start = from != null ? from : end.minusHours(props.getTrendDefaultHours());
+        String interval = (step == null || step.isBlank()) ? props.getTrendDefaultStep() : step.trim();
+        TrendRangeSupport.validate(start, end, interval, props.getTrendMaxPoints());
+
+        try {
+            Map<String, Map<Long, Double>> cpu = seriesByInstance(String.format(
+                    "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"%s\"}[5m])) * 100)",
+                    properties.getNodeJob()), start, end, interval);
+            // 전력은 job 라벨이 다를 수 있어 instance 로만 맞춘다(스냅샷 수집과 같은 방식). CPU 시계열에 없는 instance 는 무시.
+            Map<String, Map<Long, Double>> power = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
+
+            if (cpu.isEmpty()) {
+                return PowerOptimizationTrendResponse.empty(start, end, interval,
+                        "해당 구간에 대상 노드의 CPU 메트릭이 없습니다");
+            }
+            TreeSet<Long> timestamps = new TreeSet<>();
+            cpu.values().forEach(series -> timestamps.addAll(series.keySet()));
+
+            List<PowerOptimizationTrendResponse.Point> points = new ArrayList<>();
+            boolean anyPower = false;
+            for (long ts : timestamps) {
+                List<NodeResource> nodes = new ArrayList<>();
+                for (Map.Entry<String, Map<Long, Double>> e : cpu.entrySet()) {
+                    Double usage = e.getValue().get(ts);
+                    if (usage == null) continue;
+                    String instance = e.getKey();
+                    double watts = power.getOrDefault(instance, Map.of()).getOrDefault(ts, 0.0);
+                    nodes.add(new NodeResource("-", instance, 0, 0, 0, usage, 0, 0,
+                            watts, powerModel.capacityOf(instance), 0, 0, 0));
+                }
+                PowerOptimizationTrendResponse.Point point = pointOf(ts, nodes);
+                anyPower |= point.measured();
+                points.add(point);
+            }
+            String message = anyPower ? null
+                    : "전력 메트릭이 없어 전력 지표를 계산하지 못했습니다. 가동/유휴 노드 수만 제공합니다 — IPMI exporter 연동을 확인하세요";
+            return new PowerOptimizationTrendResponse(start, end, interval, points, message);
+
+        } catch (RuntimeException e) {
+            // 조회 실패로 500 을 내면 화면이 통째로 깨진다. 사유만 담아 빈 결과로 돌려준다(전력 효율 추세와 같은 원칙).
+            log.warn("전력 최적화 추세 조회 실패: reason={}", e.getMessage());
+            return PowerOptimizationTrendResponse.empty(start, end, interval, "메트릭 저장소를 조회하지 못했습니다: " + e.getMessage());
+        }
+    }
+
+    /** 한 시각의 클러스터 상태 — 현재 진단의 {@link #cluster} 와 같은 식. */
+    PowerOptimizationTrendResponse.Point pointOf(long epochSeconds, List<NodeResource> nodes) {
+        int active = (int) nodes.stream().filter(powerModel::isActive).count();
+        List<NodeResource> powered = nodes.stream().filter(this::hasPower).toList();
+        boolean measured = !powered.isEmpty();
+        Double total = measured ? round(nodes.stream().mapToDouble(NodeResource::getPowerWatts).sum()) : null;
+        Double reclaimable = measured
+                ? round(nodes.stream().filter(n -> !powerModel.isActive(n)).mapToDouble(powerModel::idlePower).sum()) : null;
+        DoubleSummaryStatistics pei = powered.stream()
+                .mapToDouble(n -> n.getCpuUsagePercent() / n.getPowerWatts()).summaryStatistics();
+        return new PowerOptimizationTrendResponse.Point(
+                OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC),
+                nodes.size(), active, nodes.size() - active, total, reclaimable,
+                measured ? round4(pei.getAverage()) : null,
+                measured ? round4(pei.getMin()) : null,
+                measured ? round4(pei.getMax()) : null,
+                powered.size(), measured);
+    }
+
+    /** PEI(CPU% ÷ W)는 0.0067 같은 작은 값이라 전력 효율 요약처럼 소수 4자리로 둔다 — 2자리로 자르면 0.01 로 뭉개진다. */
+    private static double round4(double v) {
+        return Math.round(v * 10000.0) / 10000.0;
+    }
+
+    /** 구간 질의 결과를 instance → (시각 → 값) 으로 편다. 저장소 응답 형태: [{metric:{instance}, values:[[초,"값"],…]}, …] */
+    private Map<String, Map<Long, Double>> seriesByInstance(String promQL, OffsetDateTime start, OffsetDateTime end, String step) {
+        List<Map<String, Object>> results = guard.call(() -> metricsClient.queryRangeResults(
+                promQL, start.toInstant(), end.toInstant(), step), properties.getMetrics().getQueryTimeoutMs());
+        Map<String, Map<Long, Double>> out = new LinkedHashMap<>();
+        for (Map<String, Object> series : results) {
+            Object metric = series.get("metric");
+            String instance = metric instanceof Map<?, ?> m && m.get("instance") != null ? m.get("instance").toString() : null;
+            if (instance == null) continue;
+            Object raw = series.get("values");
+            if (!(raw instanceof List<?> values)) continue;
+            Map<Long, Double> points = out.computeIfAbsent(instance, k -> new LinkedHashMap<>());
+            for (Object point : values) {
+                if (!(point instanceof List<?> pair) || pair.size() < 2) continue;
+                try {
+                    double v = Double.parseDouble(pair.get(1).toString());
+                    if (Double.isNaN(v)) continue;
+                    points.put((long) Double.parseDouble(pair.get(0).toString()), v);
+                } catch (NumberFormatException ignored) {
+                    // 저장소가 NaN 같은 값을 보낼 수 있다. 그 지점만 건너뛴다.
+                }
+            }
+        }
+        return out;
     }
 
     // ── 클러스터 현황 ───────────────────────────────────────────

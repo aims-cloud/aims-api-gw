@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -7,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 /**
@@ -26,8 +28,17 @@ public class WorkloadService {
 
     private final WorkloadRepository workloadRepository;
 
-    public WorkloadService(WorkloadRepository workloadRepository) {
+    /** 디스패치 기록. null 이면(직접 조립한 테스트 경로) 삭제 때 기록 정리를 건너뛴다. */
+    private final PlacementDispatchRepository dispatchRepository;
+
+    @Autowired
+    public WorkloadService(WorkloadRepository workloadRepository, PlacementDispatchRepository dispatchRepository) {
         this.workloadRepository = workloadRepository;
+        this.dispatchRepository = dispatchRepository;
+    }
+
+    public WorkloadService(WorkloadRepository workloadRepository) {
+        this(workloadRepository, null);
     }
 
     @Transactional
@@ -89,6 +100,7 @@ public class WorkloadService {
                     "실행 중인 워크로드는 삭제할 수 없습니다 (상태 %s, 노드 %s). 먼저 상태를 COMPLETED 또는 FAILED 로 바꾸세요",
                     status, workload.getAssignedNodeId()));
         }
+        if (dispatchRepository != null) dispatchRepository.deleteByWorkloadId(id);   // FK 가 없어 여기서 함께 지운다
         workloadRepository.delete(workload);
     }
 

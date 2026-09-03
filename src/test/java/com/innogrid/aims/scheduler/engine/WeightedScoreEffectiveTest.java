@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -30,8 +31,9 @@ class WeightedScoreEffectiveTest {
     private final WeightedScoreScheduler scheduler = new WeightedScoreScheduler();
     private final double inertiaK = new SchedulerProperties().getThermal().getInertiaK();
 
+    @DisplayName("예약이 없으면 점수는 실측 계산값과 같다")
     @Test
-    void 예약이_없으면_점수는_실측_계산값과_같다() {
+    void no_reservation_matches_measured() {
         // 실효=실측이므로 단건 배치의 점수는 전환 전과 동일해야 한다 (불변 계약)
         NodeResource node = node("n1", 8, 16384, 30, 40, 200, 500, 55);
         SchedulingPolicy policy = policy();   // maxTemperature 75
@@ -44,8 +46,9 @@ class WeightedScoreEffectiveTest {
         assertEquals(0.2667, score.temperatureScore(), EPS); // (75-55)/75
     }
 
+    @DisplayName("VM 실증 재현 2코어 노드에 1코어 예약하면 cpu여유가 0_8733에서 0_3733로 내려간다")
     @Test
-    void VM_실증_재현_2코어_노드에_1코어_예약하면_cpu여유가_0_8733에서_0_3733로_내려간다() {
+    void reserve_lowers_cpu_headroom_0_3733() {
         // 배포 VM 그대로: 2코어, 실측 CPU 12.67%, IPMI 없음(전력 0W·온도 0°C)
         NodeResource node = node("localhost:9100", 2, 3900, 12.67, 68.73, 0, 500, 0);
         SchedulingPolicy policy = policy();
@@ -64,8 +67,9 @@ class WeightedScoreEffectiveTest {
                 "예약 1코어(50%p)가 점수에 반영되어야 한다 — 실측만 보면 0.8733 그대로다");
     }
 
+    @DisplayName("메모리 전력 온도 점수도 예약분을 반영한다")
     @Test
-    void 메모리_전력_온도_점수도_예약분을_반영한다() {
+    void mem_power_temp_reflect_reservation() {
         NodeResource node = node("n1", 8, 16384, 30, 40, 200, 500, 60);
         SchedulingPolicy policy = policy();
         PlacementContext context = PlacementContext.of(List.of(node), policy);
@@ -83,8 +87,9 @@ class WeightedScoreEffectiveTest {
         assertEquals(round4((75 - effectiveTemp) / 75), score.temperatureScore(), EPS);
     }
 
+    @DisplayName("다건 연속 배치가 한 노드로 몰리지 않는다")
     @Test
-    void 다건_연속_배치가_한_노드로_몰리지_않는다() {
+    void placements_do_not_pile_up() {
         // 동일 사양 3대에 2코어 워크로드 6건 — 실측만 보면 [A,A,A,A,A,A] 가 된다
         List<NodeResource> nodes = List.of(
                 node("A", 8, 16384, 10, 20, 200, 500, 50),
@@ -106,8 +111,9 @@ class WeightedScoreEffectiveTest {
                 "예약이 점수에 반영되면 라운드 로빈처럼 고르게 퍼져야 한다");
     }
 
+    @DisplayName("네트워크 점수는 예약과 무관하게 실측을 유지한다")
     @Test
-    void 네트워크_점수는_예약과_무관하게_실측을_유지한다() {
+    void network_score_ignores_reservation() {
         NodeResource node = node("n1", 8, 16384, 30, 40, 200, 500, 55);
         PlacementContext context = PlacementContext.of(List.of(node), policy());
 

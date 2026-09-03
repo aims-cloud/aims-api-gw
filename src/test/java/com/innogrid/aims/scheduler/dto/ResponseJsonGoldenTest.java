@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,8 +60,9 @@ public class ResponseJsonGoldenTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @DisplayName("워크로드 응답 필드가 변하지 않는다")
     @Test
-    void 워크로드_응답_필드가_변하지_않는다() {
+    void workload_fields_unchanged() {
         Map<String, Object> json = toMap(Samples.workload());
 
         assertEquals(WORKLOAD_FIELDS, new TreeSet<>(json.keySet()),
@@ -74,8 +76,9 @@ public class ResponseJsonGoldenTest {
         assertEquals(false, json.containsKey("resolveResourceType"));
     }
 
+    @DisplayName("워크로드 빈 값은 null 로 나간다")
     @Test
-    void 워크로드_빈_값은_null_로_나간다() {
+    void workload_empty_values_null() {
         Map<String, Object> json = toMap(new Workload("bare", 1, 512));
 
         assertEquals(WORKLOAD_FIELDS, new TreeSet<>(json.keySet()), "값이 비어도 키는 전부 있어야 한다");
@@ -85,8 +88,9 @@ public class ResponseJsonGoldenTest {
         assertEquals("NORMAL", json.get("priority"));
     }
 
+    @DisplayName("배치 이력 응답 필드가 변하지 않는다")
     @Test
-    void 배치_이력_응답_필드가_변하지_않는다() {
+    void history_fields_unchanged() {
         Map<String, Object> json = toMap(Samples.history());
 
         assertEquals(HISTORY_FIELDS, new TreeSet<>(json.keySet()),
@@ -97,8 +101,9 @@ public class ResponseJsonGoldenTest {
         assertEquals(77L, json.get("scheduleRunId"));
     }
 
+    @DisplayName("배치 이력 단건 배치의 success 는 null 이다")
     @Test
-    void 배치_이력_단건_배치의_success_는_null_이다() {
+    void history_success_null_when_single() {
         // 단건 스케줄링 API 가 만든 이력은 실행에 연결되지 않아 success 가 비어 있다(기존 행 호환)
         Map<String, Object> json = toMap(new SchedulingHistory(1L, "w", "mdc-01", "n1", 0.5, "r", "weighted", "default"));
 
@@ -107,8 +112,9 @@ public class ResponseJsonGoldenTest {
         assertNull(json.get("scheduleRunId"));
     }
 
+    @DisplayName("배치 정책 응답 필드가 변하지 않는다")
     @Test
-    void 배치_정책_응답_필드가_변하지_않는다() {
+    void policy_fields_unchanged() {
         Map<String, Object> json = toMap(Samples.policy());
 
         assertEquals(POLICY_FIELDS, new TreeSet<>(json.keySet()),
@@ -121,8 +127,9 @@ public class ResponseJsonGoldenTest {
         assertEquals(60.0, json.get("warningTemperatureCelsius"));
     }
 
+    @DisplayName("배치 정책 기본값은 그대로 나간다")
     @Test
-    void 배치_정책_기본값은_그대로_나간다() {
+    void policy_defaults_unchanged() {
         Map<String, Object> json = toMap(new SchedulingPolicy("default", "기본"));
 
         assertEquals(POLICY_FIELDS, new TreeSet<>(json.keySet()));

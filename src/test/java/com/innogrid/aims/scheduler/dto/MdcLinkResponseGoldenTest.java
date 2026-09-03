@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,8 +32,9 @@ public class MdcLinkResponseGoldenTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @DisplayName("링크 응답은 15개 필드를 항상 낸다 null 도 키를 유지")
     @Test
-    void 링크_응답은_15개_필드를_항상_낸다_null_도_키를_유지() {
+    void link_response_15_fields() {
         MdcLink link = new MdcLink("mdc-02", "mdc-01", 20);
         Map<String, Object> json = objectMapper.readValue(
                 objectMapper.writeValueAsString(MdcLinkResponse.from(link)), Map.class);
@@ -45,8 +47,9 @@ public class MdcLinkResponseGoldenTest {
         assertTrue(json.containsKey("bandwidthMbps") && json.get("bandwidthMbps") == null, "모르는 값도 키는 남긴다");
     }
 
+    @DisplayName("매트릭스는 링크에 나오는 MDC 만 사전순으로 모아 대칭 행렬을 만든다")
     @Test
-    void 매트릭스는_링크에_나오는_MDC_만_사전순으로_모아_대칭_행렬을_만든다() {
+    void matrix_linked_mdcs_symmetric() {
         List<MdcLink> links = List.of(
                 new MdcLink("mdc-3", "mdc-1", 80),
                 new MdcLink("mdc-1", "mdc-2", 10));
@@ -65,8 +68,9 @@ public class MdcLinkResponseGoldenTest {
         assertNull(m.links().get(1).get(2), "미등록 쌍은 null");
     }
 
+    @DisplayName("링크가 없으면 빈 매트릭스")
     @Test
-    void 링크가_없으면_빈_매트릭스() {
+    void no_links_empty_matrix() {
         MdcLinkMatrixResponse m = MdcLinkMatrixResponse.of(List.of());
         assertTrue(m.mdcIds().isEmpty());
         assertTrue(m.links().isEmpty());

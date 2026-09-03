@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.model;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -25,8 +26,9 @@ class PlacementContextEffectiveTest {
     private final ThermalModel thermalModel = new ThermalModel(new SchedulerProperties());
     private final double inertiaK = new SchedulerProperties().getThermal().getInertiaK();
 
+    @DisplayName("이번 실행에서 깨어난 빈 노드는 가동 중으로 센다")
     @Test
-    void 이번_실행에서_깨어난_빈_노드는_가동_중으로_센다() {
+    void woken_node_counts_active() {
         PlacementContext ctx = context(node("busy", 50, 45), node("empty", 1, 45));
         assertEquals(1, ctx.activeNodeCount(ACTIVE_CPU));
         assertEquals(150.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
@@ -38,8 +40,9 @@ class PlacementContextEffectiveTest {
                 "깨어난 노드의 유휴 전력은 더 이상 반납 가능하지 않다");
     }
 
+    @DisplayName("평균 온도는 실효 온도의 평균이다")
     @Test
-    void 평균_온도는_실효_온도의_평균이다() {
+    void average_of_effective_temps() {
         PlacementContext ctx = context(node("A", 30, 50), node("B", 30, 50));
         assertEquals(50.0, ctx.averageTemperature(thermalModel), 1e-9);   // 예약 0 → 실측 평균
 
@@ -49,8 +52,9 @@ class PlacementContextEffectiveTest {
         assertEquals((effA + 50) / 2, ctx.averageTemperature(thermalModel), 1e-9);
     }
 
+    @DisplayName("온도를 수집하지 못한 노드는 예약이 있어도 0으로 평균에 들어간다")
     @Test
-    void 온도를_수집하지_못한_노드는_예약이_있어도_0으로_평균에_들어간다() {
+    void unmeasured_temp_averages_as_0() {
         PlacementContext ctx = context(node("A", 30, 0), node("B", 30, 60));
         ctx.reserve("A", new Workload("w", 4, 4096));
 
@@ -58,8 +62,9 @@ class PlacementContextEffectiveTest {
                 "없는 값에 상승분을 얹지 않는다");
     }
 
+    @DisplayName("제외 노드는 기본적으로 비어 있고 실어 주면 후보와 분리되어 보인다")
     @Test
-    void 제외_노드는_기본적으로_비어_있고_실어_주면_후보와_분리되어_보인다() {
+    void excluded_empty_and_separate() {
         PlacementContext ctx = context(node("A", 30, 50));
         assertEquals(List.of(), ctx.excludedNodes());
 

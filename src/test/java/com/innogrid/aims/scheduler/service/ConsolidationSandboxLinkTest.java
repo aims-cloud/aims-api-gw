@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -32,8 +33,9 @@ class ConsolidationSandboxLinkTest {
             new EngineRegistry(List.of(new PowerAwareScheduler())),
             new PowerModel(properties), properties);
 
+    @DisplayName("샌드박스는 기준 컨텍스트의 링크 스냅샷을 그대로 잇고 제외 노드는 빼놓는다")
     @Test
-    void 샌드박스는_기준_컨텍스트의_링크_스냅샷을_그대로_잇고_제외_노드는_빼놓는다() {
+    void sandbox_inherits_links_minus_excluded() {
         NodeResource n1 = node("n1"), n2 = node("n2");
         SchedulingPolicy policy = new SchedulingPolicy("p", "d");
         policy.setAffinityEnabled(true);
@@ -47,8 +49,9 @@ class ConsolidationSandboxLinkTest {
         assertNotSame(n2, sandbox.nodes().get(0), "노드는 사본 — 예약이 원본을 오염시키지 않는다");
     }
 
+    @DisplayName("링크가 없는 기준 컨텍스트면 샌드박스도 비어 있다")
     @Test
-    void 링크가_없는_기준_컨텍스트면_샌드박스도_비어_있다() {
+    void no_links_yields_empty_sandbox() {
         NodeResource n1 = node("n1");
         SchedulingPolicy policy = new SchedulingPolicy("p", "d");
 

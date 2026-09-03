@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -36,8 +37,9 @@ class PowerAwareScenarioTest {
      * 시나리오 1 — 전형적인 혼재 클러스터.
      * 효율적인 노드, 낭비하는 노드, 뜨거운 노드, 비어 있는 노드가 섞여 있다.
      */
+    @DisplayName("시나리오 혼재된 클러스터에서 효율적인 노드를 고른다")
     @Test
-    void 시나리오_혼재된_클러스터에서_효율적인_노드를_고른다() {
+    void scenario_mixed_cluster_efficient_node() {
         List<NodeResource> nodes = List.of(
                 node("효율-적정부하", 55, 45, 230, 48),
                 node("낭비-저부하", 20, 30, 420, 50),
@@ -59,8 +61,9 @@ class PowerAwareScenarioTest {
      * <p>기본값을 0.10 으로 정한 근거를 테스트로 남긴다. 빈 노드는 자원 여유와 온도 양쪽에서
      * 보상을 받아, 자원 몫이 커지면 유휴 전력 150W 를 새로 쓰면서까지 선택된다.</p>
      */
+    @DisplayName("시나리오 자원 몫을 올리면 빈 노드가 이긴다")
     @Test
-    void 시나리오_자원_몫을_올리면_빈_노드가_이긴다() {
+    void scenario_resource_share_idle_wins() {
         SchedulerProperties props = new SchedulerProperties();
         props.getPower().setResourceShare(0.20);
         PowerAwareScheduler resourceFirst = new PowerAwareScheduler(props);
@@ -80,8 +83,9 @@ class PowerAwareScenarioTest {
      * 시나리오 2 — 전부 비슷하게 평이한 클러스터.
      * 큰 차이가 없을 때도 순위가 뒤집히지 않고 안정적으로 나와야 한다.
      */
+    @DisplayName("시나리오 전부 평이하면 미세한 차이로 안정적으로 고른다")
     @Test
-    void 시나리오_전부_평이하면_미세한_차이로_안정적으로_고른다() {
+    void scenario_all_nodes_alike() {
         List<NodeResource> nodes = List.of(
                 node("평이-1", 40, 40, 250, 50),
                 node("평이-2", 42, 41, 255, 51),
@@ -103,8 +107,9 @@ class PowerAwareScenarioTest {
      * 시나리오 3 — 하나만 비정상적으로 나쁜 경우.
      * 유휴에 가까운데 전력을 많이 먹는 노드는 마지막이어야 한다.
      */
+    @DisplayName("시나리오 유휴인데 전력을 많이 쓰는 노드가 꼴찌다")
     @Test
-    void 시나리오_유휴인데_전력을_많이_쓰는_노드가_꼴찌다() {
+    void scenario_idle_power_hog_last() {
         List<NodeResource> nodes = List.of(
                 node("정상-1", 45, 40, 240, 50),
                 node("정상-2", 50, 45, 255, 52),
@@ -121,8 +126,9 @@ class PowerAwareScenarioTest {
      * 시나리오 4 — 전력 통합.
      * 이미 도는 노드와 비어 있는 노드가 있으면 도는 쪽을 채워 유휴 전력을 늘리지 않는다.
      */
+    @DisplayName("시나리오 비어있는 노드를 새로 깨우지 않는다")
     @Test
-    void 시나리오_비어있는_노드를_새로_깨우지_않는다() {
+    void scenario_empty_node_not_woken() {
         List<NodeResource> nodes = List.of(
                 node("가동중", 45, 40, 240, 50),
                 node("비어있음", 1, 5, 150, 35));
@@ -143,8 +149,9 @@ class PowerAwareScenarioTest {
      * PR ① 의 예약 누적과 맞물려 한 노드에 몰리다가 임계에서 다음 노드로 넘어가야 한다.
      * 이것이 "80% 까지 채우고 다음 노드로" 라는 에너지 인식 빈패킹이다.
      */
+    @DisplayName("시나리오 연속 배치는 한 노드를 채우고 다음으로 넘어간다")
     @Test
-    void 시나리오_연속_배치는_한_노드를_채우고_다음으로_넘어간다() {
+    void scenario_fill_one_node_first() {
         List<NodeResource> nodes = List.of(
                 node("A", 20, 20, 220, 45),
                 node("B", 20, 20, 220, 45));
@@ -181,8 +188,9 @@ class PowerAwareScenarioTest {
      * 시나리오 6 — IPMI 가 없는 실제 배포 환경.
      * 전력·온도가 전부 0 이면 자원 여유로 결정되고, 그 사실이 근거에 드러나야 한다.
      */
+    @DisplayName("시나리오 계측이 없으면 자원 여유로 결정하고 밝힌다")
     @Test
-    void 시나리오_계측이_없으면_자원_여유로_결정하고_밝힌다() {
+    void scenario_unmeasured_uses_headroom() {
         List<NodeResource> nodes = List.of(
                 node("여유많음", 15, 20, 0, 0),
                 node("보통", 45, 50, 0, 0),
@@ -201,8 +209,9 @@ class PowerAwareScenarioTest {
      * 시나리오 7 — 볼록 곡선을 켠 경우.
      * α&gt;1 이면 바쁜 노드에 얹는 비용이 커져 통합과 균형이 맞선다.
      */
+    @DisplayName("시나리오 볼록 곡선을 켜면 과밀 노드를 피한다")
     @Test
-    void 시나리오_볼록_곡선을_켜면_과밀_노드를_피한다() {
+    void scenario_convex_avoids_crowded() {
         SchedulerProperties props = new SchedulerProperties();
         props.getPower().setCurveAlpha(1.8);
         PowerAwareScheduler convex = new PowerAwareScheduler(props);

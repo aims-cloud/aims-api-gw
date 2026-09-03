@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.MdcLink;
@@ -35,8 +36,9 @@ class WeightedScoreLinkTest {
             link("a", "c", 20, MdcLink.LinkStatus.DEGRADED),
             link("a", "d", 5, MdcLink.LinkStatus.DOWN)));
 
+    @DisplayName("게이트가 꺼지면 점수가 전부 같고 링크품질 키가 없다")
     @Test
-    void 게이트가_꺼지면_점수가_전부_같고_링크품질_키가_없다() {
+    void gate_off_equal_scores_no_key() {
         SchedulingResult r = scheduler.schedule(workload("a"), ctx(false));
         Map<String, NodeScore> by = byMdc(r);
 
@@ -48,8 +50,9 @@ class WeightedScoreLinkTest {
         assertEquals(1.0, by.get("b").networkScore(), EPS);
     }
 
+    @DisplayName("게이트가 켜지면 같은 MDC UP DEGRADED 순으로 갈리고 DOWN 은 제외된다")
     @Test
-    void 게이트가_켜지면_같은_MDC_UP_DEGRADED_순으로_갈리고_DOWN_은_제외된다() {
+    void gate_on_ranks_link_quality() {
         SchedulingResult r = scheduler.schedule(workload("a"), ctx(true));
         Map<String, NodeScore> by = byMdc(r);
 
@@ -65,8 +68,9 @@ class WeightedScoreLinkTest {
         assertTrue(by.get("d").exclusionReason().contains("MDC 링크 단절"));
     }
 
+    @DisplayName("dataMdcId 가 없는 워크로드는 켠 정책에서도 예전 점수다")
     @Test
-    void dataMdcId_가_없는_워크로드는_켠_정책에서도_예전_점수다() {
+    void no_datamdcid_score_unchanged() {
         SchedulingResult r = scheduler.schedule(new Workload("w", 1, 512), ctx(true));
         Map<String, NodeScore> by = byMdc(r);
 
@@ -75,8 +79,9 @@ class WeightedScoreLinkTest {
         assertEquals(1.0, by.get("c").networkScore(), EPS);
     }
 
+    @DisplayName("미등록 MDC 의 노드는 중립 1_0 으로 같은 MDC 와 동점이다")
     @Test
-    void 미등록_MDC_의_노드는_중립_1_0_으로_같은_MDC_와_동점이다() {
+    void unregistered_mdc_neutral_1_0() {
         Workload w = workload("z");   // z 는 원장에 없다
         SchedulingResult r = scheduler.schedule(w, ctx(true));
         Map<String, NodeScore> by = byMdc(r);

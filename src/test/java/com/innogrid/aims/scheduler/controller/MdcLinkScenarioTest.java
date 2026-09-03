@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,8 +53,9 @@ class MdcLinkScenarioTest {
 
     record Step(String no, String input, int expected, String expectMessage, int actual, String message) {}
 
+    @DisplayName("시나리오 MDC 3곳 링크 등록 수정 삭제가 매트릭스에 그대로 반영된다")
     @Test
-    void 시나리오_MDC_3곳_링크_등록_수정_삭제가_매트릭스에_그대로_반영된다() throws Exception {
+    void scenario_link_lifecycle_matrix() throws Exception {
         List<Step> steps = new ArrayList<>();
         String t = "scn-" + Long.toHexString(System.nanoTime());
         String m1 = t + "-1", m2 = t + "-2", m3 = t + "-3";

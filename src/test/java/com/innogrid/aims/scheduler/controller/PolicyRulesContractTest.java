@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,8 +38,9 @@ class PolicyRulesContractTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
+    @DisplayName("전력 효율 요약은 9필드이고 노드가 없으면 최소 최대가 null 키는 유지")
     @Test
-    void 전력_효율_요약은_9필드이고_노드가_없으면_최소_최대가_null_키는_유지() throws Exception {
+    void power_efficiency_summary_9_fields() throws Exception {
         JsonNode summary = data(get("/api/v1/scheduler/nodes/power-efficiency")).get("summary");
 
         assertEquals(SUMMARY_FIELDS, keys(summary));
@@ -46,8 +48,9 @@ class PolicyRulesContractTest {
         assertTrue(summary.get("maxPeiRaw").isNull());
     }
 
+    @DisplayName("전환 응답은 activated 와 deactivated 두 필드이고 정책 응답은 20필드 그대로")
     @Test
-    void 전환_응답은_activated_와_deactivated_두_필드이고_정책_응답은_20필드_그대로() throws Exception {
+    void activate_response_two_fields() throws Exception {
         String name = "contract-act-" + System.nanoTime();
         JsonNode created = data(post("/api/v1/scheduler/policies").contentType("application/json")
                 .content("{\"name\":\"" + name + "\",\"resourceType\":\"NPU\",\"active\":false}"));
@@ -63,8 +66,9 @@ class PolicyRulesContractTest {
         }
     }
 
+    @DisplayName("이력 응답은 배열이고 페이지 응답은 객체다")
     @Test
-    void 이력_응답은_배열이고_페이지_응답은_객체다() throws Exception {
+    void history_array_page_object() throws Exception {
         assertTrue(data(get("/api/v1/scheduler/history")).isArray());
         JsonNode page = data(get("/api/v1/scheduler/history/page"));
         assertTrue(page.isObject());

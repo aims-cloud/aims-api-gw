@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.model;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -9,8 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class NodeResourceDiskTest {
 
+    @DisplayName("총량과 사용률과 예약으로 가용 디스크를 계산한다")
     @Test
-    void 총량과_사용률과_예약으로_가용_디스크를_계산한다() {
+    void available_disk_from_usage_and_reserve() {
         NodeResource node = node(40).withDiskCapacityGb(500);    // 사용률 40% → 300 GB 남음
 
         assertEquals(500, node.diskCapacityGb());
@@ -21,8 +23,9 @@ class NodeResourceDiskTest {
         assertEquals(200, node.availableDiskGb());
     }
 
+    @DisplayName("총량을 모르면 가용 디스크는 0 이다")
     @Test
-    void 총량을_모르면_가용_디스크는_0_이다() {
+    void unknown_capacity_disk_0() {
         NodeResource node = node(40);                             // withDiskCapacityGb 를 부르지 않음
 
         assertEquals(0, node.diskCapacityGb(), "0 = 모름");
@@ -31,8 +34,9 @@ class NodeResourceDiskTest {
         assertEquals(0, node.availableDiskGb(), "모르는 총량에서 예약을 빼 음수를 만들지 않는다");
     }
 
+    @DisplayName("기존 3인자 reserve 는 디스크를 예약하지 않는다")
     @Test
-    void 기존_3인자_reserve_는_디스크를_예약하지_않는다() {
+    void reserve_3_arg_skips_disk() {
         NodeResource node = node(0).withDiskCapacityGb(500);
 
         node.reserve(2, 4096, 1);
@@ -42,16 +46,18 @@ class NodeResourceDiskTest {
         assertEquals(2, node.getReservedCpu(), "CPU·메모리·GPU 예약은 예전과 같다");
     }
 
+    @DisplayName("예약이 총량을 넘어도 가용은 0 아래로 가지 않는다")
     @Test
-    void 예약이_총량을_넘어도_가용은_0_아래로_가지_않는다() {
+    void over_reservation_floors_at_0() {
         NodeResource node = node(0).withDiskCapacityGb(100);
         node.reserve(0, 0, 0, 150);
 
         assertEquals(0, node.availableDiskGb());
     }
 
+    @DisplayName("snapshot 은 디스크 총량과 예약을 복사한다")
     @Test
-    void snapshot_은_디스크_총량과_예약을_복사한다() {
+    void snapshot_copies_disk_fields() {
         NodeResource node = node(20).withDiskCapacityGb(500);
         node.reserve(1, 512, 0, 50);
 

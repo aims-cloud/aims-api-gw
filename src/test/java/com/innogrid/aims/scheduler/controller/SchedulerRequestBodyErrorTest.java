@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,8 +31,9 @@ class SchedulerRequestBodyErrorTest {
     @Autowired
     MockMvc mockMvc;
 
+    @DisplayName("깨진 JSON 은 400 과 사유를 돌려준다")
     @Test
-    void 깨진_JSON_은_400_과_사유를_돌려준다() throws Exception {
+    void broken_json_400() throws Exception {
         mockMvc.perform(post("/api/v1/scheduler/workloads")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"broken\", "))
@@ -40,8 +42,9 @@ class SchedulerRequestBodyErrorTest {
                 .andExpect(jsonPath("$.message").value(containsString("요청 본문을 읽을 수 없습니다")));
     }
 
+    @DisplayName("빈 본문은 400 과 사유를 돌려준다")
     @Test
-    void 빈_본문은_400_과_사유를_돌려준다() throws Exception {
+    void empty_body_400() throws Exception {
         mockMvc.perform(put("/api/v1/scheduler/policies/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(""))
@@ -50,8 +53,9 @@ class SchedulerRequestBodyErrorTest {
                 .andExpect(jsonPath("$.message").value(containsString("요청 본문을 읽을 수 없습니다")));
     }
 
+    @DisplayName("JSON 이 아닌 본문은 400 과 사유를 돌려준다")
     @Test
-    void JSON_이_아닌_본문은_400_과_사유를_돌려준다() throws Exception {
+    void non_json_body_400() throws Exception {
         mockMvc.perform(post("/api/v1/scheduler/policies")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("name=abc"))

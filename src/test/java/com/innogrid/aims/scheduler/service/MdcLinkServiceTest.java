@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,8 +38,9 @@ class MdcLinkServiceTest {
 
     // ── 생성 검증 ──────────────────────────────────────────────
 
+    @DisplayName("정상 생성은 쌍을 정렬하고 기본 상태 UP 출처 MANUAL 감사 SYSTEM")
     @Test
-    void 정상_생성은_쌍을_정렬하고_기본_상태_UP_출처_MANUAL_감사_SYSTEM() {
+    void create_sorts_pair_with_defaults() {
         MdcLink l = service.create(req("{\"mdcA\":\"mdc-02\",\"mdcB\":\"mdc-01\",\"latencyMs\":20}"));
 
         assertEquals("mdc-01", l.getMdcA());
@@ -49,31 +51,35 @@ class MdcLinkServiceTest {
         assertNotNull(l.getCreatedAt());
     }
 
+    @DisplayName("같은 MDC 사이는 400")
     @Test
-    void 같은_MDC_사이는_400() {
+    void same_mdc_link_400() {
         BusinessException e = assertThrows(BusinessException.class,
                 () -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"a\",\"latencyMs\":1}")));
         assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
         assertTrue(e.getMessage().contains("같은 MDC"));
     }
 
+    @DisplayName("MDC 식별자 누락 또는 지연 누락은 400")
     @Test
-    void MDC_식별자_누락_또는_지연_누락은_400() {
+    void missing_mdc_id_or_latency_400() {
         assertBad(() -> service.create(req("{\"mdcB\":\"b\",\"latencyMs\":1}")), "mdcA");
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\" \",\"latencyMs\":1}")), "mdcB");
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\"}")), "latencyMs");
     }
 
+    @DisplayName("지연 음수 대역폭 0 손실률 범위 밖은 400")
     @Test
-    void 지연_음수_대역폭_0_손실률_범위_밖은_400() {
+    void invalid_latency_bandwidth_loss_400() {
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":-1}")), "0 이상");
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1,\"bandwidthMbps\":0}")), "대역폭");
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1,\"packetLossPercent\":101}")), "손실률");
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1,\"packetLossPercent\":\"x\"}")), "숫자");
     }
 
+    @DisplayName("상태 출처는 대소문자를 무시하고 모르는 값은 400")
     @Test
-    void 상태_출처는_대소문자를_무시하고_모르는_값은_400() {
+    void status_source_ignore_case_unknown_400() {
         MdcLink l = service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1,\"status\":\"degraded\",\"source\":\"probe\"}"));
         assertEquals(MdcLink.LinkStatus.DEGRADED, l.getStatus());
         assertEquals(MdcLink.LinkSource.PROBE, l.getSource());
@@ -81,8 +87,9 @@ class MdcLinkServiceTest {
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"c\",\"latencyMs\":1,\"status\":\"broken\"}")), "링크 상태");
     }
 
+    @DisplayName("역방향 재등록은 409")
     @Test
-    void 역방향_재등록은_409() {
+    void reverse_direction_duplicate_409() {
         service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1}"));
 
         BusinessException e = assertThrows(BusinessException.class,
@@ -92,16 +99,18 @@ class MdcLinkServiceTest {
         assertEquals(1, repository.count());
     }
 
+    @DisplayName("설명이 300자를 넘으면 400")
     @Test
-    void 설명이_300자를_넘으면_400() {
+    void description_over_300_chars_400() {
         assertBad(() -> service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1,\"description\":\""
                 + "x".repeat(301) + "\"}")), "300자");
     }
 
     // ── 부분 수정 ──────────────────────────────────────────────
 
+    @DisplayName("부분 수정은 보낸 키만 반영하고 명시적 null 은 비운다")
     @Test
-    void 부분_수정은_보낸_키만_반영하고_명시적_null_은_비운다() {
+    void partial_update_null_clears_field() {
         MdcLink l = service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":10,"
                 + "\"bandwidthMbps\":1000,\"packetLossPercent\":0.5,\"description\":\"d\"}"));
 
@@ -118,8 +127,9 @@ class MdcLinkServiceTest {
         assertEquals(MdcLink.LinkStatus.DOWN, cleared.getStatus(), "키 없음은 유지");
     }
 
+    @DisplayName("쌍 변경은 둘 다 줘야 하고 다른 링크와 겹치면 409")
     @Test
-    void 쌍_변경은_둘_다_줘야_하고_다른_링크와_겹치면_409() {
+    void pair_change_overlap_409() {
         MdcLink ab = service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1}"));
         service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"c\",\"latencyMs\":1}"));
 
@@ -137,8 +147,9 @@ class MdcLinkServiceTest {
         assertEquals(7.0, same.getLatencyMs(), "자기 자신과 같은 쌍은 충돌이 아니다");
     }
 
+    @DisplayName("없는 링크의 수정 삭제는 404")
     @Test
-    void 없는_링크의_수정_삭제는_404() {
+    void missing_link_update_delete_404() {
         BusinessException e = assertThrows(BusinessException.class, () -> service.update(999L, req("{}")));
         assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(BusinessException.class, () -> service.delete(999L)).getStatus());
@@ -146,8 +157,9 @@ class MdcLinkServiceTest {
 
     // ── 목록·매트릭스 ──────────────────────────────────────────
 
+    @DisplayName("목록은 MDC 필터와 상태 필터를 함께 적용한다")
     @Test
-    void 목록은_MDC_필터와_상태_필터를_함께_적용한다() {
+    void list_applies_mdc_and_status_filter() {
         service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":1}"));
         service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"c\",\"latencyMs\":1,\"status\":\"DOWN\"}"));
         service.create(req("{\"mdcA\":\"b\",\"mdcB\":\"c\",\"latencyMs\":1}"));
@@ -159,8 +171,9 @@ class MdcLinkServiceTest {
         assertBad(() -> service.list(null, "broken"), "링크 상태");
     }
 
+    @DisplayName("매트릭스는 저장된 링크로 대칭 행렬을 만들고 삭제를 반영한다")
     @Test
-    void 매트릭스는_저장된_링크로_대칭_행렬을_만들고_삭제를_반영한다() {
+    void matrix_is_symmetric_and_reflects_delete() {
         MdcLink ab = service.create(req("{\"mdcA\":\"a\",\"mdcB\":\"b\",\"latencyMs\":10}"));
         service.create(req("{\"mdcA\":\"c\",\"mdcB\":\"a\",\"latencyMs\":80}"));
 

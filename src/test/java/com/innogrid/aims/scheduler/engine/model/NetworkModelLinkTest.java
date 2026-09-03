@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine.model;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -29,8 +30,9 @@ class NetworkModelLinkTest {
     private static final double EPS = 1e-3;
     private final NetworkModel model = new NetworkModel();
 
+    @DisplayName("링크 점수 표")
     @Test
-    void 링크_점수_표() {
+    void link_score_table() {
         assertEquals(0.714, model.linkScore(q(20, 0, MdcLink.LinkStatus.UP)), EPS);
         assertEquals(0.588, model.linkScore(q(20, 0, MdcLink.LinkStatus.DEGRADED)), EPS);
         assertEquals(0.5, model.linkScore(q(50, 0, MdcLink.LinkStatus.UP)), EPS);
@@ -39,8 +41,9 @@ class NetworkModelLinkTest {
         assertEquals(0.0, model.linkScore(q(1, 0, MdcLink.LinkStatus.DOWN)), EPS);
     }
 
+    @DisplayName("같은 MDC 와 미등록 쌍은 중립 1_0")
     @Test
-    void 같은_MDC_와_미등록_쌍은_중립_1_0() {
+    void same_mdc_and_unregistered_neutral() {
         LinkMatrix m = LinkMatrix.of(List.of(new MdcLink("a", "b", 20)));
 
         assertEquals(1.0, model.linkScore("a", "a", m), EPS);
@@ -49,8 +52,9 @@ class NetworkModelLinkTest {
         assertEquals(0.714, model.linkScore("b", "a", m), EPS, "방향 무관");
     }
 
+    @DisplayName("혼합은 설정 가중치를 따르고 0 이면 트래픽 점수 그대로")
     @Test
-    void 혼합은_설정_가중치를_따르고_0_이면_트래픽_점수_그대로() {
+    void blend_weight_0_keeps_traffic() {
         assertEquals(0.5, model.linkWeight());
         assertEquals(0.857, model.blend(1.0, 0.714), EPS);
 
@@ -62,15 +66,17 @@ class NetworkModelLinkTest {
         assertEquals(0.714, new NetworkModel(props).blend(0.3, 0.714), EPS);
     }
 
+    @DisplayName("기준 지연을 바꾸면 같은 링크의 점수가 달라진다")
     @Test
-    void 기준_지연을_바꾸면_같은_링크의_점수가_달라진다() {
+    void latency_scale_changes_score() {
         SchedulerProperties props = new SchedulerProperties();
         props.getNetwork().setLatencyScaleMs(200);
         assertEquals(1.0 / 1.1, new NetworkModel(props).linkScore(q(20, 0, MdcLink.LinkStatus.UP)), EPS);
     }
 
+    @DisplayName("트래픽 점수는 그대로다")
     @Test
-    void 트래픽_점수는_그대로다() {
+    void traffic_score_unchanged() {
         NodeResource idle = new NodeResource("m", "n", 8, 16384, 0, 10, 10, 0, 0, 0, 0, 0, 0);
         assertEquals(1.0, model.localTrafficScore(idle), EPS);
     }

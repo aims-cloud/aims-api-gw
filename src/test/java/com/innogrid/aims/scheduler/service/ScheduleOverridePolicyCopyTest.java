@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,8 +23,9 @@ class ScheduleOverridePolicyCopyTest {
     @Autowired
     ScheduleExecutionService executionService;
 
+    @DisplayName("온도 한계를 지정한 스케줄의 정책 사본은 affinityEnabled 를 유지한다")
     @Test
-    void 온도_한계를_지정한_스케줄의_정책_사본은_affinityEnabled_를_유지한다() {
+    void policy_copy_keeps_affinity_enabled() {
         SchedulingPolicy policy = policy();
         policy.setAffinityEnabled(true);
         Schedule schedule = new Schedule("s1", "s1", "0 0 2 * * ?");
@@ -37,8 +39,9 @@ class ScheduleOverridePolicyCopyTest {
         assertEquals(80.0, policy.getMaxTemperatureCelsius(), "원본은 그대로");
     }
 
+    @DisplayName("사본은 정책의 다른 판단 필드도 그대로 옮긴다")
     @Test
-    void 사본은_정책의_다른_판단_필드도_그대로_옮긴다() {
+    void copy_carries_other_decision_fields() {
         SchedulingPolicy policy = policy();
         Schedule schedule = new Schedule("s2", "s2", "0 0 2 * * ?");
         schedule.setMaxTemperatureCelsius(65.0);
@@ -55,8 +58,9 @@ class ScheduleOverridePolicyCopyTest {
         assertFalse(copy.isAffinityEnabled(), "원본이 false 면 false");
     }
 
+    @DisplayName("온도 한계가 없으면 원본을 그대로 쓴다")
     @Test
-    void 온도_한계가_없으면_원본을_그대로_쓴다() {
+    void no_thermal_limit_uses_original() {
         SchedulingPolicy policy = policy();
         Schedule schedule = new Schedule("s3", "s3", "0 0 2 * * ?");
 

@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
@@ -37,8 +38,9 @@ class PowerEfficiencyServiceTest {
 
     // ── 지표 ───────────────────────────────────────────────────
 
+    @DisplayName("PEI 는 CPU 사용률을 소비 전력으로 나눈 값이다")
     @Test
-    void PEI_는_CPU_사용률을_소비_전력으로_나눈_값이다() {
+    void pei_is_cpu_over_power() {
         NodeEfficiency n = evaluateOne(node("n1", 80, 200));
 
         assertTrue(n.evaluable());
@@ -46,24 +48,27 @@ class PowerEfficiencyServiceTest {
         assertEquals(0.80, n.peiNormalized(), EPS, "0.40 / 0.5");
     }
 
+    @DisplayName("유휴 전력과 여유율을 계산한다")
     @Test
-    void 유휴_전력과_여유율을_계산한다() {
+    void idle_power_and_headroom_computed() {
         NodeEfficiency n = evaluateOne(node("n1", 80, 200));
 
         assertEquals(150.0, n.idlePowerWatts(), EPS, "500W × 0.3");
         assertEquals(60.0, n.headroomPercent(), EPS, "(500-200)/500");
     }
 
+    @DisplayName("비례성은 이상 전력 곡선과의 근접도다")
     @Test
-    void 비례성은_이상_전력_곡선과의_근접도다() {
+    void proportionality_is_ideal_curve_closeness() {
         // P_ideal = 150 + 350×0.8 = 430, |200-430|/500 = 0.46
         assertEquals(0.54, evaluateOne(node("n1", 80, 200)).proportionality(), 1e-4);
     }
 
     // ── 평가 불가 노드 ──────────────────────────────────────────
 
+    @DisplayName("전력을 모르면 파생 지표를 모두 비운다")
     @Test
-    void 전력을_모르면_파생_지표를_모두_비운다() {
+    void unknown_power_clears_derived_metrics() {
         // PowerModel.proportionality 는 전력이 0 이어도 0.6 같은 값을 돌려준다.
         // 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로 서비스가 막아야 한다.
         NodeEfficiency n = evaluateOne(node("n9", 50, 0));
@@ -78,8 +83,9 @@ class PowerEfficiencyServiceTest {
         assertNull(n.rank());
     }
 
+    @DisplayName("평가 불가 노드도 원자료는 그대로 보여준다")
     @Test
-    void 평가_불가_노드도_원자료는_그대로_보여준다() {
+    void unevaluable_node_keeps_raw_data() {
         NodeEfficiency n = evaluateOne(node("n9", 50, 0));
 
         assertEquals(50.0, n.cpuUsagePercent(), EPS);
@@ -87,15 +93,17 @@ class PowerEfficiencyServiceTest {
         assertEquals(500.0, n.powerCapacityWatts(), EPS, "용량은 설정값이라 알 수 있다");
     }
 
+    @DisplayName("평가 불가 노드에는 연동 확인 권고가 붙는다")
     @Test
-    void 평가_불가_노드에는_연동_확인_권고가_붙는다() {
+    void unevaluable_node_gets_integration_advice() {
         assertTrue(evaluateOne(node("n9", 50, 0)).recommendation().contains("IPMI"));
     }
 
     // ── 등급·순위 ──────────────────────────────────────────────
 
+    @DisplayName("여덟 노드가 네 등급으로 고르게 갈린다")
     @Test
-    void 여덟_노드가_네_등급으로_고르게_갈린다() {
+    void eight_nodes_split_into_four_grades() {
         PowerEfficiencyResponse result = service.evaluate(cluster());
 
         assertEquals("A", grade(result, "n1"));
@@ -108,16 +116,18 @@ class PowerEfficiencyServiceTest {
         assertEquals("D", grade(result, "n8"));
     }
 
+    @DisplayName("순위는 PEI 내림차순이다")
     @Test
-    void 순위는_PEI_내림차순이다() {
+    void rank_is_pei_descending() {
         PowerEfficiencyResponse result = service.evaluate(cluster());
 
         assertEquals(1, find(result, "n1").rank(), "PEI 0.40 이 1위");
         assertEquals(8, find(result, "n8").rank(), "PEI 0.05 가 8위");
     }
 
+    @DisplayName("평가 불가 노드는 순위와 등급에서 빠진다")
     @Test
-    void 평가_불가_노드는_순위와_등급에서_빠진다() {
+    void unevaluable_node_out_of_rank_and_grade() {
         PowerEfficiencyResponse result = service.evaluate(cluster());
 
         assertNull(find(result, "n9").rank());
@@ -126,8 +136,9 @@ class PowerEfficiencyServiceTest {
                 "순위가 매겨진 노드는 평가 가능한 8대뿐");
     }
 
+    @DisplayName("PEI 와 비례성은 서로 다른 것을 본다")
     @Test
-    void PEI_와_비례성은_서로_다른_것을_본다() {
+    void pei_and_proportionality_differ() {
         PowerEfficiencyResponse result = service.evaluate(cluster());
 
         // n8 은 PEI 최하위(D)지만 저부하라 실측 전력이 이상 곡선에 가까워 비례성은 최고다.
@@ -139,8 +150,9 @@ class PowerEfficiencyServiceTest {
 
     // ── 클러스터 요약 ───────────────────────────────────────────
 
+    @DisplayName("평균은 평가 가능 노드만으로 낸다")
     @Test
-    void 평균은_평가_가능_노드만으로_낸다() {
+    void average_uses_evaluable_nodes_only() {
         PowerEfficiencyResponse.Summary summary = service.evaluate(cluster()).summary();
 
         assertEquals(9, summary.totalNodes());
@@ -149,8 +161,9 @@ class PowerEfficiencyServiceTest {
         assertEquals(0.225, summary.averagePeiRaw(), 1e-4);
     }
 
+    @DisplayName("총 전력과 총 용량을 집계한다")
     @Test
-    void 총_전력과_총_용량을_집계한다() {
+    void total_power_and_capacity_aggregated() {
         PowerEfficiencyResponse.Summary summary = service.evaluate(cluster()).summary();
 
         assertEquals(1600.0, summary.totalPowerWatts(), EPS, "200W × 8대");
@@ -159,8 +172,9 @@ class PowerEfficiencyServiceTest {
 
     // ── 표본이 모자랄 때 ────────────────────────────────────────
 
+    @DisplayName("노드가 넷보다 적으면 등급을 매기지 않는다")
     @Test
-    void 노드가_넷보다_적으면_등급을_매기지_않는다() {
+    void fewer_than_four_nodes_not_graded() {
         PowerEfficiencyResponse result = service.evaluate(
                 List.of(node("a", 80, 200), node("b", 40, 200), node("c", 20, 200)));
 
@@ -171,8 +185,9 @@ class PowerEfficiencyServiceTest {
         assertTrue(result.nodes().stream().allMatch(n -> n.rank() != null), "순위는 매긴다");
     }
 
+    @DisplayName("전부 평가 불가여도 예외가 아니다")
     @Test
-    void 전부_평가_불가여도_예외가_아니다() {
+    void all_unevaluable_is_not_an_error() {
         PowerEfficiencyResponse result = service.evaluate(
                 List.of(node("a", 50, 0), node("b", 30, 0)));
 
@@ -182,8 +197,9 @@ class PowerEfficiencyServiceTest {
         assertEquals(0.0, result.summary().totalPowerWatts(), EPS);
     }
 
+    @DisplayName("노드가 없어도 예외가 아니다")
     @Test
-    void 노드가_없어도_예외가_아니다() {
+    void no_nodes_is_not_an_error() {
         PowerEfficiencyResponse result = service.evaluate(List.of());
 
         assertTrue(result.nodes().isEmpty());
@@ -192,13 +208,15 @@ class PowerEfficiencyServiceTest {
         assertNotNull(result.summary().gradeUnavailableReason());
     }
 
+    @DisplayName("null 목록도 빈 결과로 받는다")
     @Test
-    void null_목록도_빈_결과로_받는다() {
+    void null_list_returns_empty_result() {
         assertEquals(0, service.evaluate(null).summary().totalNodes());
     }
 
+    @DisplayName("PEI 가 같으면 노드 ID 순으로 안정 정렬한다")
     @Test
-    void PEI_가_같으면_노드_ID_순으로_안정_정렬한다() {
+    void equal_pei_sorted_by_node_id() {
         PowerEfficiencyResponse first = service.evaluate(List.of(
                 node("b", 50, 200), node("a", 50, 200), node("d", 50, 200), node("c", 50, 200)));
         PowerEfficiencyResponse second = service.evaluate(List.of(
@@ -211,8 +229,9 @@ class PowerEfficiencyServiceTest {
 
     // ── 작은 클러스터 ──────────────────────────────────────────
 
+    @DisplayName("등급을 못 매기는 작은 클러스터에서도 저부하 권고는 나온다")
     @Test
-    void 등급을_못_매기는_작은_클러스터에서도_저부하_권고는_나온다() {
+    void small_cluster_still_gets_low_load_advice() {
         // 등급은 4대 이상이어야 매겨진다. 그렇다고 노드 3대짜리 클러스터에서
         // "이 노드는 놀고 있다"는 사실까지 감출 이유는 없다.
         PowerEfficiencyResponse result = service.evaluate(List.of(
@@ -226,8 +245,9 @@ class PowerEfficiencyServiceTest {
         assertNull(find(result, "바쁨-1").recommendation());
     }
 
+    @DisplayName("노드 ID 가 겹쳐도 순위가 뒤섞이지 않는다")
     @Test
-    void 노드_ID_가_겹쳐도_순위가_뒤섞이지_않는다() {
+    void duplicate_node_id_keeps_rank_stable() {
         // 수집 설정이 잘못되면 같은 instance 가 두 번 올라올 수 있다. 그때는 지표까지
         // 똑같아서, 순위를 값으로 되찾으면 한쪽이 순위를 못 받고 다른 쪽이 두 번 받는다.
         PowerEfficiencyResponse result = service.evaluate(List.of(
@@ -243,8 +263,9 @@ class PowerEfficiencyServiceTest {
 
     // ── 설정 방어 ──────────────────────────────────────────────
 
+    @DisplayName("PEI 정규화 기준이 0 이면 기본값으로 되돌린다")
     @Test
-    void PEI_정규화_기준이_0_이면_기본값으로_되돌린다() {
+    void pei_base_0_falls_back_to_default() {
         // min(1, x/0) 은 1.0 이라 방어하지 않으면 전 노드가 조용히 만점이 된다
         SchedulerProperties broken = new SchedulerProperties();
         broken.getPower().setPeiNormalizer(0);
@@ -258,8 +279,9 @@ class PowerEfficiencyServiceTest {
 
     // ── 용량을 모를 때 ──────────────────────────────────────────
 
+    @DisplayName("전력 용량을 모르면 비례성은 중립값이고 여유율은 100 이다")
     @Test
-    void 전력_용량을_모르면_비례성은_중립값이고_여유율은_100_이다() {
+    void unknown_capacity_neutral_headroom_100() {
         NodeEfficiency n = evaluateOne(new NodeResource("mdc-01", "n1", 8, 16384, 0,
                 50, 50, 30, 200, 0, 40, 0, 0));
 
@@ -286,8 +308,9 @@ class PowerEfficiencyServiceTest {
      * 예약을 반영한 실효값은 제약 검사 전용이며, 이 API 로 새어 나오면 "지금 이 서버가
      * 얼마나 효율적인가"라는 질문의 답이 예측치로 오염된다.
      */
+    @DisplayName("전력 효율 지표는 배치 예약에 영향받지 않는다")
     @Test
-    void 전력_효율_지표는_배치_예약에_영향받지_않는다() {
+    void metrics_unaffected_by_reservation() {
         NodeResource node = node("n1", 80, 200);
         NodeEfficiency before = evaluateOne(node);
 

@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -24,24 +25,27 @@ class WeightedScoreUnmeasuredTest {
 
     private final WeightedScoreScheduler scheduler = new WeightedScoreScheduler();
 
+    @DisplayName("전력을 수집하지 못한 노드의 전력 점수는 중립 0_5다")
     @Test
-    void 전력을_수집하지_못한_노드의_전력_점수는_중립_0_5다() {
+    void unmeasured_power_score_0_5() {
         NodeScore score = only(scheduler.schedule(new Workload("w", 1, 512),
                 List.of(node("n", 0, 500, 55)), policy()));
 
         assertEquals(0.5, score.powerScore(), EPS, "0W 를 여유 100% 로 읽어 1.0 을 주면 안 된다");
     }
 
+    @DisplayName("온도를 수집하지 못한 노드의 온도 점수는 중립 0_5다")
     @Test
-    void 온도를_수집하지_못한_노드의_온도_점수는_중립_0_5다() {
+    void unmeasured_temp_score_0_5() {
         NodeScore score = only(scheduler.schedule(new Workload("w", 1, 512),
                 List.of(node("n", 200, 500, 0)), policy()));
 
         assertEquals(0.5, score.temperatureScore(), EPS, "0°C 를 여유 100% 로 읽어 1.0 을 주면 안 된다");
     }
 
+    @DisplayName("계측된 노드의 점수는 그대로다")
     @Test
-    void 계측된_노드의_점수는_그대로다() {
+    void measured_node_score_unchanged() {
         NodeScore score = only(scheduler.schedule(new Workload("w", 1, 512),
                 List.of(node("n", 200, 500, 55)), policy()));
 
@@ -49,8 +53,9 @@ class WeightedScoreUnmeasuredTest {
         assertEquals(0.2667, score.temperatureScore(), EPS);   // (75-55)/75
     }
 
+    @DisplayName("IPMI가 섞인 클러스터에서 미계측 노드가 유리하지 않다")
     @Test
-    void IPMI가_섞인_클러스터에서_미계측_노드가_유리하지_않다() {
+    void unmeasured_not_favored_mixed_ipmi() {
         // 자원·네트워크 동일. measured 는 전력 여유 60%·온도 여유 46.7% 로 양호한 노드다.
         NodeResource measured = node("measured", 200, 500, 40);
         NodeResource unmeasured = node("unmeasured", 0, 500, 0);
@@ -62,8 +67,9 @@ class WeightedScoreUnmeasuredTest {
                 "미계측 노드가 만점(1.0·1.0)을 받으면 계측된 양호 노드를 이긴다");
     }
 
+    @DisplayName("전력 인지를 끈 정책에서는 계측 여부와 무관하게 0_5다")
     @Test
-    void 전력_인지를_끈_정책에서는_계측_여부와_무관하게_0_5다() {
+    void power_aware_off_always_0_5() {
         SchedulingPolicy policy = policy();
         policy.setPowerAwareEnabled(false);
 

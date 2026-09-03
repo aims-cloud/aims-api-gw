@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.common.exception.BusinessException;
@@ -100,8 +101,9 @@ class MetricsTimeoutScenarioTest {
         release.countDown();
     }
 
+    @DisplayName("시나리오 저장소 한 노드 무응답에도 배치는 계속되고 그 노드는 응답 없음으로 드러난다")
     @Test
-    void 시나리오_저장소_한_노드_무응답에도_배치는_계속되고_그_노드는_응답_없음으로_드러난다() {
+    void scenario_one_node_unresponsive() {
         StringBuilder table = new StringBuilder("\n| # | 입력 | 예상 | 실제 |\n|---|---|---|---|\n");
 
         // ① 배치

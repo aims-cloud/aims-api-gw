@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.engine;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -35,8 +36,9 @@ class PowerAwareScoringTest {
      * 이상 곡선(360W)보다 적게 쓰는 200W 노드가, 넘겨 쓰는 440W 노드보다 높아야 한다.
      * 옛 수식은 대칭 편차를 써서 200W 를 0.68, 440W 를 0.84 로 매겼다.
      */
+    @DisplayName("전력을 적게 쓰는 노드를 벌하지 않는다")
     @Test
-    void 전력을_적게_쓰는_노드를_벌하지_않는다() {
+    void low_power_node_not_penalized() {
         List<NodeResource> nodes = List.of(
                 node("frugal", 60, 50, 200, 55),
                 node("overdraw", 60, 50, 440, 55));
@@ -53,8 +55,9 @@ class PowerAwareScoringTest {
      * M3 — 빈 노드에 처음 얹으면 그 노드의 유휴 전력이 새로 든다.
      * 옛 수식은 둘 다 87.5W 로 봐서 통합할 이유를 설명하지 못했다.
      */
+    @DisplayName("빈 노드에는 유휴 기동분이 더해진다")
     @Test
-    void 빈_노드에는_유휴_기동분이_더해진다() {
+    void idle_node_adds_startup_power() {
         List<NodeResource> nodes = List.of(
                 node("running", 50, 50, 250, 55),
                 node("parked", 2, 50, 250, 55));
@@ -68,8 +71,9 @@ class PowerAwareScoringTest {
     }
 
     /** 결함 C — 볼록 지수를 올리면 같은 사양 노드도 현재 부하에 따라 갈린다. */
+    @DisplayName("볼록 지수를 올리면 부하가 높은 노드의 한계전력이 커진다")
     @Test
-    void 볼록_지수를_올리면_부하가_높은_노드의_한계전력이_커진다() {
+    void convex_raises_marginal_power() {
         SchedulerProperties props = new SchedulerProperties();
         props.getPower().setCurveAlpha(1.8);
         PowerAwareScheduler convex = new PowerAwareScheduler(props);
@@ -87,8 +91,9 @@ class PowerAwareScoringTest {
     // ── 결함 D — 워크로드 크기가 결정에 영향을 준다 ────────────────
 
     /** 옛 수식은 워크로드를 표시용으로만 써서 1코어든 6코어든 순위가 같았다. */
+    @DisplayName("워크로드 크기가 점수를 움직인다")
     @Test
-    void 워크로드_크기가_점수를_움직인다() {
+    void workload_size_moves_score() {
         List<NodeResource> nodes = List.of(node("n1", 40, 40, 250, 55));
 
         double small = scheduler.schedule(workload(1), nodes, policy()).finalScore();
@@ -103,8 +108,9 @@ class PowerAwareScoringTest {
      * 전력·온도가 0 이면 판단 근거가 없다. 0 점을 주면 최악으로, 감점을 안 하면 최상으로
      * 평가된다. 둘 다 틀렸으므로 중립 0.5 를 준다.
      */
+    @DisplayName("전력을 수집하지 못하면 중립값을 쓴다")
     @Test
-    void 전력을_수집하지_못하면_중립값을_쓴다() {
+    void unmeasured_power_neutral() {
         List<NodeResource> nodes = List.of(node("no-ipmi", 40, 40, 0, 0));
 
         SchedulingResult result = scheduler.schedule(workload(2), nodes, policy());
@@ -114,8 +120,9 @@ class PowerAwareScoringTest {
     }
 
     /** 전력 메트릭이 하나도 없으면 근거 문장이 그 사실을 밝혀야 한다. */
+    @DisplayName("전력 메트릭이 없으면 근거에 밝힌다")
     @Test
-    void 전력_메트릭이_없으면_근거에_밝힌다() {
+    void missing_power_metric_in_details() {
         List<NodeResource> nodes = List.of(
                 node("a", 20, 30, 0, 0),
                 node("b", 60, 70, 0, 0));
@@ -127,8 +134,9 @@ class PowerAwareScoringTest {
     }
 
     /** 계측된 노드가 하나라도 있으면 클러스터 요약을 근거에 담는다. */
+    @DisplayName("계측된 노드가 있으면 클러스터 요약을 남긴다")
     @Test
-    void 계측된_노드가_있으면_클러스터_요약을_남긴다() {
+    void measured_leaves_cluster_summary() {
         List<NodeResource> nodes = List.of(
                 node("measured", 40, 40, 250, 50),
                 node("parked", 1, 10, 150, 40));
@@ -146,8 +154,9 @@ class PowerAwareScoringTest {
      * 뽑혔는지" 설명할 수 없다. 방향이 증가인 것은 통합 목적상 의도된 것이다 — 같은 전력에서
      * CPU 가 높으면 단위 전력당 처리량이 좋다. 몰림은 사용률 임계가 막는다.
      */
+    @DisplayName("점수는 CPU 사용률에 대해 단조롭다")
     @Test
-    void 점수는_CPU_사용률에_대해_단조롭다() {
+    void score_monotonic_in_cpu() {
         List<Double> series = new ArrayList<>();
         for (int cpu = 10; cpu <= 70; cpu += 5) {
             List<NodeResource> nodes = List.of(node("n", cpu, 50, 250, 55));
@@ -167,8 +176,9 @@ class PowerAwareScoringTest {
     // ── 결함 H — 정책 가중치와 필드 사용 ──────────────────────────
 
     /** 정책의 전력:온도 비율이 실제로 반영된다. 옛 코드는 정책 가중치를 아예 보지 않았다. */
+    @DisplayName("정책의 전력 온도 비율이 반영된다")
     @Test
-    void 정책의_전력_온도_비율이_반영된다() {
+    void policy_power_temp_ratio_applied() {
         List<NodeResource> nodes = List.of(
                 node("power-good", 60, 50, 200, 70),   // 전력 효율 좋고 뜨겁다
                 node("cool-poor", 20, 50, 400, 35));   // 시원하지만 전력 낭비
@@ -190,8 +200,9 @@ class PowerAwareScoringTest {
      * 0 을 넣으면 "해당 없음" 이 아니라 "네트워크 포화" 로 읽히고, weighted 엔진이 같은 칸에
      * 담는 값과도 의미가 어긋난다.
      */
+    @DisplayName("networkScore에 실측 네트워크 점수가 담긴다")
     @Test
-    void networkScore에_실측_네트워크_점수가_담긴다() {
+    void networkscore_carries_measured() {
         List<NodeResource> nodes = List.of(node("n1", 40, 40, 250, 55));
 
         NodeScore power = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
@@ -204,8 +215,9 @@ class PowerAwareScoringTest {
     }
 
     /** 점수에 쓰지 않는 값도 판단 근거로는 남긴다. */
+    @DisplayName("점수에 쓰지 않는 값도 details에 남긴다")
     @Test
-    void 점수에_쓰지_않는_값도_details에_남긴다() {
+    void unused_values_kept_in_details() {
         List<NodeResource> nodes = List.of(node("n1", 40, 40, 250, 55));
 
         NodeScore top = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
@@ -221,8 +233,9 @@ class PowerAwareScoringTest {
      * 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않는다.
      * 0 이나 0.5 를 넣으면 "측정했더니 그 값" 으로 읽혀 판단 근거가 없다는 사실이 가려진다.
      */
+    @DisplayName("계측되지 않으면 파생 항목을 null로 둔다")
     @Test
-    void 계측되지_않으면_파생_항목을_null로_둔다() {
+    void unmeasured_derived_fields_null() {
         List<NodeResource> nodes = List.of(node("no-ipmi", 40, 40, 0, 0));
 
         NodeScore s = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
@@ -244,8 +257,9 @@ class PowerAwareScoringTest {
      * 실질 한계 전력은 실측 전력을 쓰지 않는다 — 용량과 CPU 사용률만으로 구하는 증분이라
      * 계측이 없어도 성립한다. 낼 수 있는 값까지 비우면 정보를 버리는 것이다.
      */
+    @DisplayName("계측이 없어도 한계 전력 증분은 낸다")
     @Test
-    void 계측이_없어도_한계_전력_증분은_낸다() {
+    void marginal_power_without_measurement() {
         List<NodeResource> nodes = List.of(node("no-ipmi", 40, 40, 0, 0));
 
         NodeScore s = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);
@@ -257,8 +271,9 @@ class PowerAwareScoringTest {
     }
 
     /** 계측된 노드는 모든 항목이 채워진다. */
+    @DisplayName("계측되면 모든 항목이 채워진다")
     @Test
-    void 계측되면_모든_항목이_채워진다() {
+    void measured_fills_every_field() {
         List<NodeResource> nodes = List.of(node("ipmi", 40, 40, 250, 55));
 
         NodeScore s = scheduler.schedule(workload(2), nodes, policy()).candidateScores().get(0);

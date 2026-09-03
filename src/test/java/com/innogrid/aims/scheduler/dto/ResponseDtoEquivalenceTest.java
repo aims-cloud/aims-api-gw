@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.dto;
 
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,8 +29,9 @@ class ResponseDtoEquivalenceTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @DisplayName("노드 응답은 모델 직렬화와 같다")
     @Test
-    void 노드_응답은_모델_직렬화와_같다() {
+    void node_response_matches_model() {
         NodeResource node = new NodeResource("mdc-01", "node-1", 8, 16384, 2, 40, 50, 30, 250, 500, 55, 1000, 500);
         node.setThermalState(NodeResource.ThermalState.WARNING);
         node.setPowerSource(NodeResource.PowerSource.IPMI);
@@ -38,15 +40,17 @@ class ResponseDtoEquivalenceTest {
         assertEquals(toMap(node), toMap(NodeResponse.from(node)));
     }
 
+    @DisplayName("노드 응답은 예약이 없어도 같다")
     @Test
-    void 노드_응답은_예약이_없어도_같다() {
+    void node_response_without_reservation() {
         NodeResource node = new NodeResource("mdc-01", "node-2", 2, 3916, 0, 12.67, 68.7, 40, 0, 500, 0, 0, 0);
 
         assertEquals(toMap(node), toMap(NodeResponse.from(node)));
     }
 
+    @DisplayName("워크로드 응답은 엔티티 직렬화와 같다")
     @Test
-    void 워크로드_응답은_엔티티_직렬화와_같다() {
+    void workload_response_matches_entity() {
         Workload full = Samples.workload();
         Workload bare = new Workload("bare", 1, 512);
 
@@ -54,8 +58,9 @@ class ResponseDtoEquivalenceTest {
         assertEquals(toMap(bare), toMap(WorkloadResponse.from(bare)), "null 인 retryCount·resourceType 이 그대로 null 이어야 한다");
     }
 
+    @DisplayName("배치 이력 응답은 엔티티 직렬화와 같다")
     @Test
-    void 배치_이력_응답은_엔티티_직렬화와_같다() {
+    void history_response_matches_entity() {
         SchedulingHistory linked = Samples.history();
         SchedulingHistory standalone = new SchedulingHistory(1L, "w", "mdc-01", "n1", 0.5, "r", "weighted", "default");
 
@@ -63,8 +68,9 @@ class ResponseDtoEquivalenceTest {
         assertEquals(toMap(standalone), toMap(SchedulingHistoryResponse.from(standalone)), "success·scheduleRunId 가 null 로 유지돼야 한다");
     }
 
+    @DisplayName("배치 정책 응답은 엔티티 직렬화와 같다")
     @Test
-    void 배치_정책_응답은_엔티티_직렬화와_같다() {
+    void policy_response_matches_entity() {
         SchedulingPolicy custom = Samples.policy();
         SchedulingPolicy defaults = new SchedulingPolicy("default", "기본");
 

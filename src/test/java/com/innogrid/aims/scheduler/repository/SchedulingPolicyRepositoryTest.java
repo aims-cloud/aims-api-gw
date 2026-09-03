@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.repository;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,24 +24,27 @@ class SchedulingPolicyRepositoryTest {
         repository.deleteAll();
     }
 
+    @DisplayName("공통 활성 정책을 찾는다")
     @Test
-    void 공통_활성_정책을_찾는다() {
+    void finds_common_active_policy() {
         repository.save(activePolicy("common", null));
 
         assertTrue(repository.findFirstByActiveTrueAndResourceTypeIsNull().isPresent());
         assertEquals("common", repository.findFirstByActiveTrueAndResourceTypeIsNull().get().getName());
     }
 
+    @DisplayName("종류별 활성 정책을 찾는다")
     @Test
-    void 종류별_활성_정책을_찾는다() {
+    void finds_active_policy_per_type() {
         repository.save(activePolicy("gpu", ResourceType.GPU));
 
         assertEquals("gpu", repository.findFirstByActiveTrueAndResourceType(ResourceType.GPU).get().getName());
         assertTrue(repository.findFirstByActiveTrueAndResourceType(ResourceType.VM).isEmpty());
     }
 
+    @DisplayName("공통과 종류별 활성 정책이 함께 있어도 각각 조회된다")
     @Test
-    void 공통과_종류별_활성_정책이_함께_있어도_각각_조회된다() {
+    void common_and_type_policies_both_found() {
         repository.save(activePolicy("common", null));
         repository.save(activePolicy("gpu", ResourceType.GPU));
 
@@ -49,8 +53,9 @@ class SchedulingPolicyRepositoryTest {
         assertEquals(2, repository.count());
     }
 
+    @DisplayName("비활성 정책은 조회되지 않는다")
     @Test
-    void 비활성_정책은_조회되지_않는다() {
+    void inactive_policy_not_found() {
         SchedulingPolicy inactive = activePolicy("gpu-old", ResourceType.GPU);
         inactive.setActive(false);
         repository.save(inactive);
@@ -58,8 +63,9 @@ class SchedulingPolicyRepositoryTest {
         assertTrue(repository.findFirstByActiveTrueAndResourceType(ResourceType.GPU).isEmpty());
     }
 
+    @DisplayName("신규 필드가 저장되고 읽힌다")
     @Test
-    void 신규_필드가_저장되고_읽힌다() {
+    void new_fields_saved_and_read_back() {
         SchedulingPolicy policy = activePolicy("gpu", ResourceType.GPU);
         policy.setDefaultEngine("power");
         policy.setWarningTemperatureCelsius(70.0);
@@ -72,8 +78,9 @@ class SchedulingPolicyRepositoryTest {
         assertEquals(70.0, loaded.getWarningTemperatureCelsius());
     }
 
+    @DisplayName("신규 필드는 지정하지 않으면 null 이다")
     @Test
-    void 신규_필드는_지정하지_않으면_null_이다() {
+    void new_fields_null_when_omitted() {
         repository.save(activePolicy("common", null));
         repository.flush();
 

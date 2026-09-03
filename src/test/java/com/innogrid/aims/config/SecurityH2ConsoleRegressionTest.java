@@ -1,5 +1,6 @@
 package com.innogrid.aims.config;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,22 +28,25 @@ class SecurityH2ConsoleRegressionTest {
     @Autowired
     MockMvc mockMvc;
 
+    @DisplayName("콘솔이 꺼진 환경에서 인증된 API 요청은 정상 200 이다")
     @Test
     @WithMockUser
-    void 콘솔이_꺼진_환경에서_인증된_API_요청은_정상_200_이다() throws Exception {
+    void authenticated_api_200_console_off() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/engines"))
                 .andExpect(status().isOk());
     }
 
+    @DisplayName("콘솔 경로는 서블릿이 없어 404 다 500 이나 403 이 아니다")
     @Test
-    void 콘솔_경로는_서블릿이_없어_404_다_500_이나_403_이_아니다() throws Exception {
+    void console_path_404_not_500() throws Exception {
         // permitAll 이라 인증 없이 도달하고, 콘솔 서블릿이 없어 404. 매처가 빈을 찾지 않으므로 예외도 없다.
         mockMvc.perform(get("/h2-console").with(anonymous()))
                 .andExpect(status().isNotFound());
     }
 
+    @DisplayName("미인증 API 요청은 여전히 403 이다")
     @Test
-    void 미인증_API_요청은_여전히_403_이다() throws Exception {
+    void unauthenticated_api_403() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/engines").with(anonymous()))
                 .andExpect(status().isForbidden());
     }

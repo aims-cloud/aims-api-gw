@@ -41,7 +41,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("한 대만 비정상적으로 낮은 경우 — 그 노드만 최하위로 떨어진다")
-    void 한_대만_비정상적으로_낮다() {
+    void scenario_one_node_abnormally_low() {
         PowerEfficiencyResponse result = run("한 대만 비정상적으로 낮음", List.of(
                 node("정상-1", 70, 200),   // PEI 0.350
                 node("정상-2", 68, 200),   // 0.340
@@ -62,7 +62,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("전반적으로 평이한 경우 — 차이가 미미해도 등급은 A~D 로 갈린다")
-    void 전반적으로_평이하다() {
+    void scenario_overall_flat_grades_split() {
         PowerEfficiencyResponse result = run("전반적으로 평이", List.of(
                 node("노드-1", 50.4, 200),  // PEI 0.2520
                 node("노드-2", 50.3, 200),  // 0.2515
@@ -84,7 +84,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("전반적으로 높은 경우 — 전부 고효율이어도 누군가는 D 를 받는다")
-    void 전반적으로_높다() {
+    void scenario_overall_high_still_has_grade_d() {
         PowerEfficiencyResponse result = run("전반적으로 높음", List.of(
                 node("노드-1", 90, 150),   // PEI 0.600
                 node("노드-2", 88, 150),   // 0.587
@@ -109,7 +109,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("전반적으로 낮은 경우 — 전부 저효율이어도 누군가는 A 를 받는다")
-    void 전반적으로_낮다() {
+    void scenario_overall_low_still_has_grade_a() {
         PowerEfficiencyResponse result = run("전반적으로 낮음", List.of(
                 node("노드-1", 16, 300),   // PEI 0.0533
                 node("노드-2", 15, 300),
@@ -128,7 +128,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("극단이 섞인 경우 — 소수 고효율 + 다수 저효율")
-    void 극단이_섞였다() {
+    void scenario_extremes_mixed() {
         PowerEfficiencyResponse result = run("극단 혼재", List.of(
                 node("고효율-1", 95, 180),  // PEI 0.528
                 node("고효율-2", 92, 180),  // 0.511
@@ -151,7 +151,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("일부만 IPMI 가 연동된 경우 — 연동된 노드끼리만 평가한다")
-    void 일부만_계측된다() {
+    void scenario_partial_ipmi_measurement() {
         PowerEfficiencyResponse result = run("일부만 계측", List.of(
                 node("계측-1", 80, 200), node("계측-2", 60, 200),
                 node("계측-3", 40, 200), node("계측-4", 20, 200),
@@ -169,7 +169,7 @@ class PowerEfficiencyScenarioTest {
 
     @Test
     @DisplayName("전력 여유가 부족한 경우 — 배치 제한 권고가 우선한다")
-    void 전력_여유가_부족하다() {
+    void scenario_low_power_headroom() {
         // 용량 500W 중 450W 를 쓰고 있어 여유가 10% 다
         NodeResource tight = new NodeResource("mdc-01", "포화-1", 8, 16384, 0,
                 90, 50, 30, 450, 500, 40, 0, 0);

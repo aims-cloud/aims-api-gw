@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -20,8 +21,9 @@ class ConsolidationMarginTest {
     private static final double EPS = 1e-9;
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
+    @DisplayName("가동 노드와 빈 노드가 함께 있으면 모든 후보에 같은 여유 값이 붙는다")
     @Test
-    void 가동_노드와_빈_노드가_함께_있으면_모든_후보에_같은_여유_값이_붙는다() {
+    void margin_same_for_all_candidates() {
         NodeResource active = node("active", 50, 250, 55);   // CPU 50% > 5% 가동
         NodeResource idle = node("idle", 1, 160, 40);         // 빈 노드, 차갑다
         SchedulingResult r = scheduler.schedule(new Workload("w", 2, 1024), List.of(active, idle), policy());
@@ -35,8 +37,9 @@ class ConsolidationMarginTest {
         assertEquals(expected > 0 ? "active" : "idle", r.selectedNodeId());
     }
 
+    @DisplayName("한쪽 집단만 있으면 키를 넣지 않는다")
     @Test
-    void 한쪽_집단만_있으면_키를_넣지_않는다() {
+    void one_group_omits_margin_key() {
         SchedulingResult onlyActive = scheduler.schedule(new Workload("w", 2, 1024),
                 List.of(node("a1", 50, 250, 55), node("a2", 40, 240, 50)), policy());
         assertTrue(onlyActive.candidateScores().stream().noneMatch(s -> s.details().containsKey("통합여유")));
@@ -46,8 +49,9 @@ class ConsolidationMarginTest {
         assertTrue(onlyIdle.candidateScores().stream().noneMatch(s -> s.details().containsKey("통합여유")));
     }
 
+    @DisplayName("적격이 아닌 후보는 여유 계산에서 빠진다")
     @Test
-    void 적격이_아닌_후보는_여유_계산에서_빠진다() {
+    void ineligible_excluded_from_margin() {
         // 빈 노드가 자원 부족으로 제외되면 "빈 집단"이 없다 → 키 없음
         NodeResource active = node("active", 50, 250, 55);
         NodeResource idleTiny = new NodeResource("mdc-01", "idle-tiny", 1, 512, 0, 1, 10, 0, 150, 500, 40, 0, 0);

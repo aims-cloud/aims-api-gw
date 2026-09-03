@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -52,8 +53,9 @@ class PowerOptimizationTrendTest {
         to = OffsetDateTime.ofInstant(Instant.ofEpochSecond(T3), ZoneOffset.UTC);
     }
 
+    @DisplayName("시각마다 가동 유휴 회수 가능 전력 PEI 를 현재 진단과 같은 식으로 계산한다")
     @Test
-    void 시각마다_가동_유휴_회수_가능_전력_PEI_를_현재_진단과_같은_식으로_계산한다() {
+    void each_point_computed_like_current() {
         stub("node_cpu_seconds_total", List.of(
                 series("n1", T1, 80, T2, 70, T3, 50),
                 series("n2", T1, 2, T2, 60, T3, 40),
@@ -82,8 +84,9 @@ class PowerOptimizationTrendTest {
                 "회수 가능 전력이 300 → 150 → 0 으로 줄어든다");
     }
 
+    @DisplayName("전력 메트릭이 없으면 measured false 전력 지표 null 가동 수만 낸다")
     @Test
-    void 전력_메트릭이_없으면_measured_false_전력_지표_null_가동_수만_낸다() {
+    void no_power_metric_measured_false() {
         stub("node_cpu_seconds_total", List.of(series("n1", T1, 80, T2, 2), series("n2", T1, 3, T2, 40)));
         stub("ipmi_dcmi_power", List.of());
 
@@ -97,8 +100,9 @@ class PowerOptimizationTrendTest {
         assertTrue(r.message().contains("전력 메트릭이 없어"), r.message());
     }
 
+    @DisplayName("일부 노드만 전력이 있으면 그 노드만 PEI 에 들고 총량은 있는 것만 더한다")
     @Test
-    void 일부_노드만_전력이_있으면_그_노드만_PEI_에_들고_총량은_있는_것만_더한다() {
+    void only_powered_nodes_enter_pei() {
         stub("node_cpu_seconds_total", List.of(series("n1", T1, 80), series("n2", T1, 40)));
         stub("ipmi_dcmi_power", List.of(series("n1", T1, 200)));
 
@@ -111,8 +115,9 @@ class PowerOptimizationTrendTest {
         assertEquals(2, p.totalNodes(), "CPU 가 있는 노드는 전부 센다");
     }
 
+    @DisplayName("시각 결손 노드는 그 시각에서만 빠지고 CPU 가 전혀 없으면 빈 결과다")
     @Test
-    void 시각_결손_노드는_그_시각에서만_빠지고_CPU_가_전혀_없으면_빈_결과다() {
+    void node_missing_at_point_drops_there() {
         stub("node_cpu_seconds_total", List.of(series("n1", T1, 80, T2, 70), series("n2", T1, 2)));   // n2 는 T2 결손
         stub("ipmi_dcmi_power", List.of(series("n1", T1, 200, T2, 200), series("n2", T1, 150)));
 
@@ -126,8 +131,9 @@ class PowerOptimizationTrendTest {
         assertTrue(empty.message().contains("CPU 메트릭이 없습니다"), empty.message());
     }
 
+    @DisplayName("구간 검증은 400 이고 조회 실패는 사유를 담은 빈 결과 200 이다")
     @Test
-    void 구간_검증은_400_이고_조회_실패는_사유를_담은_빈_결과_200_이다() {
+    void range_400_query_failure_empty_200() {
         BusinessException e = assertThrows(BusinessException.class, () -> service.trend(to, from, "5m"));
         assertEquals(400, e.getStatus().value());
         assertEquals(400, assertThrows(BusinessException.class, () -> service.trend(from.minusDays(2), to, "1s")).getStatus().value(), "지점 과다(2일/1초)");
@@ -139,8 +145,9 @@ class PowerOptimizationTrendTest {
         assertTrue(r.message().contains("조회하지 못했습니다"), r.message());
     }
 
+    @DisplayName("기본 구간은 설정의 24시간 5분이다")
     @Test
-    void 기본_구간은_설정의_24시간_5분이다() {
+    void default_range_24h_5m_from_config() {
         stub("node_cpu_seconds_total", List.of());
         stub("ipmi_dcmi_power", List.of());
         PowerOptimizationTrendResponse r = service.trend(null, null, null);

@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.dto;
 
 import java.util.Optional;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,8 +35,9 @@ class PartialUpdateNullSemanticsTest {
 
     record WithNode(JsonNode resourceType, String description) {}
 
+    @DisplayName("Optional 은 키 없음과 명시적 null 을 구분하지 못한다 그래서 쓰지 않는다")
     @Test
-    void Optional_은_키_없음과_명시적_null_을_구분하지_못한다_그래서_쓰지_않는다() {
+    void optional_cannot_distinguish_null() {
         WithOptional absent = objectMapper.readValue("{\"description\":\"d\"}", WithOptional.class);
         WithOptional explicitNull = objectMapper.readValue("{\"resourceType\":null}", WithOptional.class);
         WithOptional present = objectMapper.readValue("{\"resourceType\":\"VM\"}", WithOptional.class);
@@ -45,8 +47,9 @@ class PartialUpdateNullSemanticsTest {
                 "구분이 되기 시작했다면 이 테스트를 갱신하고 DTO 형태를 재검토한다");
     }
 
+    @DisplayName("JsonNode 는 키 없음과 명시적 null 을 구분한다")
     @Test
-    void JsonNode_는_키_없음과_명시적_null_을_구분한다() {
+    void jsonnode_distinguishes_null() {
         WithNode absent = objectMapper.readValue("{\"description\":\"d\"}", WithNode.class);
         WithNode explicitNull = objectMapper.readValue("{\"resourceType\":null}", WithNode.class);
         WithNode present = objectMapper.readValue("{\"resourceType\":\"VM\"}", WithNode.class);

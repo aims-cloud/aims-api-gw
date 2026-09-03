@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.controller;
 import java.util.Map;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -41,8 +42,9 @@ class MdcLinkApiContractTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
+    @DisplayName("생성 응답은 15필드이고 쌍은 정렬되며 감사 계정이 남는다")
     @Test
-    void 생성_응답은_15필드이고_쌍은_정렬되며_감사_계정이_남는다() throws Exception {
+    void create_response_15_fields() throws Exception {
         String t = tag();
         MvcResult created = create("{\"mdcA\":\"" + t + "-b\",\"mdcB\":\"" + t + "-a\",\"latencyMs\":20,\"bandwidthMbps\":1000}")
                 .andExpect(status().isOk()).andReturn();
@@ -65,8 +67,9 @@ class MdcLinkApiContractTest {
         }
     }
 
+    @DisplayName("역방향 중복은 409 같은 MDC 는 400 음수 지연은 400")
     @Test
-    void 역방향_중복은_409_같은_MDC_는_400_음수_지연은_400() throws Exception {
+    void duplicate_409_same_mdc_400() throws Exception {
         String t = tag();
         Map<String, Object> d = data(create("{\"mdcA\":\"" + t + "-a\",\"mdcB\":\"" + t + "-b\",\"latencyMs\":1}")
                 .andExpect(status().isOk()).andReturn());
@@ -86,8 +89,9 @@ class MdcLinkApiContractTest {
         }
     }
 
+    @DisplayName("부분 수정과 명시적 null 비움 그리고 삭제 후 404")
     @Test
-    void 부분_수정과_명시적_null_비움_그리고_삭제_후_404() throws Exception {
+    void patch_null_clears_delete_404() throws Exception {
         String t = tag();
         Map<String, Object> d = data(create("{\"mdcA\":\"" + t + "-a\",\"mdcB\":\"" + t + "-b\",\"latencyMs\":1,"
                 + "\"description\":\"d\",\"packetLossPercent\":2}").andExpect(status().isOk()).andReturn());
@@ -107,8 +111,9 @@ class MdcLinkApiContractTest {
         mockMvc.perform(delete(BASE + "/" + id)).andExpect(status().isNotFound());
     }
 
+    @DisplayName("매트릭스는 리터럴 경로로 단건 조회에 잡히지 않고 대칭이다")
     @Test
-    void 매트릭스는_리터럴_경로로_단건_조회에_잡히지_않고_대칭이다() throws Exception {
+    void matrix_literal_path_symmetric() throws Exception {
         String t = tag();
         Map<String, Object> d1 = data(create("{\"mdcA\":\"" + t + "-2\",\"mdcB\":\"" + t + "-1\",\"latencyMs\":10}")
                 .andExpect(status().isOk()).andReturn());
@@ -133,8 +138,9 @@ class MdcLinkApiContractTest {
         }
     }
 
+    @DisplayName("목록 필터는 어느 편이든 걸린 MDC 와 상태로 거른다")
     @Test
-    void 목록_필터는_어느_편이든_걸린_MDC_와_상태로_거른다() throws Exception {
+    void list_filter_by_mdc_and_status() throws Exception {
         String t = tag();
         Map<String, Object> d1 = data(create("{\"mdcA\":\"" + t + "-a\",\"mdcB\":\"" + t + "-b\",\"latencyMs\":1}")
                 .andExpect(status().isOk()).andReturn());
@@ -154,8 +160,9 @@ class MdcLinkApiContractTest {
         }
     }
 
+    @DisplayName("깨진 본문은 400 사유 미인증은 403")
     @Test
-    void 깨진_본문은_400_사유_미인증은_403() throws Exception {
+    void broken_body_400_unauthenticated_403() throws Exception {
         mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{\"mdcA\":"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("요청 본문을 읽을 수 없습니다")));
@@ -163,8 +170,9 @@ class MdcLinkApiContractTest {
         mockMvc.perform(get(BASE + "/matrix").with(anonymous())).andExpect(status().isForbidden());
     }
 
+    @DisplayName("없는 링크 조회는 404")
     @Test
-    void 없는_링크_조회는_404() throws Exception {
+    void get_missing_link_404() throws Exception {
         mockMvc.perform(get(BASE + "/987654321")).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false));
     }

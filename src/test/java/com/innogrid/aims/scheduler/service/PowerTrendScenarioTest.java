@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
@@ -42,8 +43,9 @@ class PowerTrendScenarioTest {
     private static final long T0 = 1_756_684_800L;
     private static final double EPS = 1e-4;
 
+    @DisplayName("시나리오 통합이 진행될수록 회수 가능 전력이 줄고 마지막 지점은 현재 진단과 같은 숫자다")
     @Test
-    void 시나리오_통합이_진행될수록_회수_가능_전력이_줄고_마지막_지점은_현재_진단과_같은_숫자다() {
+    void scenario_releasable_power_falls() {
         SchedulerProperties props = new SchedulerProperties();
         VictoriaMetricsClient metrics = mock(VictoriaMetricsClient.class);
         PowerOptimizationService service = new PowerOptimizationService(mock(SchedulingService.class),

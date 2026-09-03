@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -29,8 +30,9 @@ class PowerOptimizationExcludedTest {
     private final PowerOptimizationService service = new PowerOptimizationService(
             schedulingService, new PowerModel(properties), properties);
 
+    @DisplayName("제외 노드는 판단에서 빼고 응답에는 수와 사유를 싣는다")
     @Test
-    void 제외_노드는_판단에서_빼고_응답에는_수와_사유를_싣는다() {
+    void excluded_nodes_counted_with_reason() {
         List<NodeResource> nodes = List.of(node("n1", 50, 250), node("n2", 2, 150));
         List<ExcludedNode> excluded = List.of(
                 new ExcludedNode("mdc-01", "n3", List.of("cpu사용률")),
@@ -46,16 +48,18 @@ class PowerOptimizationExcludedTest {
         assertTrue(r.findings().stream().noneMatch(f -> f.nodeId().equals("n3") || f.nodeId().equals("n4")));
     }
 
+    @DisplayName("제외 노드가 없으면 0과 빈 배열이다")
     @Test
-    void 제외_노드가_없으면_0과_빈_배열이다() {
+    void no_excluded_node_gives_0_and_empty() {
         PowerOptimizationResponse r = service.diagnose(List.of(node("n1", 50, 250)));
 
         assertEquals(0, r.cluster().excludedNodes());
         assertTrue(r.cluster().excluded().isEmpty());
     }
 
+    @DisplayName("현재 상태 진단은 스냅샷의 제외 목록을 그대로 쓴다")
     @Test
-    void 현재_상태_진단은_스냅샷의_제외_목록을_그대로_쓴다() {
+    void current_diagnosis_uses_snapshot_excluded() {
         PlacementContext snapshot = PlacementContext.of(
                 List.of(node("n1", 50, 250)), new com.innogrid.aims.scheduler.entity.SchedulingPolicy("t", "t"))
                 .withExcluded(List.of(new ExcludedNode("mdc-01", "n9", List.of("MemAvailable"))));

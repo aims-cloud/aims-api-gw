@@ -6,6 +6,7 @@ import java.util.TreeSet;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -61,8 +62,9 @@ class HistoryPageEndpointTest {
         repository.deleteAllById(seeded);
     }
 
+    @DisplayName("페이지 응답은 5필드이고 경계가 맞다")
     @Test
-    void 페이지_응답은_5필드이고_경계가_맞다() throws Exception {
+    void page_response_5_fields() throws Exception {
         JsonNode d = data(get(PAGE).param("size", "10").param("workloadId", String.valueOf(WORKLOAD_A)));
 
         assertEquals(new TreeSet<>(List.of("items", "page", "size", "totalElements", "totalPages")), keys(d));
@@ -78,14 +80,16 @@ class HistoryPageEndpointTest {
         assertEquals(0, beyond.get("items").size(), "범위 밖 페이지는 빈 목록, 오류 아님");
     }
 
+    @DisplayName("항목은 이력 응답 22필드 계약을 그대로 쓴다")
     @Test
-    void 항목은_이력_응답_22필드_계약을_그대로_쓴다() throws Exception {
+    void items_22_field_contract() throws Exception {
         JsonNode d = data(get(PAGE).param("size", "1").param("workloadId", String.valueOf(WORKLOAD_A)));
         assertEquals(ResponseJsonGoldenTest.HISTORY_FIELDS, keys(d.get("items").get(0)));
     }
 
+    @DisplayName("필터는 각각 그리고 함께 적용된다")
     @Test
-    void 필터는_각각_그리고_함께_적용된다() throws Exception {
+    void filters_single_and_combined() throws Exception {
         assertEquals(10, data(get(PAGE).param("size", "100").param("engineName", "power")).get("totalElements").asInt());
         // 실패 5건 중 심은 것만 세기 위해 workloadId 와 함께
         assertEquals(3, data(get(PAGE).param("size", "100").param("success", "false")
@@ -96,8 +100,9 @@ class HistoryPageEndpointTest {
                 .param("workloadId", String.valueOf(WORKLOAD_A))).get("totalElements").asInt(), "A 는 전부 weighted");
     }
 
+    @DisplayName("정렬은 허용 필드만 되고 나머지는 400")
     @Test
-    void 정렬은_허용_필드만_되고_나머지는_400() throws Exception {
+    void unpermitted_sort_field_400() throws Exception {
         JsonNode asc = data(get(PAGE).param("size", "3").param("sort", "finalScore,asc").param("workloadId", String.valueOf(WORKLOAD_A)));
         assertEquals("hp-00", asc.get("items").get(0).get("workloadName").asString());
         JsonNode desc = data(get(PAGE).param("size", "3").param("sort", "finalScore,desc").param("workloadId", String.valueOf(WORKLOAD_A)));
@@ -108,14 +113,16 @@ class HistoryPageEndpointTest {
                 .andExpect(jsonPath("$.success").value(false));
     }
 
+    @DisplayName("size 상한 100 과 page 최소 1 을 넘으면 400")
     @Test
-    void size_상한_100_과_page_최소_1_을_넘으면_400() throws Exception {
+    void size_over_100_or_page_0_400() throws Exception {
         mockMvc.perform(get(PAGE).param("size", "101")).andExpect(status().isBadRequest());
         mockMvc.perform(get(PAGE).param("page", "0")).andExpect(status().isBadRequest());
     }
 
+    @DisplayName("기존 history 는 여전히 배열이고 전량이다")
     @Test
-    void 기존_history_는_여전히_배열이고_전량이다() throws Exception {
+    void existing_history_full_array() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())

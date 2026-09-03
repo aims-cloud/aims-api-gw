@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -38,8 +39,9 @@ class SchedulingServiceLinkMatrixTest {
             mock(PlacementService.class), new EngineRegistry(List.of(new WeightedScoreScheduler())),
             ConstraintEvaluator.withDefaults(), properties, linkRepository);
 
+    @DisplayName("게이트가 꺼진 정책은 원장을 조회하지 않고 스냅샷이 비어 있다")
     @Test
-    void 게이트가_꺼진_정책은_원장을_조회하지_않고_스냅샷이_비어_있다() {
+    void gate_off_skips_ledger_empty_snapshot() {
         when(collector.collect()).thenReturn(new NodeResourceCollector.Snapshot(List.of(node("n1")), List.of()));
 
         PlacementContext ctx = service.createContext(new SchedulingPolicy("off", "d"));
@@ -51,8 +53,9 @@ class SchedulingServiceLinkMatrixTest {
         assertFalse(ctx.linkAware(w), "정책이 꺼져 있으면 dataMdcId 가 있어도 게이트 off");
     }
 
+    @DisplayName("게이트를 켠 정책은 원장을 한 번 읽어 스냅샷을 싣는다")
     @Test
-    void 게이트를_켠_정책은_원장을_한_번_읽어_스냅샷을_싣는다() {
+    void gate_on_reads_ledger_once() {
         when(collector.collect()).thenReturn(new NodeResourceCollector.Snapshot(List.of(node("n1")), List.of()));
         when(linkRepository.findAll()).thenReturn(List.of(new MdcLink("mdc-02", "mdc-01", 20)));
         SchedulingPolicy on = new SchedulingPolicy("on", "d");
@@ -73,8 +76,9 @@ class SchedulingServiceLinkMatrixTest {
         assertFalse(ctx.linkAware(blank), "빈 문자열도 없음으로 본다");
     }
 
+    @DisplayName("원장 없이 조립한 서비스는 켠 정책이어도 빈 스냅샷이다 기존 테스트 경로")
     @Test
-    void 원장_없이_조립한_서비스는_켠_정책이어도_빈_스냅샷이다_기존_테스트_경로() {
+    void no_ledger_empty_snapshot_with_gate_on() {
         SchedulingService withoutLedger = new SchedulingService(
                 mock(WorkloadRepository.class), mock(SchedulingPolicyRepository.class), collector,
                 mock(PlacementService.class), new EngineRegistry(List.of(new WeightedScoreScheduler())),

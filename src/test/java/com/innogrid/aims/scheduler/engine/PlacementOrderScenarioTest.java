@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -39,8 +40,9 @@ class PlacementOrderScenarioTest {
     private final PowerAwareScheduler engine = new PowerAwareScheduler();
     private final PowerModel powerModel = new PowerModel(new SchedulerProperties());
 
+    @DisplayName("시나리오 A 전력만 볼 때 크기순은 나이순보다 빈 노드를 더 깨우지 않고 첫 배치는 가동 노드다")
     @Test
-    void 시나리오_A_전력만_볼_때_크기순은_나이순보다_빈_노드를_더_깨우지_않고_첫_배치는_가동_노드다() {
+    void scenario_a_size_order_no_extra_wake() {
         Result age = place(workloads(), 0);
         Result size = place(sortedBySize(workloads()), 0);
 
@@ -52,8 +54,9 @@ class PlacementOrderScenarioTest {
         // 순서에 좌우되지 않는다. 크기순의 이점은 노드·워크로드 조합에 따라 나타나며, 여기서는 "나빠지지 않음"만 고정한다.
     }
 
+    @DisplayName("시나리오 B 빈 노드가 차가우면 통합여유가 음수로 보이고 순서로는 못 막는다")
     @Test
-    void 시나리오_B_빈_노드가_차가우면_통합여유가_음수로_보이고_순서로는_못_막는다() {
+    void scenario_b_cold_idle_negative_margin() {
         Result age = place(workloads(), 1);
         Result size = place(sortedBySize(workloads()), 1);
 

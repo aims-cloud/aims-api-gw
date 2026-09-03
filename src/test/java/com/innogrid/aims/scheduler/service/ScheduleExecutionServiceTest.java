@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,8 +43,9 @@ class ScheduleExecutionServiceTest {
 
     // ── 게이트 ─────────────────────────────────────────────────
 
+    @DisplayName("사용하지 않는 스케줄은 실행할 수 없다")
     @Test
-    void 사용하지_않는_스케줄은_실행할_수_없다() {
+    void disabled_schedule_cannot_run() {
         Schedule schedule = save(scheduleOf("off", false, false));
 
         BusinessException e = assertThrows(BusinessException.class,
@@ -52,15 +54,17 @@ class ScheduleExecutionServiceTest {
         assertEquals(HttpStatus.CONFLICT, e.getStatus());
     }
 
+    @DisplayName("워크로드가 없어도 실행 자체는 막지 않는다")
     @Test
-    void 워크로드가_없어도_실행_자체는_막지_않는다() {
+    void no_workloads_does_not_block_run() {
         Schedule schedule = save(scheduleOf("empty", true, false));
 
         assertDoesNotThrow(() -> executionService.runNow(schedule.getId(), "tester"));
     }
 
+    @DisplayName("이미 실행 중이면 409 이다")
     @Test
-    void 이미_실행_중이면_409_이다() {
+    void already_running_409() {
         Schedule schedule = scheduleOf("busy", true, false);
         schedule.recordRun(ScheduleRun.RunStatus.RUNNING, null, null, null);
         Schedule saved = save(schedule);
@@ -73,8 +77,9 @@ class ScheduleExecutionServiceTest {
 
     // ── 대상 0건 처리 ──────────────────────────────────────────
 
+    @DisplayName("수동 실행은 대상이 없어도 이력을 남긴다")
     @Test
-    void 수동_실행은_대상이_없어도_이력을_남긴다() {
+    void manual_run_records_empty_history() {
         Schedule schedule = save(scheduleOf("manual", true, false));
 
         ScheduleRun run = executionService.runNow(schedule.getId(), "tester");
@@ -86,8 +91,9 @@ class ScheduleExecutionServiceTest {
         assertEquals(1, runRepository.count());
     }
 
+    @DisplayName("자동 실행은 대상이 없으면 이력을 남기지 않는다")
     @Test
-    void 자동_실행은_대상이_없으면_이력을_남기지_않는다() {
+    void auto_run_skips_empty_history() {
         // 5분 주기 스케줄 하나가 90일이면 "대상 없음" 행만 25,920개가 된다
         Schedule schedule = save(scheduleOf("auto", true, true));
 
@@ -105,8 +111,9 @@ class ScheduleExecutionServiceTest {
 
     // ── 재시도 상한 ────────────────────────────────────────────
 
+    @DisplayName("재시도 상한을 넘긴 워크로드는 대상에서 빠진다")
     @Test
-    void 재시도_상한을_넘긴_워크로드는_대상에서_빠진다() {
+    void over_retry_limit_dropped() {
         Workload exhausted = new Workload("포기한작업", 1, 1024);
         exhausted.setResourceType(Workload.ResourceType.VM);
         for (int i = 0; i < properties.getMaxRetryCount(); i++) {
@@ -122,8 +129,9 @@ class ScheduleExecutionServiceTest {
         assertTrue(run.getMessage().contains("재시도 소진 1건"), run.getMessage());
     }
 
+    @DisplayName("재시도 여유가 있으면 대상에 남는다")
     @Test
-    void 재시도_여유가_있으면_대상에_남는다() {
+    void retries_left_stays_target() {
         Workload retryable = new Workload("재시도가능", 1, 1024);
         retryable.setResourceType(Workload.ResourceType.VM);
         retryable.markFailed("일시적 자원 부족");
@@ -138,16 +146,18 @@ class ScheduleExecutionServiceTest {
         assertEquals("활성 노드가 없습니다", run.getMessage());
     }
 
+    @DisplayName("리소스 종류가 없는 기존 행은 VM 대상 실행에 포함된다")
     @Test
-    void 리소스_종류가_없는_기존_행은_VM_대상_실행에_포함된다() {
+    void null_resource_type_included_in_vm_run() {
         workloadRepository.save(new Workload("레거시", 1, 1024));   // resourceType = null
 
         Schedule schedule = save(scheduleOf("vm", true, false));
         assertEquals(1, executionService.runNow(schedule.getId(), "tester").getTargetCount());
     }
 
+    @DisplayName("다른 리소스 종류는 대상이 아니다")
     @Test
-    void 다른_리소스_종류는_대상이_아니다() {
+    void other_resource_type_not_target() {
         Workload gpu = new Workload("지피유", 1, 1024);
         gpu.setResourceType(Workload.ResourceType.GPU);
         workloadRepository.save(gpu);
@@ -158,8 +168,9 @@ class ScheduleExecutionServiceTest {
 
     // ── 실행 후 상태 ───────────────────────────────────────────
 
+    @DisplayName("실행이 끝나면 실행 중 표시가 풀린다")
     @Test
-    void 실행이_끝나면_실행_중_표시가_풀린다() {
+    void running_flag_cleared_on_end() {
         Schedule schedule = save(scheduleOf("release", true, false));
 
         executionService.runNow(schedule.getId(), "tester");
@@ -170,8 +181,9 @@ class ScheduleExecutionServiceTest {
         assertDoesNotThrow(() -> executionService.runNow(schedule.getId(), "tester"));
     }
 
+    @DisplayName("실행 이력에 엔진과 정책이 기록된다")
     @Test
-    void 실행_이력에_엔진과_정책이_기록된다() {
+    void history_records_engine_and_policy() {
         Schedule schedule = save(scheduleOf("ctx", true, false));
 
         ScheduleRun run = executionService.runNow(schedule.getId(), "tester");

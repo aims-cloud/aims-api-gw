@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.common.exception.BusinessException;
@@ -42,8 +43,9 @@ class SchedulingServiceExcludedTest {
             new EngineRegistry(List.of(new WeightedScoreScheduler())),
             ConstraintEvaluator.withDefaults(), properties);
 
+    @DisplayName("후보가 없고 제외 노드가 있으면 실패 사유에 그 노드를 적는다")
     @Test
-    void 후보가_없고_제외_노드가_있으면_실패_사유에_그_노드를_적는다() {
+    void no_candidate_reason_names_excluded() {
         given(List.of(), List.of(
                 new ExcludedNode("mdc-01", "n1:9100", List.of("cpu사용률")),
                 new ExcludedNode("mdc-01", "n2:9100", List.of("코어수"))));
@@ -55,15 +57,17 @@ class SchedulingServiceExcludedTest {
                 result.reason());
     }
 
+    @DisplayName("후보가 없고 제외 노드도 없으면 문구는 예전과 같다")
     @Test
-    void 후보가_없고_제외_노드도_없으면_문구는_예전과_같다() {
+    void no_candidate_no_excluded_keeps_message() {
         given(List.of(), List.of());
 
         assertEquals("활성 노드가 없습니다", service.dryRun(1L, null).reason());
     }
 
+    @DisplayName("노드 단건 조회 404 사유에 수집 제외를 적는다")
     @Test
-    void 노드_단건_조회_404_사유에_수집_제외를_적는다() {
+    void node_404_reason_states_exclusion() {
         given(List.of(node("n1:9100")), List.of(new ExcludedNode("mdc-01", "n2:9100", List.of("MemTotal"))));
 
         BusinessException excluded = assertThrows(BusinessException.class,
@@ -76,8 +80,9 @@ class SchedulingServiceExcludedTest {
         assertFalse(unknown.getMessage().contains("수집 제외"), unknown.getMessage());
     }
 
+    @DisplayName("노드 목록 조회는 제외 노드를 담지 않는다")
     @Test
-    void 노드_목록_조회는_제외_노드를_담지_않는다() {
+    void node_list_omits_excluded_nodes() {
         given(List.of(node("n1:9100")), List.of(new ExcludedNode("mdc-01", "n2:9100", List.of("cpu사용률"))));
 
         List<NodeResource> nodes = service.getNodeResources();

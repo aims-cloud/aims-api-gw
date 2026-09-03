@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.model;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.MdcLink;
@@ -13,8 +14,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class LinkMatrixTest {
 
+    @DisplayName("어느 방향으로 물어도 같은 링크가 나온다")
     @Test
-    void 어느_방향으로_물어도_같은_링크가_나온다() {
+    void either_direction_same_link() {
         MdcLink l = new MdcLink("b", "a", 20);
         l.setStatus(MdcLink.LinkStatus.DEGRADED);
         LinkMatrix m = LinkMatrix.of(List.of(l));
@@ -24,8 +26,9 @@ class LinkMatrixTest {
         assertEquals(1, m.size());
     }
 
+    @DisplayName("같은 MDC 미등록 null 은 비어 있다 중립")
     @Test
-    void 같은_MDC_미등록_null_은_비어_있다_중립() {
+    void same_mdc_and_null_are_empty() {
         LinkMatrix m = LinkMatrix.of(List.of(new MdcLink("a", "b", 1)));
 
         assertTrue(m.between("a", "a").isEmpty(), "같은 MDC");
@@ -34,8 +37,9 @@ class LinkMatrixTest {
         assertTrue(m.between("a", "unknown").isEmpty(), "라벨 없는 노드도 그냥 미등록");
     }
 
+    @DisplayName("빈 원장은 EMPTY 이고 손실 null 은 0 으로 본다")
     @Test
-    void 빈_원장은_EMPTY_이고_손실_null_은_0_으로_본다() {
+    void empty_ledger_null_loss_0() {
         assertSame(LinkMatrix.EMPTY, LinkMatrix.of(List.of()));
         assertSame(LinkMatrix.EMPTY, LinkMatrix.of(null));
         assertTrue(LinkMatrix.EMPTY.isEmpty());

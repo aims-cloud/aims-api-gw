@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -28,8 +29,9 @@ class TemperatureAwareEffectiveTest {
     private final TemperatureAwareScheduler scheduler = new TemperatureAwareScheduler();
     private final double inertiaK = new SchedulerProperties().getThermal().getInertiaK();
 
+    @DisplayName("예약이 없으면 점수는 실측 계산값과 같다")
     @Test
-    void 예약이_없으면_점수는_실측_계산값과_같다() {
+    void no_reservation_matches_measured() {
         List<NodeResource> nodes = List.of(node("A", 50), node("B", 60), node("C", 70));
 
         SchedulingResult result = scheduler.schedule(new Workload("w", 2, 1024), nodes, policy());
@@ -42,8 +44,9 @@ class TemperatureAwareEffectiveTest {
         assertEquals("A", result.selectedNodeId());
     }
 
+    @DisplayName("예약이 쌓인 노드는 실효 온도로 평가되고 클러스터 평균도 같은 기준이다")
     @Test
-    void 예약이_쌓인_노드는_실효_온도로_평가되고_클러스터_평균도_같은_기준이다() {
+    void reserved_node_scored_by_effective_temp() {
         NodeResource a = node("A", 50);
         NodeResource b = node("B", 50);
         PlacementContext context = PlacementContext.of(List.of(a, b), policy());
@@ -66,8 +69,9 @@ class TemperatureAwareEffectiveTest {
         assertEquals("B", result.selectedNodeId());
     }
 
+    @DisplayName("자원 점수도 예약분을 반영한다")
     @Test
-    void 자원_점수도_예약분을_반영한다() {
+    void resource_score_reflects_reservation() {
         NodeResource a = node("A", 50);
         PlacementContext context = PlacementContext.of(List.of(a), policy());
         context.reserve("A", new Workload("reserved", 2, 4096));     // cpu +25%p, mem +25%p
@@ -78,8 +82,9 @@ class TemperatureAwareEffectiveTest {
         assertEquals(0.45, sa.details().get("자원여유"), EPS);
     }
 
+    @DisplayName("다건 연속 배치가 한 노드로 몰리지 않는다")
     @Test
-    void 다건_연속_배치가_한_노드로_몰리지_않는다() {
+    void placements_do_not_pile_up() {
         List<NodeResource> nodes = List.of(node("A", 50), node("B", 50), node("C", 50));
         PlacementContext context = PlacementContext.of(nodes, policy());
 

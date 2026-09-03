@@ -86,7 +86,9 @@ public class ScheduleController {
     @Operation(summary = "스케줄 생성",
             description = "스케줄 ID·스케줄명·리소스 종류·실행 주기가 필수입니다. "
                     + "엔진·정책·전력/온도 파라미터는 선택이며, 비우면 리소스 종류별 활성 정책을 따릅니다. "
-                    + "스케줄 ID 가 중복되면 409, 실행 주기가 잘못되면 400 입니다.")
+                    + "스케줄 ID 가 중복되면 409, 실행 주기가 잘못되면 400 입니다. "
+                    + "placementOrder 는 대상 워크로드의 배치 순서 — PRIORITY_THEN_AGE(기본: 우선순위 → 등록 순) 또는 "
+                    + "PRIORITY_THEN_SIZE(우선순위 → 요구 CPU·메모리가 큰 것부터, 전력 통합에 유리). 'size'/'age' 로 줘도 됩니다.")
     @PostMapping
     public ApiResponse<ScheduleResponse> createSchedule(@RequestBody ScheduleRequest request) {
         return ApiResponse.ok(scheduleService.create(request));

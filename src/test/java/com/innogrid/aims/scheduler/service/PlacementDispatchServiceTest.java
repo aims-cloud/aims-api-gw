@@ -33,13 +33,14 @@ import static org.mockito.Mockito.when;
 class PlacementDispatchServiceTest {
 
     @Autowired PlacementDispatchService service;
+    @Autowired SchedulingService schedulingService;
     @Autowired PlacementDispatchRepository dispatchRepository;
     @Autowired WorkloadRepository workloadRepository;
     @MockitoBean DispatcherRegistry registry;
 
     @AfterEach
     void clean() {
-        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName().startsWith("dps-")).forEach(dispatchRepository::delete);
+        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith("dps-")).forEach(dispatchRepository::delete);
         workloadRepository.findAll().stream().filter(w -> w.getName().startsWith("dps-")).forEach(workloadRepository::delete);
     }
 
@@ -199,5 +200,27 @@ class PlacementDispatchServiceTest {
         assertEquals(1, service.deleteByWorkload(a.getId()));
         assertTrue(service.byWorkload(a.getId()).isEmpty());
         assertEquals(1, service.byWorkload(b.getId()).size());
+    }
+
+    @DisplayName("거부되면 호출자가 받는 배치 결과도 실패로 낮아진다 — 성공으로 세지 않게")
+    @Test
+    void rejection_downgrades_result_for_caller() {
+        when(registry.current()).thenReturn(dispatcher(PlacementDispatcher.Outcome.rejected("점검 중")));
+        Workload w = assigned("dps-down");
+        SchedulingResult r = schedulingService.dispatch(w, ok(), null);
+        assertFalse(r.success());
+        assertTrue(r.reason().contains("n1") && r.reason().contains("점검 중"));
+        assertTrue(schedulingService.dispatch(w, SchedulingResult.failure("x"), null).reason().equals("x"), "실패 결정은 그대로");
+    }
+
+    @DisplayName("콜백의 externalRef 200자·message 500자 초과는 400 — DB 길이 위반 500 을 막는다")
+    @Test
+    void callback_length_limits_400() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-len");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+        assertEquals(400, assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "RUNNING", "x".repeat(201), null)).getStatus().value());
+        assertEquals(400, assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "RUNNING", null, "y".repeat(501))).getStatus().value());
+        assertEquals(DispatchStatus.RUNNING, service.applyResult(d.getId(), "RUNNING", "x".repeat(200), "y".repeat(500)).getStatus());
     }
 }

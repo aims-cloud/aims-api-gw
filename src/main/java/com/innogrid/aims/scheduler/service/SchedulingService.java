@@ -125,16 +125,16 @@ public class SchedulingService {
         }
 
         SchedulingResult result = placementService.place(workload, context, engineId);
-        dispatch(workload, result, null);
-        return result;
+        return dispatch(workload, result, null);
     }
 
     /**
-     * 결정을 실행 계층으로 넘긴다. {@link PlacementService#place} 의 트랜잭션이 끝난 뒤라 결정은 이미 커밋되어 있다.
-     * 스케줄 실행 경로도 같은 메서드를 쓴다.
+     * 결정을 실행 계층으로 넘기고, 실행 계층이 받지 않았으면 결과를 실패로 낮춰 돌려준다(워크로드는 이미 FAILED·배정 해제).
+     * {@link PlacementService#place} 의 트랜잭션이 끝난 뒤라 결정은 이미 커밋되어 있다. 스케줄 실행 경로도 같은 메서드를 쓴다.
      */
-    public void dispatch(Workload workload, SchedulingResult result, Long scheduleRunId) {
-        if (dispatchService != null) dispatchService.afterPlacement(workload, result, scheduleRunId);
+    public SchedulingResult dispatch(Workload workload, SchedulingResult result, Long scheduleRunId) {
+        if (dispatchService == null) return result;
+        return PlacementDispatchService.downgrade(result, dispatchService.afterPlacement(workload, result, scheduleRunId));
     }
 
     /**

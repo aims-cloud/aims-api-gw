@@ -6,13 +6,16 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
@@ -51,14 +54,22 @@ public class PlacementDispatchService {
     private final DispatcherRegistry registry;
     private final ScheduleActorResolver actorResolver;
 
+    /**
+     * 결과 반영(디스패치 행 + 워크로드)을 한 트랜잭션으로 묶는다. 같은 빈 안에서 {@code this.settle()} 을 부르면 프록시를
+     * 거치지 않아 {@code @Transactional} 이 무시되므로(리뷰에서 확인) 템플릿으로 명시한다.
+     */
+    private final TransactionTemplate tx;
+
     public PlacementDispatchService(PlacementDispatchRepository repository,
                                    WorkloadRepository workloadRepository,
                                    DispatcherRegistry registry,
-                                   ScheduleActorResolver actorResolver) {
+                                   ScheduleActorResolver actorResolver,
+                                   PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.workloadRepository = workloadRepository;
         this.registry = registry;
         this.actorResolver = actorResolver;
+        this.tx = new TransactionTemplate(transactionManager);
     }
 
     // ── 결정 → 실행 계층 ──────────────────────────────────────────
@@ -75,35 +86,54 @@ public class PlacementDispatchService {
         if (existing != null) return existing;
 
         String actor = scheduleRunId != null ? ScheduleActorResolver.SYSTEM : actorResolver.current().email();
-        PlacementDispatch dispatch = repository.save(new PlacementDispatch(workload, scheduleRunId, actor));
+        PlacementDispatch dispatch;
+        try {
+            dispatch = repository.save(new PlacementDispatch(workload, scheduleRunId, actor));
+        } catch (DataIntegrityViolationException race) {
+            // 같은 결정이 동시에 두 번 들어온 경우 — 유니크 제약이 잡았으니 먼저 만든 행을 쓴다
+            return repository.findByIdempotencyKey(key).orElseThrow(() -> race);
+        }
 
-        PlacementDispatcher dispatcher = registry.current();
+        String mode = "?";
         PlacementDispatcher.Outcome outcome;
         try {
+            PlacementDispatcher dispatcher = registry.current();
+            mode = dispatcher.getMode();
             outcome = dispatcher.dispatch(toRequest(dispatch, workload, result));
             if (outcome == null) outcome = PlacementDispatcher.Outcome.unavailable("디스패처가 결과를 돌려주지 않음");
         } catch (RuntimeException e) {
-            log.warn("디스패처 예외: dispatch={}, mode={}, {}", dispatch.getId(), dispatcher.getMode(), e.toString());
+            log.warn("디스패처 예외: dispatch={}, mode={}, {}", dispatch.getId(), mode, e.toString());
             outcome = PlacementDispatcher.Outcome.unavailable("디스패처 예외: " + e.getClass().getSimpleName());
         }
-        return settle(dispatch, workload, outcome);
+        final PlacementDispatcher.Outcome decided = outcome;
+        return tx.execute(status -> settle(dispatch, workload.getId(), decided));
     }
 
-    @Transactional
-    PlacementDispatch settle(PlacementDispatch dispatch, Workload workload, PlacementDispatcher.Outcome outcome) {
+    /** 반드시 {@link #tx} 안에서 부른다. 워크로드가 사이에 지워졌으면 워크로드 쪽은 건너뛴다(부활 금지). */
+    private PlacementDispatch settle(PlacementDispatch dispatch, Long workloadId, PlacementDispatcher.Outcome outcome) {
         if (outcome.accepted()) {
             dispatch.accept(outcome.externalRef(), outcome.message());
         } else {
             DispatchStatus closed = outcome.kind() == PlacementDispatcher.Outcome.Kind.REJECTED
                     ? DispatchStatus.REJECTED : DispatchStatus.UNAVAILABLE;
             dispatch.close(closed, outcome.message());
-            Workload fresh = workloadRepository.findById(workload.getId()).orElse(workload);
-            fresh.failDispatch("실행 계층 " + (closed == DispatchStatus.REJECTED ? "거부" : "불가") + ": " + outcome.message());
-            workloadRepository.save(fresh);
+            workloadRepository.findById(workloadId).ifPresent(fresh -> {
+                fresh.failDispatch("실행 계층 " + (closed == DispatchStatus.REJECTED ? "거부" : "불가") + ": " + outcome.message());
+                workloadRepository.save(fresh);
+            });
             log.info("실행 요청 무산: dispatch={}, workload={}, {} — 워크로드 FAILED, 배정 해제",
-                    dispatch.getId(), workload.getName(), closed);
+                    dispatch.getId(), dispatch.getWorkloadName(), closed);
         }
         return repository.save(dispatch);
+    }
+
+    /** 디스패치가 실행 계층에 수락되지 않았으면 배치 결과를 실패로 낮춘다 — 호출자가 성공으로 세지 않게. */
+    public static SchedulingResult downgrade(SchedulingResult result, PlacementDispatch dispatch) {
+        if (dispatch == null || result == null || !result.success()) return result;
+        if (dispatch.getStatus() == DispatchStatus.REJECTED || dispatch.getStatus() == DispatchStatus.UNAVAILABLE) {
+            return SchedulingResult.failure("배치 결정은 " + dispatch.getNodeId() + " 이었으나 실행 계층이 받지 않음: " + dispatch.getMessage());
+        }
+        return result;
     }
 
     private static PlacementDispatcher.Request toRequest(PlacementDispatch d, Workload w, SchedulingResult r) {
@@ -138,6 +168,12 @@ public class PlacementDispatchService {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
                     "실행 계층이 보고할 수 있는 상태는 RUNNING, COMPLETED, FAILED 입니다: " + target);
         }
+        if (externalRef != null && externalRef.length() > PlacementDispatch.EXTERNAL_REF_MAX) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "externalRef 는 " + PlacementDispatch.EXTERNAL_REF_MAX + "자 이하여야 합니다");
+        }
+        if (message != null && message.length() > PlacementDispatch.MESSAGE_MAX) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "message 는 " + PlacementDispatch.MESSAGE_MAX + "자 이하여야 합니다");
+        }
         if (target == dispatch.getStatus()) return dispatch;   // 멱등
         if (!dispatch.report(target, externalRef, message)) {
             throw new BusinessException(HttpStatus.CONFLICT, String.format(
@@ -153,9 +189,10 @@ public class PlacementDispatchService {
             if (w.getStatus() == workloadTarget) return;
             if (w.transitionTo(workloadTarget)) {
                 if (workloadTarget == Workload.WorkloadStatus.FAILED && message != null) {
-                    // 실패 사유를 남긴다. transitionTo 는 사유를 건드리지 않는다.
-                    w.markFailed("실행 실패: " + message);
-                    w.transitionTo(Workload.WorkloadStatus.FAILED);
+                    // 실패 사유를 남긴다(transitionTo 는 사유를 건드리지 않는다). markFailed 는 재시도 횟수도 1 올린다 —
+                    // 실행 실패가 배치 재시도 상한을 함께 쓰는 것은 의도다(반복 실패 워크로드가 영영 재배치되지 않게). 사유 길이는 500 안.
+                    String reason = "실행 실패: " + message;
+                    w.markFailed(reason.length() > PlacementDispatch.MESSAGE_MAX ? reason.substring(0, PlacementDispatch.MESSAGE_MAX) : reason);
                 }
                 workloadRepository.save(w);
             } else {

@@ -59,6 +59,10 @@ public class PlacementDispatch {
         }
     }
 
+    /** 컬럼 길이 — 콜백 입력 검증과 비고 잘라내기가 같은 값을 쓴다. */
+    public static final int EXTERNAL_REF_MAX = 200;
+    public static final int MESSAGE_MAX = 500;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -86,10 +90,10 @@ public class PlacementDispatch {
     private String idempotencyKey;
 
     /** 실행 계층이 돌려준 식별자. 기록형 디스패처는 비워 둔다. */
-    @Column(length = 200)
+    @Column(length = EXTERNAL_REF_MAX)
     private String externalRef;
 
-    @Column(length = 500)
+    @Column(length = MESSAGE_MAX)
     private String message;
 
     @Column(nullable = false)
@@ -152,7 +156,8 @@ public class PlacementDispatch {
     /** 상태는 그대로 두고 비고만 덧붙인다(워크로드 전이 불일치 같은 사실을 남길 때). */
     public void note(String text) {
         if (text == null) return;
-        this.message = (this.message == null || this.message.isBlank()) ? text : this.message + " / " + text;
+        String merged = (this.message == null || this.message.isBlank()) ? text : this.message + " / " + text;
+        this.message = merged.length() > MESSAGE_MAX ? merged.substring(0, MESSAGE_MAX) : merged;
     }
 
     public Long getId() { return id; }

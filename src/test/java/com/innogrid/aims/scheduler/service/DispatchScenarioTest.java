@@ -52,7 +52,7 @@ class DispatchScenarioTest {
     @AfterEach
     void clean() {
         historyRepository.findAll().stream().filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith("dsc-")).forEach(historyRepository::delete);
-        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName().startsWith("dsc-")).forEach(dispatchRepository::delete);
+        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith("dsc-")).forEach(dispatchRepository::delete);
         workloadRepository.findAll().stream().filter(w -> w.getName().startsWith("dsc-")).forEach(workloadRepository::delete);
         scheduleRepository.findAll().stream().filter(s -> s.getScheduleId().startsWith("dsc-")).forEach(s -> scheduleService.delete(List.of(s.getId())));
     }

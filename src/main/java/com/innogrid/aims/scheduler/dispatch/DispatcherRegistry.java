@@ -27,10 +27,13 @@ public class DispatcherRegistry {
         return mode != null && dispatchers.containsKey(mode);
     }
 
-    /** 설정된 모드의 디스패처. 모드가 비었거나 모르면 기록형. */
+    /** 설정된 모드의 디스패처. 모드가 비었거나 모르면 기록형, 기록형도 없으면(비정상 조립) 첫 등록 구현체. 아무것도 없으면 예외. */
     public PlacementDispatcher current() {
         PlacementDispatcher d = dispatchers.get(properties.getDispatch().getMode());
-        return d != null ? d : dispatchers.get(RecordingPlacementDispatcher.MODE);
+        if (d == null) d = dispatchers.get(RecordingPlacementDispatcher.MODE);
+        if (d == null) d = dispatchers.values().stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("등록된 PlacementDispatcher 가 없습니다"));
+        return d;
     }
 
     public List<String> modes() {

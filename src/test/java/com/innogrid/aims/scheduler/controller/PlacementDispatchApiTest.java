@@ -55,7 +55,7 @@ class PlacementDispatchApiTest {
 
     @AfterEach
     void clean() {
-        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName().startsWith("dpapi-")).forEach(dispatchRepository::delete);
+        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith("dpapi-")).forEach(dispatchRepository::delete);
         workloadRepository.findAll().stream().filter(w -> w.getName().startsWith("dpapi-")).forEach(workloadRepository::delete);
     }
 

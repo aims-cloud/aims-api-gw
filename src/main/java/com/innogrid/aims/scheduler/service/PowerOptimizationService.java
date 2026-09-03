@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
@@ -57,28 +59,37 @@ public class PowerOptimizationService {
     private final PowerModel powerModel;
     private final SchedulerProperties properties;
     private final SchedulerProperties.Power props;
-    private final VictoriaMetricsClient metricsClient;
+    private final SchedulerMetricsGateway metricsClient;
     private final MetricsQueryGuard guard;
 
     @Autowired
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties,
-                                    VictoriaMetricsClient metricsClient,
+                                    SchedulerMetricsGateway metrics,
                                     MetricsQueryGuard guard) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
         this.properties = properties;
         this.props = properties.getPower();
-        this.metricsClient = metricsClient;
+        this.metricsClient = metrics;
         this.guard = guard;
+    }
+
+    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. null 이면 추세를 쓸 수 없다. */
+    public PowerOptimizationService(SchedulingService schedulingService,
+                                    PowerModel powerModel,
+                                    SchedulerProperties properties,
+                                    VictoriaMetricsClient metricsClient,
+                                    MetricsQueryGuard guard) {
+        this(schedulingService, powerModel, properties, VictoriaMetricsGateway.of(metricsClient), guard);
     }
 
     /** 스프링 없이 조립하는 형태(기존 단위 테스트) — 현재 시점 진단만 쓸 수 있고 추세는 저장소가 없어 호출할 수 없다. */
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties) {
-        this(schedulingService, powerModel, properties, null, new MetricsQueryGuard(1));
+        this(schedulingService, powerModel, properties, (SchedulerMetricsGateway) null, new MetricsQueryGuard(1));
     }
 
     /** 현재 노드 상태로 진단한다. 수집 단계에서 제외된 노드도 응답에 표기한다. */

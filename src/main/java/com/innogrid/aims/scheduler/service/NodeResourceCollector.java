@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -39,20 +41,29 @@ public class NodeResourceCollector {
 
     private static final Logger log = LoggerFactory.getLogger(NodeResourceCollector.class);
 
-    private final VictoriaMetricsClient vmClient;
+    /** 메트릭 질의 자리 — 실제 저장소 또는 가상 클러스터(단계 19). 이 클래스는 어느 쪽인지 모른다. */
+    private final SchedulerMetricsGateway vmClient;
     private final SchedulerProperties properties;
     private final PowerModel powerModel;
     private final MetricsQueryGuard guard;
 
     @Autowired
+    public NodeResourceCollector(SchedulerMetricsGateway metrics,
+                                 SchedulerProperties properties,
+                                 PowerModel powerModel,
+                                 MetricsQueryGuard guard) {
+        this.vmClient = metrics;
+        this.properties = properties;
+        this.powerModel = powerModel;
+        this.guard = guard;
+    }
+
+    /** 클라이언트를 직접 받는 형태(기존 테스트·조립 경로) — 기본 게이트웨이로 감싼다. */
     public NodeResourceCollector(VictoriaMetricsClient vmClient,
                                  SchedulerProperties properties,
                                  PowerModel powerModel,
                                  MetricsQueryGuard guard) {
-        this.vmClient = vmClient;
-        this.properties = properties;
-        this.powerModel = powerModel;
-        this.guard = guard;
+        this(new VictoriaMetricsGateway(vmClient), properties, powerModel, guard);
     }
 
     /** 스프링 없이 조립하는 형태(기존 단위 테스트). 보호 장치는 설정의 풀 크기로 직접 만든다. */

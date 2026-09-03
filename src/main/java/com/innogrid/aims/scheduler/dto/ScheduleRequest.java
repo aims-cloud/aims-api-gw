@@ -24,8 +24,17 @@ public record ScheduleRequest(
         String engine,                      // weighted | power | temperature. 비우면 정책 기본값
         Long policyId,                      // 비우면 리소스 종류별 활성 정책
         Double maxPowerBudgetWatts,
-        Double maxTemperatureCelsius
+        Double maxTemperatureCelsius,
+        String placementOrder               // PRIORITY_THEN_AGE(기본) | PRIORITY_THEN_SIZE. 대소문자 무시, "size"/"age" 도 받는다
 ) {
+    /** 배치 순서를 지정하지 않는 형태 — 단계 16 이전의 호출자(기존 테스트)와 호환. */
+    public ScheduleRequest(String scheduleId, String name, Workload.ResourceType resourceType, String cronExpression,
+                           Boolean autoRun, Boolean enabled, String description, String engine, Long policyId,
+                           Double maxPowerBudgetWatts, Double maxTemperatureCelsius) {
+        this(scheduleId, name, resourceType, cronExpression, autoRun, enabled, description, engine, policyId,
+             maxPowerBudgetWatts, maxTemperatureCelsius, null);
+    }
+
     public boolean resolveAutoRun() { return autoRun != null && autoRun; }
 
     public boolean resolveEnabled() { return enabled == null || enabled; }

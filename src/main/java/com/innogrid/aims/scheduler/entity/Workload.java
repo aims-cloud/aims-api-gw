@@ -150,6 +150,20 @@ public class Workload {
     }
 
     /**
+     * 실행 계층이 배치 요청을 거부했거나 닿지 못했다 — 실패로 돌리고 <b>배정을 해제</b>한다.
+     *
+     * <p>엔진 실패({@link #markFailed})는 배정 컬럼을 건드리지 않지만, 이 경로는 이미 노드가 정해진 뒤 실행이 무산된
+     * 것이어서 배정을 남기면 화면에 "실패했는데 노드가 있는" 상태가 보인다. {@code scheduledAt} 은 추적을 위해 남긴다.
+     * 재시도 횟수는 엔진 실패와 같이 누적된다 — 실행 계층 거부가 반복되면 상한에서 대상에서 빠진다.</p>
+     */
+    public void failDispatch(String reason) {
+        markFailed(reason);
+        this.assignedMdcId = null;
+        this.assignedNodeId = null;
+        this.schedulingScore = null;
+    }
+
+    /**
      * 실행 상태를 전이한다. 허용되지 않는 전이는 false 를 돌려준다.
      *
      * <p>FAILED 에서 PENDING 으로 되돌릴 때는 재시도 횟수를 지운다. 그러지 않으면

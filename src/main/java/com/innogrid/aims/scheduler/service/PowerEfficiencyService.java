@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.common.exception.BusinessException;
@@ -62,14 +63,28 @@ public class PowerEfficiencyService {
     private final VictoriaMetricsClient metricsClient;
     private final SchedulerProperties properties;
 
+    private final MetricsQueryGuard guard;
+
+    @Autowired
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,
-                                  SchedulerProperties properties) {
+                                  SchedulerProperties properties,
+                                  MetricsQueryGuard guard) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
         this.metricsClient = metricsClient;
         this.properties = properties;
+        this.guard = guard;
+    }
+
+    /** 스프링 없이 조립하는 형태(기존 단위 테스트). */
+    public PowerEfficiencyService(SchedulingService schedulingService,
+                                  PowerModel powerModel,
+                                  VictoriaMetricsClient metricsClient,
+                                  SchedulerProperties properties) {
+        this(schedulingService, powerModel, metricsClient, properties,
+             new MetricsQueryGuard(properties.getMetrics().getParallelism()));
     }
 
     /** 현재 노드 상태를 수집해 평가한다. */
@@ -339,8 +354,11 @@ public class PowerEfficiencyService {
     /** 시계열 하나를 타임스탬프→값 으로 편다. 여러 시리즈가 오면 첫 건만 쓴다. */
     private Map<Long, Double> seriesOf(String promQL, OffsetDateTime start,
                                        OffsetDateTime end, String step) {
-        List<Map<String, Object>> results = metricsClient.queryRangeResults(
-                promQL, start.toInstant(), end.toInstant(), step);
+        // 저장소가 응답을 안 주면 요청 스레드가 무한 대기하던 경로다(단계 14). 상한 안에서만 기다리고, 넘기면
+        // 보호 장치의 예외가 trend() 의 기존 처리로 올라가 "메트릭 저장소를 조회하지 못했습니다: 질의가 상한 …" 사유를
+        // 담은 빈 결과(200)가 된다 — 조회 실패에 500 을 내지 않는다는 이 클래스의 원칙 그대로다.
+        List<Map<String, Object>> results = guard.call(() -> metricsClient.queryRangeResults(
+                promQL, start.toInstant(), end.toInstant(), step), properties.getMetrics().getQueryTimeoutMs());
         Map<Long, Double> series = new LinkedHashMap<>();
         if (results.isEmpty()) return series;
 

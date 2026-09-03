@@ -5,7 +5,8 @@
 # ipmi: false 인 노드는 전력·온도 메트릭이 없다(실환경의 미계측 노드). gpus 가 0 이면 DCGM 시리즈가 없다.
 # capacityWatts 는 예약 필드 — 배치 엔진의 정격은 아직 설정 capacityByNode 에서 온다(로드맵 #6).
 #
-# 담긴 상황: IPMI 있음 5 / 없음 3, GPU 노드 2, 뜨거운 노드 1(seoul-03), 전력 비효율 노드 1(busan-02: 유휴인데 고전력),
+# 노드별 swing 을 적으면 그 노드만 진폭이 다르다(유휴 노드는 swing 을 작게 — 가동 판정 5% 아래에 머물게).
+# 담긴 상황: IPMI 있음 5 / 없음 3, GPU 노드 2, 뜨거운 노드 1(seoul-03: 경고 구간), 전력 비효율·유휴 노드 1(busan-02: CPU 5% 미만인데 고전력),
 #           디스크 부족 노드 1(daejeon-02), MDC 3곳.
 name: demo-3mdc-8nodes
 job: mdc-nodes
@@ -15,9 +16,9 @@ seed: 7
 nodes:
   - { mdcId: mdc-seoul,   nodeId: "seoul-01:9100",   cores: 32, memoryMb: 131072, gpus: 0, cpuUsage: 35, memoryUsage: 45, diskTotalGb: 1000, diskUsage: 40, ipmi: true,  idleWatts: 160, capacityWatts: 600, baseTemperature: 38, trait: "일반" }
   - { mdcId: mdc-seoul,   nodeId: "seoul-02:9100",   cores: 32, memoryMb: 131072, gpus: 4, cpuUsage: 55, memoryUsage: 60, diskTotalGb: 2000, diskUsage: 50, ipmi: true,  idleWatts: 220, capacityWatts: 900, baseTemperature: 42, trait: "GPU" }
-  - { mdcId: mdc-seoul,   nodeId: "seoul-03:9100",   cores: 16, memoryMb: 65536,  gpus: 0, cpuUsage: 70, memoryUsage: 55, diskTotalGb: 500,  diskUsage: 35, ipmi: true,  idleWatts: 150, capacityWatts: 500, baseTemperature: 62, trait: "뜨거움 — 온도 임계 근접" }
+  - { mdcId: mdc-seoul,   nodeId: "seoul-03:9100",   cores: 16, memoryMb: 65536,  gpus: 0, cpuUsage: 70, memoryUsage: 55, diskTotalGb: 500,  diskUsage: 35, ipmi: true,  idleWatts: 150, capacityWatts: 500, baseTemperature: 52, trait: "뜨거움 — 경고 구간(68~78°C)" }
   - { mdcId: mdc-busan,   nodeId: "busan-01:9100",   cores: 24, memoryMb: 98304,  gpus: 0, cpuUsage: 15, memoryUsage: 30, diskTotalGb: 1000, diskUsage: 20, ipmi: true,  idleWatts: 140, capacityWatts: 500, baseTemperature: 36, trait: "여유" }
-  - { mdcId: mdc-busan,   nodeId: "busan-02:9100",   cores: 24, memoryMb: 98304,  gpus: 0, cpuUsage: 5,  memoryUsage: 20, diskTotalGb: 1000, diskUsage: 15, ipmi: true,  idleWatts: 380, capacityWatts: 500, baseTemperature: 40, trait: "전력 비효율 — 유휴인데 고전력" }
+  - { mdcId: mdc-busan,   nodeId: "busan-02:9100",   cores: 24, memoryMb: 98304,  gpus: 0, cpuUsage: 2,  memoryUsage: 20, diskTotalGb: 1000, diskUsage: 15, ipmi: true,  idleWatts: 380, capacityWatts: 500, baseTemperature: 40, swing: 1, trait: "전력 비효율 — 유휴(CPU<5%)인데 고전력" }
   - { mdcId: mdc-busan,   nodeId: "busan-03:9100",   cores: 16, memoryMb: 65536,  gpus: 2, cpuUsage: 40, memoryUsage: 50, diskTotalGb: 1000, diskUsage: 45, ipmi: false, idleWatts: 150, capacityWatts: 500, baseTemperature: 40, trait: "GPU, IPMI 없음(미계측)" }
   - { mdcId: mdc-daejeon, nodeId: "daejeon-01:9100", cores: 8,  memoryMb: 32768,  gpus: 0, cpuUsage: 25, memoryUsage: 35, diskTotalGb: 500,  diskUsage: 30, ipmi: false, idleWatts: 120, capacityWatts: 400, baseTemperature: 39, trait: "소형, IPMI 없음" }
   - { mdcId: mdc-daejeon, nodeId: "daejeon-02:9100", cores: 8,  memoryMb: 32768,  gpus: 0, cpuUsage: 30, memoryUsage: 40, diskTotalGb: 200,  diskUsage: 96, ipmi: false, idleWatts: 120, capacityWatts: 400, baseTemperature: 39, trait: "디스크 부족, IPMI 없음" }

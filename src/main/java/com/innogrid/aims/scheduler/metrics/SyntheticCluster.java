@@ -29,7 +29,7 @@ public final class SyntheticCluster {
     public record Node(String mdcId, String nodeId, int cores, long memoryMb, int gpus,
                        double cpuUsage, double memoryUsage, double diskTotalGb, double diskUsage,
                        boolean ipmi, double idleWatts, double capacityWatts, double baseTemperature,
-                       double networkRxBps, double networkTxBps, String trait) {
+                       double networkRxBps, double networkTxBps, String trait, Double swing) {
 
         double memoryTotalBytes() { return memoryMb * 1024.0 * 1024.0; }
         double diskTotalBytes() { return diskTotalGb * 1024.0 * 1024.0 * 1024.0; }
@@ -86,7 +86,7 @@ public final class SyntheticCluster {
                     bool(n.get("ipmi"), true), num(n.get("idleWatts"), 150).doubleValue(), num(n.get("capacityWatts"), 500).doubleValue(),
                     num(n.get("baseTemperature"), 40).doubleValue(),
                     num(n.get("networkRxBps"), 1_000_000).doubleValue(), num(n.get("networkTxBps"), 800_000).doubleValue(),
-                    str(n.get("trait"), "")));
+                    str(n.get("trait"), ""), n.get("swing") == null ? null : num(n.get("swing"), swing).doubleValue()));
         }
         return new SyntheticCluster(name, job, period, swing, seed, nodes);
     }
@@ -121,13 +121,16 @@ public final class SyntheticCluster {
         return (Math.floorMod(h, 1000) / 1000.0) * 2 * Math.PI;
     }
 
+    /** 노드별 진폭 — 파일에 적었으면 그 값, 아니면 클러스터 공통. 유휴 노드를 진짜 유휴로 두려면 작게 적는다. */
+    double swingOf(Node node) { return node.swing() != null ? node.swing() : swing; }
+
     /** 기준값을 중심으로 ±swing 만큼 흔들린 사용률(0~100 로 자름). */
     public double cpuUsage(Node node, long epochSeconds) {
-        return clamp(node.cpuUsage() + swing * wave(node, epochSeconds), 0, 100);
+        return clamp(node.cpuUsage() + swingOf(node) * wave(node, epochSeconds), 0, 100);
     }
 
     public double memoryUsage(Node node, long epochSeconds) {
-        return clamp(node.memoryUsage() + swing * 0.3 * wave(node, epochSeconds), 0, 100);
+        return clamp(node.memoryUsage() + swingOf(node) * 0.3 * wave(node, epochSeconds), 0, 100);
     }
 
     public double diskUsage(Node node, long epochSeconds) {

@@ -63,7 +63,7 @@ class SyntheticMetricsGatewayTest {
         double watts = gw.queryScalar("ipmi_dcmi_power_consumption_watts{instance=\"" + i + "\"}");
         double temp = gw.queryScalar("avg(ipmi_temperature_celsius{name=~\"CPU.*\",instance=\"" + i + "\"})");
         assertTrue(watts >= 150 && watts <= 500, "유휴~정격 사이: " + watts);
-        assertTrue(temp >= 62, "뜨거운 노드 기준 온도 이상: " + temp);
+        assertTrue(temp >= 65 && temp <= 80, "뜨거운 노드는 경고 구간: " + temp);
         assertTrue(gw.queryScalar("sum(irate(node_network_receive_bytes_total{instance=\"" + i + "\"}[5m]))") > 0);
         assertTrue(gw.queryScalar("sum(irate(node_network_transmit_bytes_total{instance=\"" + i + "\"}[5m]))") > 0);
         assertEquals(0.0, gw.queryScalar("ipmi_dcmi_power_consumption_watts{instance=\"" + noIpmi + "\"}"));

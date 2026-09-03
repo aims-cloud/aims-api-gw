@@ -23,7 +23,9 @@ class SyntheticClusterTest {
         assertEquals(3, c.nodes().stream().filter(n -> !n.ipmi()).count());
         assertEquals(2, c.nodes().stream().filter(n -> n.gpus() > 0).count());
         assertEquals(1, c.nodes().stream().filter(n -> n.diskUsage() > 90).count());
-        assertTrue(c.node("seoul-03:9100").orElseThrow().baseTemperature() >= 60, "뜨거운 노드");
+        assertTrue(c.node("seoul-03:9100").orElseThrow().baseTemperature() >= 50, "뜨거운 노드");
+        assertEquals(1.0, c.swingOf(c.node("busan-02:9100").orElseThrow()), "유휴 노드는 진폭 1 — 가동 판정(5%) 아래 유지");
+        assertEquals(15.0, c.swingOf(c.node("seoul-01:9100").orElseThrow()), "나머지는 공통 진폭");
         assertTrue(c.node("busan-02:9100").orElseThrow().idleWatts() > 300, "전력 비효율 노드");
     }
 

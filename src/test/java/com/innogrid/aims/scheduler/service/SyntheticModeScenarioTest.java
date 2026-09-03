@@ -82,7 +82,9 @@ class SyntheticModeScenarioTest {
         assertTrue(unmeasured.stream().allMatch(n -> n.getPowerWatts() == 0 && n.getTemperatureCelsius() == 0));
         assertEquals(Set.of(4, 2), s.nodes().stream().filter(n -> n.getTotalGpu() > 0).map(NodeResource::getTotalGpu).collect(Collectors.toSet()));
         NodeResource hot = s.nodes().stream().filter(n -> n.getNodeId().startsWith("seoul-03")).findFirst().orElseThrow();
-        assertTrue(hot.getTemperatureCelsius() >= 62, "뜨거운 노드: " + hot.getTemperatureCelsius());
+        assertTrue(hot.getTemperatureCelsius() >= 65 && hot.getTemperatureCelsius() <= 80, "뜨거운 노드는 경고 구간: " + hot.getTemperatureCelsius());
+        NodeResource idle = s.nodes().stream().filter(n -> n.getNodeId().startsWith("busan-02")).findFirst().orElseThrow();
+        assertTrue(idle.getCpuUsagePercent() < 5, "유휴 노드는 가동 판정(5%) 아래: " + idle.getCpuUsagePercent());
         assertTrue(s.nodes().stream().allMatch(n -> n.getTotalCpu() > 0 && n.getTotalMemoryMb() > 0));
     }
 

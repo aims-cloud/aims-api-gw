@@ -84,8 +84,10 @@ public class SchedulerProperties {
     private final Power power = new Power();
     private final Thermal thermal = new Thermal();
     private final Network network = new Network();
+    private final Dispatch dispatch = new Dispatch();
 
     public String getNodeJob() { return nodeJob; }
+    public Dispatch getDispatch() { return dispatch; }
     public Metrics getMetrics() { return metrics; }
     public void setMetrics(Metrics v) { this.metrics = v; }
     public void setNodeJob(String nodeJob) { this.nodeJob = nodeJob; }
@@ -328,5 +330,22 @@ public class SchedulerProperties {
         public void setQueryTimeoutMs(long v) { this.queryTimeoutMs = v; }
         public int getParallelism() { return parallelism; }
         public void setParallelism(int v) { this.parallelism = v; }
+    }
+
+    /**
+     * 실행 계층 연동(디스패치) — 배치 결정을 실행 계층으로 넘기는 방식.
+     *
+     * <p>{@code mode} 는 등록된 디스패처 식별자다. 기본 {@code record} 는 외부를 부르지 않고 기록만 한다(실행 API 미정).
+     * {@code timeoutMinutes} 는 원격 모드에서 응답 없는 요청을 TIMED_OUT 으로 볼 시간이며 record 모드에서는 쓰지 않는다.</p>
+     */
+    public static class Dispatch {
+
+        private String mode = "record";
+        private int timeoutMinutes = 30;
+
+        public String getMode() { return mode; }
+        public void setMode(String v) { this.mode = v; }
+        public int getTimeoutMinutes() { return timeoutMinutes; }
+        public void setTimeoutMinutes(int v) { this.timeoutMinutes = v; }
     }
 }

@@ -168,8 +168,8 @@ public class ScheduleExecutionService {
             int success = 0;
             String firstFailure = null;
             for (Workload workload : targets) {
-                SchedulingResult result =
-                        placementService.place(workload, context, engineId, run.getId());
+                SchedulingResult result = schedulingService.dispatch(workload,
+                        placementService.place(workload, context, engineId, run.getId()), run.getId());
                 if (result.success()) {
                     success++;
                 } else if (firstFailure == null) {

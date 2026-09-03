@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.model;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,8 +47,9 @@ class NodeResourceSerializationTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @DisplayName("노드 조회 응답 필드가 변하지 않는다")
     @Test
-    void 노드_조회_응답_필드가_변하지_않는다() {
+    void response_fields_unchanged() {
         Set<String> actual = fieldsOf(NodeResponse.from(sample()));
 
         assertEquals(EXPECTED_FIELDS, actual,
@@ -58,8 +60,9 @@ class NodeResourceSerializationTest {
      * 모델의 계산용 메서드를 {@code get} 없이 지으면 직렬화되지 않는다는 관례를 고정한다.
      * {@code powerHeadroomPercent()}·{@code snapshot()}·{@code effectiveCpuUsagePercent()} 가 그 예다.
      */
+    @DisplayName("모델의 get 접두어 없는 계산 메서드는 직렬화되지 않는다")
     @Test
-    void 모델의_get_접두어_없는_계산_메서드는_직렬화되지_않는다() {
+    void non_get_methods_not_serialized() {
         Set<String> actual = fieldsOf(sample());
 
         assertFalse(actual.contains("powerHeadroomPercent"));
@@ -69,8 +72,9 @@ class NodeResourceSerializationTest {
     }
 
     /** 예약이 잡혀 있어도 필드 구성은 그대로여야 한다. 값만 달라진다. */
+    @DisplayName("예약이 있어도 필드 구성은 같다")
     @Test
-    void 예약이_있어도_필드_구성은_같다() {
+    void field_set_same_with_reservations() {
         NodeResource node = sample();
         node.reserve(2, 4096, 1);
 

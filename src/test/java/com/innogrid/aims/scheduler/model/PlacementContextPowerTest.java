@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.model;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -19,8 +20,9 @@ class PlacementContextPowerTest {
     private static final double ACTIVE_CPU = 5.0;
     private static final double IDLE_RATIO = 0.3;
 
+    @DisplayName("후보 전체의 소비 전력을 더한다")
     @Test
-    void 후보_전체의_소비_전력을_더한다() {
+    void total_power_sums_candidates() {
         PlacementContext ctx = context(
                 node("n1", 50, 250, 500),
                 node("n2", 30, 180, 500),
@@ -29,8 +31,9 @@ class PlacementContextPowerTest {
         assertEquals(550.0, ctx.totalPowerWatts(), 1e-9);
     }
 
+    @DisplayName("전력을 수집하지 못한 노드는 합계를 부풀리지 않는다")
     @Test
-    void 전력을_수집하지_못한_노드는_합계를_부풀리지_않는다() {
+    void unmeasured_power_not_in_total() {
         PlacementContext ctx = context(
                 node("n1", 50, 250, 500),
                 node("n2", 30, 0, 500));      // IPMI 미연동
@@ -38,8 +41,9 @@ class PlacementContextPowerTest {
         assertEquals(250.0, ctx.totalPowerWatts(), 1e-9);
     }
 
+    @DisplayName("기준 사용률을 넘는 노드를 가동 중으로 센다")
     @Test
-    void 기준_사용률을_넘는_노드를_가동_중으로_센다() {
+    void above_threshold_counts_active() {
         PlacementContext ctx = context(
                 node("busy", 50, 250, 500),
                 node("light", 5.1, 160, 500),
@@ -49,8 +53,9 @@ class PlacementContextPowerTest {
         assertEquals(2, ctx.activeNodeCount(ACTIVE_CPU));
     }
 
+    @DisplayName("비어 있는 노드의 유휴 전력을 반납 가능으로 본다")
     @Test
-    void 비어_있는_노드의_유휴_전력을_반납_가능으로_본다() {
+    void empty_node_power_reclaimable() {
         PlacementContext ctx = context(
                 node("busy", 50, 250, 500),
                 node("empty-1", 1, 150, 500),
@@ -60,8 +65,9 @@ class PlacementContextPowerTest {
         assertEquals(270.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
     }
 
+    @DisplayName("전부 가동 중이면 반납할 전력이 없다")
     @Test
-    void 전부_가동_중이면_반납할_전력이_없다() {
+    void all_active_no_reclaimable() {
         PlacementContext ctx = context(
                 node("n1", 50, 250, 500),
                 node("n2", 40, 220, 500));
@@ -69,8 +75,9 @@ class PlacementContextPowerTest {
         assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
     }
 
+    @DisplayName("후보가 비면 집계도 0이다")
     @Test
-    void 후보가_비면_집계도_0이다() {
+    void empty_candidates_zero_aggregates() {
         PlacementContext ctx = PlacementContext.of(List.of(), new SchedulingPolicy("t", "t"));
 
         assertEquals(0.0, ctx.totalPowerWatts(), 1e-9);

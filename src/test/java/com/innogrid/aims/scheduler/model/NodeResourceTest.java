@@ -1,13 +1,15 @@
 package com.innogrid.aims.scheduler.model;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class NodeResourceTest {
 
+    @DisplayName("가용량은 사용률에서 계산한다")
     @Test
-    void 가용량은_사용률에서_계산한다() {
+    void available_from_usage() {
         NodeResource node = node(8, 16384, 2, 25, 50);
 
         assertEquals(6.0, node.availableCpu(), 1e-9);
@@ -15,8 +17,9 @@ class NodeResourceTest {
         assertEquals(2, node.availableGpu());
     }
 
+    @DisplayName("예약분은 가용량에서 차감된다")
     @Test
-    void 예약분은_가용량에서_차감된다() {
+    void reservations_subtracted() {
         NodeResource node = node(8, 16384, 2, 25, 50);
 
         node.reserve(2, 4096, 1);
@@ -26,8 +29,9 @@ class NodeResourceTest {
         assertEquals(1, node.availableGpu());
     }
 
+    @DisplayName("예약은 누적된다")
     @Test
-    void 예약은_누적된다() {
+    void reservations_accumulate() {
         NodeResource node = node(8, 16384, 2, 0, 0);
 
         node.reserve(2, 1024, 1);
@@ -39,8 +43,9 @@ class NodeResourceTest {
         assertEquals(3.0, node.availableCpu(), 1e-9);
     }
 
+    @DisplayName("예약을 반영해 수용 가능 여부를 판단한다")
     @Test
-    void 예약을_반영해_수용_가능_여부를_판단한다() {
+    void fit_check_uses_reservations() {
         NodeResource node = node(4, 8192, 1, 0, 0);
 
         assertTrue(node.canAccommodate(3, 4096, 1));
@@ -52,24 +57,27 @@ class NodeResourceTest {
         assertTrue(node.canAccommodate(1, 1024, 0));
     }
 
+    @DisplayName("전력 여유율은 용량 대비로 계산한다")
     @Test
-    void 전력_여유율은_용량_대비로_계산한다() {
+    void power_headroom_vs_capacity() {
         NodeResource node = new NodeResource("mdc-01", "node-1", 8, 16384, 0,
                 0, 0, 0, 400, 500, 50, 0, 0);
 
         assertEquals(20.0, node.powerHeadroomPercent(), 1e-9);
     }
 
+    @DisplayName("전력 용량을 모르면 여유율을 100으로 본다")
     @Test
-    void 전력_용량을_모르면_여유율을_100으로_본다() {
+    void unknown_power_headroom_100() {
         NodeResource node = new NodeResource("mdc-01", "node-1", 8, 16384, 0,
                 0, 0, 0, 400, 0, 50, 0, 0);
 
         assertEquals(100.0, node.powerHeadroomPercent(), 1e-9);
     }
 
+    @DisplayName("예약이 없으면 실효 사용률은 실측값과 같다")
     @Test
-    void 예약이_없으면_실효_사용률은_실측값과_같다() {
+    void no_reservation_usage_measured() {
         NodeResource node = node(8, 16384, 2, 25, 50);
 
         assertEquals(25.0, node.effectiveCpuUsagePercent(), 1e-9);
@@ -77,8 +85,9 @@ class NodeResourceTest {
         assertEquals(0.0, node.reservedCpuRatio(), 1e-9);
     }
 
+    @DisplayName("실효 사용률은 예약분을 더한다")
     @Test
-    void 실효_사용률은_예약분을_더한다() {
+    void effective_usage_adds_reservation() {
         NodeResource node = node(8, 16384, 2, 20, 40);
 
         node.reserve(2, 1638, 0);
@@ -89,8 +98,9 @@ class NodeResourceTest {
         assertEquals(49.99, node.effectiveMemoryUsagePercent(), 0.01);
     }
 
+    @DisplayName("실효 사용률은 100을 넘지 않는다")
     @Test
-    void 실효_사용률은_100을_넘지_않는다() {
+    void effective_usage_capped_100() {
         NodeResource node = node(8, 16384, 2, 90, 95);
 
         node.reserve(8, 16384, 0);

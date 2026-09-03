@@ -54,6 +54,9 @@ public class SchedulingService {
     /** MDC 링크 원장. null 이면(원장 없이 조립한 테스트 경로) 링크 스냅샷은 항상 비어 있다. */
     private final MdcLinkRepository linkRepository;
 
+    /** 실행 계층 연동. null 이면(직접 조립한 테스트 경로) 결정만 하고 넘기지 않는다. */
+    private final PlacementDispatchService dispatchService;
+
     @Autowired
     public SchedulingService(WorkloadRepository workloadRepository,
                              SchedulingPolicyRepository policyRepository,
@@ -62,7 +65,8 @@ public class SchedulingService {
                              EngineRegistry engineRegistry,
                              ConstraintEvaluator constraintEvaluator,
                              SchedulerProperties properties,
-                             MdcLinkRepository linkRepository) {
+                             MdcLinkRepository linkRepository,
+                             PlacementDispatchService dispatchService) {
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.nodeCollector = nodeCollector;
@@ -71,6 +75,20 @@ public class SchedulingService {
         this.constraintEvaluator = constraintEvaluator;
         this.properties = properties;
         this.linkRepository = linkRepository;
+        this.dispatchService = dispatchService;
+    }
+
+    /** 실행 계층 연동 없이 조립하는 형태 — 링크 원장은 있으나 디스패치는 하지 않는다(기존 테스트 경로). */
+    public SchedulingService(WorkloadRepository workloadRepository,
+                             SchedulingPolicyRepository policyRepository,
+                             NodeResourceCollector nodeCollector,
+                             PlacementService placementService,
+                             EngineRegistry engineRegistry,
+                             ConstraintEvaluator constraintEvaluator,
+                             SchedulerProperties properties,
+                             MdcLinkRepository linkRepository) {
+        this(workloadRepository, policyRepository, nodeCollector, placementService, engineRegistry,
+             constraintEvaluator, properties, linkRepository, null);
     }
 
     /** 링크 원장 없이 조립하는 형태 — 기존 단위 테스트 경로. 링크 스냅샷은 항상 {@link LinkMatrix#EMPTY}. */
@@ -106,7 +124,17 @@ public class SchedulingService {
             return SchedulingResult.failure(noActiveNodesReason(context));
         }
 
-        return placementService.place(workload, context, engineId);
+        SchedulingResult result = placementService.place(workload, context, engineId);
+        dispatch(workload, result, null);
+        return result;
+    }
+
+    /**
+     * 결정을 실행 계층으로 넘긴다. {@link PlacementService#place} 의 트랜잭션이 끝난 뒤라 결정은 이미 커밋되어 있다.
+     * 스케줄 실행 경로도 같은 메서드를 쓴다.
+     */
+    public void dispatch(Workload workload, SchedulingResult result, Long scheduleRunId) {
+        if (dispatchService != null) dispatchService.afterPlacement(workload, result, scheduleRunId);
     }
 
     /**

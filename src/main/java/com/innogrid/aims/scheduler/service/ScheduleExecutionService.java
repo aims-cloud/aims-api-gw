@@ -170,6 +170,7 @@ public class ScheduleExecutionService {
             for (Workload workload : targets) {
                 SchedulingResult result =
                         placementService.place(workload, context, engineId, run.getId());
+                schedulingService.dispatch(workload, result, run.getId());
                 if (result.success()) {
                     success++;
                 } else if (firstFailure == null) {

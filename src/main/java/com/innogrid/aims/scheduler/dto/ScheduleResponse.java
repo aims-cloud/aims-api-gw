@@ -30,6 +30,7 @@ public record ScheduleResponse(
         Long policyId,
         Double maxPowerBudgetWatts,
         Double maxTemperatureCelsius,
+        Schedule.PlacementOrder placementOrder, // 해석된 값 — 저장이 null 이면 PRIORITY_THEN_AGE
 
         ScheduleRun.RunStatus lastRunStatus,    // 처리 상태 배지
         OffsetDateTime lastRunAt,               // 시작 시간
@@ -49,6 +50,7 @@ public record ScheduleResponse(
                 s.getId(), s.getScheduleId(), s.getName(), s.getResourceType(),
                 s.getCronExpression(), s.isAutoRun(), s.isEnabled(), s.getDescription(),
                 s.getEngine(), s.getPolicyId(), s.getMaxPowerBudgetWatts(), s.getMaxTemperatureCelsius(),
+                s.resolvePlacementOrder(),
                 s.getLastRunStatus(), s.getLastRunAt(), s.getLastRunFinishedAt(), s.getLastRunMessage(),
                 s.getNextRunAt(),
                 s.getCreatedBy(), s.getCreatedByName(), s.getCreatedAt(),

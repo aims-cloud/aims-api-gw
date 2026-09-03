@@ -56,11 +56,28 @@ public class ScheduleExecutionService {
     private static final List<Workload.WorkloadStatus> TARGET_STATUSES =
             List.of(Workload.WorkloadStatus.PENDING, Workload.WorkloadStatus.FAILED);
 
-    /** 우선순위 높은 것부터, 같으면 먼저 등록된 것부터. */
-    private static final Comparator<Workload> BY_PRIORITY_THEN_AGE =
+    /** 우선순위 높은 것부터, 같으면 먼저 등록된 것부터(현행 기본). */
+    static final Comparator<Workload> BY_PRIORITY_THEN_AGE =
             Comparator.comparingInt((Workload w) -> w.getPriority().ordinal()).reversed()
                     .thenComparing(Workload::getCreatedAt,
                             Comparator.nullsLast(Comparator.naturalOrder()));
+
+    /**
+     * 우선순위 높은 것부터, 같으면 요구 CPU → 요구 메모리가 큰 것부터, 그래도 같으면 먼저 등록된 것부터.
+     * 전력 통합에서 큰 워크로드를 먼저 채우면 노드 조각화가 준다(빈 패킹의 first-fit-decreasing). 우선순위가
+     * 첫 기준이라 공정성은 그대로다.
+     */
+    static final Comparator<Workload> BY_PRIORITY_THEN_SIZE =
+            Comparator.comparingInt((Workload w) -> w.getPriority().ordinal()).reversed()
+                    .thenComparing(Comparator.comparingInt(Workload::getRequiredCpu).reversed())
+                    .thenComparing(Comparator.comparingInt(Workload::getRequiredMemoryMb).reversed())
+                    .thenComparing(Workload::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()));
+
+    /** 스케줄이 고른 배치 순서의 비교자. 지정이 없으면 현행 비교자 객체 그대로다. */
+    static Comparator<Workload> orderFor(Schedule schedule) {
+        return schedule.resolvePlacementOrder() == Schedule.PlacementOrder.PRIORITY_THEN_SIZE
+                ? BY_PRIORITY_THEN_SIZE : BY_PRIORITY_THEN_AGE;
+    }
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
@@ -205,14 +222,14 @@ public class ScheduleExecutionService {
      * <p>정렬을 SQL 에 맡기지 않는다. 우선순위가 문자열로 저장돼 있어 {@code order by} 로는
      * 사전순(CRITICAL, HIGH, LOW, NORMAL)이 되어 NORMAL 이 LOW 보다 뒤로 간다.</p>
      */
-    private List<Workload> findTargets(Schedule schedule) {
+    List<Workload> findTargets(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
         boolean matchNullType = type == Workload.ResourceType.VM;   // 기존 행은 VM 으로 해석한다
 
         return workloadRepository.findSchedulingCandidates(
                         TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount())
                 .stream()
-                .sorted(BY_PRIORITY_THEN_AGE)
+                .sorted(orderFor(schedule))
                 .toList();
     }
 

@@ -166,6 +166,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
         }
 
         scores.sort(Comparator.comparingDouble(NodeScore::totalScore).reversed());
+        annotateConsolidationMargin(scores);
 
         if (bestScore == null) {
             return new SchedulingResult(false, null, null, 0,
@@ -242,6 +243,27 @@ public class PowerAwareScheduler implements SchedulingEngine {
 
     private double clamp01(double v) {
         return Math.max(0.0, Math.min(1.0, v));
+    }
+
+    /**
+     * 통합 판정의 여유 — 가동 중 후보의 최고 총점 − 빈 후보의 최고 총점(적격 후보만).
+     *
+     * <p>양수면 통합 쪽(가동 노드)을 골랐고, 값이 작으면 노드 조건이 조금만 달라져도 빈 노드를 깨우는 선택으로
+     * 뒤집힌다는 뜻이다. 시나리오 4 에서 0.0015 였다(12장 T11). 점수·순위·선택은 바꾸지 않고 <b>보이게만</b> 한다 —
+     * 어느 쪽으로 얼마나 밀어야 하는지는 노드 2대 이상 실환경의 이 값이 쌓인 뒤에 정한다(단계 16 재판단).
+     * 한쪽 집단이 없으면 키를 넣지 않는다.</p>
+     */
+    private static void annotateConsolidationMargin(List<NodeScore> scores) {
+        double bestActive = Double.NaN, bestIdle = Double.NaN;
+        for (NodeScore ns : scores) {
+            if (!ns.eligible()) continue;
+            boolean active = Double.valueOf(1.0).equals(ns.details().get("가동중"));
+            if (active) bestActive = Double.isNaN(bestActive) ? ns.totalScore() : Math.max(bestActive, ns.totalScore());
+            else bestIdle = Double.isNaN(bestIdle) ? ns.totalScore() : Math.max(bestIdle, ns.totalScore());
+        }
+        if (Double.isNaN(bestActive) || Double.isNaN(bestIdle)) return;
+        double margin = Math.round((bestActive - bestIdle) * 10000.0) / 10000.0;
+        for (NodeScore ns : scores) ns.details().put("통합여유", margin);
     }
 
     private double round(double value) {

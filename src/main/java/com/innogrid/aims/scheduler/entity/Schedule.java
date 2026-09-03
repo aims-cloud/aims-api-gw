@@ -65,6 +65,28 @@ public class Schedule {
     private Double maxPowerBudgetWatts;
     private Double maxTemperatureCelsius;
 
+    /**
+     * 대상 워크로드를 배치하는 순서. null 이면 {@link PlacementOrder#PRIORITY_THEN_AGE}(현행).
+     *
+     * <p>전력 통합은 빈 패킹이라 큰 워크로드부터 채워야 조각화가 준다(12장 T3 → 단계 16). 우선순위는 어느 쪽이든
+     * 첫 기준이라 공정성과 충돌하지 않는다 — 크기 우선은 <b>같은 우선순위 안에서만</b> 큰 것부터다.</p>
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private PlacementOrder placementOrder;
+
+    /** 배치 순서 선택지. */
+    public enum PlacementOrder {
+        /** 우선순위 높은 것부터, 같으면 먼저 등록된 것부터(현행). */
+        PRIORITY_THEN_AGE,
+        /** 우선순위 높은 것부터, 같으면 요구 CPU → 요구 메모리가 큰 것부터, 그래도 같으면 먼저 등록된 것부터. */
+        PRIORITY_THEN_SIZE;
+
+        public static PlacementOrder orDefault(PlacementOrder v) {
+            return v == null ? PRIORITY_THEN_AGE : v;
+        }
+    }
+
     // ── 최근 실행 스냅샷 ────────────────────────────────────────
     // 목록 화면이 실행 이력을 조인하지 않고도 최근 상태를 보여줄 수 있게 비정규화했다.
     @Enumerated(EnumType.STRING)
@@ -125,6 +147,11 @@ public class Schedule {
         return Workload.ResourceType.orDefault(resourceType);
     }
 
+    /** 값이 없으면 현행(우선순위 → 나이)으로 해석한 배치 순서. */
+    public PlacementOrder resolvePlacementOrder() {
+        return PlacementOrder.orDefault(placementOrder);
+    }
+
     /** 실행 결과를 최근 실행 스냅샷에 반영한다. */
     public void recordRun(ScheduleRun.RunStatus status, OffsetDateTime startedAt,
                           OffsetDateTime finishedAt, String message) {
@@ -143,6 +170,7 @@ public class Schedule {
     public boolean isAutoRun() { return autoRun; }
     public boolean isEnabled() { return enabled; }
     public String getDescription() { return description; }
+    public PlacementOrder getPlacementOrder() { return placementOrder; }
     public String getEngine() { return engine; }
     public Long getPolicyId() { return policyId; }
     public Double getMaxPowerBudgetWatts() { return maxPowerBudgetWatts; }
@@ -170,6 +198,7 @@ public class Schedule {
     public void setPolicyId(Long policyId) { this.policyId = policyId; }
     public void setMaxPowerBudgetWatts(Double v) { this.maxPowerBudgetWatts = v; }
     public void setMaxTemperatureCelsius(Double v) { this.maxTemperatureCelsius = v; }
+    public void setPlacementOrder(PlacementOrder v) { this.placementOrder = v; }
     public void setNextRunAt(OffsetDateTime nextRunAt) { this.nextRunAt = nextRunAt; }
     public void setCreatedBy(String email, String name) {
         this.createdBy = email;

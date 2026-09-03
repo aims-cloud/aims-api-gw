@@ -1,10 +1,15 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.OffsetDateTime;
+
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.scheduler.dto.PowerOptimizationTrendResponse;
 import com.innogrid.aims.scheduler.service.ConsolidationService;
 import com.innogrid.aims.scheduler.service.PowerOptimizationService;
 
@@ -48,6 +53,19 @@ public class PowerOptimizationController {
     @GetMapping("/power")
     public ApiResponse<?> getPowerOptimization() {
         return ApiResponse.ok(optimizationService.diagnoseCurrent());
+    }
+
+    @Operation(summary = "전력 최적화 추세",
+               description = "구간의 시각마다 총 전력·가동/유휴 노드·회수 가능 전력·PEI 를 메트릭 저장소 구간 질의로 다시 계산합니다(저장하지 않음). "
+                       + "기본 최근 24시간·5분 간격, 지점 수 상한(설정 trendMaxPoints)을 넘으면 400. "
+                       + "전력 메트릭이 없는 시각은 measured=false 이고 전력 지표는 null 입니다(가동/유휴 노드 수만). "
+                       + "저장소가 응답하지 않으면 사유를 담은 빈 결과(200)입니다.")
+    @GetMapping("/power/trend")
+    public ApiResponse<PowerOptimizationTrendResponse> getPowerTrend(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+            @RequestParam(required = false) String step) {
+        return ApiResponse.ok(optimizationService.trend(from, to, step));
     }
 
     @Operation(summary = "워크로드 통합 가능성 진단",

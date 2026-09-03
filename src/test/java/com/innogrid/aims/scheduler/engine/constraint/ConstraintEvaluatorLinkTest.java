@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine.constraint;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
@@ -26,8 +27,9 @@ class ConstraintEvaluatorLinkTest {
             link("data", "degraded", 20, MdcLink.LinkStatus.DEGRADED),
             link("data", "down", 5, MdcLink.LinkStatus.DOWN)));
 
+    @DisplayName("DOWN 링크의 노드는 사유와 함께 제외한다")
     @Test
-    void DOWN_링크의_노드는_사유와_함께_제외한다() {
+    void link_down_excluded_with_reason() {
         String reason = evaluator.exclusionReason(workload("data"), node("down"), ctx(true));
 
         assertNotNull(reason);
@@ -35,34 +37,39 @@ class ConstraintEvaluatorLinkTest {
         assertTrue(reason.contains("data ↔ down DOWN"), reason);
     }
 
+    @DisplayName("UP 과 DEGRADED 는 제약이 아니라 점수의 영역이라 통과한다")
     @Test
-    void UP_과_DEGRADED_는_제약이_아니라_점수의_영역이라_통과한다() {
+    void up_and_degraded_pass() {
         assertNull(evaluator.exclusionReason(workload("data"), node("up"), ctx(true)));
         assertNull(evaluator.exclusionReason(workload("data"), node("degraded"), ctx(true)));
     }
 
+    @DisplayName("같은 MDC 미등록 쌍 라벨 없는 노드는 통과한다")
     @Test
-    void 같은_MDC_미등록_쌍_라벨_없는_노드는_통과한다() {
+    void same_mdc_and_unlabeled_pass() {
         assertNull(evaluator.exclusionReason(workload("data"), node("data"), ctx(true)), "같은 MDC");
         assertNull(evaluator.exclusionReason(workload("data"), node("elsewhere"), ctx(true)), "미등록");
         assertNull(evaluator.exclusionReason(workload("data"), node("unknown"), ctx(true)), "라벨 없음도 미등록으로 중립");
         assertNull(evaluator.exclusionReason(workload("data"), node(null), ctx(true)), "MDC null");
     }
 
+    @DisplayName("게이트가 꺼져 있으면 DOWN 이어도 통과한다")
     @Test
-    void 게이트가_꺼져_있으면_DOWN_이어도_통과한다() {
+    void gate_off_passes_link_down() {
         assertNull(evaluator.exclusionReason(workload("data"), node("down"), ctx(false)), "정책 off");
         assertNull(evaluator.exclusionReason(workload(null), node("down"), ctx(true)), "dataMdcId 없음");
     }
 
+    @DisplayName("링크 스냅샷이 비어 있으면 켜져 있어도 통과한다")
     @Test
-    void 링크_스냅샷이_비어_있으면_켜져_있어도_통과한다() {
+    void empty_snapshot_passes_gate_on() {
         PlacementContext empty = PlacementContext.of(List.of(node("down")), policy(true));
         assertNull(evaluator.exclusionReason(workload("data"), node("down"), empty));
     }
 
+    @DisplayName("제약 설명에 C5 가 있고 순서가 마지막이다")
     @Test
-    void 제약_설명에_C5_가_있고_순서가_마지막이다() {
+    void c5_listed_last() {
         List<ConstraintDescriptionResponse> all = ConstraintDescriptionResponse.all();
         assertEquals(6, all.size());
         ConstraintDescriptionResponse c5 = all.get(5);

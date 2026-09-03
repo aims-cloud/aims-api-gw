@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -15,8 +16,9 @@ class TemperatureAwareSchedulerTest {
 
     private final TemperatureAwareScheduler scheduler = new TemperatureAwareScheduler();
 
+    @DisplayName("온도가 낮은 노드를 선택한다")
     @Test
-    void 온도가_낮은_노드를_선택한다() {
+    void cooler_node_selected() {
         Workload workload = new Workload("temp-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
         policy.setMaxTemperatureCelsius(80);
@@ -33,8 +35,9 @@ class TemperatureAwareSchedulerTest {
         assertEquals("cool", result.selectedNodeId());
     }
 
+    @DisplayName("열적 균형을 유지한다 평균 이하 노드 선호")
     @Test
-    void 열적_균형을_유지한다_평균_이하_노드_선호() {
+    void below_average_node_preferred() {
         Workload workload = new Workload("balance-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
         policy.setMaxTemperatureCelsius(80);
@@ -53,8 +56,9 @@ class TemperatureAwareSchedulerTest {
         assertEquals("node-2", result.selectedNodeId());
     }
 
+    @DisplayName("열관성 예측으로 배치후 과열 노드를 제외한다")
     @Test
-    void 열관성_예측으로_배치후_과열_노드를_제외한다() {
+    void predicted_overheat_excluded() {
         // 큰 워크로드(CPU 6코어) + 이미 높은 온도 → 배치 후 온도 초과 예측
         Workload workload = new Workload("heavy-job", 6, 8192);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
@@ -73,8 +77,9 @@ class TemperatureAwareSchedulerTest {
         assertEquals("safe", result.selectedNodeId());
     }
 
+    @DisplayName("냉각 비용 제곱 모델이 고온 노드에 패널티를 준다")
     @Test
-    void 냉각_비용_제곱_모델이_고온_노드에_패널티를_준다() {
+    void squared_cooling_penalizes_hot() {
         Workload workload = new Workload("cooling-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
         policy.setMaxTemperatureCelsius(80);

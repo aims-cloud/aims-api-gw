@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
@@ -49,8 +50,9 @@ class LinkAwarePlacementScenarioTest {
             link("a", "d", 5, MdcLink.LinkStatus.DOWN),
             link("b", "c", 40, MdcLink.LinkStatus.UP)));
 
+    @DisplayName("시나리오 데이터 위치와 링크 품질에 따라 배치가 갈리고 게이트를 끄면 현행과 같다")
     @Test
-    void 시나리오_데이터_위치와_링크_품질에_따라_배치가_갈리고_게이트를_끄면_현행과_같다() {
+    void scenario_link_quality_placement() {
         StringBuilder table = new StringBuilder("\n| # | 상황 | a | b | c | d | 선택 |\n|---|---|---|---|---|---|---|\n");
 
         // ① 게이트 off

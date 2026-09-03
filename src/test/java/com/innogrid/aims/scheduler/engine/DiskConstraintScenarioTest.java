@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.engine;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -28,8 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class DiskConstraintScenarioTest {
 
+    @DisplayName("시나리오 디스크 총량이 다른 노드에 200GB 워크로드 4건")
     @Test
-    void 시나리오_디스크_총량이_다른_노드에_200GB_워크로드_4건() {
+    void scenario_200gb_workloads_mixed_disks() {
         NodeResource a = node("A").withDiskCapacityGb(100);
         NodeResource b = node("B").withDiskCapacityGb(500);
         NodeResource c = node("C");                                    // 총량 모름

@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,8 +34,9 @@ class SchedulingPolicySelectionTest {
 
     // ── 정책 선택 ───────────────────────────────────────────────
 
+    @DisplayName("종류별 활성 정책이 공통보다 우선한다")
     @Test
-    void 종류별_활성_정책이_공통보다_우선한다() {
+    void type_active_beats_common() {
         policyRepository.save(active("common", null));
         policyRepository.save(active("gpu", ResourceType.GPU));
 
@@ -43,16 +45,18 @@ class SchedulingPolicySelectionTest {
                 "종류별 정책이 없으면 공통으로 내려온다");
     }
 
+    @DisplayName("종류를 지정하지 않으면 공통 정책을 쓴다")
     @Test
-    void 종류를_지정하지_않으면_공통_정책을_쓴다() {
+    void no_type_uses_common_policy() {
         policyRepository.save(active("common", null));
         policyRepository.save(active("gpu", ResourceType.GPU));
 
         assertEquals("common", schedulingService.resolvePolicy().getName());
     }
 
+    @DisplayName("활성 정책이 없으면 기본 정책을 만든다")
     @Test
-    void 활성_정책이_없으면_기본_정책을_만든다() {
+    void no_active_policy_creates_default() {
         assertEquals(0, policyRepository.count());
 
         SchedulingPolicy created = schedulingService.resolvePolicy(ResourceType.NPU);
@@ -61,8 +65,9 @@ class SchedulingPolicySelectionTest {
         assertEquals(1, policyRepository.count(), "기본 정책이 저장된다");
     }
 
+    @DisplayName("활성 정책이 둘이어도 예외가 나지 않는다")
     @Test
-    void 활성_정책이_둘이어도_예외가_나지_않는다() {
+    void two_active_policies_no_exception() {
         policyRepository.save(active("common", null));
         policyRepository.save(active("gpu", ResourceType.GPU));
 
@@ -72,8 +77,9 @@ class SchedulingPolicySelectionTest {
 
     // ── 상태 전이 ───────────────────────────────────────────────
 
+    @DisplayName("상태 전이가 저장된다")
     @Test
-    void 상태_전이가_저장된다() {
+    void status_transition_saved() {
         Workload workload = workloadRepository.save(scheduledWorkload());
 
         Workload running = schedulingService.changeStatus(workload.getId(), WorkloadStatus.RUNNING);
@@ -83,8 +89,9 @@ class SchedulingPolicySelectionTest {
         assertEquals(WorkloadStatus.COMPLETED, done.getStatus());
     }
 
+    @DisplayName("허용되지 않는 전이는 400 이다")
     @Test
-    void 허용되지_않는_전이는_400_이다() {
+    void disallowed_transition_400() {
         Workload workload = workloadRepository.save(scheduledWorkload());
 
         BusinessException e = assertThrows(BusinessException.class,
@@ -94,16 +101,18 @@ class SchedulingPolicySelectionTest {
         assertTrue(e.getMessage().contains("허용되지 않는 상태 전이"), e.getMessage());
     }
 
+    @DisplayName("없는 워크로드의 상태 전이는 404 이다")
     @Test
-    void 없는_워크로드의_상태_전이는_404_이다() {
+    void missing_workload_transition_404() {
         BusinessException e = assertThrows(BusinessException.class,
                 () -> schedulingService.changeStatus(99999L, WorkloadStatus.RUNNING));
 
         assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
     }
 
+    @DisplayName("종료 상태가 되면 예약 집계에서 빠진다")
     @Test
-    void 종료_상태가_되면_예약_집계에서_빠진다() {
+    void terminal_status_out_of_reservation() {
         Workload workload = workloadRepository.save(scheduledWorkload());
 
         assertTrue(reservedIds().contains(workload.getId()), "배치 직후에는 예약 대상이다");
@@ -117,8 +126,9 @@ class SchedulingPolicySelectionTest {
 
     // ── 리소스 종류별 조회 ──────────────────────────────────────
 
+    @DisplayName("리소스 종류로 대기 워크로드를 고른다")
     @Test
-    void 리소스_종류로_대기_워크로드를_고른다() {
+    void pending_selected_by_resource_type() {
         Workload gpu = new Workload("gpu-job", 1, 1024);
         gpu.setResourceType(ResourceType.GPU);
         workloadRepository.save(gpu);

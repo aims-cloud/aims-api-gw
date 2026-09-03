@@ -7,6 +7,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -27,13 +28,15 @@ class MetricsQueryGuardTest {
         guard.shutdown();
     }
 
+    @DisplayName("상한 안에 끝나면 결과를 그대로 돌려준다")
     @Test
-    void 상한_안에_끝나면_결과를_그대로_돌려준다() {
+    void within_timeout_returns_result() {
         assertEquals("ok", guard.call(() -> "ok", 1000));
     }
 
+    @DisplayName("상한을 넘기면 기다리기를 멈추고 응답 없음 예외를 던진다")
     @Test
-    void 상한을_넘기면_기다리기를_멈추고_응답_없음_예외를_던진다() {
+    void timeout_throws_unresponsive() {
         CountDownLatch release = new CountDownLatch(1);
         long started = System.nanoTime();
         try {
@@ -48,8 +51,9 @@ class MetricsQueryGuardTest {
         }
     }
 
+    @DisplayName("저장소 연결 실패도 응답 없음 예외로 바꾼다 다른 예외는 그대로")
     @Test
-    void 저장소_연결_실패도_응답_없음_예외로_바꾼다_다른_예외는_그대로() {
+    void connection_failure_becomes_unresponsive() {
         MetricsQueryGuard.MetricsUnavailableException e = assertThrows(MetricsQueryGuard.MetricsUnavailableException.class,
                 () -> guard.call(() -> { throw new ResourceAccessException("connection refused"); }, 1000));
         assertTrue(e.getMessage().contains("연결하지 못했습니다"), e.getMessage());
@@ -59,8 +63,9 @@ class MetricsQueryGuardTest {
         assertEquals("bad promql", other.getMessage());
     }
 
+    @DisplayName("여러 작업은 제출 순서대로 받고 넘긴 것만 비운다")
     @Test
-    void 여러_작업은_제출_순서대로_받고_넘긴_것만_비운다() {
+    void tasks_return_in_submit_order() {
         CountDownLatch release = new CountDownLatch(1);
         try {
             List<Future<String>> futures = List.of(
@@ -79,8 +84,9 @@ class MetricsQueryGuardTest {
         }
     }
 
+    @DisplayName("전체 기한이 먼저 오면 남은 작업은 기다리지 않는다")
     @Test
-    void 전체_기한이_먼저_오면_남은_작업은_기다리지_않는다() {
+    void overall_deadline_skips_remaining_tasks() {
         CountDownLatch release = new CountDownLatch(1);
         try {
             List<Future<String>> futures = List.of(
@@ -98,8 +104,9 @@ class MetricsQueryGuardTest {
         }
     }
 
+    @DisplayName("설정 기본값과 제외 사유 문구")
     @Test
-    void 설정_기본값과_제외_사유_문구() {
+    void default_settings_and_reason_text() {
         SchedulerProperties.Metrics m = new SchedulerProperties().getMetrics();
         assertEquals(10_000, m.getNodeTimeoutMs());
         assertEquals(30_000, m.getCollectTimeoutMs());

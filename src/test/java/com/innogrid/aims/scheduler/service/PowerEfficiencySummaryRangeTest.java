@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,8 +24,9 @@ class PowerEfficiencySummaryRangeTest {
     @Autowired
     PowerEfficiencyService service;
 
+    @DisplayName("최소 최대 PEI 원값은 평가 가능 노드에서만 계산한다")
     @Test
-    void 최소_최대_PEI_원값은_평가_가능_노드에서만_계산한다() {
+    void min_max_pei_from_evaluable_only() {
         PowerEfficiencyResponse.Summary s = service.evaluate(List.of(
                 node("n1", 80, 200),      // 0.40
                 node("n2", 10, 200),      // 0.05
@@ -38,8 +40,9 @@ class PowerEfficiencySummaryRangeTest {
         assertTrue(s.minPeiRaw() <= s.averagePeiRaw() && s.averagePeiRaw() <= s.maxPeiRaw());
     }
 
+    @DisplayName("평가 가능 노드가 없으면 최소 최대는 null")
     @Test
-    void 평가_가능_노드가_없으면_최소_최대는_null() {
+    void no_evaluable_node_min_max_null() {
         PowerEfficiencyResponse.Summary s = service.evaluate(List.of(node("n1", 50, 0), node("n2", 60, 0))).summary();
 
         assertEquals(0, s.evaluableNodes());
@@ -48,8 +51,9 @@ class PowerEfficiencySummaryRangeTest {
         assertNull(s.averagePeiRaw());
     }
 
+    @DisplayName("노드가 하나면 최소와 최대가 같다")
     @Test
-    void 노드가_하나면_최소와_최대가_같다() {
+    void single_node_min_equals_max() {
         PowerEfficiencyResponse.Summary s = service.evaluate(List.of(node("n1", 40, 200))).summary();
         assertEquals(s.minPeiRaw(), s.maxPeiRaw());
         assertEquals(0.20, s.maxPeiRaw(), EPS);

@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,8 +34,9 @@ class PolicyResolutionRulesTest {
         repository.flush();
     }
 
+    @DisplayName("같은 종류 활성이 둘이면 이름순 첫 번째로 결정된다")
     @Test
-    void 같은_종류_활성이_둘이면_이름순_첫_번째로_결정된다() {
+    void two_active_same_type_first_by_name() {
         repository.save(active("zeta", ResourceType.GPU));
         repository.save(active("alpha", ResourceType.GPU));
         repository.save(active("mid", ResourceType.GPU));
@@ -43,8 +45,9 @@ class PolicyResolutionRulesTest {
         assertEquals("alpha", schedulingService.resolvePolicy(ResourceType.GPU).getName(), "반복해도 같다");
     }
 
+    @DisplayName("공통 활성이 둘이어도 이름순이고 종류별 활성이 우선한다")
     @Test
-    void 공통_활성이_둘이어도_이름순이고_종류별_활성이_우선한다() {
+    void two_active_common_by_name_type_first() {
         repository.save(active("common-b", null));
         repository.save(active("common-a", null));
         repository.save(active("gpu", ResourceType.GPU));
@@ -54,8 +57,9 @@ class PolicyResolutionRulesTest {
         assertEquals("gpu", schedulingService.resolvePolicy(ResourceType.GPU).getName());
     }
 
+    @DisplayName("비활성 default 가 있으면 다시 저장하지 않고 그 값을 쓴다 예전엔 유니크 위반 500")
     @Test
-    void 비활성_default_가_있으면_다시_저장하지_않고_그_값을_쓴다_예전엔_유니크_위반_500() {
+    void inactive_default_reused() {
         SchedulingPolicy off = new SchedulingPolicy(SchedulingService.DEFAULT_POLICY_NAME, "기본");
         off.setActive(false);
         off.setCpuWeight(0.9);
@@ -69,8 +73,9 @@ class PolicyResolutionRulesTest {
         assertFalse(repository.findByName("default").orElseThrow().isActive(), "재활성화하지 않는다");
     }
 
+    @DisplayName("아무 정책도 없으면 예전처럼 default 를 만들어 저장한다")
     @Test
-    void 아무_정책도_없으면_예전처럼_default_를_만들어_저장한다() {
+    void no_policy_creates_default() {
         assertEquals(0, repository.count());
 
         SchedulingPolicy created = schedulingService.resolvePolicy(ResourceType.NPU);

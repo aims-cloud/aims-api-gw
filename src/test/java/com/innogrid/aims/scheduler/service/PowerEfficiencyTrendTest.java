@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
@@ -45,8 +46,9 @@ class PowerEfficiencyTrendTest {
 
     // ── 정상 경로 ──────────────────────────────────────────────
 
+    @DisplayName("전력과 CPU 를 시각으로 맞춰 PEI 를 계산한다")
     @Test
-    void 전력과_CPU_를_시각으로_맞춰_PEI_를_계산한다() {
+    void power_and_cpu_aligned_by_time() {
         stub("ipmi_dcmi_power", series(1756684800L, 200.0, 1756685100L, 250.0));
         stub("node_cpu_seconds_total", series(1756684800L, 80.0, 1756685100L, 50.0));
 
@@ -58,8 +60,9 @@ class PowerEfficiencyTrendTest {
         assertEquals(0.20, points.get(1).peiRaw(), 1e-9, "50 / 250");
     }
 
+    @DisplayName("시각 순서대로 돌려준다")
     @Test
-    void 시각_순서대로_돌려준다() {
+    void points_in_timestamp_order() {
         stub("ipmi_dcmi_power", series(1756685100L, 250.0, 1756684800L, 200.0));
         stub("node_cpu_seconds_total", series(1756684800L, 80.0, 1756685100L, 50.0));
 
@@ -69,8 +72,9 @@ class PowerEfficiencyTrendTest {
         assertTrue(points.get(0).at().isBefore(points.get(1).at()));
     }
 
+    @DisplayName("한쪽 시계열만 있는 지점은 PEI 를 비운다")
     @Test
-    void 한쪽_시계열만_있는_지점은_PEI_를_비운다() {
+    void one_series_only_empty_pei() {
         // 두 메트릭의 수집 시각이 어긋나면 생기는 상황이다. 없는 값으로 나눌 수 없다.
         stub("ipmi_dcmi_power", series(1756684800L, 200.0));
         stub("node_cpu_seconds_total", series(1756685100L, 50.0));
@@ -85,8 +89,9 @@ class PowerEfficiencyTrendTest {
         assertEquals(50.0, points.get(1).cpuUsagePercent(), 1e-9);
     }
 
+    @DisplayName("전력이 0 인 지점은 PEI 를 비운다")
     @Test
-    void 전력이_0_인_지점은_PEI_를_비운다() {
+    void power_0_point_empty_pei() {
         stub("ipmi_dcmi_power", series(1756684800L, 0.0));
         stub("node_cpu_seconds_total", series(1756684800L, 80.0));
 
@@ -95,8 +100,9 @@ class PowerEfficiencyTrendTest {
 
     // ── 데이터가 없을 때 ────────────────────────────────────────
 
+    @DisplayName("데이터가 없으면 빈 결과와 사유를 돌려준다")
     @Test
-    void 데이터가_없으면_빈_결과와_사유를_돌려준다() {
+    void no_data_empty_result_with_reason() {
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString())).thenReturn(List.of());
 
         PowerEfficiencyTrendResponse result = service.trend("node-1", FROM, TO, "5m");
@@ -105,8 +111,9 @@ class PowerEfficiencyTrendTest {
         assertTrue(result.message().contains("IPMI"), result.message());
     }
 
+    @DisplayName("저장소 조회에 실패해도 예외를 올리지 않는다")
     @Test
-    void 저장소_조회에_실패해도_예외를_올리지_않는다() {
+    void query_failure_raises_no_exception() {
         // 조회 실패로 500 을 내면 화면이 통째로 깨진다. IPMI 미연동 환경에서는 흔한 상황이다.
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString()))
                 .thenThrow(new IllegalStateException("connection refused"));
@@ -117,8 +124,9 @@ class PowerEfficiencyTrendTest {
         assertTrue(result.message().contains("조회하지 못했습니다"), result.message());
     }
 
+    @DisplayName("전력만 없으면 왜 PEI 가 비었는지 알려준다")
     @Test
-    void 전력만_없으면_왜_PEI_가_비었는지_알려준다() {
+    void missing_power_explains_empty_pei() {
         // 배포 VM 이 실제로 이 상태다 — CPU 시계열은 있고 IPMI 만 없다.
         // 사유가 없으면 화면은 "PEI 가 왜 전부 비었는지" 알 길이 없다.
         stub("ipmi_dcmi_power", List.of());
@@ -132,8 +140,9 @@ class PowerEfficiencyTrendTest {
         assertTrue(result.message().contains("전력"), result.message());
     }
 
+    @DisplayName("양쪽 다 있으면 사유를 붙이지 않는다")
     @Test
-    void 양쪽_다_있으면_사유를_붙이지_않는다() {
+    void both_series_present_no_reason() {
         stub("ipmi_dcmi_power", series(1756684800L, 200.0));
         stub("node_cpu_seconds_total", series(1756684800L, 80.0));
 
@@ -142,8 +151,9 @@ class PowerEfficiencyTrendTest {
 
     // ── 파라미터 검증 ───────────────────────────────────────────
 
+    @DisplayName("기본 구간은 최근 24시간이고 간격은 5분이다")
     @Test
-    void 기본_구간은_최근_24시간이고_간격은_5분이다() {
+    void default_range_24h_step_5m() {
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString())).thenReturn(List.of());
 
         PowerEfficiencyTrendResponse result = service.trend("node-1", null, null, null);
@@ -152,24 +162,27 @@ class PowerEfficiencyTrendTest {
         assertEquals(24, java.time.Duration.between(result.from(), result.to()).toHours());
     }
 
+    @DisplayName("from 이 to 보다 뒤면 400 이다")
     @Test
-    void from_이_to_보다_뒤면_400_이다() {
+    void from_after_to_400() {
         BusinessException e = assertThrows(BusinessException.class,
                 () -> service.trend("node-1", TO, FROM, "5m"));
 
         assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
     }
 
+    @DisplayName("step 형식이 틀리면 400 이다")
     @Test
-    void step_형식이_틀리면_400_이다() {
+    void invalid_step_format_400() {
         assertEquals(HttpStatus.BAD_REQUEST,
                 assertThrows(BusinessException.class,
                         () -> service.trend("node-1", FROM, TO, "5분")).getStatus());
         assertThrows(BusinessException.class, () -> service.trend("node-1", FROM, TO, "0m"));
     }
 
+    @DisplayName("지점 수가 상한을 넘으면 400 이다")
     @Test
-    void 지점_수가_상한을_넘으면_400_이다() {
+    void too_many_points_400() {
         // 메트릭 클라이언트에 읽기 타임아웃이 없어, 무거운 질의는 애초에 내보내지 않는다.
         OffsetDateTime longAgo = TO.minusDays(30);
 
@@ -180,8 +193,9 @@ class PowerEfficiencyTrendTest {
         assertTrue(e.getMessage().contains("너무 많습니다"), e.getMessage());
     }
 
+    @DisplayName("넓은 구간도 간격이 충분하면 통과한다")
     @Test
-    void 넓은_구간도_간격이_충분하면_통과한다() {
+    void wide_range_large_step_passes() {
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString())).thenReturn(List.of());
 
         assertDoesNotThrow(() -> service.trend("node-1", TO.minusDays(30), TO, "1h"));

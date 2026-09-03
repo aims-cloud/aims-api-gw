@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -43,8 +44,9 @@ class PowerEfficiencyTrendTimeoutTest {
         release.countDown();
     }
 
+    @DisplayName("저장소가 응답하지 않으면 상한 안에 돌아오고 사유를 담은 빈 결과다")
     @Test
-    void 저장소가_응답하지_않으면_상한_안에_돌아오고_사유를_담은_빈_결과다() {
+    void unresponsive_store_empty_with_reason() {
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString())).thenAnswer(inv -> {
             release.await(10, TimeUnit.SECONDS);
             return List.of();
@@ -59,8 +61,9 @@ class PowerEfficiencyTrendTimeoutTest {
         assertTrue(r.message().contains("조회하지 못했습니다") && r.message().contains("150ms"), r.message());
     }
 
+    @DisplayName("연결 실패도 같은 형태로 사유를 남긴다")
     @Test
-    void 연결_실패도_같은_형태로_사유를_남긴다() {
+    void connection_failure_same_shape() {
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString()))
                 .thenThrow(new ResourceAccessException("Connection refused"));
 

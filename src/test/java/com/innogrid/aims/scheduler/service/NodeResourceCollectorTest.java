@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
@@ -55,8 +56,9 @@ class NodeResourceCollectorTest {
         when(vm.queryScalar(anyString())).thenReturn(0.0);   // 부가 메트릭은 전부 0(IPMI 없음)
     }
 
+    @DisplayName("핵심 메트릭이 모두 있으면 실측값으로 노드를 만든다")
     @Test
-    void 핵심_메트릭이_모두_있으면_실측값으로_노드를_만든다() {
+    void all_core_metrics_build_node() {
         up(N1);
         healthy(N1, 12.67, 2, 4_000_000_000d, 1_250_000_000d);
 
@@ -71,8 +73,9 @@ class NodeResourceCollectorTest {
         assertEquals(NodeResource.PowerSource.NONE, n.getPowerSource());
     }
 
+    @DisplayName("CPU 질의가 빈 결과면 노드를 수집하지 않는다")
     @Test
-    void CPU_질의가_빈_결과면_노드를_수집하지_않는다() {
+    void empty_cpu_query_skips_node() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         answers.put(cpuKey(N1), null);                               // 시리즈 없음
@@ -81,8 +84,9 @@ class NodeResourceCollectorTest {
                 "예전 코드는 CPU 0% 의 빈 노드로 만들어 배치·진단을 오판시켰다");
     }
 
+    @DisplayName("코어 수 질의가 예외면 노드를 수집하지 않는다")
     @Test
-    void 코어_수_질의가_예외면_노드를_수집하지_않는다() {
+    void core_count_exception_skips_node() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         answers.put(coresKey(N1), new RuntimeException("HTTP 400"));
@@ -91,8 +95,9 @@ class NodeResourceCollectorTest {
                 "예전 코드는 Math.max(0, 1) 로 1코어짜리 가짜 노드를 만들었다");
     }
 
+    @DisplayName("메모리 질의가 없으면 노드를 수집하지 않는다")
     @Test
-    void 메모리_질의가_없으면_노드를_수집하지_않는다() {
+    void missing_memory_skips_node() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         answers.put("node_memory_MemAvailable_bytes{instance=\"" + N1, null);
@@ -100,8 +105,9 @@ class NodeResourceCollectorTest {
         assertTrue(collector.collectAll().isEmpty());
     }
 
+    @DisplayName("한 노드가 빠져도 다른 노드는 정상 수집된다")
     @Test
-    void 한_노드가_빠져도_다른_노드는_정상_수집된다() {
+    void one_node_dropped_others_collected() {
         up(N1, N2);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         healthy(N2, 40.0, 8, 16e9, 8e9);
@@ -113,8 +119,9 @@ class NodeResourceCollectorTest {
         assertEquals(N2, nodes.get(0).getNodeId());
     }
 
+    @DisplayName("전력 온도가 없어도 노드는 수집하고 플래그로 표시한다")
     @Test
-    void 전력_온도가_없어도_노드는_수집하고_플래그로_표시한다() {
+    void no_power_thermal_node_flagged() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         // 전력·온도는 safeQuery(queryScalar) → 0.0 이 기본. 제외 대상이 아니다.
@@ -126,8 +133,9 @@ class NodeResourceCollectorTest {
         assertEquals(NodeResource.PowerSource.NONE, nodes.get(0).getPowerSource());
     }
 
+    @DisplayName("실측 CPU 0퍼센트는 값이 있는 것이므로 수집한다")
     @Test
-    void 실측_CPU_0퍼센트는_값이_있는_것이므로_수집한다() {
+    void cpu_0_percent_is_collected() {
         up(N1);
         healthy(N1, 0.0, 2, 4e9, 1.25e9);   // 시리즈는 있고 값이 0
 
@@ -137,8 +145,9 @@ class NodeResourceCollectorTest {
         assertEquals(0.0, nodes.get(0).getCpuUsagePercent(), 1e-9);
     }
 
+    @DisplayName("제외된 노드는 어떤 메트릭을 몰랐는지와 함께 스냅샷에 남는다")
     @Test
-    void 제외된_노드는_어떤_메트릭을_몰랐는지와_함께_스냅샷에_남는다() {
+    void excluded_node_lists_missing_metrics() {
         up(N1, N2);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         healthy(N2, 40.0, 8, 16e9, 8e9);
@@ -154,8 +163,9 @@ class NodeResourceCollectorTest {
         assertEquals(List.of("cpu사용률", "코어수"), snapshot.excluded().get(0).missingMetrics());
     }
 
+    @DisplayName("전부 정상이면 제외 목록이 빈다")
     @Test
-    void 전부_정상이면_제외_목록이_빈다() {
+    void all_healthy_excluded_list_empty() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
 
@@ -165,8 +175,9 @@ class NodeResourceCollectorTest {
         assertTrue(snapshot.excluded().isEmpty());
     }
 
+    @DisplayName("collectAll 은 스냅샷의 후보 목록과 같다")
     @Test
-    void collectAll_은_스냅샷의_후보_목록과_같다() {
+    void collect_all_matches_snapshot_candidates() {
         up(N1, N2);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         healthy(N2, 40.0, 8, 16e9, 8e9);
@@ -175,8 +186,9 @@ class NodeResourceCollectorTest {
         assertEquals(List.of(N1), collector.collectAll().stream().map(NodeResource::getNodeId).toList());
     }
 
+    @DisplayName("디스크 총량과 가용량으로 총량 GB 와 사용률을 만든다")
     @Test
-    void 디스크_총량과_가용량으로_총량_GB_와_사용률을_만든다() {
+    void disk_total_and_available_give_usage() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         when(vm.queryScalar(anyString())).thenAnswer(inv -> {
@@ -193,8 +205,9 @@ class NodeResourceCollectorTest {
         assertEquals(300, n.availableDiskGb());
     }
 
+    @DisplayName("디스크 총량을 못 얻어도 노드는 수집되고 총량은 0 모름 이다")
     @Test
-    void 디스크_총량을_못_얻어도_노드는_수집되고_총량은_0_모름_이다() {
+    void missing_disk_total_gives_0_unknown() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
         // queryScalar 기본 스텁이 0.0 — 시리즈 없음과 같다
@@ -206,8 +219,9 @@ class NodeResourceCollectorTest {
         assertEquals(0.0, nodes.get(0).getDiskUsagePercent(), 1e-9);
     }
 
+    @DisplayName("up 질의가 실패하면 빈 목록이다")
     @Test
-    void up_질의가_실패하면_빈_목록이다() {
+    void up_query_failure_empty_list() {
         when(vm.query(startsWith("up{"))).thenThrow(new RuntimeException("connection refused"));
 
         assertTrue(collector.collectAll().isEmpty());

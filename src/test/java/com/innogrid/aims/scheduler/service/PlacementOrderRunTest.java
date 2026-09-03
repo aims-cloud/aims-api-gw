@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -45,8 +46,9 @@ class PlacementOrderRunTest {
         scheduleRepository.findAll().stream().filter(s -> s.getScheduleId().startsWith("por-")).forEach(s -> scheduleService.delete(List.of(s.getId())));
     }
 
+    @DisplayName("크기순 스케줄의 즉시 실행은 결정을 큰 워크로드부터 기록하고 나이순은 등록 순으로 기록한다")
     @Test
-    void 크기순_스케줄의_즉시_실행은_결정을_큰_워크로드부터_기록하고_나이순은_등록_순으로_기록한다() {
+    void run_now_records_decisions_in_order() {
         when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(
                 List.of(new NodeResource("mdc-01", "t:9100", 2, 3900, 0, 10, 60, 0, 0, 500, 0, 0, 0)), List.of()));
         save("por-w1", 1); save("por-w2", 2); save("por-w3", 1);

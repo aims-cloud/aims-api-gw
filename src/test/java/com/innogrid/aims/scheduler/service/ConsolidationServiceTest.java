@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -52,8 +53,9 @@ class ConsolidationServiceTest {
 
     // ── 순절감 판정 ────────────────────────────────────────────
 
+    @DisplayName("배치된 워크로드가 없으면 그대로 반납한다")
     @Test
-    void 배치된_워크로드가_없으면_그대로_반납한다() {
+    void empty_node_released_as_is() {
         given(List.of(node("idle", 1, 5, 150), node("busy", 50, 50, 260)), List.of());
 
         Candidate idle = find(service.diagnose(), "idle");
@@ -64,8 +66,9 @@ class ConsolidationServiceTest {
         assertEquals(0, idle.workloadCount());
     }
 
+    @DisplayName("옮겨서 이득이면 반납 후보다")
     @Test
-    void 옮겨서_이득이면_반납_후보다() {
+    void migration_saves_power_release_candidate() {
         NodeResource idle = node("idle", 2, 10, 150);
         NodeResource host = node("host", 40, 40, 250);
         given(List.of(idle, host), List.of(workload(1L, "w1", 1)));
@@ -82,8 +85,9 @@ class ConsolidationServiceTest {
         assertEquals("host", c.moves().get(0).toNodeId());
     }
 
+    @DisplayName("옮기는 비용이 더 크면 후보가 아니다")
     @Test
-    void 옮기는_비용이_더_크면_후보가_아니다() {
+    void migration_cost_exceeds_saving_not_candidate() {
         // 유휴 전력이 작은 노드(용량 200W → 유휴 60W)에서 큰 워크로드를 빼면 옮기는 값이 더 크다
         NodeResource small = node("small", 3, 10, 60, 200);
         NodeResource host = node("host", 40, 40, 250, 500);
@@ -96,8 +100,9 @@ class ConsolidationServiceTest {
         assertTrue(c.blockedReason().contains("손해"), c.blockedReason());
     }
 
+    @DisplayName("받을 노드가 없으면 사유와 함께 불가로 본다")
     @Test
-    void 받을_노드가_없으면_사유와_함께_불가로_본다() {
+    void no_receiving_node_infeasible_with_reason() {
         NodeResource idle = node("idle", 2, 10, 150);
         NodeResource full = node("full", 79, 40, 300);   // 1코어만 남아 4코어를 못 받는다
         given(List.of(idle, full), List.of(workload(1L, "big", 4)));
@@ -108,8 +113,9 @@ class ConsolidationServiceTest {
         assertTrue(c.blockedReason().contains("받을 노드가 없습니다"), c.blockedReason());
     }
 
+    @DisplayName("옮길 다른 노드가 없으면 불가로 본다")
     @Test
-    void 옮길_다른_노드가_없으면_불가로_본다() {
+    void no_other_node_infeasible() {
         NodeResource only = node("only", 2, 10, 150);
         given(List.of(only), List.of(workload(1L, "w1", 1)));
 
@@ -124,8 +130,9 @@ class ConsolidationServiceTest {
      * 부하는 메트릭에만 보인다. 이 검사를 빠뜨리면 가동 중인 노드를 반납하라고 권고한다 —
      * 배포 VM 이 정확히 이 상태다(워크로드 0건, CPU 12%).
      */
+    @DisplayName("워크로드가 없어도 부하가 있으면 반납하지 않는다")
     @Test
-    void 워크로드가_없어도_부하가_있으면_반납하지_않는다() {
+    void no_workloads_with_load_not_released() {
         given(List.of(node("busy-but-unmanaged", 12, 30, 200), node("host", 30, 30, 240)), List.of());
 
         Candidate c = find(service.diagnose(), "busy-but-unmanaged");
@@ -135,8 +142,9 @@ class ConsolidationServiceTest {
     }
 
     /** 옮길 워크로드를 다 빼도 부하가 남으면 반납할 수 없다. */
+    @DisplayName("워크로드를 다 옮겨도 부하가 남으면 반납하지 않는다")
     @Test
-    void 워크로드를_다_옮겨도_부하가_남으면_반납하지_않는다() {
+    void load_left_after_migration_not_released() {
         // CPU 40% 인데 옮기는 워크로드는 1코어(12.5%p) 뿐 → 27.5% 가 남는다
         NodeResource node = node("partly-managed", 40, 30, 250);
         NodeResource host = node("host", 20, 20, 210);
@@ -151,8 +159,9 @@ class ConsolidationServiceTest {
     // ── 상한 ──────────────────────────────────────────────────
 
     /** 60건 중 50건만 옮겨보고 "반납 가능" 이라 하면 거짓이다. */
+    @DisplayName("워크로드가 상한을 넘으면 평가하지 않는다")
     @Test
-    void 워크로드가_상한을_넘으면_평가하지_않는다() {
+    void too_many_workloads_not_evaluated() {
         properties.getPower().setMaxRelocationsPerNode(2);
 
         NodeResource idle = node("idle", 2, 10, 150);
@@ -168,8 +177,9 @@ class ConsolidationServiceTest {
         assertEquals(3, c.workloadCount());
     }
 
+    @DisplayName("후보 상한을 넘으면 잘림을 표시한다")
     @Test
-    void 후보_상한을_넘으면_잘림을_표시한다() {
+    void over_candidate_limit_marks_truncated() {
         properties.getPower().setMaxConsolidationCandidates(1);
 
         given(List.of(node("a", 2, 10, 150), node("b", 3, 10, 150), node("c", 4, 10, 150)), List.of());
@@ -183,8 +193,9 @@ class ConsolidationServiceTest {
     }
 
     /** 상한에 걸려도 절감이 큰 후보가 먼저 평가돼야 한다. */
+    @DisplayName("절감 잠재량이 큰 후보부터 평가한다")
     @Test
-    void 절감_잠재량이_큰_후보부터_평가한다() {
+    void largest_saving_evaluated_first() {
         properties.getPower().setMaxConsolidationCandidates(1);
 
         // 용량이 클수록 유휴 전력이 크다 → 먼저 평가돼야 한다
@@ -199,8 +210,9 @@ class ConsolidationServiceTest {
     // ── 부작용 방어 ────────────────────────────────────────────
 
     /** S1 — 진단은 계산일 뿐이다. 실제 배치를 일으키면 안 된다. */
+    @DisplayName("시뮬레이션이 실제 배치를 일으키지 않는다")
     @Test
-    void 시뮬레이션이_실제_배치를_일으키지_않는다() {
+    void simulation_no_real_placement() {
         given(List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250)),
                 List.of(workload(1L, "w1", 1)));
 
@@ -211,8 +223,9 @@ class ConsolidationServiceTest {
     }
 
     /** S2 — NodeResource 는 가변이다. 조회용 스냅샷에 예약이 남으면 응답이 오염된다. */
+    @DisplayName("시뮬레이션 후 조회용 노드에 예약이 남지 않는다")
     @Test
-    void 시뮬레이션_후_조회용_노드에_예약이_남지_않는다() {
+    void simulation_leaves_no_reservation() {
         NodeResource idle = node("idle", 2, 10, 150);
         NodeResource host = node("host", 40, 40, 250);
         given(List.of(idle, host), List.of(workload(1L, "w1", 1), workload(2L, "w2", 1)));
@@ -227,8 +240,9 @@ class ConsolidationServiceTest {
      * 후보마다 메트릭을 다시 수집하면 노드당 아홉 종의 질의가 후보 수만큼 되풀이된다.
      * 메트릭 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.
      */
+    @DisplayName("후보가 여럿이어도 메트릭은 한 번만 수집한다")
     @Test
-    void 후보가_여럿이어도_메트릭은_한_번만_수집한다() {
+    void metrics_collected_once_many_candidates() {
         given(List.of(node("a", 2, 10, 150), node("b", 3, 10, 150), node("c", 4, 10, 150)),
                 List.of(workload(1L, "w1", 1)));
 
@@ -238,8 +252,9 @@ class ConsolidationServiceTest {
     }
 
     /** 샌드박스는 사본이라 한 후보의 예약이 다음 후보 판정에 섞이면 안 된다. */
+    @DisplayName("앞 후보의 예약이 다음 후보 판정에 섞이지 않는다")
     @Test
-    void 앞_후보의_예약이_다음_후보_판정에_섞이지_않는다() {
+    void reservation_not_leaked_to_next_candidate() {
         NodeResource a = node("a", 2, 10, 150);
         NodeResource b = node("b", 2, 10, 150);
         NodeResource host = node("host", 30, 30, 240);
@@ -255,8 +270,9 @@ class ConsolidationServiceTest {
 
     // ── 요약 ──────────────────────────────────────────────────
 
+    @DisplayName("반납 가능한 노드가 없으면 feasible 이 거짓이다")
     @Test
-    void 반납_가능한_노드가_없으면_feasible_이_거짓이다() {
+    void no_releasable_node_feasible_false() {
         given(List.of(node("only", 2, 10, 150)), List.of(workload(1L, "w1", 1)));
 
         ConsolidationResponse result = service.diagnose();
@@ -265,22 +281,25 @@ class ConsolidationServiceTest {
         assertEquals(0, result.summary().reclaimableNodes());
     }
 
+    @DisplayName("한계를 응답에 명시한다")
     @Test
-    void 한계를_응답에_명시한다() {
+    void limits_stated_in_response() {
         given(List.of(node("idle", 1, 5, 150)), List.of());
 
         assertTrue(service.diagnose().limitation().contains("계산상 절감량"));
     }
 
+    @DisplayName("총 전력이 0이면 절감 비율을 내지 않는다")
     @Test
-    void 총_전력이_0이면_절감_비율을_내지_않는다() {
+    void zero_total_power_no_saving_ratio() {
         given(List.of(node("no-ipmi", 1, 5, 0), node("host", 30, 30, 0)), List.of());
 
         assertNull(service.diagnose().summary().savingPercent());
     }
 
+    @DisplayName("요청당 메트릭 수집은 한 번이다")
     @Test
-    void 요청당_메트릭_수집은_한_번이다() {
+    void metrics_collected_once_per_request() {
         // 예전에는 getNodeResources() 와 createContext() 가 각각 수집해 요청당 두 번이었다.
         // 두 스냅샷의 시점이 달라 1차 필터가 본 노드와 시뮬레이션 기준 노드가 어긋날 수 있었다.
         given(List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250)),
@@ -292,8 +311,9 @@ class ConsolidationServiceTest {
         verify(schedulingService, never()).getNodeResources();
     }
 
+    @DisplayName("수집 단계에서 제외된 노드는 요약에 수와 사유로 실린다")
     @Test
-    void 수집_단계에서_제외된_노드는_요약에_수와_사유로_실린다() {
+    void excluded_nodes_in_summary_with_reason() {
         List<NodeResource> nodes = List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250));
         given(nodes, List.of());
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");

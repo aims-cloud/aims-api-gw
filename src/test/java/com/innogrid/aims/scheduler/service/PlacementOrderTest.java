@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -41,8 +42,9 @@ class PlacementOrderTest {
         scheduleRepository.findAll().stream().filter(s -> s.getScheduleId().startsWith("po-")).forEach(scheduleRepository::delete);
     }
 
+    @DisplayName("기본은 현행 비교자 그대로이고 응답에는 해석된 값이 나온다")
     @Test
-    void 기본은_현행_비교자_그대로이고_응답에는_해석된_값이_나온다() throws Exception {
+    void default_order_resolved_in_response() throws Exception {
         ScheduleResponse r = scheduleService.create(request("po-default", null));
 
         assertEquals(Schedule.PlacementOrder.PRIORITY_THEN_AGE, r.placementOrder(), "저장 null → 해석값 AGE");
@@ -55,8 +57,9 @@ class PlacementOrderTest {
         assertEquals("PRIORITY_THEN_AGE", json.get("placementOrder"));
     }
 
+    @DisplayName("요청은 관대 파서 size age 정식 이름을 받고 모르는 값은 400")
     @Test
-    void 요청은_관대_파서_size_age_정식_이름을_받고_모르는_값은_400() {
+    void lenient_parser_unknown_order_400() {
         assertEquals(Schedule.PlacementOrder.PRIORITY_THEN_SIZE, scheduleService.create(request("po-size", "size")).placementOrder());
         assertEquals(Schedule.PlacementOrder.PRIORITY_THEN_SIZE, scheduleService.create(request("po-size2", " priority_then_size ")).placementOrder());
         assertEquals(Schedule.PlacementOrder.PRIORITY_THEN_AGE, scheduleService.create(request("po-age", "AGE")).placementOrder());
@@ -66,8 +69,9 @@ class PlacementOrderTest {
         assertTrue(e.getMessage().contains("배치 순서"), e.getMessage());
     }
 
+    @DisplayName("크기 우선은 같은 우선순위 안에서 CPU 메모리 나이 순이고 우선순위가 먼저다")
     @Test
-    void 크기_우선은_같은_우선순위_안에서_CPU_메모리_나이_순이고_우선순위가_먼저다() {
+    void size_order_cpu_memory_age_after_priority() {
         // 저장 순서 = 나이. 전부 GPU 종류.
         Workload small1 = save("po-small1", 1, 512, Workload.WorkloadPriority.NORMAL);
         Workload big = save("po-big", 4, 1024, Workload.WorkloadPriority.NORMAL);

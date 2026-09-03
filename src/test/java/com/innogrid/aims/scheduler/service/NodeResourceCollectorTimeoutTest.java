@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
@@ -65,8 +66,9 @@ class NodeResourceCollectorTimeoutTest {
         release.countDown();
     }
 
+    @DisplayName("응답 없는 노드만 제외하고 나머지는 순서대로 수집한다")
     @Test
-    void 응답_없는_노드만_제외하고_나머지는_순서대로_수집한다() {
+    void unresponsive_node_excluded_order_kept() {
         up(FAST_1, SLOW, FAST_2);
         long started = System.nanoTime();
 
@@ -82,8 +84,9 @@ class NodeResourceCollectorTimeoutTest {
         assertTrue(elapsedMs < 3000, "상한 근처에서 돌아온다: " + elapsedMs + "ms");
     }
 
+    @DisplayName("정상 노드만 있으면 결과가 예전과 같다")
     @Test
-    void 정상_노드만_있으면_결과가_예전과_같다() {
+    void healthy_nodes_unchanged_result() {
         up(FAST_1, FAST_2);
 
         NodeResourceCollector.Snapshot snap = collector.collect();
@@ -97,8 +100,9 @@ class NodeResourceCollectorTimeoutTest {
         assertEquals(50.0, n.getMemoryUsagePercent(), 1e-9);
     }
 
+    @DisplayName("전체 상한이 먼저 오면 끝나지 않은 노드를 전부 제외한다")
     @Test
-    void 전체_상한이_먼저_오면_끝나지_않은_노드를_전부_제외한다() {
+    void overall_timeout_excludes_unfinished() {
         props.getMetrics().setNodeTimeoutMs(10_000);      // 노드 상한은 넉넉히, 전체 상한만 짧게
         props.getMetrics().setCollectTimeoutMs(300);
         up("slow-a:9100", "slow-b:9100", "slow-c:9100", "slow-d:9100", "slow-e:9100");   // 풀 4 보다 많다
@@ -112,8 +116,9 @@ class NodeResourceCollectorTimeoutTest {
         assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 3000);
     }
 
+    @DisplayName("대상 목록 질의가 상한을 넘기면 빈 스냅샷이다")
     @Test
-    void 대상_목록_질의가_상한을_넘기면_빈_스냅샷이다() {
+    void target_list_timeout_empty_snapshot() {
         when(vm.query(startsWith("up{"))).thenAnswer(inv -> { blockUntilReleased(); return Map.of(); });
 
         NodeResourceCollector.Snapshot snap = collector.collect();
@@ -122,8 +127,9 @@ class NodeResourceCollectorTimeoutTest {
         assertTrue(snap.excluded().isEmpty(), "대상 목록을 모르니 제외 노드도 없다 — 지금까지의 '수집 실패' 경로와 같다");
     }
 
+    @DisplayName("핵심 메트릭이 없는 노드는 여전히 판단 불가 사유로 제외된다")
     @Test
-    void 핵심_메트릭이_없는_노드는_여전히_판단_불가_사유로_제외된다() {
+    void missing_core_metrics_still_excluded() {
         up(FAST_1, "nometric-1:9100");
         when(vm.queryResults(anyString())).thenAnswer(inv -> {
             String q = inv.getArgument(0);

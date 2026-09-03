@@ -4,10 +4,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
@@ -38,13 +42,30 @@ public class NodeResourceCollector {
     private final VictoriaMetricsClient vmClient;
     private final SchedulerProperties properties;
     private final PowerModel powerModel;
+    private final MetricsQueryGuard guard;
 
+    @Autowired
     public NodeResourceCollector(VictoriaMetricsClient vmClient,
                                  SchedulerProperties properties,
-                                 PowerModel powerModel) {
+                                 PowerModel powerModel,
+                                 MetricsQueryGuard guard) {
         this.vmClient = vmClient;
         this.properties = properties;
         this.powerModel = powerModel;
+        this.guard = guard;
+    }
+
+    /** 스프링 없이 조립하는 형태(기존 단위 테스트). 보호 장치는 설정의 풀 크기로 직접 만든다. */
+    public NodeResourceCollector(VictoriaMetricsClient vmClient,
+                                 SchedulerProperties properties,
+                                 PowerModel powerModel) {
+        this(vmClient, properties, powerModel, new MetricsQueryGuard(properties.getMetrics().getParallelism()));
+    }
+
+    /** 노드 한 대 수집의 결과 — 후보 노드 또는 제외 사유 중 하나. 작업 스레드는 공유 목록을 건드리지 않고 이것만 돌려준다. */
+    private record NodeOutcome(NodeResource node, ExcludedNode excluded) {
+        static NodeOutcome of(NodeResource node) { return new NodeOutcome(node, null); }
+        static NodeOutcome excluded(ExcludedNode excluded) { return new NodeOutcome(null, excluded); }
     }
 
     /**
@@ -68,16 +89,27 @@ public class NodeResourceCollector {
         return collect().nodes();
     }
 
-    /** 후보 노드와 제외 노드를 함께 수집한다. */
+    /**
+     * 후보 노드와 제외 노드를 함께 수집한다.
+     *
+     * <p><b>질의는 상한 안에서만 기다린다</b>(단계 14). 대상 목록·GPU 개수는 단건 상한, 노드 한 대의 질의 10회는
+     * 노드 상한, 스냅샷 전체는 전체 상한이다. 노드별 수집은 보호 장치의 풀에서 병렬로 돌리되 결과는 <b>제출 순서대로</b>
+     * 모아 노드 순서가 순차 수집과 같다. 상한을 넘긴 노드는 "응답 없음"으로 제외 목록에 넣고 나머지로 계속 간다 —
+     * 저장소가 멈춰도 요청 스레드는 멈추지 않는다. 대상 목록 질의가 상한을 넘기면 빈 스냅샷(지금까지의 "수집 실패"와
+     * 같은 결과)이다. 작업 스레드는 공유 목록을 건드리지 않고 {@link NodeOutcome} 만 돌려준다 — 뒤늦게 끝난 작업이
+     * 조립이 끝난 목록을 오염시키지 않게 하기 위해서다.</p>
+     */
     @SuppressWarnings("unchecked")
     public Snapshot collect() {
         List<NodeResource> nodes = new ArrayList<>();
         List<ExcludedNode> excluded = new ArrayList<>();
+        SchedulerProperties.Metrics limits = properties.getMetrics();
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(limits.getCollectTimeoutMs());
 
         try {
             // up == 1인 노드만 수집
-            Map<String, Object> upResponse = vmClient.query(
-                    String.format("up{job=\"%s\"} == 1", properties.getNodeJob()));
+            Map<String, Object> upResponse = guard.call(() -> vmClient.query(
+                    String.format("up{job=\"%s\"} == 1", properties.getNodeJob())), limits.getQueryTimeoutMs());
             if (upResponse == null) return new Snapshot(nodes, excluded);
 
             Map<String, Object> data = (Map<String, Object>) upResponse.get("data");
@@ -89,21 +121,34 @@ public class NodeResourceCollector {
             // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다.
             Map<String, Integer> gpuCounts = collectGpuCounts();
 
+            List<String> instances = new ArrayList<>();
+            List<String> mdcIds = new ArrayList<>();
+            List<Future<NodeOutcome>> futures = new ArrayList<>();
             for (Map<String, Object> result : results) {
                 Map<String, String> labels = (Map<String, String>) result.get("metric");
                 String instance = labels.getOrDefault("instance", "unknown");
                 String mdcId = labels.getOrDefault("mdc_id", "unknown");
+                int gpu = gpuCounts.getOrDefault(instance, 0);
+                instances.add(instance);
+                mdcIds.add(mdcId);
+                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, gpu)));
+            }
 
-                try {
-                    NodeResource node = collectNodeMetrics(mdcId, instance,
-                            gpuCounts.getOrDefault(instance, 0), excluded);
-                    if (node != null) {
-                        nodes.add(node);
-                    }
-                } catch (Exception e) {
-                    log.debug("노드 메트릭 수집 실패: instance={}, error={}", instance, e.getMessage());
+            List<Optional<NodeOutcome>> outcomes = guard.awaitAll(futures, limits.getNodeTimeoutMs(), deadline);
+            for (int i = 0; i < outcomes.size(); i++) {
+                Optional<NodeOutcome> outcome = outcomes.get(i);
+                if (outcome.isEmpty()) {
+                    log.warn("노드 수집 제외: instance={} — 메트릭 질의가 상한 {}ms 안에 끝나지 않았다(저장소 응답 없음). "
+                            + "기다리기를 멈추고 후보에서 뺀다", instances.get(i), limits.getNodeTimeoutMs());
+                    excluded.add(ExcludedNode.timedOut(mdcIds.get(i), instances.get(i), limits.getNodeTimeoutMs()));
+                } else if (outcome.get().node() != null) {
+                    nodes.add(outcome.get().node());
+                } else if (outcome.get().excluded() != null) {
+                    excluded.add(outcome.get().excluded());
                 }
             }
+        } catch (MetricsQueryGuard.MetricsUnavailableException e) {
+            log.warn("노드 자원 수집 실패 — 저장소 응답 없음: {}", e.getMessage());
         } catch (Exception e) {
             log.warn("노드 자원 수집 실패: {}", e.getMessage());
         }
@@ -112,10 +157,10 @@ public class NodeResourceCollector {
     }
 
     /**
-     * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 {@code excluded} 에 기록하고 {@code null}.
+     * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 제외 사유를 담은 결과를 돌려준다.
+     * 작업 스레드에서 돌므로 공유 상태를 건드리지 않는다.
      */
-    private NodeResource collectNodeMetrics(String mdcId, String instance, int totalGpu,
-                                            List<ExcludedNode> excluded) {
+    private NodeOutcome collectNodeMetrics(String mdcId, String instance, int totalGpu) {
         String filter = String.format("{instance=\"%s\"}", instance);
         String mount = properties.getDiskMountPoint();
 
@@ -135,8 +180,7 @@ public class NodeResourceCollector {
         if (!missing.isEmpty()) {
             log.warn("노드 수집 제외: instance={} — 판단 불가 메트릭 {} (질의 실패 또는 시리즈 없음). "
                     + "0 으로 채우면 빈 노드로 오판하므로 후보에서 뺀다", instance, missing);
-            excluded.add(new ExcludedNode(mdcId, instance, missing));
-            return null;
+            return NodeOutcome.excluded(new ExcludedNode(mdcId, instance, missing));
         }
 
         double memUsage = (1 - memAvail.getAsDouble() / memTotal.getAsDouble()) * 100;
@@ -170,7 +214,7 @@ public class NodeResourceCollector {
 
         // IPMI 값이 하나도 없으면 전력·온도 판단 근거가 없다는 뜻이다.
         node.setPowerSource(powerWatts > 0 || temperature > 0 ? PowerSource.IPMI : PowerSource.NONE);
-        return node;
+        return NodeOutcome.of(node);
     }
 
     /**
@@ -180,7 +224,10 @@ public class NodeResourceCollector {
     private Map<String, Integer> collectGpuCounts() {
         Map<String, Integer> counts = new HashMap<>();
         try {
-            for (Map<String, Object> result : vmClient.queryResults("count by(instance) (DCGM_FI_DEV_GPU_UTIL)")) {
+            List<Map<String, Object>> rows = guard.call(
+                    () -> vmClient.queryResults("count by(instance) (DCGM_FI_DEV_GPU_UTIL)"),
+                    properties.getMetrics().getQueryTimeoutMs());
+            for (Map<String, Object> result : rows) {
                 Map<String, String> labels = (Map<String, String>) result.get("metric");
                 List<Object> value = (List<Object>) result.get("value");
                 if (labels == null || value == null || value.size() < 2) continue;

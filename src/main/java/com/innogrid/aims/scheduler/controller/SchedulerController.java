@@ -150,7 +150,7 @@ public class SchedulerController {
     }
 
     @Operation(summary = "수집 제외 노드 목록",
-               description = "핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
+               description = "메트릭 저장소가 상한 안에 응답하지 않아 뺀 노드(사유: 메트릭 질의 응답 없음)도 함께 나옵니다 — 저장소가 멈춰도 배치는 나머지 노드로 계속됩니다. 핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
                        + "노드 목록(/nodes)은 배열 계약을 지키느라 이들을 담지 않으므로 여기서 확인합니다. 정상이면 빈 배열입니다.")
     @GetMapping("/nodes/excluded")
     public ApiResponse<List<ExcludedNodeResponse>> getExcludedNodes() {

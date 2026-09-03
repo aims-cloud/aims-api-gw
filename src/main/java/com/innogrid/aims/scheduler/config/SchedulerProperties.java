@@ -19,6 +19,9 @@ public class SchedulerProperties {
     /** 노드 수집 대상 Prometheus job 이름. */
     private String nodeJob = "mdc-nodes";
 
+    /** 메트릭 질의 시간 상한. 저장소가 응답을 안 줄 때 스케줄러가 멈추지 않게 한다(단계 14). */
+    private Metrics metrics = new Metrics();
+
     /** 디스크 사용률을 읽을 마운트 포인트. 여러 시리즈 중 하나를 고정하기 위해 사용한다. */
     private String diskMountPoint = "/";
 
@@ -83,6 +86,8 @@ public class SchedulerProperties {
     private final Network network = new Network();
 
     public String getNodeJob() { return nodeJob; }
+    public Metrics getMetrics() { return metrics; }
+    public void setMetrics(Metrics v) { this.metrics = v; }
     public void setNodeJob(String nodeJob) { this.nodeJob = nodeJob; }
     public String getDiskMountPoint() { return diskMountPoint; }
     public void setDiskMountPoint(String diskMountPoint) { this.diskMountPoint = diskMountPoint; }
@@ -293,5 +298,35 @@ public class SchedulerProperties {
         public void setDegradedPenalty(double v) { this.degradedPenalty = v; }
         public double getLinkWeight() { return linkWeight; }
         public void setLinkWeight(double v) { this.linkWeight = v; }
+    }
+
+    /**
+     * 메트릭 질의 시간 상한 — 저장소 클라이언트에 타임아웃이 없어(타 담당자 파일) 스케줄러 쪽에서 기다리기를 멈춘다.
+     *
+     * <p>기다리기를 멈춰도 HTTP 호출 자체는 저장소가 응답할 때까지 풀 스레드를 붙잡는다. 그래서 풀은 고정 크기이고,
+     * 붙잡힌 스레드를 실제로 회수하는 것은 클라이언트 타임아웃(12장 T8)만 할 수 있다.</p>
+     */
+    public static class Metrics {
+
+        /** 노드 한 대의 질의(핵심 4 + 부가 6) 전체 상한(ms). 넘으면 그 노드를 "응답 없음"으로 제외한다. */
+        private long nodeTimeoutMs = 10_000;
+
+        /** 스냅샷 전체 상한(ms). 넘으면 끝나지 않은 노드를 전부 제외한다. */
+        private long collectTimeoutMs = 30_000;
+
+        /** 단건 질의(대상 노드 목록·GPU 개수·전력 효율 추세) 상한(ms). */
+        private long queryTimeoutMs = 5_000;
+
+        /** 내부 풀 크기 = 저장소 동시 질의 수. */
+        private int parallelism = 4;
+
+        public long getNodeTimeoutMs() { return nodeTimeoutMs; }
+        public void setNodeTimeoutMs(long v) { this.nodeTimeoutMs = v; }
+        public long getCollectTimeoutMs() { return collectTimeoutMs; }
+        public void setCollectTimeoutMs(long v) { this.collectTimeoutMs = v; }
+        public long getQueryTimeoutMs() { return queryTimeoutMs; }
+        public void setQueryTimeoutMs(long v) { this.queryTimeoutMs = v; }
+        public int getParallelism() { return parallelism; }
+        public void setParallelism(int v) { this.parallelism = v; }
     }
 }

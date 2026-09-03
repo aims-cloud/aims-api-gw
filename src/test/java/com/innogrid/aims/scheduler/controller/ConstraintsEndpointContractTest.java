@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,8 +25,9 @@ class ConstraintsEndpointContractTest {
     @Autowired
     MockMvc mockMvc;
 
+    @DisplayName("제약 설명은 C0 부터 C5 까지 여섯 항목이다")
     @Test
-    void 제약_설명은_C0_부터_C5_까지_여섯_항목이다() throws Exception {
+    void constraint_list_6_items() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/constraints"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(6))

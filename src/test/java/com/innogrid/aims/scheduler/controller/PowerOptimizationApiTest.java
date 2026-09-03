@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,8 +30,9 @@ class PowerOptimizationApiTest {
     @Autowired
     MockMvc mockMvc;
 
+    @DisplayName("전력 최적화 진단은 데이터가 없어도 200 이다")
     @Test
-    void 전력_최적화_진단은_데이터가_없어도_200_이다() throws Exception {
+    void optimization_diagnosis_200_no_data() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/optimization/power"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -43,8 +45,9 @@ class PowerOptimizationApiTest {
                 .andExpect(jsonPath("$.data.summary.findingCount").value(0));
     }
 
+    @DisplayName("통합 진단은 데이터가 없어도 200 이다")
     @Test
-    void 통합_진단은_데이터가_없어도_200_이다() throws Exception {
+    void consolidation_diagnosis_200_no_data() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/optimization/consolidation"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -60,15 +63,17 @@ class PowerOptimizationApiTest {
      * {@code /optimization/power} 는 두 조각짜리 경로다. {@code SchedulerController} 의
      * {@code /nodes/{nodeId}} 같은 경로 변수에 잡히지 않고 제 컨트롤러로 가야 한다.
      */
+    @DisplayName("최적화 경로가 다른 컨트롤러에 잡히지 않는다")
     @Test
-    void 최적화_경로가_다른_컨트롤러에_잡히지_않는다() throws Exception {
+    void optimization_path_not_captured() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/optimization/power"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.cluster").exists());   // 노드 단건 응답에는 없는 필드
     }
 
+    @DisplayName("미인증이면 403 이다")
     @Test
-    void 미인증이면_403_이다() throws Exception {
+    void unauthenticated_403() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/optimization/power")
                         .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous()))
                 .andExpect(status().isForbidden());

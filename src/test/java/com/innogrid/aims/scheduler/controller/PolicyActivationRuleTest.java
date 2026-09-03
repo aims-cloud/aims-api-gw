@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -61,8 +62,9 @@ class PolicyActivationRuleTest {
         }
     }
 
+    @DisplayName("빈 상태의 첫 정책은 활성 그 다음은 비활성으로 만들어진다")
     @Test
-    void 빈_상태의_첫_정책은_활성_그_다음은_비활성으로_만들어진다() throws Exception {
+    void first_policy_active_rest_inactive() throws Exception {
         Map<String, Object> first = create("{\"name\":\"act-first\"}");
         Map<String, Object> second = create("{\"name\":\"act-second\"}");
 
@@ -71,8 +73,9 @@ class PolicyActivationRuleTest {
         assertEquals(true, repository.findByName("act-first").orElseThrow().isActive(), "첫 정책은 그대로");
     }
 
+    @DisplayName("명시적 active true 가 충돌하면 409 이고 아무것도 바뀌지 않는다")
     @Test
-    void 명시적_active_true_가_충돌하면_409_이고_아무것도_바뀌지_않는다() throws Exception {
+    void create_active_true_409() throws Exception {
         create("{\"name\":\"act-a\"}");
 
         mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
@@ -83,8 +86,9 @@ class PolicyActivationRuleTest {
         assertTrue(repository.findByName("act-b").isEmpty(), "저장되지 않는다");
     }
 
+    @DisplayName("PUT active true 는 충돌 시 409 active false 는 항상 허용")
     @Test
-    void PUT_active_true_는_충돌_시_409_active_false_는_항상_허용() throws Exception {
+    void put_active_true_409_false_ok() throws Exception {
         create("{\"name\":\"act-a\"}");
         Map<String, Object> b = create("{\"name\":\"act-b\"}");
 
@@ -99,8 +103,9 @@ class PolicyActivationRuleTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.active").value(true));   // 충돌이 없어졌으니 허용
     }
 
+    @DisplayName("전환은 같은 종류의 활성을 끄고 대상을 켜며 꺼진 것을 응답에 담는다")
     @Test
-    void 전환은_같은_종류의_활성을_끄고_대상을_켜며_꺼진_것을_응답에_담는다() throws Exception {
+    void activate_deactivates_same_type() throws Exception {
         create("{\"name\":\"act-a\"}");
         Map<String, Object> b = create("{\"name\":\"act-b\"}");
         Map<String, Object> gpu = create("{\"name\":\"act-gpu\",\"resourceType\":\"GPU\"}");
@@ -125,8 +130,9 @@ class PolicyActivationRuleTest {
         assertNotNull(r);
     }
 
+    @DisplayName("종류를 바꾸는 부분 수정도 활성 충돌에 걸린다")
     @Test
-    void 종류를_바꾸는_부분_수정도_활성_충돌에_걸린다() throws Exception {
+    void patch_type_change_409() throws Exception {
         create("{\"name\":\"act-common\"}");
         Map<String, Object> gpu = create("{\"name\":\"act-gpu\",\"resourceType\":\"GPU\"}");
         assertEquals(true, gpu.get("active"));
@@ -138,16 +144,18 @@ class PolicyActivationRuleTest {
         assertEquals("GPU", repository.findByName("act-gpu").orElseThrow().getResourceType().name(), "바뀌지 않는다");
     }
 
+    @DisplayName("자기 자신을 다시 저장하는 것은 충돌이 아니다")
     @Test
-    void 자기_자신을_다시_저장하는_것은_충돌이_아니다() throws Exception {
+    void resaving_same_policy_no_conflict() throws Exception {
         Map<String, Object> a = create("{\"name\":\"act-a\"}");
         mockMvc.perform(put(BASE + "/" + a.get("id")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"active\":true,\"description\":\"same\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.active").value(true));
     }
 
+    @DisplayName("없는 정책 전환은 404")
     @Test
-    void 없는_정책_전환은_404() throws Exception {
+    void activate_missing_policy_404() throws Exception {
         mockMvc.perform(post(BASE + "/987654321/activate")).andExpect(status().isNotFound());
     }
 

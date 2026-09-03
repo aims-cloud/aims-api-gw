@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,8 +31,9 @@ class SchedulePlacementOrderApiTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
+    @DisplayName("생략하면 현행 해석값이고 응답은 24필드")
     @Test
-    void 생략하면_현행_해석값이고_응답은_24필드() throws Exception {
+    void omitted_order_default_24_fields() throws Exception {
         String id = "poapi-" + Long.toHexString(System.nanoTime());
         JsonNode d = create("{\"scheduleId\":\"" + id + "\",\"name\":\"" + id + "\",\"cronExpression\":\"0 0 2 * * ?\",\"resourceType\":\"GPU\"}");
         try {
@@ -42,8 +44,9 @@ class SchedulePlacementOrderApiTest {
         }
     }
 
+    @DisplayName("size 는 관대 파서로 받고 수정으로 바꿀 수 있으며 모르는 값은 400")
     @Test
-    void size_는_관대_파서로_받고_수정으로_바꿀_수_있으며_모르는_값은_400() throws Exception {
+    void lenient_order_parse_unknown_400() throws Exception {
         String id = "poapi-" + Long.toHexString(System.nanoTime());
         JsonNode d = create("{\"scheduleId\":\"" + id + "\",\"name\":\"" + id + "\",\"cronExpression\":\"0 0 2 * * ?\",\"resourceType\":\"GPU\",\"placementOrder\":\"size\"}");
         try {

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,8 +41,9 @@ class SchedulerApiContractTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
+    @DisplayName("워크로드 생성 조회 목록 응답이 같은 21필드다")
     @Test
-    void 워크로드_생성_조회_목록_응답이_같은_21필드다() throws Exception {
+    void workload_responses_21_fields() throws Exception {
         Map<String, Object> created = data(mockMvc.perform(post("/api/v1/scheduler/workloads")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -85,8 +87,9 @@ class SchedulerApiContractTest {
         mockMvc.perform(delete("/api/v1/scheduler/workloads/" + id)).andExpect(status().isOk());
     }
 
+    @DisplayName("허용되지 않는 상태 전이는 400 이고 응답 형태는 그대로다")
     @Test
-    void 허용되지_않는_상태_전이는_400_이고_응답_형태는_그대로다() throws Exception {
+    void invalid_status_transition_400() throws Exception {
         Map<String, Object> created = data(mockMvc.perform(post("/api/v1/scheduler/workloads")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"contract-w2\",\"requiredCpu\":1,\"requiredMemoryMb\":512}"))
@@ -103,8 +106,9 @@ class SchedulerApiContractTest {
         mockMvc.perform(delete("/api/v1/scheduler/workloads/" + id)).andExpect(status().isOk());
     }
 
+    @DisplayName("배치 정책 생성 조회 수정 목록 응답이 같은 20필드다")
     @Test
-    void 배치_정책_생성_조회_수정_목록_응답이_같은_20필드다() throws Exception {
+    void policy_responses_20_fields() throws Exception {
         String name = "contract-policy-" + System.nanoTime();
         Map<String, Object> created = data(mockMvc.perform(post("/api/v1/scheduler/policies")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -143,16 +147,18 @@ class SchedulerApiContractTest {
         mockMvc.perform(get("/api/v1/scheduler/policies/" + id)).andExpect(status().isNotFound());
     }
 
+    @DisplayName("배치 이력 목록은 배열이다")
     @Test
-    void 배치_이력_목록은_배열이다() throws Exception {
+    void placement_history_is_array() throws Exception {
         // 테스트 환경에는 노드가 없어 배치가 일어나지 않으므로 행이 없을 수 있다. 형태만 본다.
         mockMvc.perform(get("/api/v1/scheduler/history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
     }
 
+    @DisplayName("노드 목록은 배열이고 없는 노드는 404 다")
     @Test
-    void 노드_목록은_배열이고_없는_노드는_404_다() throws Exception {
+    void node_list_array_missing_404() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/nodes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());

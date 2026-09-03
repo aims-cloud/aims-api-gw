@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.controller;
 
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,8 +32,9 @@ class PolicyAffinityRequestTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
+    @DisplayName("생성 시 켤 수 있고 기본은 꺼져 있다")
     @Test
-    void 생성_시_켤_수_있고_기본은_꺼져_있다() throws Exception {
+    void affinity_defaults_off_on_create() throws Exception {
         String on = "aff-on-" + System.nanoTime();
         Map<String, Object> created = data(mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"" + on + "\",\"affinityEnabled\":true}"))
@@ -51,8 +53,9 @@ class PolicyAffinityRequestTest {
         }
     }
 
+    @DisplayName("부분 수정으로 켜고 끌 수 있고 키가 없으면 유지된다")
     @Test
-    void 부분_수정으로_켜고_끌_수_있고_키가_없으면_유지된다() throws Exception {
+    void patch_toggles_affinity_omitted_keeps() throws Exception {
         String name = "aff-put-" + System.nanoTime();
         Map<String, Object> created = data(mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"" + name + "\"}"))

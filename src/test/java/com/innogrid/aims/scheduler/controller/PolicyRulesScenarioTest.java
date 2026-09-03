@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -81,8 +82,9 @@ class PolicyRulesScenarioTest {
         }
     }
 
+    @DisplayName("시나리오 정책 생성 전환 비활성 default 페이징이 설계대로 동작한다")
     @Test
-    void 시나리오_정책_생성_전환_비활성_default_페이징이_설계대로_동작한다() throws Exception {
+    void scenario_policy_lifecycle() throws Exception {
         List<Step> steps = new ArrayList<>();
 
         JsonNode a = body(post(P).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"scn-a\"}"));

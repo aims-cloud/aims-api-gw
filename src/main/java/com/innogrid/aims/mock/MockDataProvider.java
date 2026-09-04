@@ -2,18 +2,11 @@ package com.innogrid.aims.mock;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
 
 import com.innogrid.aims.dashboard.model.GpuDashboardDataset;
 import com.innogrid.aims.dashboard.model.GpuDashboardThreshold;
 import com.innogrid.aims.dashboard.model.GpuDeviceMetrics;
 import com.innogrid.aims.dashboard.model.GpuMetricHistory;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeInfo;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeMetrics;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeSpec;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.RoleInfo;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.VmInfo;
 import org.springframework.stereotype.Component;
 
 /**
@@ -64,130 +57,6 @@ public class MockDataProvider {
         return new GpuDeviceMetrics(gpuId, gpuIndex, uuid, hostname, role, deploymentId, vmId, vmName,
                 projectName, credentialName, gpuType, allocationType, gpuUtilization, vramUsedMb,
                 vramTotalMb, peakVramMb, gpuHistory(gpuUtilization, vramUsedMb));
-    }
-
-    // ── 자원 탐색기 트리 ────────────────────────────────────────
-    // TODO:: 자원 관리 데이터(역할·노드·VM 원장) 연동 시 트리 Mock 데이터와 이 메서드 제거
-    public ResourceExplorerTreeDataset getResourceExplorerTreeDataset() {
-        return new ResourceExplorerTreeDataset(
-                List.of(new RoleInfo("ADMIN", "역할 A", "관리자", 1),
-                        new RoleInfo("USER", "역할 B", "관리자", 1)),
-                List.of(new NodeInfo(
-                                "node-01",
-                                "node 01",
-                                "GPU 학습 노드",
-                                "ADMIN",
-                                "Openstack-GPU",
-                                "RUNNING",
-                                List.of("123.123.12.1"),
-                                new NodeSpec(
-                                        "Hypervisor",
-                                        "OPENSTACK",
-                                        "IaaS",
-                                        128,
-                                        40,
-                                        40,
-                                        128.0,
-                                        "Ceph 10TB"),
-                                new NodeMetrics(
-                                        32.5,
-                                        51.6,
-                                        128.0,
-                                        512.0,
-                                        1024.0,
-                                        88.5,
-                                        62.4,
-                                        80.0,
-                                        1_048_576.0,
-                                        524_288.0),
-                                List.of("gpu-01", "gpu-02")),
-                        new NodeInfo(
-                                "node-02",
-                                "node 02",
-                                "GPU 추론 노드",
-                                "USER",
-                                "Openstack-GPU2",
-                                "ERROR",
-                                List.of("123.123.12.2", "172.20.0.44"),
-                                new NodeSpec(
-                                        "Hypervisor",
-                                        "OPENSTACK",
-                                        "IaaS",
-                                        86,
-                                        40,
-                                        40,
-                                        128.0,
-                                        "Ceph 10TB"),
-                                new NodeMetrics(
-                                        78.1,
-                                        96.4,
-                                        128.0,
-                                        890.5,
-                                        1024.0,
-                                        64.0,
-                                        96.0,
-                                        160.0,
-                                        2_097_152.0,
-                                        786_432.0),
-                                List.of("gpu-03", "gpu-04")),
-                        // 메트릭 미수집 노드 — 노드 목록/Top-N 의 "-"·미수집 표시 확인용
-                        new NodeInfo(
-                                "node-03",
-                                "node 03",
-                                null,
-                                "USER",
-                                "Openstack-GPU2",
-                                "ERROR",
-                                List.of("123.123.180.82", "172.20.0.232"),
-                                new NodeSpec(
-                                        "Hypervisor",
-                                        "OPENSTACK",
-                                        "IaaS",
-                                        12,
-                                        20,
-                                        20,
-                                        64.0,
-                                        "Local 2TB"),
-                                null, List.of())),
-                List.of(new VmInfo(
-                                "vm-01",
-                                "vm 01",
-                                "학습 VM",
-                                "ADMIN",
-                                "Openstack-GPU",
-                                "node-01",
-                                "RUNNING",
-                                List.of("10.0.0.11", "172.20.1.11"),
-                                45.2,
-                                62.8,
-                                38.6,
-                                List.of("gpu-01", "gpu-02")),
-                        new VmInfo(
-                                "vm-02",
-                                "vm 02",
-                                "추론 VM",
-                                "USER",
-                                "Openstack-GPU2",
-                                "node-02",
-                                "ERROR",
-                                List.of("10.0.0.12", "172.20.1.12"),
-                                88.9,
-                                91.3,
-                                76.2,
-                                List.of("gpu-03", "gpu-04")),
-                        new VmInfo(
-                                "vm-03",
-                                "vm 03",
-                                null,
-                                "USER",
-                                "Openstack-GPU3",
-                                "node-02",
-                                "PENDING",
-                                List.of("10.0.0.13"),
-                                5.1,
-                                12.4,
-                                3.9,
-                                List.of("gpu-05", "gpu-06"))));
     }
 
     // TODO:: 실제 Thanos 연동 시 GPU Mock 시계열 생성 헬퍼 제거

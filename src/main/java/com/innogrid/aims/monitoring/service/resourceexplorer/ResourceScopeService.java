@@ -226,7 +226,7 @@ public class ResourceScopeService {
     }
 
     /** 1세부 VM 상태 — 우리 4종 이름과 같으면 그대로, 아니면 Tumblebug 어휘 매핑을 재사용 */
-    static ResourceStatus sebu1Status(String status) {
+    public static ResourceStatus sebu1Status(String status) {
         if (status != null) {
             for (ResourceStatus candidate : ResourceStatus.values()) {
                 if (candidate.name().equalsIgnoreCase(status.trim())) {

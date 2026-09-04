@@ -4,14 +4,18 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
 
-import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
-import com.innogrid.aims.mock.MockDataProvider;
-import com.innogrid.aims.monitoring.ResourceExplorerProperties;
-import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse;
+import com.innogrid.aims.infra.entity.Asset;
+import com.innogrid.aims.infra.repository.AssetRepository;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDailyUsageResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeInfoResponse;
@@ -22,150 +26,229 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryRespons
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse.GpuCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse.NetworkTrafficCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeInfo;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeMetrics;
-import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceExplorerTreeService;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.DailyMax;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.HostSummaryMetrics;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 자원 탐색기 노드 상세 패널 조회 서비스.
- * 트리에서 물리 노드 선택 시 개요(주요 지표 카드·요약 차트·정보 표)·가상머신 탭 데이터를 제공한다.
+ * 자원 탐색기 노드(물리 호스트) 상세 패널 조회 서비스.
+ * 트리에서 물리 호스트 선택 시 개요(주요 지표 카드·요약 차트·정보 표)·가상머신·자원 사용 현황 탭 데이터를 제공한다.
  *
- * 경로의 nodeId 가 현재 사용자 토큰의 역할 스코프에 없으면 404 —
- * 트리에 노출되지 않는 노드의 패널을 URL 로 직접 조회할 수 없다(역할 패널과 동일 정책).
+ * nodeId 는 assets.id 다. 현재 사용자 토큰의 역할 스코프({@link ResourceScopeService})에 없으면 404 —
+ * 트리에 노출되지 않는 노드의 패널을 URL 로 직접 조회할 수 없다(역할·MDC 패널과 동일 정책).
+ * 지표는 Thanos({@link HostDetailMetricsQueryService}), 가상머신은 1세부 Host↔VM 관계({@link Sebu1VirtualResourceProvider})다.
  * 로그/트레이스 탭은 NodeLog/NodeTrace 서비스, 알람 탭은 AlarmHistory/AlarmPolicy API 를 재사용한다.
  */
 @Service
 public class ResourceExplorerNodeService {
 
-    /** Mock 시계열 생성용 결정적 패턴 — 현재값 대비 배율 (하루 부하 곡선 흉내) */
-    // TODO:: Thanos range 쿼리 연동 시 Mock 시계열 생성 로직 제거
-    private static final double[] TREND_PATTERN = {
-            0.55, 0.52, 0.50, 0.48, 0.47, 0.50, 0.58, 0.68,
-            0.78, 0.86, 0.92, 0.95, 0.97, 1.00, 0.98, 0.94,
-            0.90, 0.88, 0.85, 0.80, 0.74, 0.68, 0.62, 0.58};
+    /** 가상머신 탭 사용률의 집계 윈도우 */
+    static final NodeMetricInterval VM_LIST_INTERVAL = NodeMetricInterval.LAST_10M;
 
-    private static final int MAX_TREND_POINTS = 500;
+    private final ResourceScopeService scopeService;
+    private final AssetRepository assetRepository;
+    private final MonitoringTargetRepository monitoringTargetRepository;
+    private final Sebu1VirtualResourceProvider virtualResourceProvider;
+    private final HostDetailMetricsQueryService detailMetrics;
+    private final HostMetricsQueryService hostMetrics;
 
-    // TODO:: 자원 관리 데이터 연동 시 Mock 플래그 의존성 제거
-    private final ResourceExplorerProperties properties;
-    // TODO:: 자원 관리 데이터 연동 시 MockDataProvider 의존성을 실제 원장·Thanos 조회로 교체
-    private final MockDataProvider mockDataProvider;
-    private final AuthService authService;
-
-    public ResourceExplorerNodeService(ResourceExplorerProperties properties,
-                                       MockDataProvider mockDataProvider,
-                                       AuthService authService) {
-        this.properties = properties;
-        this.mockDataProvider = mockDataProvider;
-        this.authService = authService;
+    public ResourceExplorerNodeService(ResourceScopeService scopeService,
+                                       AssetRepository assetRepository,
+                                       MonitoringTargetRepository monitoringTargetRepository,
+                                       Sebu1VirtualResourceProvider virtualResourceProvider,
+                                       HostDetailMetricsQueryService detailMetrics,
+                                       HostMetricsQueryService hostMetrics) {
+        this.scopeService = scopeService;
+        this.assetRepository = assetRepository;
+        this.monitoringTargetRepository = monitoringTargetRepository;
+        this.virtualResourceProvider = virtualResourceProvider;
+        this.detailMetrics = detailMetrics;
+        this.hostMetrics = hostMetrics;
     }
+
+    /** 접근 검증을 통과한 노드 — 자산, 스코프 호스트, exporter instance */
+    record NodeContext(Asset asset, ScopedHost host, String nodeInstance, String dcgmInstance) {}
 
     // ── 공개 API ────────────────────────────────────────────────
 
     /** 개요 탭 주요 지표 카드 6종 — 미수집이거나 GPU 미탑재면 해당 카드가 null 로 내려간다 */
+    @Transactional(readOnly = true)
     public NodeSummaryResponse getNodeSummary(String nodeId) {
-        NodeInfo node = accessibleNode(nodeId);
-        NodeMetrics m = node.metrics();
-        if (m == null) {
-            return new NodeSummaryResponse(now(), null, null, null, null, null, null);
-        }
+        NodeContext ctx = accessibleNode(nodeId);
+        HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
         return new NodeSummaryResponse(
                 now(),
-                m.cpuUtilization() == null ? null : new CpuCard(m.cpuUtilization(), node.spec().cpuCoreCount()),
+                m.cpuPercent() == null ? null : new CpuCard(m.cpuPercent(), zeroIfNull(m.coreCount())),
                 capacityCard(m.memoryUsedGb(), m.memoryTotalGb()),
                 capacityCard(m.fileSystemUsedGb(), m.fileSystemTotalGb()),
-                m.networkReceiveBytesPerSec() == null || m.networkTransmitBytesPerSec() == null
-                        ? null
-                        : new NetworkTrafficCard(m.networkReceiveBytesPerSec(), m.networkTransmitBytesPerSec()),
-                m.gpuUtilization() == null ? null : new GpuCard(m.gpuUtilization(), node.gpuIds().size()),
+                m.receiveBytesPerSec() == null || m.transmitBytesPerSec() == null
+                        ? null : new NetworkTrafficCard(m.receiveBytesPerSec(), m.transmitBytesPerSec()),
+                m.gpuPercent() == null ? null : new GpuCard(m.gpuPercent(), zeroIfNull(m.gpuCount())),
                 capacityCard(m.vramUsedGb(), m.vramTotalGb()));
     }
 
     /** 개요 탭 모니터링 요약 차트 — 지표별 시계열 (NETWORK 는 수신/송신 2개 시리즈, 미수집이면 빈 시리즈).
      *  metric 미지정 시 전체 지표(6종)를 반환한다.
      *  조회 구간은 지금 기준 interval 기간(지금-window ~ 지금), 버킷 간격은 기간별 defaultStep 이다. */
+    @Transactional(readOnly = true)
     public List<NodeMetricTrendResponse> getNodeMetricTrend(String nodeId, NodeDetailMetric metric,
                                                             NodeMetricInterval interval) {
-        NodeInfo node = accessibleNode(nodeId);
+        NodeContext ctx = accessibleNode(nodeId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
 
-        List<NodeDetailMetric> metrics = metric == null
-                ? List.of(NodeDetailMetric.values())
-                : List.of(metric);
+        List<NodeDetailMetric> metrics = metric == null ? List.of(NodeDetailMetric.values()) : List.of(metric);
         return metrics.stream()
-                .map(m -> metricTrend(node, m, from, to, step))
+                .map(m -> new NodeMetricTrendResponse(m, m.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
+                        detailMetrics.trend(m, ctx.nodeInstance(), ctx.dcgmInstance(), from, to, step)))
                 .toList();
     }
 
-    /** 지표 1종의 시계열 응답을 구성한다 */
-    private static NodeMetricTrendResponse metricTrend(NodeInfo node, NodeDetailMetric metric, Instant from, Instant to, String step) {
-        NodeMetrics m = node.metrics();
-        List<NodeMetricTrendResponse.Series> series = new ArrayList<>();
-        if (m != null) {
-            switch (metric) {
-                case CPU -> addSeries(series, metric.name().toLowerCase(Locale.ROOT),
-                        m.cpuUtilization(), from, to, step);
-                case MEMORY -> addSeries(series, metric.name().toLowerCase(Locale.ROOT),
-                        utilization(m.memoryUsedGb(), m.memoryTotalGb()), from, to, step);
-                case FILE_SYSTEM -> addSeries(series, metric.name().toLowerCase(Locale.ROOT),
-                        utilization(m.fileSystemUsedGb(), m.fileSystemTotalGb()), from, to, step);
-                case NETWORK -> {
-                    addSeries(series, "receive", m.networkReceiveBytesPerSec(), from, to, step);
-                    addSeries(series, "transmit", m.networkTransmitBytesPerSec(), from, to, step);
-                }
-                case GPU -> addSeries(series, metric.name().toLowerCase(Locale.ROOT),
-                        m.gpuUtilization(), from, to, step);
-                case VRAM -> addSeries(series, metric.name().toLowerCase(Locale.ROOT),
-                        utilization(m.vramUsedGb(), m.vramTotalGb()), from, to, step);
-            }
-        }
-        return new NodeMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step, series);
-    }
-
-    /** 개요 탭 노드 정보 표 — 정적 스펙과 우상단 배지(provider/platformType) */
+    /**
+     * 개요 탭 노드 정보 표 — 자산 원장(유형·제조사·시스템 유형)과 Thanos 현재값(가동일수·코어·메모리·스토리지), 1세부 VM 수.
+     * provider 배지는 자산 제조사, platformType 은 자산 시스템 유형으로 채운다.
+     */
+    @Transactional(readOnly = true)
     public NodeInfoResponse getNodeInfo(String nodeId) {
-        NodeInfo node = accessibleNode(nodeId);
-        long vmCount = loadDataset().vms().stream()
-                .filter(v -> nodeId.equals(v.nodeId()))
-                .count();
+        NodeContext ctx = accessibleNode(nodeId);
+        HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
+        int vmCount = virtualResourceProvider.findByHost(ctx.asset()).size();
         return new NodeInfoResponse(
-                node.nodeId(),
-                node.name(),
-                String.join(",", node.ipAddresses()),
-                node.spec().uptimeDays(),
-                node.spec().type(),
-                (int) vmCount,
-                node.spec().cpuAllocatedCores(),
-                node.spec().memoryAllocatedGb(),
-                node.spec().storage(),
-                node.spec().provider(),
-                node.spec().platformType());
+                nodeId,
+                ctx.asset().getName(),
+                String.join(",", ctx.host().ipAddresses()),
+                uptimeDays(m.bootTimeSeconds()),
+                ctx.asset().getType().name(),
+                vmCount,
+                zeroIfNull(m.coreCount()),
+                m.memoryTotalGb() == null ? 0.0 : m.memoryTotalGb(),
+                m.fileSystemTotalGb() == null ? null : m.fileSystemTotalGb() + " GB",
+                ctx.asset().getManufacturer(),
+                ctx.asset().getSystemType());
     }
 
-    /** 가상머신 탭 — 이 노드에서 실행 중인 VM 목록, 상태·키워드(이름/별칭) 필터·정렬·페이징(1부터) */
+    /** 가상머신 탭 — 이 물리 호스트에 배치된 1세부 VM 목록, 상태·키워드(이름/별칭) 필터·정렬·페이징(1부터).
+     *  사용률은 VM 내부 node_exporter 의 최근 10분 평균, exporter 가 없으면 미수집(null). */
+    @Transactional(readOnly = true)
     public PageResponse<NodeVmListItemResponse> getNodeVms(String nodeId, NodeStatus status,
                                                            String keyword, int page, int size, String sort) {
-        // TODO:: 가상머신 탭 화면 설계 확정 시 컬럼·검색 필드 재정의
-        accessibleNode(nodeId);
-        List<NodeVmListItemResponse> rows = loadDataset().vms().stream()
-                .filter(v -> nodeId.equals(v.nodeId()))
-                .filter(v -> status == null || status.name().equalsIgnoreCase(v.status()))
-                .map(v -> new NodeVmListItemResponse(
-                        v.vmId(), v.name(), v.alias(),
-                        NodeStatus.valueOf(v.status().toUpperCase(Locale.ROOT)),
-                        v.ipAddresses(), v.cpuUtilization(), v.memoryUtilization(), v.diskUtilization()))
+        Comparator<NodeVmListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        NodeContext ctx = accessibleNode(nodeId);
+        List<VirtualResource> vms = virtualResourceProvider.findByHost(ctx.asset());
+        Map<String, HostUtilization> utilization = vms.stream().anyMatch(v -> v.instance() != null)
+                ? hostMetrics.utilizationByInstance(VM_LIST_INTERVAL) : Map.of();
+
+        List<NodeVmListItemResponse> rows = vms.stream()
+                .map(v -> vmRow(v, v.instance() == null
+                        ? HostUtilization.EMPTY : utilization.getOrDefault(v.instance(), HostUtilization.EMPTY)))
+                .filter(row -> status == null || row.status() == status)
                 .filter(row -> matchesKeyword(row, keyword))
-                .sorted(comparator(sort))
+                .sorted(comparator)
                 .toList();
         return PageResponse.of(rows, page, size);
+    }
+
+    /** 자원 사용 현황 탭 — 일자별 일간 최대 CPU/Memory/File System 사용률과 가상머신수.
+     *  interval 기간(지금 기준)에 걸친 일자의 행을 반환한다. 값이 null 이면 해당 일자 미수집("-")이다.
+     *  가상머신수는 이력이 없어 오늘 행에만 현재 1세부 VM 수를 싣는다. */
+    // TODO:: 1세부 VM 배치 이력(일간 최대 VM 수)이 제공되면 과거 일자의 maxVmCount 채우기
+    @Transactional(readOnly = true)
+    public PageResponse<NodeDailyUsageResponse> getNodeUsage(String nodeId, NodeMetricInterval interval,
+                                                             int page, int size, String sort) {
+        Comparator<NodeDailyUsageResponse> comparator = usageComparator(sort);   // 미지원 필드는 조회 전에 400
+        NodeContext ctx = accessibleNode(nodeId);
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        LocalDate from = today.minusDays(Math.max(0, interval.window().toDays()));
+        long vmCount = virtualResourceProvider.findByHost(ctx.asset()).size();
+
+        List<NodeDailyUsageResponse> rows = detailMetrics.dailyMax(ctx.nodeInstance(), from, today).stream()
+                .map(d -> new NodeDailyUsageResponse(d.date(), d.cpuPercent(), d.memoryPercent(), d.fileSystemPercent(),
+                        d.date().equals(today) ? vmCount : null))
+                .sorted(comparator)
+                .toList();
+        return PageResponse.of(rows, page, size);
+    }
+
+    // ── 노드 접근 검증 ──────────────────────────────────────────
+
+    /** nodeId(assets.id)가 현재 사용자 토큰의 역할 스코프에 있는 물리 호스트일 때만 컨텍스트를 만든다. 아니면 404. */
+    private NodeContext accessibleNode(String nodeId) {
+        long assetId;
+        try {
+            assetId = Long.parseLong(nodeId);
+        } catch (NumberFormatException e) {
+            throw notFound(nodeId);
+        }
+        ScopedHost host = scopeService.currentUserScope().distinctHosts().stream()
+                .filter(h -> h.assetId() == assetId)
+                .findFirst()
+                .orElseThrow(() -> notFound(nodeId));
+        Asset asset = assetRepository.findById(assetId).orElseThrow(() -> notFound(nodeId));
+        String dcgmInstance = monitoringTargetRepository.findByAsset_IdIn(List.of(assetId)).stream()
+                .filter(t -> t.getExporterType() == ExporterType.DCGM_EXPORTER)
+                .map(MonitoringTarget::getScrapeEndpoint)
+                .findFirst()
+                .orElse(null);
+        return new NodeContext(asset, host, host.instance(), dcgmInstance);
+    }
+
+    private static BusinessException notFound(String nodeId) {
+        return new BusinessException(HttpStatus.NOT_FOUND, "노드를 찾을 수 없습니다: " + nodeId);
+    }
+
+    // ── 행·카드 구성 ────────────────────────────────────────────
+
+    private static NodeVmListItemResponse vmRow(VirtualResource vm, HostUtilization u) {
+        return new NodeVmListItemResponse(
+                "SEBU1:" + vm.externalId(),
+                vm.name(),
+                null,                                                   // 1세부 VM 별칭 없음
+                NodeStatus.valueOf(ResourceScopeService.sebu1Status(vm.status()).name()),
+                List.of(),                                              // TODO:: 1세부 VM IP 제공 시 채우기
+                u.cpuUtilization(),
+                u.memoryUtilization(),
+                u.fileSystemUtilization());
+    }
+
+    /** 사용률 + Free/Total 카드 — used/total 중 하나라도 미수집이면 카드 없음(null) */
+    private static CapacityMetricCard capacityCard(Double usedGb, Double totalGb) {
+        if (usedGb == null || totalGb == null) {
+            return null;
+        }
+        double percent = totalGb <= 0 ? 0.0 : round1(usedGb / totalGb * 100);
+        return new CapacityMetricCard(percent, round1(totalGb - usedGb), totalGb);
+    }
+
+    private static long uptimeDays(Long bootTimeSeconds) {
+        if (bootTimeSeconds == null) {
+            return 0;
+        }
+        return Math.max(0, (Instant.now().getEpochSecond() - bootTimeSeconds) / 86_400);
+    }
+
+    private static int zeroIfNull(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private static double round1(double value) {
+        return Math.round(value * 10) / 10.0;
+    }
+
+    private static OffsetDateTime now() {
+        return OffsetDateTime.now(ZoneId.systemDefault());
     }
 
     /** 키워드는 이름/별칭에서 찾는다 */
@@ -178,45 +261,23 @@ public class ResourceExplorerNodeService {
                 || (row.alias() != null && row.alias().toLowerCase(Locale.ROOT).contains(lower));
     }
 
-    /** 자원 사용 현황 탭 — 일자별 일간 최대 CPU/Memory/File System 사용률과 일간 최대 가상머신수.
-     *  interval 기간(지금 기준)에 걸친 일자의 행을 반환한다. 값이 null 이면 해당 일자 미수집("-")이다. */
-    public PageResponse<NodeDailyUsageResponse> getNodeUsage(String nodeId, NodeMetricInterval interval, int page, int size, String sort) {
-        NodeInfo node = accessibleNode(nodeId);
-        long vmCount = loadDataset().vms().stream()
-                .filter(v -> nodeId.equals(v.nodeId()))
-                .count();
-        LocalDate from = LocalDate.now(ZoneId.systemDefault())
-                .minusDays(Math.max(0, interval.window().toDays()));
+    /** 가상머신 탭 sort 해석 — 미지원 필드는 400, 미수집(null)은 마지막 */
+    private static Comparator<NodeVmListItemResponse> comparator(String sort) {
+        String[] parts = sort.split(",", 2);
+        String field = parts[0].trim();
+        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
 
-        List<NodeDailyUsageResponse> rows = mockDailyUsage(node, vmCount).stream()
-                .filter(row -> !row.date().isBefore(from))
-                .sorted(usageComparator(sort))
-                .toList();
-        return PageResponse.of(rows, page, size);
-    }
-
-    /** Mock 일간 최대치 — 오늘/어제 2행을 현재 지표 기반으로 결정적으로 생성한다.
-     *  어제의 가상머신수는 수집 이력이 없는 상태("-")를 흉내 내 null 이다.
-     *  TODO:: Thanos max_over_time 일 단위 집계(또는 일 배치 적재) 연동 시 이 생성 로직 제거 */
-    private static List<NodeDailyUsageResponse> mockDailyUsage(NodeInfo node, long vmCount) {
-        NodeMetrics m = node.metrics();
-        LocalDate today = LocalDate.now(ZoneId.systemDefault());
-        return List.of(
-                new NodeDailyUsageResponse(today,
-                        dailyMax(m == null ? null : m.cpuUtilization(), 1.15),
-                        dailyMax(m == null ? null : utilization(m.memoryUsedGb(), m.memoryTotalGb()), 1.1),
-                        dailyMax(m == null ? null : utilization(m.fileSystemUsedGb(), m.fileSystemTotalGb()), 1.05),
-                        m == null ? null : vmCount),
-                new NodeDailyUsageResponse(today.minusDays(1),
-                        dailyMax(m == null ? null : m.cpuUtilization(), 0.9),
-                        dailyMax(m == null ? null : utilization(m.memoryUsedGb(), m.memoryTotalGb()), 0.95),
-                        dailyMax(m == null ? null : utilization(m.fileSystemUsedGb(), m.fileSystemTotalGb()), 1.0),
-                        null));
-    }
-
-    /** 일간 최대치 흉내 — 현재값 × 배율, 100% 상한. 미수집(null)은 그대로 null */
-    private static Double dailyMax(Double current, double factor) {
-        return current == null ? null : Math.min(100.0, round1(current * factor));
+        Comparator<NodeVmListItemResponse> comparator = switch (field) {
+            case "name" -> Comparator.comparing(NodeVmListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
+            case "alias" -> nullsLast(NodeVmListItemResponse::alias, desc);
+            case "status" -> Comparator.comparing(row -> row.status().name());
+            case "ipAddress" -> nullsLast(row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0), desc);
+            case "cpuUtilization" -> nullsLast(NodeVmListItemResponse::cpuUtilization, desc);
+            case "memoryUtilization" -> nullsLast(NodeVmListItemResponse::memoryUtilization, desc);
+            case "diskUtilization" -> nullsLast(NodeVmListItemResponse::diskUtilization, desc);
+            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+        };
+        return desc ? comparator.reversed() : comparator;
     }
 
     /** 자원 사용 현황 sort 해석 — 미지원 필드는 400, 미수집(null)은 마지막 */
@@ -231,138 +292,14 @@ public class ResourceExplorerNodeService {
             case "maxMemoryUtilization" -> nullsLast(NodeDailyUsageResponse::maxMemoryUtilization, desc);
             case "maxFileSystemUtilization" -> nullsLast(NodeDailyUsageResponse::maxFileSystemUtilization, desc);
             case "maxVmCount" -> nullsLast(NodeDailyUsageResponse::maxVmCount, desc);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
         };
         return desc ? comparator.reversed() : comparator;
     }
 
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (목록 공통 규칙) */
-    private static <T extends Comparable<T>> Comparator<NodeDailyUsageResponse> nullsLast(
-            java.util.function.Function<NodeDailyUsageResponse, T> extractor, boolean desc) {
-        Comparator<T> nullHandling = desc
-                ? Comparator.nullsFirst(Comparator.naturalOrder())
-                : Comparator.nullsLast(Comparator.naturalOrder());
-        return Comparator.comparing(extractor, nullHandling);
-    }
-
-    // ── 노드 접근 검증 ──────────────────────────────────────────
-
-    /** nodeId 가 데이터셋에 존재하고 현재 사용자 토큰의 역할 스코프에 속할 때만 반환한다. 아니면 404. */
-    private NodeInfo accessibleNode(String nodeId) {
-        return loadDataset().nodes().stream()
-                .filter(n -> n.nodeId().equals(nodeId))
-                .filter(n -> authService.currentUserRoleIds().contains(n.roleId()))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(
-                        HttpStatus.NOT_FOUND, "노드를 찾을 수 없습니다: " + nodeId));
-    }
-
-    private ResourceExplorerTreeDataset loadDataset() {
-        // TODO:: 자원 관리 데이터(노드 원장)와 Thanos 지표 연동 시 Mock 분기를 실제 조회로 교체
-        if (properties.isMockEnabled()) {
-            return mockDataProvider.getResourceExplorerTreeDataset();
-        }
-        throw new ResponseStatusException(
-                HttpStatus.NOT_IMPLEMENTED,
-                "노드 지표·정보 데이터와 자원 탐색기 노드 상세 패널의 매핑 구현 전입니다.");
-    }
-
-    // ── Mock 시계열 생성 ────────────────────────────────────────
-
-    /** 지표 현재값이 있으면 결정적 시계열 시리즈를 추가한다 — 미수집(null)이면 추가하지 않는다 */
-    // TODO:: Thanos range 쿼리 연동 시 Mock 시계열 생성 로직 제거
-    private static void addSeries(List<NodeMetricTrendResponse.Series> series,
-                                  String name, Double baseValue, Instant from, Instant to, String step) {
-        if (baseValue == null) {
-            return;
-        }
-        long stepSeconds = parseStepSeconds(step);
-        long span = Math.max(1, to.getEpochSecond() - from.getEpochSecond());
-        long points = Math.min(span / stepSeconds + 1, MAX_TREND_POINTS);
-
-        List<MetricTrendResponse.DataPoint> dataPoints = new ArrayList<>();
-        for (long i = 0; i < points; i++) {
-            long timestamp = from.getEpochSecond() + i * stepSeconds;
-            double factor = TREND_PATTERN[(int) (i % TREND_PATTERN.length)];
-            dataPoints.add(new MetricTrendResponse.DataPoint(timestamp, round1(baseValue * factor)));
-        }
-        series.add(new NodeMetricTrendResponse.Series(name, dataPoints));
-    }
-
-    /** step 문자열("300s", "5m", "1h")을 초로 해석한다. 형식이 잘못되면 400. */
-    private static long parseStepSeconds(String step) {
-        try {
-            String trimmed = step.trim().toLowerCase(Locale.ROOT);
-            long value = Long.parseLong(trimmed.substring(0, trimmed.length() - 1));
-            long seconds = switch (trimmed.charAt(trimmed.length() - 1)) {
-                case 's' -> value;
-                case 'm' -> value * 60;
-                case 'h' -> value * 3600;
-                case 'd' -> value * 86400;
-                default -> throw new NumberFormatException();
-            };
-            if (seconds <= 0) {
-                throw new NumberFormatException();
-            }
-            return seconds;
-        } catch (RuntimeException e) {
-            throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 step 형식입니다 (예: 300s, 5m, 1h, 1d): " + step);
-        }
-    }
-
-    // ── 집계 내부 ───────────────────────────────────────────────
-
-    /** 사용률 + Free/Total 카드 — used/total 중 하나라도 미수집이면 카드 없음(null) */
-    private static CapacityMetricCard capacityCard(Double usedGb, Double totalGb) {
-        Double percent = utilization(usedGb, totalGb);
-        if (percent == null) {
-            return null;
-        }
-        return new CapacityMetricCard(percent, round1(totalGb - usedGb), totalGb);
-    }
-
-    /** 사용률(%) — 소수 1자리 반올림. 미수집(null)이면 null, 전체 용량이 0이면 0. */
-    private static Double utilization(Double used, Double total) {
-        if (used == null || total == null) {
-            return null;
-        }
-        return total <= 0 ? 0.0 : round1(used / total * 100);
-    }
-
-    private static double round1(double value) {
-        return Math.round(value * 10) / 10.0;
-    }
-
-    private static OffsetDateTime now() {
-        return OffsetDateTime.now(ZoneId.systemDefault());
-    }
-
-    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400, 미수집(null)은 마지막. */
-    private static Comparator<NodeVmListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<NodeVmListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(NodeVmListItemResponse::name);
-            case "alias" -> nullsLastComparator(NodeVmListItemResponse::alias, desc);
-            case "status" -> Comparator.comparing(row -> row.status().name());
-            case "ipAddress" -> nullsLastComparator(
-                    row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0), desc);
-            case "cpuUtilization" -> nullsLastComparator(NodeVmListItemResponse::cpuUtilization, desc);
-            case "memoryUtilization" -> nullsLastComparator(NodeVmListItemResponse::memoryUtilization, desc);
-            case "diskUtilization" -> nullsLastComparator(NodeVmListItemResponse::diskUtilization, desc);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
-        };
-        return desc ? comparator.reversed() : comparator;
-    }
-
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (MDC 노드 목록과 동일 규칙) */
-    private static <T extends Comparable<T>> Comparator<NodeVmListItemResponse> nullsLastComparator(
-            java.util.function.Function<NodeVmListItemResponse, T> extractor, boolean desc) {
+    /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (목록 공통 규칙).
+     *  desc 면 바깥에서 reversed() 되어 null 위치도 뒤집히므로, 미리 nullsFirst 로 두어 상쇄한다. */
+    private static <R, T extends Comparable<T>> Comparator<R> nullsLast(Function<R, T> extractor, boolean desc) {
         Comparator<T> nullHandling = desc
                 ? Comparator.nullsFirst(Comparator.naturalOrder())
                 : Comparator.nullsLast(Comparator.naturalOrder());

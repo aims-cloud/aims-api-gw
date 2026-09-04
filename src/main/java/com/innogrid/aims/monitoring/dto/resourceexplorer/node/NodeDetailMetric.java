@@ -18,8 +18,5 @@ public enum NodeDetailMetric {
     public String unit() {
         return unit;
     }
-
-    public void add() {
-    }
 }
 

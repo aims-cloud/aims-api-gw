@@ -28,8 +28,27 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long>, JpaSp
     /** 이 정책을 가리키는 스케줄이 있는지 — 정책 삭제 전에 본다. */
     boolean existsByPolicyId(Long policyId);
 
-    /** 자동 실행 대상. 러너가 폴링할 때 쓴다. */
-    List<Schedule> findByEnabledTrueAndAutoRunTrueAndNextRunAtLessThanEqual(OffsetDateTime now);
+    /**
+     * 자동 실행 대상. 러너가 폴링할 때 쓴다.
+     *
+     * <p><b>이미 실행 중인 스케줄은 뺀다.</b> 한 번 실행이 폴링 주기보다 오래 걸리면 그동안의 폴이 같은 스케줄을
+     * 계속 큐에 쌓고, 원래 실행이 끝나 상태가 풀리는 순간 쌓인 것들이 <b>차례로 정상 실행</b>된다 — cron 한 틱에
+     * 실행이 두세 번 일어나고, 배치가 실패하는 워크로드는 재시도 상한을 한 틱에 다 태운다.</p>
+     *
+     * <p><b>파생 쿼리 대신 JPQL 을 쓰는 이유</b>: {@code …LastRunStatusNot(RUNNING)} 으로 쓰면 SQL 이
+     * {@code last_run_status <> 'RUNNING'} 이 되는데, 이 컬럼은 nullable 이라 <b>한 번도 실행된 적 없는 스케줄이
+     * 전부 탈락</b>한다(NULL 비교는 UNKNOWN). 새로 만든 스케줄이 영영 자동 실행되지 않는 결함이라 NULL 을 명시한다.</p>
+     */
+    @Query("""
+           select s from Schedule s
+            where s.enabled = true
+              and s.autoRun = true
+              and s.nextRunAt <= :now
+              and (s.lastRunStatus is null or s.lastRunStatus <> :running)
+            order by s.nextRunAt asc
+           """)
+    List<Schedule> findDueForRun(@Param("now") OffsetDateTime now,
+                                 @Param("running") ScheduleRun.RunStatus running);
 
     /**
      * 실행 권한을 원자적으로 잡는다.

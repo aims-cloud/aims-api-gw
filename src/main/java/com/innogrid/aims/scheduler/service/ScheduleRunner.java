@@ -133,7 +133,7 @@ public class ScheduleRunner implements SmartLifecycle {
     /** 실행할 때가 된 스케줄을 찾아 실행 스레드에 넘긴다. 폴링 스레드는 DB 조회만 한다. */
     private void runDueSchedules() {
         List<Schedule> due = scheduleRepository
-                .findByEnabledTrueAndAutoRunTrueAndNextRunAtLessThanEqual(OffsetDateTime.now());
+                .findDueForRun(OffsetDateTime.now(), ScheduleRun.RunStatus.RUNNING);
         if (due.isEmpty()) return;
 
         log.debug("자동 실행 대상 스케줄 {}건", due.size());

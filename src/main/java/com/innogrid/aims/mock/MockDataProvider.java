@@ -2,16 +2,11 @@ package com.innogrid.aims.mock;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
 
 import com.innogrid.aims.dashboard.model.GpuDashboardDataset;
 import com.innogrid.aims.dashboard.model.GpuDashboardThreshold;
 import com.innogrid.aims.dashboard.model.GpuDeviceMetrics;
 import com.innogrid.aims.dashboard.model.GpuMetricHistory;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeInfo;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.RoleInfo;
-import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.VmInfo;
 import org.springframework.stereotype.Component;
 
 /**
@@ -62,15 +57,6 @@ public class MockDataProvider {
         return new GpuDeviceMetrics(gpuId, gpuIndex, uuid, hostname, role, deploymentId, vmId, vmName,
                 projectName, credentialName, gpuType, allocationType, gpuUtilization, vramUsedMb,
                 vramTotalMb, peakVramMb, gpuHistory(gpuUtilization, vramUsedMb));
-    }
-
-    // ── 자원 탐색기 트리 ────────────────────────────────────────
-    // TODO:: 자원 관리 데이터(역할·노드·VM 원장) 연동 시 트리 Mock 데이터와 이 메서드 제거
-    public ResourceExplorerTreeDataset getResourceExplorerTreeDataset() {
-        return new ResourceExplorerTreeDataset(
-                List.of(new RoleInfo("ADMIN", "역할 A")),
-                List.of(new NodeInfo("node-01", "node 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02"))),
-                List.of(new VmInfo("vm-01", "vm 01", "ADMIN", "Openstack-GPU", "RUNNING", List.of("gpu-01", "gpu-02"))));
     }
 
     // TODO:: 실제 Thanos 연동 시 GPU Mock 시계열 생성 헬퍼 제거

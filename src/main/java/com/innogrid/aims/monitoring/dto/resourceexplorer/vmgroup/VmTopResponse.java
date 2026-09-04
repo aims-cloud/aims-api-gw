@@ -1,6 +1,6 @@
 package com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup;
 
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 
 /**
  * 가상머신 Top-N 항목. value 는 요청한 metric 의 값이고,

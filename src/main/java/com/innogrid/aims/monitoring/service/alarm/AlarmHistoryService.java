@@ -24,10 +24,12 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AlarmHistoryService {
 
-    /** 발생 이력 목록 — 레벨·역할·배포영역·자원 유형·기간·키워드 필터, 컬럼 정렬, 페이징(1부터) */
+    /** 발생 이력 목록 — 레벨·역할·배포영역·자원 유형·특정 자원·기간·키워드 필터, 컬럼 정렬, 페이징(1부터).
+     *  resourceId 는 자원 탐색기의 알람 탭(MDC/노드/VM 등 선택 자원 스코프)에서 사용한다. */
     public PageResponse<AlarmHistoryListItemResponse> getHistories(
             List<AlarmLevel> levels, String roleId, String deploymentId, String resourceType,
-            Long policyId, String keyword, Instant from, Instant to, int page, int size, String sort) {
+            String resourceId, Long policyId, String keyword,
+            Instant from, Instant to, int page, int size, String sort) {
         // TODO:: AlarmHistory 엔티티에 역할/배포영역/정책 링크/확인 정보 필드 확장 후 조회 구현
         throw dataSourceNotImplemented();
     }

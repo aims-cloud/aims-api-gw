@@ -7,10 +7,12 @@ import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDailyUsageResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeMetricTrendResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogFileResponse;
@@ -51,10 +53,11 @@ import org.springframework.web.bind.annotation.RestController;
  * 트리에서 물리 노드를 선택했을 때 오른쪽 패널의 탭별 데이터를 제공한다.
  *   개요 탭        — 주요 지표 카드 6종, 모니터링 요약 차트, 노드 정보 표
  *   가상머신 탭    — 노드에서 실행 중인 VM 목록
- *   자원 사용 현황 탭 — 카테고리별 상세 (화면 설계 확정 전)
+ *   자원 사용 현황 탭 — 일자별 일간 최대 사용률·가상머신수 테이블
  *   로그/트레이스 탭 — 수집 서비스 관리(위저드 CRUD·탐지·검증), 서비스별 로그·트레이스 조회
- * 알람 탭은 기존 AlarmController 를 instance 필터로 재사용한다.
- * 왼쪽 트리는 ResourceExplorerTreeController, 노드그룹 패널은 ResourceExplorerNodeGroupController 가 담당한다.
+ * 알람 탭은 AlarmHistory/AlarmPolicy API 의 resourceId 필터를 재사용한다.
+ * 경로의 nodeId 가 현재 사용자 토큰의 역할 스코프에 없으면 404 — 트리에 노출되지 않는 노드는 조회할 수 없다.
+ * 왼쪽 트리는 ResourceExplorerTreeController, MDC 패널은 ResourceExplorerMdcController 가 담당한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (노드)", description = "노드 상세 — 주요 지표, 모니터링 요약 차트, 노드 정보, 가상머신 목록, 자원 사용 현황, 수집 서비스·로그")
 @RestController
@@ -83,19 +86,16 @@ public class ResourceExplorerNodeController {
 
     @Operation(summary = "노드 모니터링 요약 차트",
             description = "metric(CPU|MEMORY|FILE_SYSTEM|NETWORK|GPU|VRAM)별 시계열을 조회합니다. "
+                    + "metric 미지정 시 전체 지표(6종)를 배열로 반환합니다. "
                     + "NETWORK 는 receive/transmit 2개 시리즈를 반환합니다. "
-                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+                    + "interval(LAST_10M|LAST_1H|LAST_6H|LAST_24H|LAST_30D|LAST_90D)은 조회 기간(지금 기준)이며 "
+                    + "버킷 간격(step)은 기간에 맞춰 서버가 정합니다.")
     @GetMapping("/metrics/trend")
-    public ApiResponse<NodeMetricTrendResponse> getNodeMetricTrend(
+    public ApiResponse<List<NodeMetricTrendResponse>> getNodeMetricTrend(
             @PathVariable String nodeId,
-            @RequestParam(defaultValue = "CPU") NodeDetailMetric metric,
-            @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to,
-            @RequestParam(defaultValue = "300s") String step) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
-        return ApiResponse.ok(resourceExplorerNodeService.getNodeMetricTrend(
-                nodeId, metric, fromInstant, toInstant, step));
+            @RequestParam(required = false) NodeDetailMetric metric,
+            @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
+        return ApiResponse.ok(resourceExplorerNodeService.getNodeMetricTrend(nodeId, metric, interval));
     }
 
     @Operation(summary = "노드 정보",
@@ -117,22 +117,23 @@ public class ResourceExplorerNodeController {
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "name,asc") String sort) {
-        return ApiResponse.ok(resourceExplorerNodeService.getNodeVms(
-                nodeId, status, keyword, page, size, sort));
+        return ApiResponse.ok(resourceExplorerNodeService.getNodeVms(nodeId, status, keyword, page, size, sort));
     }
 
     @Operation(summary = "노드 자원 사용 현황",
-            description = "자원 사용 현황 탭 — 카테고리별 상세 시계열. 화면 설계 확정 전이며 응답 구조가 변경될 수 있습니다.")
+            description = "자원 사용 현황 탭 테이블 — 일자별 일간 최대 CPU/Memory/File System 사용률과 일간 최대 가상머신수. "
+                    + "값이 null 이면 해당 일자 미수집(\"-\")입니다. "
+                    + "interval(LAST_10M|LAST_1H|LAST_6H|LAST_24H|LAST_30D|LAST_90D)은 조회 기간(지금 기준)이며 "
+                    + "일 단위 테이블이라 기간에 걸친 일자의 행이 반환됩니다. "
+                    + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
     @GetMapping("/usage")
-    public ApiResponse<List<NodeMetricTrendResponse>> getNodeUsage(
+    public ApiResponse<PageResponse<NodeDailyUsageResponse>> getNodeUsage(
             @PathVariable String nodeId,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
-        return ApiResponse.ok(resourceExplorerNodeService.getNodeUsage(
-                nodeId, category, fromInstant, toInstant));
+            @RequestParam(defaultValue = "LAST_30D") NodeMetricInterval interval,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "date,desc") String sort) {
+        return ApiResponse.ok(resourceExplorerNodeService.getNodeUsage(nodeId, interval, page, size, sort));
     }
 
     // ── 로그/트레이스 탭 — 수집 서비스 관리 ─────────────────────

@@ -3,8 +3,8 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeMetric;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup.VmGroupSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup.VmListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup.VmTopResponse;
@@ -16,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
  * 자원 탐색기 가상머신 그룹 패널 조회 서비스.
  * 트리에서 배포영역별 가상머신 그룹 선택 시 개요 탭의 KPI 카드·VM Top-N·VM 목록을 제공한다.
  * (알람 탭은 기존 AlarmController 를 자원 스코프 필터로 재사용한다)
- * 노드그룹 패널은 ResourceExplorerNodeGroupService, 트리는 ResourceExplorerTreeService 가 담당한다.
+ * MDC 패널은 ResourceExplorerMdcService, 트리는 ResourceExplorerTreeService 가 담당한다.
  */
 @Service
 public class ResourceExplorerVmGroupService {

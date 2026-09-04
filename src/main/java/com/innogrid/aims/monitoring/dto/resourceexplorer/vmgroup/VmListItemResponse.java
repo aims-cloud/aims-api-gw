@@ -1,6 +1,6 @@
 package com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup;
 
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 
 /** 가상머신 목록 테이블 1행 — 이름/별칭/상태/IP/CPU/Memory(사용·전체)/File system(사용·전체). */
 public record VmListItemResponse(

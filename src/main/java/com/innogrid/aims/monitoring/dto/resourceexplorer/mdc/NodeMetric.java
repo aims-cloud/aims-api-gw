@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.mdc;
 
 /** 노드 Top-N 위젯의 지표 토글 (CPU / Memory / File system utilization). */
 public enum NodeMetric {

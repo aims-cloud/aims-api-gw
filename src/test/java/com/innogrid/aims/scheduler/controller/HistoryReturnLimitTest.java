@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+
+import org.springframework.data.domain.Limit;
 
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
@@ -101,6 +104,39 @@ class HistoryReturnLimitTest {
             assertEquals(3, fetch("/api/v1/scheduler/workloads/" + other + "/history").size());
         } finally {
             repository.deleteAllById(few);
+        }
+    }
+
+    @DisplayName("자를 때 남는 쪽이 최신이다 — 정렬한 뒤에 자른다")
+    @Test
+    void limit_keeps_the_newest_not_the_oldest() {
+        long other = WORKLOAD + 2;
+        List<Long> rows = new ArrayList<>();
+        // 저장 사이에 **시계가 실제로 넘어갈 때까지** 기다린다.
+        // 처음에는 "저장마다 DB 왕복이 있으니 시각이 달라지겠지" 하고 그냥 이어 저장했는데, 세 건이 같은 시각으로
+        // 찍혀 정렬 순서가 매번 달라졌다(반복 실행에서 4회 중 2회 실패). H2 왕복이 시계 해상도보다 빠르다.
+        // 고정 sleep 대신 시각이 바뀌는 즉시 진행해, 느려지지 않으면서도 결과가 확정되게 한다.
+        for (String name : List.of("oldest", "middle", "newest")) {
+            SchedulingHistory saved = repository.save(new SchedulingHistory(other, name, "mdc-01", "n1",
+                    0.5, "r", "weighted", "default"));
+            rows.add(saved.getId());
+            waitUntilClockPasses(saved.getCreatedAt());
+        }
+        try {
+            List<String> kept = repository.findByWorkloadIdOrderByCreatedAtDesc(other, Limit.of(2))
+                    .stream().map(SchedulingHistory::getWorkloadName).toList();
+
+            assertEquals(List.of("newest", "middle"), kept,
+                    "자른 뒤에 정렬하면 오래된 것이 남는다 — 정렬이 먼저여야 한다");
+        } finally {
+            repository.deleteAllById(rows);
+        }
+    }
+
+    /** 주어진 시각보다 뒤가 될 때까지 기다린다 — 같은 시각이 두 번 찍히면 정렬 순서가 정해지지 않는다. */
+    private static void waitUntilClockPasses(OffsetDateTime moment) {
+        while (!OffsetDateTime.now().isAfter(moment)) {
+            Thread.onSpinWait();
         }
     }
 

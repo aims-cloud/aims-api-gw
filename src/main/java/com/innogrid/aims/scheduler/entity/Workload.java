@@ -10,7 +10,10 @@ import jakarta.persistence.*;
  * 스케줄링 엔진이 최적 노드에 배치한다.
  */
 @Entity
-@Table(name = "workloads")
+@Table(name = "workloads", indexes = {
+        // 스케줄 실행이 매 틱마다 도는 배치 후보 조회의 필터 두 개
+        @Index(name = "idx_workloads_status_type", columnList = "status, resourceType")
+})
 public class Workload {
 
     @Id

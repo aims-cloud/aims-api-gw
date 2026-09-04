@@ -146,3 +146,26 @@ ALTER TABLE scheduling_policies ADD CONSTRAINT scheduling_policies_resource_type
 --  WHERE table_name IN ('workloads', 'scheduling_policies', 'scheduling_history');
 -- SELECT column_name, data_type, is_nullable, character_maximum_length
 --   FROM information_schema.columns WHERE table_name = 'workloads' ORDER BY ordinal_position;
+
+-- ── 인덱스 ───────────────────────────────────────────────────
+-- 위 CREATE TABLE 은 표가 이미 있는 DB(배포 VM)에서는 아무 일도 하지 않는다.
+-- 반면 아래 인덱스는 **기존 DB 에도 적용된다** — 배포 VM 에서 실제로 만들어지는 부분이 여기다.
+--
+-- scheduling_history 는 인덱스가 하나도 없었다. 이 표는 지워지지 않으므로(연구 근거 보존)
+-- 행이 단조 증가하는데, 실행 상세·워크로드별 이력·전체 목록이 모두 전량 스캔이었다.
+-- workloads 는 스케줄 실행이 매 틱마다 status + resource_type 으로 후보를 고른다.
+--
+-- 엔티티에도 같은 이름으로 @Index 를 선언해 두었다. ddl-auto=update 인 환경은 Hibernate 가
+-- 만들어 주지만, validate 인 환경과 "스크립트가 스키마의 기록"이라는 원칙을 위해 여기에도 남긴다.
+CREATE INDEX IF NOT EXISTS idx_scheduling_history_run
+    ON scheduling_history (schedule_run_id);
+CREATE INDEX IF NOT EXISTS idx_scheduling_history_workload_created
+    ON scheduling_history (workload_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_scheduling_history_created
+    ON scheduling_history (created_at);
+
+CREATE INDEX IF NOT EXISTS idx_workloads_status_type
+    ON workloads (status, resource_type);
+
+-- 확인:
+-- SELECT indexname FROM pg_indexes WHERE tablename IN ('scheduling_history', 'workloads') ORDER BY indexname;

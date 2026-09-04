@@ -272,11 +272,17 @@ public class ScheduleService {
      * 과거라서 켜자마자 실행된다. 자동 실행이 꺼져 있으면 예정 시각을 비운다.</p>
      */
     public void refreshNextRunAt(Schedule schedule) {
-        if (!schedule.isAutoRunnable()) {
-            schedule.setNextRunAt(null);
-            return;
-        }
-        schedule.setNextRunAt(cronSupport.nextRunAt(schedule.getCronExpression(), OffsetDateTime.now()));
+        schedule.setNextRunAt(nextRunAt(schedule.getCronExpression(), schedule.isAutoRunnable()));
+    }
+
+    /**
+     * 다음 실행 시각을 값만으로 계산한다. 자동 실행 대상이 아니면 {@code null}.
+     *
+     * <p>실행이 끝날 때는 엔티티가 <b>실행 시작 시점의 사본</b>이라 그 사이 바뀐 cron·자동 실행 여부를 모른다.
+     * 그래서 호출자가 DB 의 최신 값을 읽어 넘길 수 있게 열어 둔다.</p>
+     */
+    public OffsetDateTime nextRunAt(String cronExpression, boolean autoRunnable) {
+        return autoRunnable ? cronSupport.nextRunAt(cronExpression, OffsetDateTime.now()) : null;
     }
 
     private void apply(Schedule schedule, ScheduleRequest request) {

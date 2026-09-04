@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.model.NodePowerSpecs;
+import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
@@ -47,15 +49,28 @@ public class NodeResourceCollector {
     private final PowerModel powerModel;
     private final MetricsQueryGuard guard;
 
+    /** 노드 전력 사양 원장. null 이면(원장 없이 조립한 테스트 경로) 정격은 종전대로 설정값에서 온다. */
+    private final NodePowerSpecRepository powerSpecRepository;
+
     @Autowired
     public NodeResourceCollector(SchedulerMetricsGateway metrics,
                                  SchedulerProperties properties,
                                  PowerModel powerModel,
-                                 MetricsQueryGuard guard) {
+                                 MetricsQueryGuard guard,
+                                 NodePowerSpecRepository powerSpecRepository) {
         this.vmClient = metrics;
         this.properties = properties;
         this.powerModel = powerModel;
         this.guard = guard;
+        this.powerSpecRepository = powerSpecRepository;
+    }
+
+    /** 원장 없이 조립하는 형태 — 정격은 설정값. */
+    public NodeResourceCollector(SchedulerMetricsGateway metrics,
+                                 SchedulerProperties properties,
+                                 PowerModel powerModel,
+                                 MetricsQueryGuard guard) {
+        this(metrics, properties, powerModel, guard, null);
     }
 
     /** 클라이언트를 직접 받는 형태(기존 테스트·조립 경로) — 기본 게이트웨이로 감싼다. */
@@ -111,6 +126,11 @@ public class NodeResourceCollector {
      * 조립이 끝난 목록을 오염시키지 않게 하기 위해서다.</p>
      */
     @SuppressWarnings("unchecked")
+    /** 원장 스냅샷 — 수집 1회당 한 번만 읽는다. 원장이 없거나 비면 {@link NodePowerSpecs#EMPTY}. */
+    private NodePowerSpecs powerSpecs() {
+        return powerSpecRepository == null ? NodePowerSpecs.EMPTY : NodePowerSpecs.of(powerSpecRepository.findAll());
+    }
+
     public Snapshot collect() {
         List<NodeResource> nodes = new ArrayList<>();
         List<ExcludedNode> excluded = new ArrayList<>();
@@ -131,6 +151,8 @@ public class NodeResourceCollector {
 
             // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다.
             Map<String, Integer> gpuCounts = collectGpuCounts();
+            // 정격 전력 원장도 수집 1회당 한 번만 읽는다(단계 20). 비어 있으면 정격은 종전대로 설정값에서 온다.
+            NodePowerSpecs specs = powerSpecs();
 
             List<String> instances = new ArrayList<>();
             List<String> mdcIds = new ArrayList<>();
@@ -142,7 +164,7 @@ public class NodeResourceCollector {
                 int gpu = gpuCounts.getOrDefault(instance, 0);
                 instances.add(instance);
                 mdcIds.add(mdcId);
-                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, gpu)));
+                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, gpu, specs)));
             }
 
             List<Optional<NodeOutcome>> outcomes = guard.awaitAll(futures, limits.getNodeTimeoutMs(), deadline);
@@ -171,7 +193,7 @@ public class NodeResourceCollector {
      * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 제외 사유를 담은 결과를 돌려준다.
      * 작업 스레드에서 돌므로 공유 상태를 건드리지 않는다.
      */
-    private NodeOutcome collectNodeMetrics(String mdcId, String instance, int totalGpu) {
+    private NodeOutcome collectNodeMetrics(String mdcId, String instance, int totalGpu, NodePowerSpecs specs) {
         String filter = String.format("{instance=\"%s\"}", instance);
         String mount = properties.getDiskMountPoint();
 
@@ -219,7 +241,7 @@ public class NodeResourceCollector {
         NodeResource node = new NodeResource(mdcId, instance,
                 totalCpu, totalMemMb, totalGpu,
                 cpuUsage.getAsDouble(), memUsage, diskUsage,
-                powerWatts, powerModel.capacityOf(instance), temperature,
+                powerWatts, specs.capacityOr(instance, powerModel::capacityOf), temperature,
                 networkRx, networkTx)
                 .withDiskCapacityGb(diskCapacityGb);
 

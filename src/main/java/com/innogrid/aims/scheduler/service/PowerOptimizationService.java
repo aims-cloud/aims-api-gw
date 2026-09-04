@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.model.NodePowerSpecs;
+import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
@@ -62,18 +64,32 @@ public class PowerOptimizationService {
     private final SchedulerMetricsGateway metricsClient;
     private final MetricsQueryGuard guard;
 
+    /** 노드 전력 사양 원장. null 이면(직접 조립한 테스트 경로) 정격은 설정값. */
+    private final NodePowerSpecRepository powerSpecRepository;
+
     @Autowired
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties,
                                     SchedulerMetricsGateway metrics,
-                                    MetricsQueryGuard guard) {
+                                    MetricsQueryGuard guard,
+                                    NodePowerSpecRepository powerSpecRepository) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
         this.properties = properties;
         this.props = properties.getPower();
         this.metricsClient = metrics;
         this.guard = guard;
+        this.powerSpecRepository = powerSpecRepository;
+    }
+
+    /** 원장 없이 조립하는 형태 — 추세의 정격은 설정값. */
+    public PowerOptimizationService(SchedulingService schedulingService,
+                                    PowerModel powerModel,
+                                    SchedulerProperties properties,
+                                    SchedulerMetricsGateway metrics,
+                                    MetricsQueryGuard guard) {
+        this(schedulingService, powerModel, properties, metrics, guard, null);
     }
 
     /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. null 이면 추세를 쓸 수 없다. */
@@ -167,6 +183,10 @@ public class PowerOptimizationService {
             TreeSet<Long> timestamps = new TreeSet<>();
             cpu.values().forEach(series -> timestamps.addAll(series.keySet()));
 
+            // 정격 전력 원장은 시각마다가 아니라 추세 1회당 한 번만 읽는다(단계 20).
+            NodePowerSpecs specs = powerSpecRepository == null
+                    ? NodePowerSpecs.EMPTY : NodePowerSpecs.of(powerSpecRepository.findAll());
+
             List<PowerOptimizationTrendResponse.Point> points = new ArrayList<>();
             boolean anyPower = false;
             for (long ts : timestamps) {
@@ -177,7 +197,7 @@ public class PowerOptimizationService {
                     String instance = e.getKey();
                     double watts = power.getOrDefault(instance, Map.of()).getOrDefault(ts, 0.0);
                     nodes.add(new NodeResource("-", instance, 0, 0, 0, usage, 0, 0,
-                            watts, powerModel.capacityOf(instance), 0, 0, 0));
+                            watts, specs.capacityOr(instance, powerModel::capacityOf), 0, 0, 0));
                 }
                 PowerOptimizationTrendResponse.Point point = pointOf(ts, nodes);
                 anyPower |= point.measured();

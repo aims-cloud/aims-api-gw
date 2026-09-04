@@ -327,6 +327,55 @@ public class ScheduleExecutionService {
     /** 실행 결과 메시지의 컬럼 길이. 넘치면 저장이 통째로 실패해 실행 권한이 안 풀린다. */
     static final int MESSAGE_MAX = 500;
 
+    static final String RECOVERED_MESSAGE = "앱 재기동으로 중단됨 — 실행 권한을 회수했습니다";
+
+    /**
+     * 기동 시 남아 있는 실행 권한을 회수한다.
+     *
+     * <p>실행 권한은 실행이 끝나며 풀린다. 그런데 <b>실행 도중 프로세스가 죽으면</b>(우리 배포 절차인
+     * 재시작이 곧 그 경우다) 표시가 그대로 남고, 그 스케줄은 자동·수동 실행도 삭제도 영구히 거부된다.
+     * 다시 뜰 때 한 번 훑어 정리하는 것이 유일한 회수 수단이다.</p>
+     *
+     * <p><b>대상은 실행 권한이 잡힌 스케줄로만 한정한다.</b> 예정 시각이 지난 스케줄 전체를 건드리면
+     * "앱이 꺼져 있던 사이의 실행은 몰아 돌리지 않는다"는 기존 계약이 깨진다. 실행 이력도 <b>기존 행을
+     * 마무리할 뿐</b> 새 행을 만들지 않는다.</p>
+     *
+     * <p>스케줄 하나가 실패해도 나머지는 회수한다 — 앱 기동을 막으면 안 되므로 호출자가 다시 감싼다.</p>
+     *
+     * @return 회수한 스케줄 수
+     */
+    public int recoverStuckRuns() {
+        List<Schedule> stuck = scheduleRepository.findByLastRunStatus(ScheduleRun.RunStatus.RUNNING);
+        if (stuck.isEmpty()) return 0;
+
+        List<Long> ids = stuck.stream().map(Schedule::getId).toList();
+        finishStuckRuns(ids);
+
+        int recovered = 0;
+        for (Schedule schedule : stuck) {
+            try {
+                complete(schedule, ScheduleRun.RunStatus.FAILED, schedule.getLastRunAt(), RECOVERED_MESSAGE);
+                recovered++;
+            } catch (RuntimeException e) {
+                log.error("스케줄 실행 권한 회수 실패: schedule={}", schedule.getScheduleId(), e);
+            }
+        }
+        log.warn("기동 회수: 실행 중으로 남아 있던 스케줄 {}건 중 {}건을 정리했습니다", stuck.size(), recovered);
+        return recovered;
+    }
+
+    /** 끝나지 않은 실행 이력을 마무리한다. 실패해도 스케줄 권한 회수는 계속한다. */
+    private void finishStuckRuns(List<Long> scheduleIds) {
+        try {
+            List<ScheduleRun> runs = runRepository.findByScheduleIdInAndStatus(
+                    scheduleIds, ScheduleRun.RunStatus.RUNNING);
+            runs.forEach(run -> run.finish(ScheduleRun.RunStatus.FAILED, RECOVERED_MESSAGE));
+            runRepository.saveAll(runs);
+        } catch (RuntimeException e) {
+            log.error("중단된 실행 이력 정리 실패(스케줄 권한 회수는 계속한다)", e);
+        }
+    }
+
     /**
      * 최근 실행 정보를 기록하고 <b>실행 권한을 푼다</b>.
      *

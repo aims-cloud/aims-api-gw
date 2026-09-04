@@ -75,6 +75,8 @@ public class ScheduleRunner implements SmartLifecycle {
     public void start() {
         if (!running.compareAndSet(false, true)) return;
 
+        recoverStuckRunsQuietly();
+
         poller = Executors.newSingleThreadScheduledExecutor(daemon("aims-schedule-poller"));
         worker = Executors.newSingleThreadExecutor(daemon("aims-schedule-worker"));
 
@@ -86,6 +88,21 @@ public class ScheduleRunner implements SmartLifecycle {
         log.info("스케줄 러너 시작: 확인 주기 {}ms, 최초 지연 {}초, 시간대 {}",
                 properties.getPollIntervalMs(), properties.getInitialDelaySeconds(),
                 properties.getTimezone());
+    }
+
+    /**
+     * 기동 시 남아 있는 실행 권한을 회수한다. <b>여기서 예외가 새면 앱이 뜨지 않는다</b> —
+     * 스프링 컨텍스트 생성 스레드에서 돌기 때문이다. 그래서 {@code Throwable} 까지 삼키고 로그만 남긴다.
+     *
+     * <p>중복 {@code start()} 로 두 번 돌지 않도록 {@code running} 을 세운 뒤에 부른다. 폴링 시작 전에
+     * 끝나야 회수 대상이 폴러와 겹치지 않는다.</p>
+     */
+    private void recoverStuckRunsQuietly() {
+        try {
+            executionService.recoverStuckRuns();
+        } catch (Throwable t) {
+            log.error("기동 회수 실패 — 스케줄러는 계속 기동한다", t);
+        }
     }
 
     @Override

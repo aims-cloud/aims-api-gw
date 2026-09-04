@@ -7,9 +7,9 @@ package com.innogrid.aims.monitoring.dto.resourceexplorer.root;
 public record RoleListItemResponse(
         String roleId,
         String name,                    // 화면에서 역할 패널로 링크
-        String managerName,             // 관리자
-        long memberCount,
-        long deploymentCount,
+        String managerName,             // 관리자 — 역할 관리자 개념이 아직 없어 null("-")
+        long memberCount,               // 역할에 속한 사용자 수
+        long mdcCount,                  // 역할 스코프 물리 호스트가 속한 MDC 수
         long nodeCount,
         StatusSummary nodeStatus,
         long vmCount,

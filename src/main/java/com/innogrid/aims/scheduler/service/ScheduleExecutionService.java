@@ -196,6 +196,12 @@ public class ScheduleExecutionService {
             failQuietly(schedule, run, startedAt, "실행 중 오류: " + e.getMessage());
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "스케줄 실행에 실패했습니다: " + e.getMessage());
+        } catch (Error e) {
+            // 배포는 실행 중인 JVM 의 jar 를 덮어쓴다. 아직 로드되지 않은 클래스를 그때 읽으면
+            // NoClassDefFoundError 가 나는데, RuntimeException 만 잡으면 실행 권한이 잡힌 채 남는다.
+            log.error("스케줄 실행 중단(Error): schedule={}", schedule.getScheduleId(), e);
+            failQuietly(schedule, run, startedAt, "실행 중단: " + e);
+            throw e;
         }
     }
 
@@ -318,31 +324,71 @@ public class ScheduleExecutionService {
         return saved;
     }
 
+    /** 실행 결과 메시지의 컬럼 길이. 넘치면 저장이 통째로 실패해 실행 권한이 안 풀린다. */
+    static final int MESSAGE_MAX = 500;
+
     /**
-     * 최근 실행 정보를 갱신하고 다음 실행 시각을 다시 계산한다.
+     * 최근 실행 정보를 기록하고 <b>실행 권한을 푼다</b>.
      *
-     * <p>시작 시각을 인자로 받는다. 실행 권한을 잡는 조건부 UPDATE 가 영속성 컨텍스트를
-     * 비우기 때문에 엔티티에 남아 있는 값은 갱신 전 상태다.</p>
+     * <p>엔티티를 저장하지 않고 전용 UPDATE 하나만 쓴다 — 이유는
+     * {@link ScheduleRepository#recordRunResult} 주석에 적었다. 조회용으로 들고 있는 엔티티에도 같은 값을
+     * 반영해 호출자가 이어서 읽을 수 있게 하되, 그 엔티티를 저장하지는 않는다.</p>
      */
-    private void complete(Schedule schedule, ScheduleRun.RunStatus status,
-                          OffsetDateTime startedAt, String message) {
-        schedule.recordRun(status, startedAt, OffsetDateTime.now(), message);
-        scheduleService.refreshNextRunAt(schedule);
-        scheduleRepository.save(schedule);
+    void complete(Schedule schedule, ScheduleRun.RunStatus status,
+                  OffsetDateTime startedAt, String message) {
+        OffsetDateTime finishedAt = OffsetDateTime.now();
+        String trimmed = trim(message);
+        OffsetDateTime nextRunAt = nextRunAtOf(schedule, finishedAt);
+
+        scheduleRepository.recordRunResult(schedule.getId(), status, startedAt, finishedAt, trimmed, nextRunAt);
+
+        schedule.recordRun(status, startedAt, finishedAt, trimmed);
+        schedule.setNextRunAt(nextRunAt);
+    }
+
+    /**
+     * 다음 실행 시각. cron 을 못 읽어도 <b>실행 권한 해제를 막지 않는다</b> —
+     * 그 경우 한 주기 뒤로 밀어 폴러가 같은 실행을 즉시 다시 던지지 않게 한다.
+     */
+    private OffsetDateTime nextRunAtOf(Schedule schedule, OffsetDateTime base) {
+        try {
+            scheduleService.refreshNextRunAt(schedule);   // 엔티티에 계산만 하고 저장하지 않는다
+            return schedule.getNextRunAt();
+        } catch (RuntimeException e) {
+            log.warn("다음 실행 시각 계산 실패 — 한 주기 뒤로 민다: schedule={}, cron={}",
+                    schedule.getScheduleId(), schedule.getCronExpression(), e);
+            return schedule.isAutoRunnable()
+                    ? base.plusNanos(properties.getPollIntervalMs() * 1_000_000L)
+                    : null;
+        }
+    }
+
+    /** 컬럼 길이에 맞춰 자른다. 자르지 않으면 긴 예외 메시지 하나로 상태 기록이 통째로 실패한다. */
+    static String trim(String message) {
+        if (message == null || message.length() <= MESSAGE_MAX) return message;
+        return message.substring(0, MESSAGE_MAX - 3) + "...";
     }
 
     /**
      * 실패로 마무리한다. 여기서 다시 예외가 나면 원래 예외를 가리므로 삼킨다.
      * 상태를 못 풀면 스케줄이 RUNNING 으로 남아 영영 실행되지 않는다.
+     *
+     * <p><b>이력 저장과 권한 해제를 따로 감싼다.</b> 한 덩어리로 두면 이력 저장이 먼저 터졌을 때 해제가
+     * 아예 실행되지 않는다 — 실제로 이것이 가장 유력한 잠금 경로였다(긴 오류 메시지 → 컬럼 길이 초과).</p>
      */
     private void failQuietly(Schedule schedule, ScheduleRun run,
                              OffsetDateTime startedAt, String message) {
+        String trimmed = trim(message);
         try {
             if (run != null) {
-                run.finish(ScheduleRun.RunStatus.FAILED, message);
+                run.finish(ScheduleRun.RunStatus.FAILED, trimmed);
                 runRepository.save(run);
             }
-            complete(schedule, ScheduleRun.RunStatus.FAILED, startedAt, message);
+        } catch (RuntimeException e) {
+            log.error("실행 이력 저장 실패(권한 해제는 계속한다): schedule={}", schedule.getScheduleId(), e);
+        }
+        try {
+            complete(schedule, ScheduleRun.RunStatus.FAILED, startedAt, trimmed);
         } catch (RuntimeException e) {
             log.error("스케줄 실행 상태 정리 실패: schedule={}", schedule.getScheduleId(), e);
         }

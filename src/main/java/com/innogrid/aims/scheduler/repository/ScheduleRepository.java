@@ -53,4 +53,46 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long>, JpaSp
     int acquireForRun(@Param("id") Long id,
                       @Param("running") ScheduleRun.RunStatus running,
                       @Param("startedAt") OffsetDateTime startedAt);
+
+    /**
+     * 실행 결과를 기록하고 <b>실행 권한을 푼다</b>.
+     *
+     * <p>엔티티 저장(merge)이 아니라 전용 UPDATE 인 이유가 셋이다.
+     * <ol>
+     *   <li><b>락 해제를 다른 작업에 종속시키지 않는다.</b> 엔티티로 저장하면 cron 재계산·이력 저장이 함께 얽혀
+     *       그중 하나만 실패해도 실행 권한이 영영 안 풀린다.</li>
+     *   <li><b>실행 중 편집을 되돌리지 않는다.</b> 폴러가 읽어 워커로 넘긴 엔티티는 detached 라, 저장하면 이름·cron·
+     *       사용 여부까지 <b>실행 시작 시점 값으로 되돌아간다</b> — 폭주하는 스케줄을 끄려는 조작이 조용히 취소된다.</li>
+     *   <li><b>다음 실행 시각을 반드시 함께 민다.</b> 권한만 풀고 {@code nextRunAt} 을 과거로 두면 폴러가 주기마다
+     *       같은 실행을 다시 던진다.</li>
+     * </ol>
+     *
+     * <p><b>전파는 기본(REQUIRED)이다.</b> 실행 서비스는 의도적으로 {@code @Transactional} 이 없어 운영에서는
+     * 트랜잭션 밖에서 돌고, 그래서 이 호출이 곧 자기 트랜잭션이 된다 — 롤백에 휩쓸릴 바깥 트랜잭션이 없다.
+     * {@code REQUIRES_NEW} 를 걸면 실행을 트랜잭션으로 감싼 쪽(테스트)에서 <b>바깥이 쥔 행 락을 기다리다</b>
+     * 쓰기가 보이지 않게 된다.</p>
+     *
+     * <p>영속성 컨텍스트는 건드리지 않는다({@code clearAutomatically=false}) — 호출자가 들고 있는 다른 엔티티까지
+     * 떼어내면 미저장 변경이 사라진다.</p>
+     */
+    @Transactional
+    @Modifying(clearAutomatically = false, flushAutomatically = false)
+    @Query("""
+           update Schedule s
+              set s.lastRunStatus = :status,
+                  s.lastRunAt = :startedAt,
+                  s.lastRunFinishedAt = :finishedAt,
+                  s.lastRunMessage = :message,
+                  s.nextRunAt = :nextRunAt
+            where s.id = :id
+           """)
+    int recordRunResult(@Param("id") Long id,
+                        @Param("status") ScheduleRun.RunStatus status,
+                        @Param("startedAt") OffsetDateTime startedAt,
+                        @Param("finishedAt") OffsetDateTime finishedAt,
+                        @Param("message") String message,
+                        @Param("nextRunAt") OffsetDateTime nextRunAt);
+
+    /** 실행 권한이 잡힌 채 남아 있는 스케줄. 기동 회수가 쓴다. */
+    List<Schedule> findByLastRunStatus(ScheduleRun.RunStatus status);
 }

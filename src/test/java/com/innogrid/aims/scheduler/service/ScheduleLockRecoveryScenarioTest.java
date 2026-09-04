@@ -104,6 +104,9 @@ class ScheduleLockRecoveryScenarioTest {
         Schedule after = scheduleRepository.findById(schedule.getId()).orElseThrow();
         assertNotEquals(ScheduleRun.RunStatus.RUNNING, after.getLastRunStatus());
         assertTrue(after.getNextRunAt().isAfter(OffsetDateTime.now()));
-        assertEquals(0, executionService.recoverStuckRuns(), "회수할 것이 남지 않는다");
+        executionService.recoverStuckRuns();
+        assertEquals(ScheduleRun.RunStatus.COMPLETED,
+                scheduleRepository.findById(schedule.getId()).orElseThrow().getLastRunStatus(),
+                "회수가 정상 종료된 실행을 건드리면 안 된다");
     }
 }

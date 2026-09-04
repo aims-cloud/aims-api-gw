@@ -324,8 +324,8 @@ public class ScheduleExecutionService {
         return saved;
     }
 
-    /** 실행 결과 메시지의 컬럼 길이. 넘치면 저장이 통째로 실패해 실행 권한이 안 풀린다. */
-    static final int MESSAGE_MAX = 500;
+    /** 실행 결과 메시지의 컬럼 길이. 스케줄·실행 이력 두 컬럼이 같은 길이라 한 상수를 공유한다. */
+    static final int MESSAGE_MAX = ScheduleRun.MESSAGE_MAX;
 
     static final String RECOVERED_MESSAGE = "앱 재기동으로 중단됨 — 실행 권한을 회수했습니다";
 
@@ -342,6 +342,10 @@ public class ScheduleExecutionService {
      *
      * <p>스케줄 하나가 실패해도 나머지는 회수한다 — 앱 기동을 막으면 안 되므로 호출자가 다시 감싼다.</p>
      *
+     * <p><b>한계 — 앱이 한 대라는 전제 위에 있다.</b> 두 대가 떠 있으면 한쪽의 기동이 다른 쪽에서 <b>실제로 돌고 있는
+     * 실행</b>을 중단된 것으로 보고 실패 처리한다. 무중단 배포나 다중 인스턴스로 가면 "이 프로세스가 잡은 실행"을
+     * 구분할 표식(인스턴스 식별자)이 먼저 필요하다.</p>
+     *
      * @return 회수한 스케줄 수
      */
     public int recoverStuckRuns() {
@@ -354,8 +358,10 @@ public class ScheduleExecutionService {
         int recovered = 0;
         for (Schedule schedule : stuck) {
             try {
-                complete(schedule, ScheduleRun.RunStatus.FAILED, schedule.getLastRunAt(), RECOVERED_MESSAGE);
-                recovered++;
+                // 그 사이 삭제된 스케줄이면 갱신 행이 0 이다 — 로그 건수가 어긋나지 않게 실제 결과를 센다.
+                if (complete(schedule, ScheduleRun.RunStatus.FAILED, schedule.getLastRunAt(), RECOVERED_MESSAGE) > 0) {
+                    recovered++;
+                }
             } catch (RuntimeException e) {
                 log.error("스케줄 실행 권한 회수 실패: schedule={}", schedule.getScheduleId(), e);
             }
@@ -383,39 +389,57 @@ public class ScheduleExecutionService {
      * {@link ScheduleRepository#recordRunResult} 주석에 적었다. 조회용으로 들고 있는 엔티티에도 같은 값을
      * 반영해 호출자가 이어서 읽을 수 있게 하되, 그 엔티티를 저장하지는 않는다.</p>
      */
-    void complete(Schedule schedule, ScheduleRun.RunStatus status,
-                  OffsetDateTime startedAt, String message) {
+    int complete(Schedule schedule, ScheduleRun.RunStatus status,
+                 OffsetDateTime startedAt, String message) {
         OffsetDateTime finishedAt = OffsetDateTime.now();
         String trimmed = trim(message);
         OffsetDateTime nextRunAt = nextRunAtOf(schedule, finishedAt);
 
-        scheduleRepository.recordRunResult(schedule.getId(), status, startedAt, finishedAt, trimmed, nextRunAt);
+        int updated = scheduleRepository.recordRunResult(
+                schedule.getId(), status, startedAt, finishedAt, trimmed, nextRunAt);
 
         schedule.recordRun(status, startedAt, finishedAt, trimmed);
         schedule.setNextRunAt(nextRunAt);
+        return updated;
     }
 
     /**
-     * 다음 실행 시각. cron 을 못 읽어도 <b>실행 권한 해제를 막지 않는다</b> —
-     * 그 경우 한 주기 뒤로 밀어 폴러가 같은 실행을 즉시 다시 던지지 않게 한다.
+     * cron 을 읽을 수 없을 때 다음 실행 시각을 얼마나 뒤로 미룰지(분).
+     *
+     * <p><b>폴링 주기보다 훨씬 커야 한다.</b> 폴링 주기만큼만 밀면 "실행 → cron 실패 → 주기 뒤 재실행"이
+     * 끝없이 도는 핫 루프가 된다. 그렇다고 비워 두면(null) 자동 실행이 조용히 멈춰 아무도 모른다.
+     * 한 시간이면 사람이 로그를 보고 고칠 여유가 있으면서 루프도 아니다.</p>
+     */
+    static final int CRON_FALLBACK_MINUTES = 60;
+
+    /**
+     * 다음 실행 시각.
+     *
+     * <p><b>DB 의 현재 값으로 계산한다.</b> 넘겨받은 엔티티는 실행이 <b>시작될 때</b> 읽은 사본이라,
+     * 실행 도중 사용자가 cron 이나 자동 실행 여부를 바꿨으면 낡았다. 그 사본으로 계산하면 방금 켠 자동 실행이
+     * {@code nextRunAt = null} 로 덮여 <b>그 스케줄만 조용히 안 돌게</b> 된다(폴러는 null 을 건너뛴다).
+     * 화면에는 자동 실행이 켜져 보이므로 원인을 찾기도 어렵다.</p>
+     *
+     * <p>cron 을 못 읽어도 <b>실행 권한 해제를 막지 않는다</b> — 그 경우 넉넉히 뒤로 밀어 폴러가 같은 실행을
+     * 반복해 던지지 않게 한다.</p>
      */
     private OffsetDateTime nextRunAtOf(Schedule schedule, OffsetDateTime base) {
+        String cron = scheduleRepository.findCronExpressionById(schedule.getId())
+                .orElseGet(schedule::getCronExpression);
+        boolean autoRunnable = scheduleRepository.findAutoRunnableById(schedule.getId())
+                .orElseGet(schedule::isAutoRunnable);
         try {
-            scheduleService.refreshNextRunAt(schedule);   // 엔티티에 계산만 하고 저장하지 않는다
-            return schedule.getNextRunAt();
+            return scheduleService.nextRunAt(cron, autoRunnable);
         } catch (RuntimeException e) {
-            log.warn("다음 실행 시각 계산 실패 — 한 주기 뒤로 민다: schedule={}, cron={}",
-                    schedule.getScheduleId(), schedule.getCronExpression(), e);
-            return schedule.isAutoRunnable()
-                    ? base.plusNanos(properties.getPollIntervalMs() * 1_000_000L)
-                    : null;
+            log.warn("다음 실행 시각 계산 실패 — {}분 뒤로 민다(cron 을 고쳐야 정상 주기로 돌아온다): schedule={}, cron={}",
+                    CRON_FALLBACK_MINUTES, schedule.getScheduleId(), cron, e);
+            return autoRunnable ? base.plusMinutes(CRON_FALLBACK_MINUTES) : null;
         }
     }
 
     /** 컬럼 길이에 맞춰 자른다. 자르지 않으면 긴 예외 메시지 하나로 상태 기록이 통째로 실패한다. */
     static String trim(String message) {
-        if (message == null || message.length() <= MESSAGE_MAX) return message;
-        return message.substring(0, MESSAGE_MAX - 3) + "...";
+        return ScheduleRun.trim(message);
     }
 
     /**

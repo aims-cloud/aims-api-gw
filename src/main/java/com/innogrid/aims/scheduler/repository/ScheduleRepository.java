@@ -114,4 +114,18 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long>, JpaSp
 
     /** 실행 권한이 잡힌 채 남아 있는 스케줄. 기동 회수가 쓴다. */
     List<Schedule> findByLastRunStatus(ScheduleRun.RunStatus status);
+
+    /**
+     * 다음 실행 시각을 계산할 때 쓰는 <b>현재</b> cron. 실행 도중 사용자가 바꿨을 수 있어 DB 값을 읽는다.
+     *
+     * <p>엔티티가 아니라 값만 읽는다 — {@code findById} 로 엔티티를 로드하면 영속성 컨텍스트에 들어가고,
+     * 그 뒤 벌크 UPDATE 는 그 사본을 갱신하지 않아 <b>같은 트랜잭션 안의 재조회가 낡은 값을 돌려준다.</b></p>
+     */
+    @Query("select s.cronExpression from Schedule s where s.id = :id")
+    Optional<String> findCronExpressionById(@Param("id") Long id);
+
+    /** 지금 자동 실행 대상인가(사용 중 + 자동 실행). 위와 같은 이유로 값만 읽는다. */
+    @Query("select case when (s.enabled = true and s.autoRun = true) then true else false end"
+           + " from Schedule s where s.id = :id")
+    Optional<Boolean> findAutoRunnableById(@Param("id") Long id);
 }

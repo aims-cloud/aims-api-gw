@@ -61,7 +61,10 @@ class ScheduleStartupRecoveryTest {
     void recovers_stuck_schedule() {
         Schedule schedule = stuck("rec-basic");
 
-        assertTrue(executionService.recoverStuckRuns() >= 1);
+        assertTrue(scheduleRepository.findByLastRunStatus(ScheduleRun.RunStatus.RUNNING).stream()
+                .anyMatch(s -> s.getId().equals(schedule.getId())), "회수 전에는 잔류 상태다");
+
+        executionService.recoverStuckRuns();
 
         Schedule after = reload(schedule);
         assertEquals(ScheduleRun.RunStatus.FAILED, after.getLastRunStatus());
@@ -121,9 +124,20 @@ class ScheduleStartupRecoveryTest {
         assertNull(after.getLastRunStatus());
     }
 
-    @DisplayName("회수할 것이 없으면 아무 일도 하지 않는다")
+    @DisplayName("회수 대상이 아닌 스케줄은 회수 뒤에도 그대로다")
     @Test
-    void no_stuck_schedule_is_a_noop() {
-        assertEquals(0, executionService.recoverStuckRuns());
+    void non_stuck_schedule_is_untouched() {
+        Schedule normal = new Schedule("rec-normal", "rec-normal", "0 0 3 * * ?");
+        normal.setEnabled(true);
+        normal.setAutoRun(true);
+        normal.recordRun(ScheduleRun.RunStatus.COMPLETED, OffsetDateTime.now().minusHours(1),
+                OffsetDateTime.now().minusHours(1), "정상 종료");
+        scheduleRepository.save(normal);
+
+        executionService.recoverStuckRuns();
+
+        Schedule after = reload(normal);
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, after.getLastRunStatus(), "완료된 실행을 실패로 바꾸면 안 된다");
+        assertEquals("정상 종료", after.getLastRunMessage());
     }
 }

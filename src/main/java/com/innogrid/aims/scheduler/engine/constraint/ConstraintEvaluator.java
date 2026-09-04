@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.engine.constraint;
 
+import java.util.OptionalDouble;
+
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -24,7 +26,12 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
  * C3 열 상태     (쿨다운, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
  * C4 전력        (여유율, 워크로드 예산, 배치 후 예상 전력)
  * C5 MDC 링크    (데이터 MDC ↔ 노드 MDC 링크가 DOWN 이면 제외 — 정책 affinityEnabled + 워크로드 dataMdcId 일 때만)
+ * C6 MDC 전력 예산 (그 MDC 의 전력 합계가 예산을 넘으면 제외 — 예산 원장에 등록된 MDC 일 때만)
  * </pre>
+ *
+ * <p>C6 을 <b>맨 뒤에</b> 둔 이유: C0~C5 는 노드 한 대만 보지만 C6 은 같은 MDC 의 형제 노드를 전부 훑는
+ * <b>유일한 교차 노드 검사</b>다. 순서는 동작이 아니라 "먼저 걸린 사유"만 정하므로, 싼 검사부터라는
+ * 기존 순서를 지키는 편이 낫다.</p>
  */
 @Component
 public class ConstraintEvaluator {
@@ -67,7 +74,54 @@ public class ConstraintEvaluator {
         reason = checkPower(workload, node, policy, ctx.powerBudgetWatts());
         if (reason != null) return reason;
 
-        return checkLink(workload, node, ctx);
+        reason = checkLink(workload, node, ctx);
+        if (reason != null) return reason;
+
+        return checkMdcBudget(workload, node, ctx);
+    }
+
+    // ── C6. MDC 전력 예산 ──────────────────────────────────────
+
+    /**
+     * 이 노드가 속한 <b>MDC 전체의 전력 합계</b>가 예산을 넘으면 제외한다.
+     *
+     * <p>C4 는 노드 한 대의 정격만 본다. 그런데 MDC 는 컨테이너·랙 단위 수전 용량이 곧 상한이라,
+     * 8대가 각자 정격 아래여도 합계가 계약 용량을 넘으면 실제로는 올릴 수 없다.</p>
+     *
+     * <p><b>합계는 실측이 아니라 예약분을 반영한 실효 전력으로 낸다.</b> 실측 전력은 이미 실행 중인 부하만
+     * 담아서, 한 실행에서 워크로드를 몇 개 얹든 합계가 그대로다 — 그러면 예산이 누적되지 않아 상한이
+     * 사실상 적용되지 않는다(단계 6①·9 에서 고친 결함과 같은 부류). 후보 자신은 아직 예약 전이므로
+     * "배치 후 예상 전력"을 쓴다. 두 값 모두 {@link PowerModel} 에 이미 있는 것으로 새 수식은 없다.</p>
+     *
+     * <p>건너뛰는 경우 셋: 예산 원장이 비었을 때, 이 MDC 에 예산이 등록되지 않았을 때, <b>후보 노드의
+     * 전력을 수집하지 못했을 때</b>. 마지막은 "전력을 모르는 노드는 전력으로 막지 않는다"는 기존 원칙이다.
+     * 형제 노드 중 미계측은 합계에서 빼고 <b>사유에 대수를 적어</b> 합계가 과소 평가임을 드러낸다.</p>
+     */
+    private String checkMdcBudget(Workload workload, NodeResource node, PlacementContext ctx) {
+        if (ctx.mdcBudgets().isEmpty() || node.getPowerWatts() <= 0) return null;
+
+        String mdcId = node.getMdcId();
+        OptionalDouble budget = ctx.mdcBudgets().budgetOf(mdcId);
+        if (budget.isEmpty()) return null;
+
+        double sum = powerModel.predictedPower(node, workload.getRequiredCpu());
+        int measured = 1;
+        int unmeasured = 0;
+        for (NodeResource sibling : ctx.nodes()) {
+            if (sibling.getNodeId().equals(node.getNodeId()) || !mdcId.equals(sibling.getMdcId())) continue;
+            if (sibling.getPowerWatts() <= 0) {
+                unmeasured++;
+            } else {
+                sum += powerModel.effectivePowerWatts(sibling);
+                measured++;
+            }
+        }
+
+        double limit = budget.getAsDouble();
+        if (sum <= limit) return null;
+        return String.format("MDC %s 전력 합계 예상 %,.0fW > 예산 %,.0fW (계측 %d대%s)",
+                mdcId, sum, limit, measured,
+                unmeasured > 0 ? String.format(", 미계측 %d대 제외", unmeasured) : "");
     }
 
     // ── C5. MDC 링크 ───────────────────────────────────────────

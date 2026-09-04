@@ -52,14 +52,20 @@ public class ResourceScopeService {
     /** 스코프 내 물리 호스트 1건 (역할별) */
     public record ScopedHost(String role, Long assetId, String name, String mdcId, ResourceStatus status) {}
 
-    /** 스코프 내 가상머신 1건 (역할별). resourceId 는 SEBU1:{externalId} 또는 TB:{ns}/{infra}/{node} */
-    public record ScopedVm(String role, String resourceId, String name, ResourceStatus status) {}
+    /**
+     * 스코프 내 가상머신 1건 (역할별). resourceId 는 SEBU1:{externalId} 또는 TB:{ns}/{infra}/{node}.
+     * 소속 영역은 1세부 VM 이면 물리 호스트의 mdcId, Tumblebug VM 이면 nsId 만 채워진다.
+     */
+    public record ScopedVm(String role, String resourceId, String name, ResourceStatus status, String mdcId, String nsId) {}
+
+    /** 스코프 내 Tumblebug Namespace 1건 (역할별) — VM 이 없어도 역할 패널 영역 테이블에 행으로 나온다 */
+    public record ScopedNamespace(String role, String nsId, String name) {}
 
     /** 사용자 역할 스코프의 자원 전체 */
-    public record Scope(Set<String> roles, List<ScopedHost> hosts, List<ScopedVm> vms) {
+    public record Scope(Set<String> roles, List<ScopedHost> hosts, List<ScopedVm> vms, List<ScopedNamespace> namespaces) {
 
         static Scope empty() {
-            return new Scope(Set.of(), List.of(), List.of());
+            return new Scope(Set.of(), List.of(), List.of(), List.of());
         }
 
         public List<ScopedHost> hostsOf(String role) {
@@ -68,6 +74,10 @@ public class ResourceScopeService {
 
         public List<ScopedVm> vmsOf(String role) {
             return vms.stream().filter(v -> v.role().equals(role)).toList();
+        }
+
+        public List<ScopedNamespace> namespacesOf(String role) {
+            return namespaces.stream().filter(n -> n.role().equals(role)).toList();
         }
 
         /** 역할을 제거한 전체 집계용 — assets.id 기준 중복 제거 */
@@ -129,9 +139,10 @@ public class ResourceScopeService {
 
         List<ScopedHost> hosts = new ArrayList<>();
         List<ScopedVm> vms = new ArrayList<>();
+        List<ScopedNamespace> namespaces = new ArrayList<>();
         loadPhysical(roles, metrics, hosts, vms);
-        loadTumblebug(roles, vms);
-        return new Scope(roles, List.copyOf(hosts), List.copyOf(vms));
+        loadTumblebug(roles, vms, namespaces);
+        return new Scope(roles, List.copyOf(hosts), List.copyOf(vms), List.copyOf(namespaces));
     }
 
     // ── 물리 호스트 + 1세부 가상자원 ────────────────────────────
@@ -152,7 +163,7 @@ public class ResourceScopeService {
         Map<Long, List<MonitoringTarget>> targetsByAsset = monitoringTargetRepository.findByAsset_IdIn(assetIds).stream()
                 .collect(Collectors.groupingBy(t -> t.getAsset().getId()));
 
-        // 같은 자산이 여러 역할에 있어도 1세부 VM 조회는 자산당 한 번
+        // 1세부 VM 목록은 자산당 한 번만 조회해 재사용한다 (결과는 해당 자산을 가진 역할마다 각각 추가된다)
         Map<Long, List<VirtualResource>> vmsByAsset = new LinkedHashMap<>();
         for (Map.Entry<String, Map<Long, Asset>> entry : hostsByRole.entrySet()) {
             String role = entry.getKey();
@@ -161,7 +172,8 @@ public class ResourceScopeService {
                 hosts.add(new ScopedHost(role, asset.getId(), asset.getName(), asset.getMdcId(),
                         hostStatus(asset, targets, metrics)));
                 for (VirtualResource vm : vmsByAsset.computeIfAbsent(asset.getId(), id -> virtualResourceProvider.findByHost(asset))) {
-                    vms.add(new ScopedVm(role, "SEBU1:" + vm.externalId(), vm.name(), sebu1Status(vm.status())));
+                    vms.add(new ScopedVm(role, "SEBU1:" + vm.externalId(), vm.name(), sebu1Status(vm.status()),
+                            asset.getMdcId(), null));
                 }
             }
         }
@@ -211,7 +223,7 @@ public class ResourceScopeService {
 
     // ── Tumblebug VM ────────────────────────────────────────────
 
-    private void loadTumblebug(Set<String> roles, List<ScopedVm> vms) {
+    private void loadTumblebug(Set<String> roles, List<ScopedVm> vms, List<ScopedNamespace> namespaces) {
         Map<String, Set<String>> namespacesByRole = new LinkedHashMap<>();
         for (RoleNamespace mapping : roleNamespaceRepository.findByRole_NameIn(roles)) {
             namespacesByRole.computeIfAbsent(mapping.getRole().getName(), k -> new TreeSet<>()).add(mapping.getNsId());
@@ -223,10 +235,15 @@ public class ResourceScopeService {
         for (Map.Entry<String, Set<String>> entry : namespacesByRole.entrySet()) {
             String role = entry.getKey();
             for (String nsId : entry.getValue()) {
+                String nsName = tb.namespaceNames().get(nsId);
+                if (nsName == null) {
+                    continue;                                       // Tumblebug 에 없는 Namespace 는 트리와 같이 건너뜀
+                }
+                namespaces.add(new ScopedNamespace(role, nsId, nsName));
                 for (TbInfra infra : tb.infrasByNamespace().getOrDefault(nsId, List.of())) {
                     for (TbNode node : infra.nodes()) {
                         vms.add(new ScopedVm(role, "TB:" + nsId + "/" + infra.id() + "/" + node.id(), node.name(),
-                                TumblebugStatusMapper.bucket(node.status())));
+                                TumblebugStatusMapper.bucket(node.status()), null, nsId));
                     }
                 }
             }

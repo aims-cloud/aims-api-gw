@@ -58,6 +58,14 @@ public class SchedulerController {
      */
     private static final int HISTORY_MAX = 1000;
 
+    /**
+     * 실제로 읽어 오는 건수 — 상한보다 하나 많다.
+     *
+     * <p>딱 상한만 읽으면 "정말 잘렸는지"와 "우연히 상한과 같은 건수인지"를 구분할 수 없어, 잘리지 않았는데도
+     * 경고가 찍힌다. 한 건을 더 읽어 보면 그 구분이 확실해진다. 남는 한 건은 응답에서 버린다.</p>
+     */
+    private static final int PROBE = HISTORY_MAX + 1;
+
     private final SchedulingService schedulingService;
     private final PowerEfficiencyService powerEfficiencyService;
     private final WorkloadService workloadService;
@@ -237,7 +245,7 @@ public class SchedulerController {
                        + HISTORY_MAX + "건까지만 반환합니다. 전체가 필요하면 /history/page 를 쓰세요.")
     @GetMapping("/history")
     public ApiResponse<List<SchedulingHistoryResponse>> getHistory() {
-        return ApiResponse.ok(capped(historyRepository.findAllByOrderByCreatedAtDesc(Limit.of(HISTORY_MAX)),
+        return ApiResponse.ok(capped(historyRepository.findAllByOrderByCreatedAtDesc(Limit.of(PROBE)),
                 "전체 이력"));
     }
 
@@ -260,7 +268,7 @@ public class SchedulerController {
     @GetMapping("/workloads/{workloadId}/history")
     public ApiResponse<List<SchedulingHistoryResponse>> getWorkloadHistory(@PathVariable Long workloadId) {
         return ApiResponse.ok(capped(
-                historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId, Limit.of(HISTORY_MAX)),
+                historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId, Limit.of(PROBE)),
                 "워크로드 " + workloadId + " 이력"));
     }
 
@@ -271,10 +279,12 @@ public class SchedulerController {
      * 대신 운영 로그에 남겨, 잘린 목록을 화면에서 보고 있다는 사실을 알 수 있게 한다.</p>
      */
     private List<SchedulingHistoryResponse> capped(List<SchedulingHistory> rows, String what) {
-        if (rows.size() >= HISTORY_MAX) {
-            log.warn("{} 가 반환 상한 {}건에 닿았습니다 — 더 오래된 이력은 /history/page 로 조회하세요",
+        List<SchedulingHistory> kept = rows;
+        if (rows.size() > HISTORY_MAX) {
+            log.warn("{}가 반환 상한 {}건을 넘어 잘렸습니다 — 더 오래된 이력은 /history/page 로 조회하세요",
                     what, HISTORY_MAX);
+            kept = rows.subList(0, HISTORY_MAX);
         }
-        return rows.stream().map(SchedulingHistoryResponse::from).toList();
+        return kept.stream().map(SchedulingHistoryResponse::from).toList();
     }
 }

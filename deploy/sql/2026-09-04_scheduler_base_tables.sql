@@ -9,9 +9,12 @@
 --     "missing table [workloads]" 로 **앱 전체가 기동하지 않는다.** 스케줄러만 죽는 것이 아니다.
 --
 -- 실행:
---   psql -U aims -d aims -f 2026-09-04_scheduler_base_tables.sql
+--   psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-09-04_scheduler_base_tables.sql
+--   (ON_ERROR_STOP 을 붙인다 — psql 기본값은 문장이 실패해도 계속 진행이라, CHECK 하나가 실패한 것을
+--    모른 채 뒤 문장이 다 돌아 버린다)
 --
--- 실행 순서 주의 — 새 DB 에 스크립트를 몰아서 돌린다면 **이 파일을 2026-08-31_* 보다 먼저** 실행해야 한다.
+-- 실행 순서 주의 — 새 DB 에 스크립트를 몰아서 돌린다면 **이 파일을 2026-08-31_* 보다 먼저** 실행해야 한다
+--   (파일명은 작성 날짜이지 실행 순서가 아니다. 전체 순서는 deploy/sql/README.md 참고).
 --   그 두 파일이 여기 있는 표에 ALTER 를 걸기 때문에, 파일명(날짜) 순으로 돌리면 대상이 없어 실패한다.
 --   이미 표가 있는 DB(배포 VM)에서는 IF NOT EXISTS 라 아무 일도 하지 않는다 — 언제 돌려도 안전하다.
 --
@@ -119,6 +122,13 @@ CREATE TABLE IF NOT EXISTS scheduling_history (
 
     created_at        TIMESTAMPTZ
 );
+
+-- ── 기존 DB 보정 ─────────────────────────────────────────────
+-- 위 CREATE 는 표가 하나라도 있으면 **표 전체가 no-op** 이라 컬럼 단위로는 아무것도 고치지 못한다.
+-- required_disk_gb 는 단계 12 에서 엔티티에 들어왔는데 그때 ALTER 를 남기지 않았다. 지금까지 ddl-auto=update 가
+-- 채워 줘서 드러나지 않았을 뿐, update 를 쓰지 않는 기존 DB 에는 이 컬럼이 없다. 여기서 함께 보정한다.
+-- 이미 있으면 아무 일도 하지 않는다. 기존 행에는 DEFAULT 0 이 즉시 채워진다(PostgreSQL 11+ 는 표를 다시 쓰지 않는다).
+ALTER TABLE workloads ADD COLUMN IF NOT EXISTS required_disk_gb INTEGER NOT NULL DEFAULT 0;
 
 -- ── 열거형 CHECK 제약 ────────────────────────────────────────
 -- Hibernate 는 @Enumerated(EnumType.STRING) 컬럼에 CHECK 를 만든다. 자동 생성되지 않은 환경을 위해 명시한다.

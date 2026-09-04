@@ -21,8 +21,12 @@ import org.springframework.stereotype.Component;
 /**
  * Thanos 에서 트리 구성에 필요한 수집 상태를 한 번에 읽어 스냅샷으로 제공한다 (docs/06 §9.4).
  *
- * 호스트마다 질의하지 않고 전체 instance 에 대해 3개 쿼리만 수행한 뒤 instance 라벨로 조인한다.
- * instance 라벨 값은 monitoring_target 의 {@code address:port} 와 같다.
+ * 호스트·VM 마다 질의하지 않고 전체에 대해 5개 쿼리만 수행한 뒤 라벨로 조인한다.
+ * <ul>
+ *   <li>물리 호스트(1세부): {@code instance} 라벨 = monitoring_target 의 {@code address:port}</li>
+ *   <li>Tumblebug VM(2세부): exporter 등록 시 relabel 로 심는 {@code tb_ns / tb_infra / tb_node} 라벨 (docs/06 §9.6).
+ *       IP 로 대조하지 않는다.</li>
+ * </ul>
  *
  * <ul>
  *   <li>수집 상태: {@code up} — 1 이면 COLLECTING, 0 이거나 결과에 없으면 UNAVAILABLE.
@@ -40,6 +44,10 @@ public class MonitoringCapabilityResolver {
     public static final String UP_QUERY = "max by (instance) (up)";
     public static final String GPU_DEVICE_QUERY = "count by (instance, UUID, gpu) (DCGM_FI_DEV_GPU_UTIL)";
     public static final String IPMI_METRIC_QUERY = "count by (instance, __name__) ({__name__=~\"ipmi_.*\"})";
+    /** Tumblebug VM — relabel 라벨(tb_ns/tb_infra/tb_node)이 있는 시계열만 */
+    public static final String TB_UP_QUERY = "max by (tb_ns, tb_infra, tb_node) (up{tb_node!=\"\"})";
+    public static final String TB_GPU_DEVICE_QUERY =
+            "count by (tb_ns, tb_infra, tb_node, UUID, gpu) (DCGM_FI_DEV_GPU_UTIL{tb_node!=\"\"})";
 
     /** GPU 장치 하나 — 트리에서는 gpu 인덱스로 표시하고 UUID 를 resourceId 로 쓴다 */
     public record GpuDevice(String uuid, String index) {}
@@ -49,10 +57,12 @@ public class MonitoringCapabilityResolver {
                            Map<String, Boolean> upByInstance,
                            Map<String, List<GpuDevice>> gpuDevicesByInstance,
                            Map<String, Set<String>> ipmiMetricsByInstance,
+                           Map<String, Boolean> upByTbNode,
+                           Map<String, List<GpuDevice>> gpuDevicesByTbNode,
                            boolean degraded) {
 
         static Snapshot empty(Instant at, boolean degraded) {
-            return new Snapshot(at, Map.of(), Map.of(), Map.of(), degraded);
+            return new Snapshot(at, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), degraded);
         }
 
         /** exporter 가 등록된 instance 의 수집 상태 — 등록 여부(NOT_CONFIGURED)는 호출측이 판단한다 */
@@ -68,6 +78,27 @@ public class MonitoringCapabilityResolver {
         public boolean hasAnyMetric(String instance, List<String> metricNames) {
             Set<String> names = ipmiMetricsByInstance.get(instance);
             return names != null && metricNames.stream().anyMatch(names::contains);
+        }
+
+        /**
+         * Tumblebug VM 의 수집 상태. Tumblebug 은 exporter 등록 원장이 없으므로 라벨이 붙은 시계열의 존재로
+         * 등록 여부를 판단한다 — 시계열 없음: NOT_CONFIGURED, up=1: COLLECTING, up=0: UNAVAILABLE.
+         */
+        // TODO:: lookback(5분)을 넘겨 시계열이 사라진 VM 은 UNAVAILABLE 이어야 하지만 NOT_CONFIGURED 로 보인다 — VM exporter 등록 원장 확정 시 보정
+        public MonitoringStatus tbStatusOf(String nsId, String infraId, String nodeId) {
+            Boolean up = upByTbNode.get(tbKey(nsId, infraId, nodeId));
+            if (up == null) {
+                return MonitoringStatus.NOT_CONFIGURED;
+            }
+            return up ? MonitoringStatus.COLLECTING : MonitoringStatus.UNAVAILABLE;
+        }
+
+        public List<GpuDevice> tbGpuDevices(String nsId, String infraId, String nodeId) {
+            return gpuDevicesByTbNode.getOrDefault(tbKey(nsId, infraId, nodeId), List.of());
+        }
+
+        static String tbKey(String nsId, String infraId, String nodeId) {
+            return nsId + "/" + infraId + "/" + nodeId;
         }
     }
 
@@ -139,7 +170,6 @@ public class MonitoringCapabilityResolver {
                             .add(new GpuDevice(uuid, label(row, "gpu")));
                 }
             }
-            gpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
             Map<String, Set<String>> ipmi = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(IPMI_METRIC_QUERY)) {
                 String instance = label(row, "instance");
@@ -148,17 +178,46 @@ public class MonitoringCapabilityResolver {
                     ipmi.computeIfAbsent(instance, k -> new HashSet<>()).add(name);
                 }
             }
-            return new Snapshot(now, up, gpus, ipmi, false);
+            Map<String, Boolean> tbUp = new HashMap<>();
+            for (Map<String, Object> row : client.queryResults(TB_UP_QUERY)) {
+                String key = tbKey(row);
+                if (key != null) {
+                    tbUp.put(key, "1".equals(value(row)));
+                }
+            }
+            Map<String, List<GpuDevice>> tbGpus = new HashMap<>();
+            for (Map<String, Object> row : client.queryResults(TB_GPU_DEVICE_QUERY)) {
+                String key = tbKey(row);
+                String uuid = label(row, "UUID");
+                if (key != null && uuid != null) {
+                    tbGpus.computeIfAbsent(key, k -> new ArrayList<>())
+                            .add(new GpuDevice(uuid, label(row, "gpu")));
+                }
+            }
+            gpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
+            tbGpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
+            return new Snapshot(now, up, gpus, ipmi, tbUp, tbGpus, false);
         } catch (RuntimeException e) {
             if (previous != null) {
                 // 마지막 정상 결과를 유지하되 TTL 만 갱신해 장애 중 Thanos 를 반복 호출하지 않는다
                 log.warn("Thanos 수집 상태 조회 실패 — 마지막 정상 스냅샷을 유지합니다: {}", e.getMessage());
                 return new Snapshot(now, previous.upByInstance(), previous.gpuDevicesByInstance(),
-                        previous.ipmiMetricsByInstance(), previous.degraded());
+                        previous.ipmiMetricsByInstance(), previous.upByTbNode(), previous.gpuDevicesByTbNode(),
+                        previous.degraded());
             }
             log.warn("Thanos 수집 상태 조회 실패 — 모든 항목을 UNAVAILABLE 로 표시합니다: {}", e.getMessage());
             return Snapshot.empty(now, true);
         }
+    }
+
+    private static String tbKey(Map<String, Object> row) {
+        String ns = label(row, "tb_ns");
+        String infra = label(row, "tb_infra");
+        String node = label(row, "tb_node");
+        if (ns == null || infra == null || node == null) {
+            return null;
+        }
+        return Snapshot.tbKey(ns, infra, node);
     }
 
     private static int compareGpu(GpuDevice a, GpuDevice b) {

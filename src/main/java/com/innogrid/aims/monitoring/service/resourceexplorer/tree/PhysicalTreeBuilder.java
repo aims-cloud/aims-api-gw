@@ -178,7 +178,9 @@ public class PhysicalTreeBuilder {
         }
         MonitoringTarget dcgm = byExporter.get(ExporterType.DCGM_EXPORTER);
         if (dcgm != null) {
-            ResourceTreeNodeResponse gpuGroup = gpuGroup(hostNodeId, role, mdcId, dcgm.getScrapeEndpoint(), snapshot);
+            String instance = dcgm.getScrapeEndpoint();
+            ResourceTreeNodeResponse gpuGroup = gpuGroup(hostNodeId, role, mdcId,
+                    snapshot.gpuDevices(instance), snapshot.statusOf(instance));
             if (gpuGroup != null) {
                 children.add(gpuGroup);
             }
@@ -214,10 +216,11 @@ public class PhysicalTreeBuilder {
 
     // ── 모니터링 항목 ───────────────────────────────────────────
 
-    private static List<ResourceTreeNodeResponse> nodeExporterItems(String ownerId,
-                                                                    String role,
-                                                                    String mdcId,
-                                                                    MonitoringStatus status) {
+    /** node_exporter 항목 8종 (Disk 하위 Disk I/O·File System 포함). Tumblebug VM 가지에서도 재사용한다 */
+    static List<ResourceTreeNodeResponse> nodeExporterItems(String ownerId,
+                                                            String role,
+                                                            String mdcId,
+                                                            MonitoringStatus status) {
         List<ResourceTreeNodeResponse> items = new ArrayList<>();
         for (ResourceTreeNodeType type : NODE_EXPORTER_ITEMS) {
             List<ResourceTreeNodeResponse> sub = type == ResourceTreeNodeType.DISK
@@ -238,17 +241,15 @@ public class PhysicalTreeBuilder {
                 null, role, mdcId, null, status, children);
     }
 
-    /** dcgm_exporter 가 등록되고 GPU 장치 메트릭이 확인된 경우에만 생성한다 */
-    private static ResourceTreeNodeResponse gpuGroup(String ownerId,
-                                                     String role,
-                                                     String mdcId,
-                                                     String instance,
-                                                     Snapshot snapshot) {
-        List<GpuDevice> devices = snapshot.gpuDevices(instance);
+    /** GPU 장치 메트릭이 확인된 경우에만 생성한다 (장치 목록이 비면 null). Tumblebug VM 가지에서도 재사용한다 */
+    static ResourceTreeNodeResponse gpuGroup(String ownerId,
+                                             String role,
+                                             String mdcId,
+                                             List<GpuDevice> devices,
+                                             MonitoringStatus status) {
         if (devices.isEmpty()) {
             return null;
         }
-        MonitoringStatus status = snapshot.statusOf(instance);
         String groupId = "gpus:" + ownerId;
         List<ResourceTreeNodeResponse> gpus = devices.stream()
                 .map(d -> ResourceTreeNodeResponse.of("gpu:" + ownerId + ":" + d.uuid(), groupId,

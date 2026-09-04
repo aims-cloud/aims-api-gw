@@ -16,6 +16,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeTy
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreePathResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeSearchResponse;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.PhysicalTreeBuilder;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -26,8 +27,9 @@ import org.springframework.stereotype.Service;
  * 사용자는 자신에게 부여된 역할에 매핑된 자원 트리만 볼 수 있다.
  *
  * 트리 항목 ID 체계:
- *   root | role:{role} | physical:{role} → PhysicalTreeBuilder 의 하위 체계
- *   (가상머신 가지 vm-root:{role} → Namespace → Infra → NodeGroup → Node 는 후속 단계)
+ *   root | role:{role}
+ *   physical:{role} → PhysicalTreeBuilder 의 하위 체계 (MDC → 물리 호스트 → 항목·가상자원)
+ *   vmroot:{role}   → TumblebugTreeBuilder 의 하위 체계 (Namespace → Infra → NodeGroup/미분류 → Node)
  *
  * 화면 최초 로딩은 getTree 로 전체 계층을 한 번에 받고, roots/children 은 Lazy Loading 화면용 보조 API 다.
  */
@@ -37,10 +39,14 @@ public class ResourceExplorerTreeService {
     private static final String ROOT_ID = "root";
 
     private final PhysicalTreeBuilder physicalTreeBuilder;
+    private final TumblebugTreeBuilder tumblebugTreeBuilder;
     private final AuthService authService;
 
-    public ResourceExplorerTreeService(PhysicalTreeBuilder physicalTreeBuilder, AuthService authService) {
+    public ResourceExplorerTreeService(PhysicalTreeBuilder physicalTreeBuilder,
+                                       TumblebugTreeBuilder tumblebugTreeBuilder,
+                                       AuthService authService) {
         this.physicalTreeBuilder = physicalTreeBuilder;
+        this.tumblebugTreeBuilder = tumblebugTreeBuilder;
         this.authService = authService;
     }
 
@@ -52,10 +58,12 @@ public class ResourceExplorerTreeService {
         Set<String> mdcFilter = new LinkedHashSet<>(filter.mdcIds());
 
         Map<String, ResourceTreeNodeResponse> physicalByRole = physicalTreeBuilder.build(userRoles, mdcFilter);
-        // TODO:: 가상머신 가지(Tumblebug Namespace → Infra → NodeGroup/미분류 → Node) 조립기를 붙여 역할 하위에 추가
+        // MDC 필터는 물리 가지 전용 — 가상머신 가지는 필터가 걸려 있으면 생략한다
+        Map<String, ResourceTreeNodeResponse> vmByRole = mdcFilter.isEmpty()
+                ? tumblebugTreeBuilder.build(userRoles) : Map.of();
 
         List<ResourceTreeNodeResponse> roles = userRoles.stream()
-                .map(role -> roleNode(role, physicalByRole.get(role)))
+                .map(role -> roleNode(role, physicalByRole.get(role), vmByRole.get(role)))
                 .toList();
         ResourceTreeNodeResponse root = rootNode(roles);
 
@@ -101,10 +109,15 @@ public class ResourceExplorerTreeService {
      * 역할 노드 — 역할은 자원이 아니라 사용자의 접근 범위이므로 매핑된 자원이 없어도 항상 노출한다
      * (leaf=true, childCount=0). 자원 스코프 필터링은 하위 가지 조립기가 담당한다.
      */
-    private static ResourceTreeNodeResponse roleNode(String role, ResourceTreeNodeResponse physical) {
+    private static ResourceTreeNodeResponse roleNode(String role,
+                                                     ResourceTreeNodeResponse physical,
+                                                     ResourceTreeNodeResponse virtualMachines) {
         List<ResourceTreeNodeResponse> branches = new ArrayList<>();
         if (physical != null) {
             branches.add(physical);
+        }
+        if (virtualMachines != null) {
+            branches.add(virtualMachines);
         }
         return ResourceTreeNodeResponse.of("role:" + role, ROOT_ID, role, ResourceTreeNodeType.ROLE,
                 role, role, null, null, null, branches);

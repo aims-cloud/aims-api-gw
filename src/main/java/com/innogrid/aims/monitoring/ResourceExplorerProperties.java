@@ -19,9 +19,18 @@ public class ResourceExplorerProperties {
      */
     private Duration metricsCacheTtl = Duration.ofMinutes(1);
 
+    /**
+     * CB-Tumblebug Namespace·Infra·Node 조회 결과 캐시 유효 시간 (docs/06 §7.1 — 기본 1분).
+     * 자원 변경은 최대 이 시간만큼 지연되어 트리에 반영된다.
+     */
+    private Duration tumblebugCacheTtl = Duration.ofMinutes(1);
+
     public boolean isMockEnabled() { return mockEnabled; }
     public void setMockEnabled(boolean mockEnabled) { this.mockEnabled = mockEnabled; }
 
     public Duration getMetricsCacheTtl() { return metricsCacheTtl; }
     public void setMetricsCacheTtl(Duration metricsCacheTtl) { this.metricsCacheTtl = metricsCacheTtl; }
+
+    public Duration getTumblebugCacheTtl() { return tumblebugCacheTtl; }
+    public void setTumblebugCacheTtl(Duration tumblebugCacheTtl) { this.tumblebugCacheTtl = tumblebugCacheTtl; }
 }

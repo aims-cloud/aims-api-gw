@@ -48,10 +48,10 @@ class ResourceExplorerRootServiceTest {
 
     private void adminAndUserScope() {
         scope(new LinkedHashSet<>(List.of("ADMIN", "USER")),
-                List.of(new ScopedHost("ADMIN", 11L, "node-01", "mdc-01", ResourceStatus.RUNNING),
-                        new ScopedHost("ADMIN", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
-                        new ScopedHost("USER", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
-                        new ScopedHost("USER", 13L, "node-03", "mdc-02", ResourceStatus.PENDING)),
+                List.of(new ScopedHost("ADMIN", 11L, "node-01", null, "mdc-01", ResourceStatus.RUNNING, null, List.of()),
+                        new ScopedHost("ADMIN", 12L, "node-02", null, "mdc-02", ResourceStatus.ERROR, null, List.of()),
+                        new ScopedHost("USER", 12L, "node-02", null, "mdc-02", ResourceStatus.ERROR, null, List.of()),
+                        new ScopedHost("USER", 13L, "node-03", null, "mdc-02", ResourceStatus.PENDING, null, List.of())),
                 List.of(new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-1", "vm-1", ResourceStatus.RUNNING, null, "ns-a"),
                         new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-2", "vm-2", ResourceStatus.STOP, null, "ns-a")));
     }

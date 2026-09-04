@@ -83,8 +83,10 @@ class ResourceScopeServiceTest {
             return names.stream().flatMap(n -> assetMappings.getOrDefault(n, List.of()).stream()).toList();
         });
 
+        MonitoringTarget activeNodeExporter = target(active, "10.0.0.1", 9100, ExporterType.NODE_EXPORTER);
+        activeNodeExporter.setAlias("node-01-alias");
         List<MonitoringTarget> targets = List.of(
-                target(active, "10.0.0.1", 9100, ExporterType.NODE_EXPORTER),
+                activeNodeExporter,
                 target(active, "10.0.0.1", 9290, ExporterType.IPMI_EXPORTER),
                 target(powerOff, "10.0.0.2", 9100, ExporterType.NODE_EXPORTER),
                 target(powerOff, "10.0.0.2", 9290, ExporterType.IPMI_EXPORTER),
@@ -135,6 +137,15 @@ class ResourceScopeServiceTest {
                 "node-05", ResourceStatus.PENDING,                    // MAINTENANCE
                 "node-06", ResourceStatus.STOP));                     // DECOMMISSIONED
         assertThat(byName).doesNotContainKey("san-01");               // 서버 유형만
+
+        // 목록·Top-N 용 부가 정보 — node_exporter instance, 별칭, exporter 주소 목록
+        ScopedHost node01 = scope.hostsOf("ADMIN").stream().filter(h -> h.name().equals("node-01")).findFirst().orElseThrow();
+        assertThat(node01.instance()).isEqualTo("10.0.0.1:9100");
+        assertThat(node01.alias()).isEqualTo("node-01-alias");
+        assertThat(node01.ipAddresses()).containsExactly("10.0.0.1");
+        ScopedHost node04 = scope.hostsOf("ADMIN").stream().filter(h -> h.name().equals("node-04")).findFirst().orElseThrow();
+        assertThat(node04.instance()).isNull();
+        assertThat(node04.ipAddresses()).isEmpty();
     }
 
     @Test

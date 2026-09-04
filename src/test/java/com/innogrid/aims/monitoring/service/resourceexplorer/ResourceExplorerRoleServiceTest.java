@@ -50,9 +50,9 @@ class ResourceExplorerRoleServiceTest {
         when(userRepository.countByRoles_Name("ADMIN")).thenReturn(3L);
         when(scopeService.scopeOf(anyCollection())).thenReturn(Scope.empty());
         when(scopeService.scopeOf(List.of("ADMIN"))).thenReturn(new Scope(Set.of("ADMIN"),
-                List.of(new ScopedHost("ADMIN", 11L, "node-01", "mdc-01", ResourceStatus.RUNNING),
-                        new ScopedHost("ADMIN", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
-                        new ScopedHost("ADMIN", 13L, "node-03", "mdc-02", ResourceStatus.PENDING)),
+                List.of(new ScopedHost("ADMIN", 11L, "node-01", null, "mdc-01", ResourceStatus.RUNNING, null, List.of()),
+                        new ScopedHost("ADMIN", 12L, "node-02", null, "mdc-02", ResourceStatus.ERROR, null, List.of()),
+                        new ScopedHost("ADMIN", 13L, "node-03", null, "mdc-02", ResourceStatus.PENDING, null, List.of())),
                 List.of(new ScopedVm("ADMIN", "SEBU1:uuid-1", "web-01", ResourceStatus.RUNNING, "mdc-01", null),
                         new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-1", "vm-1", ResourceStatus.RUNNING, null, "ns-a"),
                         new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-2", "vm-2", ResourceStatus.STOP, null, "ns-a")),

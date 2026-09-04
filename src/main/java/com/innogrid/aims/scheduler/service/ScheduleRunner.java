@@ -3,7 +3,9 @@ package com.innogrid.aims.scheduler.service;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +52,12 @@ public class ScheduleRunner implements SmartLifecycle {
     private final SchedulerProperties properties;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+
+    /**
+     * 워커에 넘겼지만 아직 끝나지 않은 스케줄. 큐에서 대기 중인 것까지 포함한다 —
+     * DB 의 "실행 중" 표시는 실행이 <b>시작된 뒤</b>에야 생겨서 대기 구간을 못 막는다.
+     */
+    private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     private ScheduledExecutorService poller;
     private ExecutorService worker;
@@ -130,15 +138,33 @@ public class ScheduleRunner implements SmartLifecycle {
         }
     }
 
-    /** 실행할 때가 된 스케줄을 찾아 실행 스레드에 넘긴다. 폴링 스레드는 DB 조회만 한다. */
+    /**
+     * 실행할 때가 된 스케줄을 찾아 실행 스레드에 넘긴다. 폴링 스레드는 DB 조회만 한다.
+     *
+     * <p><b>중복 제출을 두 겹으로 막는다.</b> DB 조회는 "이미 시작한" 실행만 거른다 — 워커가 단일 스레드라
+     * 큐에서 <b>차례를 기다리는</b> 스케줄은 아직 실행 중 표시가 없고 예정 시각도 그대로다. 그것만으로는
+     * 폴 주기마다 같은 스케줄이 큐에 쌓이고, 앞의 실행이 끝나 표시가 풀리는 순간 쌓인 것들이 차례로
+     * <b>정상 실행</b>된다. 그래서 넘긴 스케줄을 기억해 두고 실행이 끝날 때까지 다시 넘기지 않는다.</p>
+     *
+     * <p>이 기억은 프로세스 안에만 있다 — 재기동하면 비고, 그때는 DB 쪽(실행 중 표시)과 기동 회수가 맡는다.</p>
+     */
     private void runDueSchedules() {
         List<Schedule> due = scheduleRepository
                 .findDueForRun(OffsetDateTime.now(), ScheduleRun.RunStatus.RUNNING);
         if (due.isEmpty()) return;
 
-        log.debug("자동 실행 대상 스케줄 {}건", due.size());
         for (Schedule schedule : due) {
-            worker.submit(() -> executeQuietly(schedule));
+            if (!inFlight.add(schedule.getId())) {
+                log.debug("이미 넘긴 스케줄이라 건너뛴다: schedule={}", schedule.getScheduleId());
+                continue;
+            }
+            worker.submit(() -> {
+                try {
+                    executeQuietly(schedule);
+                } finally {
+                    inFlight.remove(schedule.getId());
+                }
+            });
         }
     }
 

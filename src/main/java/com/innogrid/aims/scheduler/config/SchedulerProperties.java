@@ -19,6 +19,16 @@ public class SchedulerProperties {
     /** 노드 수집 대상 Prometheus job 이름. */
     private String nodeJob = "mdc-nodes";
 
+    /**
+     * 모의 메트릭 모드 — 실제 저장소 대신 가상 클러스터({@link #syntheticClusterPath})를 본다(단계 19).
+     * 1세부 데이터가 없는 동안 시연·검증용. 팀 관행({@code aims.gpu-dashboard.mock-enabled})과 같은 플래그 방식이며
+     * 환경변수 {@code AIMS_SCHEDULER_MOCK_ENABLED} 로 켠다. 기본 false — 배포는 항상 꺼진 채로.
+     */
+    private boolean mockEnabled = false;
+
+    /** 가상 클러스터 정의 파일. {@code classpath:} 또는 파일 경로. */
+    private String syntheticClusterPath = "classpath:scheduler/synthetic-cluster.yml";
+
     /** 메트릭 질의 시간 상한. 저장소가 응답을 안 줄 때 스케줄러가 멈추지 않게 한다(단계 14). */
     private Metrics metrics = new Metrics();
 
@@ -87,6 +97,10 @@ public class SchedulerProperties {
     private final Dispatch dispatch = new Dispatch();
 
     public String getNodeJob() { return nodeJob; }
+    public boolean isMockEnabled() { return mockEnabled; }
+    public void setMockEnabled(boolean v) { this.mockEnabled = v; }
+    public String getSyntheticClusterPath() { return syntheticClusterPath; }
+    public void setSyntheticClusterPath(String v) { this.syntheticClusterPath = v; }
     public Dispatch getDispatch() { return dispatch; }
     public Metrics getMetrics() { return metrics; }
     public void setMetrics(Metrics v) { this.metrics = v; }

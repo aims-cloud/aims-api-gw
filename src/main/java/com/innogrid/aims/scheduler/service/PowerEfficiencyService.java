@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
@@ -56,7 +58,7 @@ public class PowerEfficiencyService {
 
     private final SchedulingService schedulingService;
     private final PowerModel powerModel;
-    private final VictoriaMetricsClient metricsClient;
+    private final SchedulerMetricsGateway metricsClient;
     private final SchedulerProperties properties;
 
     private final MetricsQueryGuard guard;
@@ -64,14 +66,23 @@ public class PowerEfficiencyService {
     @Autowired
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
-                                  VictoriaMetricsClient metricsClient,
+                                  SchedulerMetricsGateway metrics,
                                   SchedulerProperties properties,
                                   MetricsQueryGuard guard) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
-        this.metricsClient = metricsClient;
+        this.metricsClient = metrics;
         this.properties = properties;
         this.guard = guard;
+    }
+
+    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. */
+    public PowerEfficiencyService(SchedulingService schedulingService,
+                                  PowerModel powerModel,
+                                  VictoriaMetricsClient metricsClient,
+                                  SchedulerProperties properties,
+                                  MetricsQueryGuard guard) {
+        this(schedulingService, powerModel, VictoriaMetricsGateway.of(metricsClient), properties, guard);
     }
 
     /** 스프링 없이 조립하는 형태(기존 단위 테스트). */
@@ -79,7 +90,7 @@ public class PowerEfficiencyService {
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,
                                   SchedulerProperties properties) {
-        this(schedulingService, powerModel, metricsClient, properties,
+        this(schedulingService, powerModel, VictoriaMetricsGateway.of(metricsClient), properties,
              new MetricsQueryGuard(properties.getMetrics().getParallelism()));
     }
 

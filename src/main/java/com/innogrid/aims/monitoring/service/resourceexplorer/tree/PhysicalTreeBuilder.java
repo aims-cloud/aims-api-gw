@@ -25,7 +25,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MonitoringCapa
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MonitoringCapabilityResolver.Snapshot;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 자원 탐색기 트리의 물리 가지(1세부)를 조립한다 (docs/06 §2, §3, §5, §9).
@@ -96,7 +95,6 @@ public class PhysicalTreeBuilder {
      * @param mdcFilter 비어 있지 않으면 해당 MDC 만 포함
      * @return 역할 이름 → PHYSICAL_ROOT 노드 (parentId 는 role:{role})
      */
-    @Transactional(readOnly = true)
     public Map<String, ResourceTreeNodeResponse> build(Collection<String> roleNames, Set<String> mdcFilter) {
         if (roleNames.isEmpty()) {
             return Map.of();

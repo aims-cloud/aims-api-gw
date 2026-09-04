@@ -168,14 +168,14 @@ public class HostDetailMetricsQueryService {
                               Instant from, Instant to, String step) {
         try {
             return switch (metric) {
-                case CPU -> series("cpu", nodeInstance == null ? null : cpuPercent(nodeInstance, step), from, to, step);
+                case CPU -> series("cpu", nodeInstance == null ? null : cpuPercent(nodeInstance, rateWindow(step)), from, to, step);
                 case MEMORY -> series("memory", nodeInstance == null ? null : memoryPercent(nodeInstance), from, to, step);
                 case FILE_SYSTEM -> series("file_system", nodeInstance == null ? null : fileSystemPercent(nodeInstance), from, to, step);
                 case NETWORK -> {
                     List<Series> both = new ArrayList<>();
                     if (nodeInstance != null) {
-                        both.addAll(series("receive", receiveBytesPerSec(nodeInstance, step), from, to, step));
-                        both.addAll(series("transmit", transmitBytesPerSec(nodeInstance, step), from, to, step));
+                        both.addAll(series("receive", receiveBytesPerSec(nodeInstance, rateWindow(step)), from, to, step));
+                        both.addAll(series("transmit", transmitBytesPerSec(nodeInstance, rateWindow(step)), from, to, step));
                     }
                     yield both;
                 }
@@ -216,6 +216,27 @@ public class HostDetailMetricsQueryService {
                 rows.add(new DailyMax(d, null, null, null));
             }
             return rows;
+        }
+    }
+
+    /**
+     * rate() 범위 창 — 버킷 간격(step)이 5분보다 짧으면 5분을 쓴다.
+     * rate 는 창 안에 샘플이 2개 이상 있어야 값이 나오므로 스크랩 간격(15~30초)의 4배 이상을 확보한다.
+     */
+    static String rateWindow(String step) {
+        try {
+            String s = step.trim().toLowerCase();
+            long value = Long.parseLong(s.substring(0, s.length() - 1));
+            long seconds = switch (s.charAt(s.length() - 1)) {
+                case 's' -> value;
+                case 'm' -> value * 60;
+                case 'h' -> value * 3600;
+                case 'd' -> value * 86_400;
+                default -> 0;
+            };
+            return seconds >= 300 ? step : RATE_WINDOW;
+        } catch (RuntimeException e) {
+            return RATE_WINDOW;
         }
     }
 

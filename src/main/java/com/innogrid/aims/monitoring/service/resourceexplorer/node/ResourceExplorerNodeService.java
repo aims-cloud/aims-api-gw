@@ -40,7 +40,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualRe
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 자원 탐색기 노드(물리 호스트) 상세 패널 조회 서비스.
@@ -84,7 +83,6 @@ public class ResourceExplorerNodeService {
     // ── 공개 API ────────────────────────────────────────────────
 
     /** 개요 탭 주요 지표 카드 6종 — 미수집이거나 GPU 미탑재면 해당 카드가 null 로 내려간다 */
-    @Transactional(readOnly = true)
     public NodeSummaryResponse getNodeSummary(String nodeId) {
         NodeContext ctx = accessibleNode(nodeId);
         HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
@@ -102,7 +100,6 @@ public class ResourceExplorerNodeService {
     /** 개요 탭 모니터링 요약 차트 — 지표별 시계열 (NETWORK 는 수신/송신 2개 시리즈, 미수집이면 빈 시리즈).
      *  metric 미지정 시 전체 지표(6종)를 반환한다.
      *  조회 구간은 지금 기준 interval 기간(지금-window ~ 지금), 버킷 간격은 기간별 defaultStep 이다. */
-    @Transactional(readOnly = true)
     public List<NodeMetricTrendResponse> getNodeMetricTrend(String nodeId, NodeDetailMetric metric,
                                                             NodeMetricInterval interval) {
         NodeContext ctx = accessibleNode(nodeId);
@@ -121,7 +118,6 @@ public class ResourceExplorerNodeService {
      * 개요 탭 노드 정보 표 — 자산 원장(유형·제조사·시스템 유형)과 Thanos 현재값(가동일수·코어·메모리·스토리지), 1세부 VM 수.
      * provider 배지는 자산 제조사, platformType 은 자산 시스템 유형으로 채운다.
      */
-    @Transactional(readOnly = true)
     public NodeInfoResponse getNodeInfo(String nodeId) {
         NodeContext ctx = accessibleNode(nodeId);
         HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
@@ -142,7 +138,6 @@ public class ResourceExplorerNodeService {
 
     /** 가상머신 탭 — 이 물리 호스트에 배치된 1세부 VM 목록, 상태·키워드(이름/별칭) 필터·정렬·페이징(1부터).
      *  사용률은 VM 내부 node_exporter 의 최근 10분 평균, exporter 가 없으면 미수집(null). */
-    @Transactional(readOnly = true)
     public PageResponse<NodeVmListItemResponse> getNodeVms(String nodeId, NodeStatus status,
                                                            String keyword, int page, int size, String sort) {
         Comparator<NodeVmListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
@@ -165,7 +160,6 @@ public class ResourceExplorerNodeService {
      *  interval 기간(지금 기준)에 걸친 일자의 행을 반환한다. 값이 null 이면 해당 일자 미수집("-")이다.
      *  가상머신수는 이력이 없어 오늘 행에만 현재 1세부 VM 수를 싣는다. */
     // TODO:: 1세부 VM 배치 이력(일간 최대 VM 수)이 제공되면 과거 일자의 maxVmCount 채우기
-    @Transactional(readOnly = true)
     public PageResponse<NodeDailyUsageResponse> getNodeUsage(String nodeId, NodeMetricInterval interval,
                                                              int page, int size, String sort) {
         Comparator<NodeDailyUsageResponse> comparator = usageComparator(sort);   // 미지원 필드는 조회 전에 400

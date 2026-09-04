@@ -32,7 +32,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeB
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 자원 탐색기 패널들이 공유하는 "사용자 역할 스코프의 자원 목록" 조회 서비스.
@@ -133,12 +132,10 @@ public class ResourceScopeService {
     }
 
     /** 현재 사용자 토큰의 역할 스코프 */
-    @Transactional(readOnly = true)
     public Scope currentUserScope() {
         return scopeOf(authService.currentUserRoleIds());
     }
 
-    @Transactional(readOnly = true)
     public Scope scopeOf(Collection<String> roleNames) {
         if (roleNames == null || roleNames.isEmpty()) {
             return Scope.empty();
@@ -199,6 +196,7 @@ public class ResourceScopeService {
      * 물리 호스트 실행 상태 판정.
      * <ol>
      *   <li>자산 상태 INACTIVE/DECOMMISSIONED → STOP, MAINTENANCE → PENDING</li>
+     *   <li>Thanos 정상 스냅샷이 없음(기동 직후 장애) → PENDING (관측 계통 장애를 호스트 오류로 집계하지 않는다)</li>
      *   <li>ipmi_exporter 가 있고 섀시 전원이 꺼져 있으면 → STOP</li>
      *   <li>exporter 미등록 → PENDING (상태 미확정)</li>
      *   <li>exporter 중 하나라도 수집 중 → RUNNING, 전부 미수집 → ERROR</li>
@@ -210,6 +208,9 @@ public class ResourceScopeService {
             case INACTIVE, DECOMMISSIONED -> { return ResourceStatus.STOP; }
             case MAINTENANCE -> { return ResourceStatus.PENDING; }
             case ACTIVE -> { }
+        }
+        if (metrics.degraded()) {
+            return ResourceStatus.PENDING;
         }
         for (MonitoringTarget target : targets) {
             if (target.getExporterType() == ExporterType.IPMI_EXPORTER

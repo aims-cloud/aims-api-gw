@@ -26,7 +26,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 자원 탐색기 트리의 가상머신 가지(CB-Tumblebug 멀티클라우드)를 조립한다 (docs/06 §2, §4.2, §6.1, §7.1, §9.5~9.7).
@@ -116,7 +115,6 @@ public class TumblebugTreeBuilder {
      *
      * @return 역할 이름 → VM_ROOT 노드 (parentId 는 role:{role})
      */
-    @Transactional(readOnly = true)
     public Map<String, ResourceTreeNodeResponse> build(Collection<String> roleNames) {
         if (roleNames.isEmpty()) {
             return Map.of();

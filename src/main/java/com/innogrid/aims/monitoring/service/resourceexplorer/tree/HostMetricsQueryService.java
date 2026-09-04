@@ -21,6 +21,8 @@ import org.springframework.stereotype.Component;
  * </ul>
  * 호스트마다 질의하지 않고 4개 쿼리로 전체 instance 를 받아 조인한다. Thanos 장애 시 빈 결과(전부 미수집)를 돌려준다.
  */
+// TODO:: LAST_30D/LAST_90D 는 avg_over_time(...[30d|90d]) 을 전체 instance 에 대해 실행해 호스트 수·보존 기간에 따라 느려질 수 있음
+//        — Thanos 다운샘플링·recording rule 적용 여부가 확정되면 장기 구간은 recording rule 또는 range 평균으로 교체
 @Component
 public class HostMetricsQueryService {
 

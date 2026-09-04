@@ -10,7 +10,6 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -38,10 +37,11 @@ class SchedulingServiceExcludedTest {
     private final NodeResourceCollector collector = mock(NodeResourceCollector.class);
     private final SchedulerProperties properties = new SchedulerProperties();
 
-    private final SchedulingService service = new SchedulingService(
-            workloadRepository, policyRepository, collector, mock(PlacementService.class),
-            new EngineRegistry(List.of(new WeightedScoreScheduler())),
-            ConstraintEvaluator.withDefaults(), properties);
+    private final SchedulingService service = SchedulingServiceBuilder.aSchedulingService()
+            .workloads(workloadRepository).policies(policyRepository).collector(collector)
+            .engines(new EngineRegistry(List.of(new WeightedScoreScheduler())))
+            .properties(properties)
+            .build();
 
     @DisplayName("후보가 없고 제외 노드가 있으면 실패 사유에 그 노드를 적는다")
     @Test

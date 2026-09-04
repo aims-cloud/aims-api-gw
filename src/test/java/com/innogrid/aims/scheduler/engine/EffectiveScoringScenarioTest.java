@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static com.innogrid.aims.scheduler.service.SchedulingServiceBuilder.aSchedulingService;
 import static org.mockito.Mockito.when;
 
 /**
@@ -254,12 +255,13 @@ class EffectiveScoringScenarioTest {
                 .thenReturn(java.util.Optional.of(new Workload("w", 1, 512)));
         when(workloadRepository.findByStatusIn(org.mockito.ArgumentMatchers.anyCollection())).thenReturn(List.of());
 
-        return new SchedulingService(workloadRepository, policyRepository,
-                new NodeResourceCollector(vm, properties, new PowerModel(properties)),
-                mock(com.innogrid.aims.scheduler.service.PlacementService.class),
-                new EngineRegistry(List.of(new WeightedScoreScheduler())),
-                com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator.withDefaults(),
-                properties);
+        return aSchedulingService()
+                .workloads(workloadRepository)
+                .policies(policyRepository)
+                .collector(new NodeResourceCollector(vm, properties, new PowerModel(properties)))
+                .engines(new EngineRegistry(List.of(new WeightedScoreScheduler())))
+                .properties(properties)
+                .build();
     }
 
     /** 부하가 다른 4대. 호출마다 새 객체 — 예약이 쌓이는 가변 객체라 엔진 간에 공유하지 않는다. */

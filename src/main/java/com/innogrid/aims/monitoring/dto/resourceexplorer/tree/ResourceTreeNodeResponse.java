@@ -4,7 +4,17 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-/** 자원 탐색기에서 사용하는 공통 트리 항목. */
+/**
+ * 자원 탐색기에서 사용하는 공통 트리 항목 (docs/06 자원 탐색기 트리 설계 §4.3, §7).
+ *
+ * <ul>
+ *   <li>{@code id}: 트리 내 위치를 나타내는 고유 ID (같은 자원이 여러 역할 아래 있으면 서로 다른 id)</li>
+ *   <li>{@code resourceId}: 해당 자원 영역에서 실제 자원을 식별하는 안정적인 ID (물리 호스트 = assets.id)</li>
+ *   <li>{@code status}: 자원 실행 상태 — 자원 노드에만 부여</li>
+ *   <li>{@code monitoringStatus}: 수집 상태 — 자원·모니터링 항목 노드에 부여, 그룹 노드는 null</li>
+ * </ul>
+ * 실제 사용률·시계열 값은 트리에 포함하지 않는다.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ResourceTreeNodeResponse(
         String id,
@@ -13,8 +23,9 @@ public record ResourceTreeNodeResponse(
         ResourceTreeNodeType type,
         String resourceId,
         String roleId,
-        String deploymentId,
+        String mdcId,
         String status,
+        MonitoringStatus monitoringStatus,
         boolean leaf,               // 최종 노드 Flag 값
         int childCount,
         List<ResourceTreeNodeResponse> children
@@ -22,5 +33,33 @@ public record ResourceTreeNodeResponse(
     public ResourceTreeNodeResponse {
         children = children == null ? null : List.copyOf(children);
     }
-}
 
+    /** children 으로 leaf/childCount 를 계산해 생성한다. */
+    public static ResourceTreeNodeResponse of(String id,
+                                              String parentId,
+                                              String name,
+                                              ResourceTreeNodeType type,
+                                              String resourceId,
+                                              String roleId,
+                                              String mdcId,
+                                              String status,
+                                              MonitoringStatus monitoringStatus,
+                                              List<ResourceTreeNodeResponse> children) {
+        List<ResourceTreeNodeResponse> safe = children == null ? List.of() : children;
+        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleId, mdcId,
+                status, monitoringStatus, safe.isEmpty(), safe.size(), safe);
+    }
+
+    /** 하위 목록을 교체한 사본 — leaf/childCount 를 다시 계산한다. */
+    public ResourceTreeNodeResponse withChildren(List<ResourceTreeNodeResponse> newChildren) {
+        List<ResourceTreeNodeResponse> safe = newChildren == null ? List.of() : newChildren;
+        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleId, mdcId,
+                status, monitoringStatus, safe.isEmpty(), safe.size(), safe);
+    }
+
+    /** Lazy Loading 응답용 — 하위 목록을 제외하고 leaf/childCount 는 유지한다. */
+    public ResourceTreeNodeResponse withoutChildren() {
+        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleId, mdcId,
+                status, monitoringStatus, leaf, childCount, null);
+    }
+}

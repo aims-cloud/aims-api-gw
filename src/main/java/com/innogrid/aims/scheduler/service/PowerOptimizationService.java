@@ -295,9 +295,15 @@ public class PowerOptimizationService {
     /**
      * 노드를 MDC 로 묶어 전력 현황을 낸다. MDC 식별자 오름차순이라 응답이 결정적이다.
      *
-     * <p>합계는 클러스터 합계와 같은 <b>실측</b> 기준이다(배치 판정 C6 은 예약분까지 반영한 실효 전력을 쓴다 —
-     * 기준이 다른 이유는 {@link Mdc} 주석에 적었다). 라벨이 없는 노드는 수집기가 {@code unknown} 으로 묶으므로
-     * 여기서도 한 그룹으로 나온다.</p>
+     * <p>전력을 <b>실측</b>과 <b>실효</b> 두 값으로 낸다. 실측은 클러스터 합계와 같은 기준이고, 실효는 예약분까지
+     * 반영해 <b>C6 이 예산과 비교하는 기준선과 같다.</b> 남은 여유·초과 판정은 실효로 낸다 — 실측으로 내면
+     * "여유가 있다"고 보여 주고도 실제 배치는 막히는 어긋남이 생긴다.</p>
+     *
+     * <p>계측 판정은 <b>C6 과 같은 술어</b>(실측 전력 &gt; 0)를 쓴다. 진단의 {@link #hasPower} 는 정격까지 요구하는데,
+     * 그건 정격으로 나누는 진단 항목에 필요한 조건이지 "전력을 계측했는가"의 조건이 아니다. 두 술어가 갈리면
+     * 지금 고치는 것과 같은 종류의 어긋남이 다시 생긴다.</p>
+     *
+     * <p>라벨이 없는 노드는 수집기가 {@code unknown} 으로 묶으므로 여기서도 한 그룹으로 나온다.</p>
      */
     private List<Mdc> mdcs(List<NodeResource> nodes, MdcPowerBudgets budgets) {
         Map<String, List<NodeResource>> byMdc = new java.util.TreeMap<>();
@@ -308,13 +314,16 @@ public class PowerOptimizationService {
 
         List<Mdc> result = new ArrayList<>();
         for (Map.Entry<String, List<NodeResource>> entry : byMdc.entrySet()) {
-            List<NodeResource> group = entry.getValue();
-            double total = group.stream().filter(this::hasPower).mapToDouble(NodeResource::getPowerWatts).sum();
-            int measured = (int) group.stream().filter(this::hasPower).count();
+            List<NodeResource> measuredNodes = entry.getValue().stream()
+                    .filter(n -> n.getPowerWatts() > 0)     // C6 과 같은 술어
+                    .toList();
+            double total = measuredNodes.stream().mapToDouble(NodeResource::getPowerWatts).sum();
+            double effective = measuredNodes.stream().mapToDouble(powerModel::effectivePowerWatts).sum();
 
             Double budget = budgets.budgetOf(entry.getKey()).stream().boxed().findFirst().orElse(null);
-            Double remaining = budget == null ? null : round(budget - total);
-            result.add(new Mdc(entry.getKey(), group.size(), measured, round(total),
+            Double remaining = budget == null ? null : round(budget - effective);
+            result.add(new Mdc(entry.getKey(), entry.getValue().size(), measuredNodes.size(),
+                    round(total), round(effective),
                     budget, remaining, remaining != null && remaining < 0));
         }
         return result;

@@ -100,7 +100,7 @@ class ResourceScopeServiceTest {
                 Map.of("10.0.0.1:9100", true, "10.0.0.1:9290", true, "10.0.0.2:9100", true, "10.0.0.2:9290", true, "10.0.0.3:9100", false),
                 Map.of(), Map.of(),
                 Map.of("10.0.0.1:9290", true, "10.0.0.2:9290", false),
-                Map.of(), Map.of(), false));
+                Map.of(), Set.of(), Map.of(), false));
 
         Map<String, List<RoleNamespace>> nsMappings = Map.of("ADMIN", List.of(new RoleNamespace(admin, "ns-a")));
         when(roleNamespaceRepository.findByRole_NameIn(anyCollection())).thenAnswer(inv -> {
@@ -146,6 +146,19 @@ class ResourceScopeServiceTest {
         ScopedHost node04 = scope.hostsOf("ADMIN").stream().filter(h -> h.name().equals("node-04")).findFirst().orElseThrow();
         assertThat(node04.instance()).isNull();
         assertThat(node04.ipAddresses()).isEmpty();
+    }
+
+    @Test
+    void Thanos_정상_스냅샷이_없으면_ACTIVE_호스트는_PENDING으로_두고_자산_상태_규칙만_적용한다() {
+        when(resolver.snapshot()).thenReturn(new Snapshot(Instant.now(),
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), Map.of(), true));   // degraded
+        Map<String, ResourceStatus> byName = service.scopeOf(List.of("ADMIN")).hostsOf("ADMIN").stream()
+                .collect(java.util.stream.Collectors.toMap(ScopedHost::name, ScopedHost::status));
+
+        assertThat(byName.get("node-01")).isEqualTo(ResourceStatus.PENDING);   // ERROR 로 집계하지 않는다
+        assertThat(byName.get("node-03")).isEqualTo(ResourceStatus.PENDING);
+        assertThat(byName.get("node-05")).isEqualTo(ResourceStatus.PENDING);   // MAINTENANCE
+        assertThat(byName.get("node-06")).isEqualTo(ResourceStatus.STOP);      // DECOMMISSIONED 는 자산 상태 우선
     }
 
     @Test

@@ -60,10 +60,13 @@ class TumblebugTreeBuilderTest {
 
         stubTumblebugHealthy();
         when(metricsClient.queryResults(any())).thenReturn(List.of());
+        // vm-1: 현재 up=1 / vm-2: 24시간 이력만 있고 현재 up 없음(exporter 5분 이상 중단) / vm-3: 이력 없음
         when(metricsClient.queryResults(MonitoringCapabilityResolver.TB_UP_QUERY)).thenReturn(List.of(
-                vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1"), "1"),
-                vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-2"), "0")));
-        when(metricsClient.queryResults(MonitoringCapabilityResolver.TB_GPU_DEVICE_QUERY)).thenReturn(List.of(
+                vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1"), "1")));
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.tbRegisteredQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
+                vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1"), "288"),
+                vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-2"), "120")));
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.tbGpuDeviceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
                 vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1", "UUID", "GPU-1111", "gpu", "0"), "1")));
 
         MonitoringCapabilityResolver resolver = new MonitoringCapabilityResolver(metricsClient, properties, clock);
@@ -168,7 +171,7 @@ class TumblebugTreeBuilderTest {
                         ResourceTreeNodeType.SWAP, ResourceTreeNodeType.SYSTEM, ResourceTreeNodeType.GPU_GROUP);
         assertThat(vm1.children().get(8).children()).extracting(ResourceTreeNodeResponse::resourceId).containsExactly("GPU-1111");
 
-        // vm-2: up=0 → 항목 유지 + UNAVAILABLE
+        // vm-2: 이력은 있고 현재 up 없음 → 항목 유지 + UNAVAILABLE (NOT_CONFIGURED 로 떨어지지 않는다)
         assertThat(vm2.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
         assertThat(vm2.children()).hasSize(8);
         assertThat(vm2.children()).extracting(ResourceTreeNodeResponse::monitoringStatus).containsOnly(MonitoringStatus.UNAVAILABLE);

@@ -150,6 +150,21 @@ class HostDetailMetricsQueryServiceTest {
         assertThat(rows).allSatisfy(r -> assertThat(r.cpuPercent()).isNull());
     }
 
+    @Test
+    void 요약_차트의_rate_창은_step이_5분보다_짧으면_5분이다() {
+        assertThat(HostDetailMetricsQueryService.rateWindow("30s")).isEqualTo("5m");
+        assertThat(HostDetailMetricsQueryService.rateWindow("5m")).isEqualTo("5m");
+        assertThat(HostDetailMetricsQueryService.rateWindow("15m")).isEqualTo("15m");
+        assertThat(HostDetailMetricsQueryService.rateWindow("1h")).isEqualTo("1h");
+        assertThat(HostDetailMetricsQueryService.rateWindow("1d")).isEqualTo("1d");
+        assertThat(HostDetailMetricsQueryService.rateWindow("garbage")).isEqualTo("5m");
+
+        Instant from = Instant.ofEpochSecond(1_757_000_000L);
+        when(client.queryRangeResults(anyString(), any(), any(), eq("30s"))).thenReturn(List.of());
+        service.trend(NodeDetailMetric.CPU, NODE, DCGM, from, from.plusSeconds(600), "30s");
+        verify(client).queryRangeResults(org.mockito.ArgumentMatchers.contains("[5m]"), eq(from), eq(from.plusSeconds(600)), eq("30s"));
+    }
+
     private static List<Map<String, Object>> vector(String value) {
         return List.of(Map.of("metric", Map.of("instance", NODE), "value", List.of(1_757_000_000, value)));
     }

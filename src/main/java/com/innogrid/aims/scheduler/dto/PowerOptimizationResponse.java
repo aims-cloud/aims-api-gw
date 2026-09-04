@@ -19,12 +19,48 @@ import java.util.List;
 public record PowerOptimizationResponse(
         OffsetDateTime evaluatedAt,
         Cluster cluster,
+        List<Mdc> mdcs,
         List<Finding> findings,
         Summary summary
 ) {
     public PowerOptimizationResponse {
+        mdcs = mdcs == null ? List.of() : List.copyOf(mdcs);
         findings = findings == null ? List.of() : List.copyOf(findings);
     }
+
+    /**
+     * MDC 한 곳의 전력 현황. MDC 식별자 오름차순이다.
+     *
+     * <p>클러스터 합계는 "전체가 얼마를 쓰는가"만 답한다. 그런데 전력 상한은 실제로 <b>MDC 단위</b>로 걸린다 —
+     * 컨테이너·랙의 수전 용량이 곧 상한이다. 이 배열은 그 단위로 쪼갠 현황이며, 예산 원장에 값을 넣은 MDC 는
+     * 남은 여유와 초과 여부까지 함께 보여 준다.</p>
+     *
+     * <p><b>전력을 두 값으로 낸다.</b> {@code totalPowerWatts} 는 실측 합이라 클러스터 합계와 같은 기준이고,
+     * {@code effectivePowerWatts} 는 <b>예약분까지 반영한</b> 합이라 배치 판정(C6)이 쓰는 기준선과 같다.
+     * 둘의 차이가 곧 "배정됐지만 아직 메트릭에 잡히지 않은 부하"다.</p>
+     *
+     * <p><b>남은 여유와 초과 판정은 실효 기준으로 낸다.</b> 실측으로 내면 "여유 100W 남았다"고 보여 주고도
+     * 실제 배치는 C6 에 막히는 어긋남이 생긴다 — 같은 시점의 같은 사실(예약)을 한쪽만 보기 때문이다.
+     * 남는 차이는 "후보 워크로드 한 건의 증가분"뿐이고, 그것은 진단이 답할 질문이 아니다.</p>
+     *
+     * @param measuredNodes       전력을 수집한 노드 수. {@code nodeCount} 보다 적으면 합계가 과소 평가다.
+     *                            판정 기준은 C6 과 같다 — 실측 전력이 0 보다 큰 노드
+     * @param totalPowerWatts     실측 전력 합. 클러스터 합계와 같은 기준이라 MDC 별 합을 더하면 클러스터 합계가 된다
+     * @param effectivePowerWatts 예약분까지 반영한 전력 합. C6 이 예산과 비교하는 기준선이다
+     * @param budgetWatts         예산 원장에 등록된 총량. 등록하지 않았으면 null
+     * @param remainingWatts      예산 − <b>실효</b> 합. 예산이 없으면 null. 음수면 이미 넘긴 것이다
+     * @param overBudget          실효 합이 예산을 넘었는지. 예산이 없으면 false
+     */
+    public record Mdc(
+            String mdcId,
+            int nodeCount,
+            int measuredNodes,
+            double totalPowerWatts,
+            double effectivePowerWatts,
+            Double budgetWatts,
+            Double remainingWatts,
+            boolean overBudget
+    ) {}
 
     /**
      * 클러스터 전력 현황.

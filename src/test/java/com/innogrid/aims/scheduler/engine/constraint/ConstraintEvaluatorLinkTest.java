@@ -67,11 +67,11 @@ class ConstraintEvaluatorLinkTest {
         assertNull(evaluator.exclusionReason(workload("data"), node("down"), empty));
     }
 
-    @DisplayName("제약 설명에 C5 가 있고 순서가 마지막이다")
+    @DisplayName("제약 설명에 C5 가 있고 전력(C4) 다음 자리다")
     @Test
-    void c5_listed_last() {
+    void c5_listed_after_power() {
         List<ConstraintDescriptionResponse> all = ConstraintDescriptionResponse.all();
-        assertEquals(6, all.size());
+        assertEquals(7, all.size());   // C6 MDC 전력 예산이 뒤에 붙어 C5 는 더 이상 마지막이 아니다
         ConstraintDescriptionResponse c5 = all.get(5);
         assertEquals("C5", c5.code());
         assertTrue(c5.togglable());

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.MdcLink;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -16,8 +15,6 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
-import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
-import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -34,10 +31,12 @@ class SchedulingServiceLinkMatrixTest {
     private final MdcLinkRepository linkRepository = mock(MdcLinkRepository.class);
     private final SchedulerProperties properties = new SchedulerProperties();
 
-    private final SchedulingService service = new SchedulingService(
-            mock(WorkloadRepository.class), mock(SchedulingPolicyRepository.class), collector,
-            mock(PlacementService.class), new EngineRegistry(List.of(new WeightedScoreScheduler())),
-            ConstraintEvaluator.withDefaults(), properties, linkRepository);
+    private final SchedulingService service = SchedulingServiceBuilder.aSchedulingService()
+            .collector(collector)
+            .engines(new EngineRegistry(List.of(new WeightedScoreScheduler())))
+            .properties(properties)
+            .links(linkRepository)
+            .build();
 
     @DisplayName("게이트가 꺼진 정책은 원장을 조회하지 않고 스냅샷이 비어 있다")
     @Test
@@ -79,10 +78,11 @@ class SchedulingServiceLinkMatrixTest {
     @DisplayName("원장 없이 조립한 서비스는 켠 정책이어도 빈 스냅샷이다 기존 테스트 경로")
     @Test
     void no_ledger_empty_snapshot_with_gate_on() {
-        SchedulingService withoutLedger = new SchedulingService(
-                mock(WorkloadRepository.class), mock(SchedulingPolicyRepository.class), collector,
-                mock(PlacementService.class), new EngineRegistry(List.of(new WeightedScoreScheduler())),
-                ConstraintEvaluator.withDefaults(), properties);
+        SchedulingService withoutLedger = SchedulingServiceBuilder.aSchedulingService()
+                .collector(collector)
+                .engines(new EngineRegistry(List.of(new WeightedScoreScheduler())))
+                .properties(properties)
+                .build();   // 링크 원장을 붙이지 않는다
         when(collector.collect()).thenReturn(new NodeResourceCollector.Snapshot(List.of(node("n1")), List.of()));
         SchedulingPolicy on = new SchedulingPolicy("on", "d");
         on.setAffinityEnabled(true);

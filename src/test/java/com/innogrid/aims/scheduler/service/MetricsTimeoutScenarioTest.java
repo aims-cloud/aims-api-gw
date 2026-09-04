@@ -17,7 +17,6 @@ import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -72,8 +71,11 @@ class MetricsTimeoutScenarioTest {
         SchedulingPolicyRepository policies = mock(SchedulingPolicyRepository.class);
         when(policies.findFirstByActiveTrueAndResourceTypeIsNull()).thenReturn(Optional.of(new SchedulingPolicy("default", "기본")));
 
-        service = new SchedulingService(workloads, policies, collector, mock(PlacementService.class),
-                new EngineRegistry(List.of(new WeightedScoreScheduler())), ConstraintEvaluator.withDefaults(), props);
+        service = SchedulingServiceBuilder.aSchedulingService()
+                .workloads(workloads).policies(policies).collector(collector)
+                .engines(new EngineRegistry(List.of(new WeightedScoreScheduler())))
+                .properties(props)
+                .build();
 
         when(vm.query(startsWith("up{"))).thenAnswer(inv -> {
             if (upHangs) block();

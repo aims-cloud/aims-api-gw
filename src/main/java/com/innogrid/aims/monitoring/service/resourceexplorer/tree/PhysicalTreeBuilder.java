@@ -53,7 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PhysicalTreeBuilder {
 
     /** 트리에 물리 호스트로 노출하는 자산 유형 — 스위치·스토리지 등은 제외한다 */
-    static final Set<Asset.AssetType> HOST_TYPES = EnumSet.of(Asset.AssetType.SERVER, Asset.AssetType.GPU_SERVER);
+    public static final Set<Asset.AssetType> HOST_TYPES = EnumSet.of(Asset.AssetType.SERVER, Asset.AssetType.GPU_SERVER);
 
     /** node_exporter 항목 (docs/06 §5.2 순서). Disk 는 화면용 그룹으로 하위에 Disk I/O·File System 을 둔다 */
     static final List<ResourceTreeNodeType> NODE_EXPORTER_ITEMS = List.of(

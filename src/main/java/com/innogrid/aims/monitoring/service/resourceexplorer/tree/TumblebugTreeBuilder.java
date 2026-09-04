@@ -65,14 +65,14 @@ public class TumblebugTreeBuilder {
     /** Tumblebug 조회 실패 시 가상머신 루트 노드에 표시하는 상태 */
     public static final String UNAVAILABLE_STATUS = "TUMBLEBUG_UNAVAILABLE";
 
-    /** Tumblebug NodeSummary 중 트리에 필요한 필드 */
-    record TbNode(String id, String name, String status, String nodeGroupId, String provider) {}
+    /** Tumblebug NodeSummary 중 트리·패널에 필요한 필드 */
+    public record TbNode(String id, String name, String status, String nodeGroupId, String provider) {}
 
-    /** Tumblebug InfraInfoSummary 중 트리에 필요한 필드 */
-    record TbInfra(String id, String name, String status, List<TbNode> nodes) {}
+    /** Tumblebug InfraInfoSummary 중 트리·패널에 필요한 필드 */
+    public record TbInfra(String id, String name, String status, List<TbNode> nodes) {}
 
-    /** 한 시점의 Tumblebug 자원 구조. degraded 는 마지막 갱신이 실패했음을 뜻한다. */
-    record TbSnapshot(Instant loadedAt,
+    /** 한 시점의 Tumblebug 자원 구조. degraded 는 마지막 갱신이 실패했음을 뜻한다. 패널 집계도 같은 스냅샷을 쓴다. */
+    public record TbSnapshot(Instant loadedAt,
                       Map<String, String> namespaceNames,
                       Map<String, List<TbInfra>> infrasByNamespace,
                       boolean degraded) {
@@ -241,8 +241,8 @@ public class TumblebugTreeBuilder {
 
     // ── Tumblebug 조회·캐시 ─────────────────────────────────────
 
-    /** 캐시가 유효하면 재사용하고, 만료됐으면 Tumblebug 을 다시 조회한다. */
-    TbSnapshot snapshot() {
+    /** 캐시가 유효하면 재사용하고, 만료됐으면 Tumblebug 을 다시 조회한다. 트리와 패널이 같은 스냅샷을 공유한다. */
+    public TbSnapshot snapshot() {
         TbSnapshot current = cached;
         if (isFresh(current)) {
             return current;

@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 /**
  * Thanos 에서 트리 구성에 필요한 수집 상태를 한 번에 읽어 스냅샷으로 제공한다 (docs/06 §9.4).
  *
- * 호스트·VM 마다 질의하지 않고 전체에 대해 5개 쿼리만 수행한 뒤 라벨로 조인한다.
+ * 호스트·VM 마다 질의하지 않고 전체에 대해 6개 쿼리만 수행한 뒤 라벨로 조인한다.
  * <ul>
  *   <li>물리 호스트(1세부): {@code instance} 라벨 = monitoring_target 의 {@code address:port}</li>
  *   <li>Tumblebug VM(2세부): exporter 등록 시 relabel 로 심는 {@code tb_ns / tb_infra / tb_node} 라벨 (docs/06 §9.6).
@@ -44,6 +44,8 @@ public class MonitoringCapabilityResolver {
     public static final String UP_QUERY = "max by (instance) (up)";
     public static final String GPU_DEVICE_QUERY = "count by (instance, UUID, gpu) (DCGM_FI_DEV_GPU_UTIL)";
     public static final String IPMI_METRIC_QUERY = "count by (instance, __name__) ({__name__=~\"ipmi_.*\"})";
+    /** IPMI 섀시 전원 상태 (1 켜짐 / 0 꺼짐) — 물리 호스트 실행 상태(RUNNING/STOP) 판정에 사용 */
+    public static final String CHASSIS_POWER_QUERY = "max by (instance) (ipmi_chassis_power_state)";
     /** Tumblebug VM — relabel 라벨(tb_ns/tb_infra/tb_node)이 있는 시계열만 */
     public static final String TB_UP_QUERY = "max by (tb_ns, tb_infra, tb_node) (up{tb_node!=\"\"})";
     public static final String TB_GPU_DEVICE_QUERY =
@@ -57,12 +59,18 @@ public class MonitoringCapabilityResolver {
                            Map<String, Boolean> upByInstance,
                            Map<String, List<GpuDevice>> gpuDevicesByInstance,
                            Map<String, Set<String>> ipmiMetricsByInstance,
+                           Map<String, Boolean> chassisPowerOnByInstance,
                            Map<String, Boolean> upByTbNode,
                            Map<String, List<GpuDevice>> gpuDevicesByTbNode,
                            boolean degraded) {
 
         static Snapshot empty(Instant at, boolean degraded) {
-            return new Snapshot(at, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), degraded);
+            return new Snapshot(at, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), degraded);
+        }
+
+        /** IPMI 섀시 전원 — true 켜짐, false 꺼짐, null 미확인(ipmi_exporter 없음 또는 샘플 없음) */
+        public Boolean chassisPowerOn(String ipmiInstance) {
+            return chassisPowerOnByInstance.get(ipmiInstance);
         }
 
         /** exporter 가 등록된 instance 의 수집 상태 — 등록 여부(NOT_CONFIGURED)는 호출측이 판단한다 */
@@ -178,6 +186,13 @@ public class MonitoringCapabilityResolver {
                     ipmi.computeIfAbsent(instance, k -> new HashSet<>()).add(name);
                 }
             }
+            Map<String, Boolean> power = new HashMap<>();
+            for (Map<String, Object> row : client.queryResults(CHASSIS_POWER_QUERY)) {
+                String instance = label(row, "instance");
+                if (instance != null) {
+                    power.put(instance, "1".equals(value(row)));
+                }
+            }
             Map<String, Boolean> tbUp = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(TB_UP_QUERY)) {
                 String key = tbKey(row);
@@ -196,14 +211,14 @@ public class MonitoringCapabilityResolver {
             }
             gpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
             tbGpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
-            return new Snapshot(now, up, gpus, ipmi, tbUp, tbGpus, false);
+            return new Snapshot(now, up, gpus, ipmi, power, tbUp, tbGpus, false);
         } catch (RuntimeException e) {
             if (previous != null) {
                 // 마지막 정상 결과를 유지하되 TTL 만 갱신해 장애 중 Thanos 를 반복 호출하지 않는다
                 log.warn("Thanos 수집 상태 조회 실패 — 마지막 정상 스냅샷을 유지합니다: {}", e.getMessage());
                 return new Snapshot(now, previous.upByInstance(), previous.gpuDevicesByInstance(),
-                        previous.ipmiMetricsByInstance(), previous.upByTbNode(), previous.gpuDevicesByTbNode(),
-                        previous.degraded());
+                        previous.ipmiMetricsByInstance(), previous.chassisPowerOnByInstance(),
+                        previous.upByTbNode(), previous.gpuDevicesByTbNode(), previous.degraded());
             }
             log.warn("Thanos 수집 상태 조회 실패 — 모든 항목을 UNAVAILABLE 로 표시합니다: {}", e.getMessage());
             return Snapshot.empty(now, true);

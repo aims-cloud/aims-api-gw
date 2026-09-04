@@ -1,13 +1,14 @@
 package com.innogrid.aims.monitoring.dto.resourceexplorer.role;
 
 /**
- * 역할 패널의 KPI 카드 8종 — 멤버/배포영역/노드/가상머신 수와 상태별 카운트.
- * 상태 카운트(Running/Pending/Stop/Error)의 집계 대상(노드+VM 합산 여부)은 TODO:: 확정 필요.
- * Pending 상태는 이 화면에서 처음 등장 — 노드·VM 상태 값 체계(NodeStatus)와의 정합은 TODO:: 확정 필요.
+ * 역할 패널의 KPI 카드 — 멤버/MDC/Namespace/물리 호스트/가상머신 수와 상태별 카운트.
+ * 상태 카운트(Running/Pending/Stop/Error)는 물리 호스트+가상머신 합산이며 노드·VM 도넛의 상태별 합과 일치한다.
+ * 집계 범위는 해당 역할에 매핑된 자원(role_assets·role_namespaces)이다.
  */
 public record RoleSummaryResponse(
         long memberCount,
-        long deploymentCount,
+        long mdcCount,
+        long namespaceCount,
         long nodeCount,
         long vmCount,
         long runningCount,

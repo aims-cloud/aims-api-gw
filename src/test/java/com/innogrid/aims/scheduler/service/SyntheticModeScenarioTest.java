@@ -95,9 +95,18 @@ class SyntheticModeScenarioTest {
         assertEquals(8, eff.summary().totalNodes());
         assertEquals(5, eff.summary().evaluableNodes(), "IPMI 있는 노드만 평가 가능");
         assertTrue(eff.summary().gradeAvailable(), eff.summary().gradeUnavailableReason());
-        PowerEfficiencyResponse.NodeEfficiency worst = eff.nodes().stream().filter(n -> n.peiRaw() != null)
-                .min((a, b) -> Double.compare(a.peiRaw(), b.peiRaw())).orElseThrow();
-        assertTrue(worst.nodeId().startsWith("busan-02"), "유휴인데 고전력인 노드가 최저 PEI: " + worst.nodeId());
+        // 시각과 무관한 성질만 단언한다. "최저 PEI 는 언제나 busan-02" 는 여유 노드(busan-01)의 CPU 가 0 에 가까워지는
+        // 구간(한 주기의 8.6%)에 뒤집힌다 — 일을 안 하는 노드의 PEI 도 0 에 가깝기 때문이다. 한 주기 전체를 훑어
+        // 확인한 불변 성질은 metrics/SyntheticModeInvariantTest 에 있다.
+        PowerEfficiencyResponse.NodeEfficiency idleHighPower = eff.nodes().stream()
+                .filter(n -> n.nodeId().startsWith("busan-02")).findFirst().orElseThrow();
+        assertNotNull(idleHighPower.peiRaw(), "유휴 고전력 노드는 IPMI 계측 노드라 PEI 가 있다");
+        List<PowerEfficiencyResponse.NodeEfficiency> activeMeasured = eff.nodes().stream()
+                .filter(n -> n.peiRaw() != null && n.cpuUsagePercent() > 5).toList();
+        assertFalse(activeMeasured.isEmpty(), "가동 중인 계측 노드가 있어야 비교가 성립한다");
+        assertTrue(activeMeasured.stream().allMatch(n -> idleHighPower.peiRaw() < n.peiRaw()),
+                "유휴인데 고전력인 노드는 가동 중인 계측 노드보다 효율이 낮다: " + idleHighPower.peiRaw() + " vs "
+                        + activeMeasured.stream().map(n -> n.nodeId() + "=" + n.peiRaw()).toList());
         assertEquals(3, eff.nodes().stream().filter(n -> n.peiRaw() == null).count(), "미계측 3대는 PEI null");
 
         PowerOptimizationResponse diag = optimization.diagnoseCurrent();

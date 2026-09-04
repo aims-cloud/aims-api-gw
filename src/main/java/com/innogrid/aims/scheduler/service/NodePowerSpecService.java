@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.NodePowerSpecRequest;
 import com.innogrid.aims.scheduler.entity.NodePowerSpec;
-import com.innogrid.aims.scheduler.model.NodePowerSpecs;
 import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 
 import tools.jackson.databind.JsonNode;
@@ -45,12 +45,6 @@ public class NodePowerSpecService {
         return all.stream().filter(s -> s.getNodeId().toLowerCase().contains(needle)).toList();
     }
 
-    /** 수집·추세가 쓰는 스냅샷 — 호출 1회당 한 번만 읽는다. */
-    @Transactional(readOnly = true)
-    public NodePowerSpecs snapshot() {
-        return NodePowerSpecs.of(repository.findAll());
-    }
-
     /** 없으면 404. */
     @Transactional(readOnly = true)
     public NodePowerSpec require(Long id) {
@@ -72,7 +66,7 @@ public class NodePowerSpecService {
         ScheduleActorResolver.Actor actor = actorResolver.current();
         spec.setCreatedBy(actor.email(), actor.name());
         spec.setUpdatedBy(actor.email(), actor.name());
-        return repository.save(spec);
+        return saveOrConflict(spec);
     }
 
     /** 부분 수정 — 보낸 키만 반영한다. 노드 식별자를 바꾸면 중복 검사를 다시 한다. */
@@ -92,13 +86,29 @@ public class NodePowerSpecService {
         apply(spec, r);
         ScheduleActorResolver.Actor actor = actorResolver.current();
         spec.setUpdatedBy(actor.email(), actor.name());
-        return repository.save(spec);
+        return saveOrConflict(spec);
     }
 
     /** 삭제. 없으면 404. 참조하는 것이 없어 다른 규칙은 없다 — 다음 수집부터 기본값으로 돌아간다. */
     @Transactional
     public void delete(Long id) {
         repository.delete(require(id));
+    }
+
+    /**
+     * 저장하며 <b>동시 등록 경합</b>을 409 로 바꾼다.
+     *
+     * <p>중복은 먼저 조회해 막지만, 같은 노드를 동시에 등록·수정하면 그 검사를 지나쳐 유니크 제약에 걸린다.
+     * 그대로 두면 500 으로 새므로 여기서 409 로 바꾼다(디스패치 기록의 멱등키 경합과 같은 처리). 제약 위반 뒤의
+     * 영속성 컨텍스트는 신뢰할 수 없어 다시 조회하지 않고, 어떤 노드가 걸렸는지만 알린다.</p>
+     */
+    NodePowerSpec saveOrConflict(NodePowerSpec spec) {
+        try {
+            return repository.saveAndFlush(spec);
+        } catch (DataIntegrityViolationException race) {
+            throw new BusinessException(HttpStatus.CONFLICT, String.format(
+                    "이미 등록된 노드입니다: %s (동시에 등록·수정되어 유니크 제약에 걸렸습니다)", spec.getNodeId()));
+        }
     }
 
     // ── 반영·검증 ──────────────────────────────────────────────

@@ -115,12 +115,23 @@ class NodePowerSpecServiceTest {
     @Test
     void snapshot_prefers_ledger_then_fallback() {
         service.create(req("nps-snap:9100", 1234.5, null, null));
-        NodePowerSpecs specs = service.snapshot();
+        NodePowerSpecs specs = NodePowerSpecs.of(repository.findAll());   // 수집기가 만드는 것과 같은 형태
         assertEquals(1234.5, specs.capacityOf("nps-snap:9100").orElseThrow());
         assertTrue(specs.capacityOf("nps-missing:9100").isEmpty());
         assertEquals(1234.5, specs.capacityOr("nps-snap:9100", id -> 500.0));
         assertEquals(500.0, specs.capacityOr("nps-missing:9100", id -> 500.0), "원장에 없으면 대체값");
         assertTrue(NodePowerSpecs.EMPTY.isEmpty());
         assertEquals(500.0, NodePowerSpecs.EMPTY.capacityOr("any", id -> 500.0), "빈 원장은 항상 대체값");
+    }
+
+    @DisplayName("중복 검사를 지나친 동시 등록은 500 이 아니라 409 다 — 유니크 제약 경합")
+    @Test
+    void concurrent_duplicate_is_conflict_not_500() {
+        service.create(req("nps-race:9100", 500.0, null, null));
+        // 다른 요청이 검사와 저장 사이에 끼어든 상태를 흉내낸다 — 검사를 건너뛰고 저장만 시도
+        NodePowerSpec racer = new NodePowerSpec("nps-race:9100", 700.0);
+        BusinessException e = assertThrows(BusinessException.class, () -> service.saveOrConflict(racer));
+        assertEquals(409, e.getStatus().value());
+        assertTrue(e.getMessage().contains("동시에"));
     }
 }

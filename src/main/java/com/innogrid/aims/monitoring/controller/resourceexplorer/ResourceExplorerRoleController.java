@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   KPI 카드         — 멤버/MDC/Namespace/노드/가상머신 수, Running/Pending/Stop/Error
  *   노드/가상머신 상태 — 상태별 분포 도넛 (전체 자원 패널과 동일 구조)
  *   자원 영역 섹션   — 역할 하위 MDC(물리)·Namespace(가상머신)별 노드/가상머신 수와 상태 스택바 테이블
- * 왼쪽 트리는 ResourceExplorerTreeController, 하위 그룹 패널은 노드그룹/VM그룹 컨트롤러가 담당한다.
+ * 왼쪽 트리는 ResourceExplorerTreeController, 하위 패널은 MDC/VM그룹 컨트롤러가 담당한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (역할)", description = "역할 패널 — KPI 카드, 노드/가상머신 상태, 자원 영역(MDC·Namespace) 목록")
 @RestController

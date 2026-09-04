@@ -25,7 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class AlarmHistoryService {
 
     /** 발생 이력 목록 — 레벨·역할·배포영역·자원 유형·특정 자원·기간·키워드 필터, 컬럼 정렬, 페이징(1부터).
-     *  resourceId 는 자원 탐색기의 알람 탭(노드그룹/노드/VM 등 선택 자원 스코프)에서 사용한다. */
+     *  resourceId 는 자원 탐색기의 알람 탭(MDC/노드/VM 등 선택 자원 스코프)에서 사용한다. */
     public PageResponse<AlarmHistoryListItemResponse> getHistories(
             List<AlarmLevel> levels, String roleId, String deploymentId, String resourceType,
             String resourceId, Long policyId, String keyword,

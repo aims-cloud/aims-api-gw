@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.mdc;
 
 import java.util.List;
 

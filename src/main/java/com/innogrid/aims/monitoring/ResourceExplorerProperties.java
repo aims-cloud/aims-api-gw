@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "aims.resource-explorer")
 public class ResourceExplorerProperties {
 
-    // TODO:: 역할·노드그룹·노드 패널이 자원 관리 데이터 연동으로 전환되면 이 설정 제거 (트리는 더 이상 사용하지 않음)
+    // TODO:: 노드 패널이 자원 관리 데이터 연동으로 전환되면 이 설정 제거 (트리·전체 자원·역할·MDC 패널은 더 이상 사용하지 않음)
     private boolean mockEnabled;
 
     /**

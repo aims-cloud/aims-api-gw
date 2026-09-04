@@ -49,8 +49,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ResourceScopeService {
 
-    /** 스코프 내 물리 호스트 1건 (역할별) */
-    public record ScopedHost(String role, Long assetId, String name, String mdcId, ResourceStatus status) {}
+    /**
+     * 스코프 내 물리 호스트 1건 (역할별).
+     * alias 는 node_exporter 타겟의 별칭, instance 는 node_exporter 의 Thanos instance 라벨(address:port),
+     * ipAddresses 는 이 자산에 연결된 exporter 타겟 주소 목록 — 각각 없으면 null / 빈 목록.
+     */
+    public record ScopedHost(String role, Long assetId, String name, String alias, String mdcId, ResourceStatus status,
+                             String instance, List<String> ipAddresses) {
+        public ScopedHost {
+            ipAddresses = ipAddresses == null ? List.of() : List.copyOf(ipAddresses);
+        }
+    }
 
     /**
      * 스코프 내 가상머신 1건 (역할별). resourceId 는 SEBU1:{externalId} 또는 TB:{ns}/{infra}/{node}.
@@ -169,8 +178,15 @@ public class ResourceScopeService {
             String role = entry.getKey();
             for (Asset asset : entry.getValue().values()) {
                 List<MonitoringTarget> targets = targetsByAsset.getOrDefault(asset.getId(), List.of());
-                hosts.add(new ScopedHost(role, asset.getId(), asset.getName(), asset.getMdcId(),
-                        hostStatus(asset, targets, metrics)));
+                MonitoringTarget nodeExporter = targets.stream()
+                        .filter(t -> t.getExporterType() == ExporterType.NODE_EXPORTER)
+                        .findFirst().orElse(null);
+                List<String> addresses = targets.stream().map(MonitoringTarget::getAddress).distinct().toList();
+                hosts.add(new ScopedHost(role, asset.getId(), asset.getName(),
+                        nodeExporter == null ? null : nodeExporter.getAlias(),
+                        asset.getMdcId(), hostStatus(asset, targets, metrics),
+                        nodeExporter == null ? null : nodeExporter.getScrapeEndpoint(),
+                        addresses));
                 for (VirtualResource vm : vmsByAsset.computeIfAbsent(asset.getId(), id -> virtualResourceProvider.findByHost(asset))) {
                     vms.add(new ScopedVm(role, "SEBU1:" + vm.externalId(), vm.name(), sebu1Status(vm.status()),
                             asset.getMdcId(), null));

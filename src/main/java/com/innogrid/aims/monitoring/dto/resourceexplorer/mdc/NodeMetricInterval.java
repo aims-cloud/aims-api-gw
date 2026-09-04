@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.mdc;
 
 import java.time.Duration;
 
@@ -31,5 +31,16 @@ public enum NodeMetricInterval {
     /** 기간에 맞춘 시계열 버킷 간격 (PromQL step) */
     public String defaultStep() {
         return defaultStep;
+    }
+
+    /** PromQL range 표기 — 10m / 1h / 24h / 30d */
+    public String promWindow() {
+        if (window.toMinutes() < 60) {
+            return window.toMinutes() + "m";
+        }
+        if (window.toHours() < 48) {
+            return window.toHours() + "h";
+        }
+        return window.toDays() + "d";
     }
 }

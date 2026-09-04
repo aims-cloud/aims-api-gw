@@ -2,7 +2,7 @@ package com.innogrid.aims.monitoring.dto.resourceexplorer.node;
 
 import java.util.List;
 
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 
 /**
  * 노드 상세 가상머신 탭의 목록 1행.

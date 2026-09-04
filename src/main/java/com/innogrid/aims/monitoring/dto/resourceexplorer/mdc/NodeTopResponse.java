@@ -1,4 +1,4 @@
-package com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup;
+package com.innogrid.aims.monitoring.dto.resourceexplorer.mdc;
 
 /**
  * 노드 Top-N 항목. value 는 요청한 metric 의 값이고,

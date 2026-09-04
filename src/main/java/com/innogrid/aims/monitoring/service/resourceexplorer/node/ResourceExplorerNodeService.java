@@ -22,8 +22,8 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryRespons
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse.GpuCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse.NetworkTrafficCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeMetricInterval;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset;
 import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeInfo;
 import com.innogrid.aims.monitoring.model.ResourceExplorerTreeDataset.NodeMetrics;
@@ -360,7 +360,7 @@ public class ResourceExplorerNodeService {
         return desc ? comparator.reversed() : comparator;
     }
 
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (노드그룹 목록과 동일 규칙) */
+    /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (MDC 노드 목록과 동일 규칙) */
     private static <T extends Comparable<T>> Comparator<NodeVmListItemResponse> nullsLastComparator(
             java.util.function.Function<NodeVmListItemResponse, T> extractor, boolean desc) {
         Comparator<T> nullHandling = desc

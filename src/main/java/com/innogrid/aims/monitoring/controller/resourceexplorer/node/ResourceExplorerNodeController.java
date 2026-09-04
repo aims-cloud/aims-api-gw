@@ -11,8 +11,8 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDailyUsageResp
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeMetricTrendResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeMetricInterval;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogFileResponse;
@@ -57,7 +57,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   로그/트레이스 탭 — 수집 서비스 관리(위저드 CRUD·탐지·검증), 서비스별 로그·트레이스 조회
  * 알람 탭은 AlarmHistory/AlarmPolicy API 의 resourceId 필터를 재사용한다.
  * 경로의 nodeId 가 현재 사용자 토큰의 역할 스코프에 없으면 404 — 트리에 노출되지 않는 노드는 조회할 수 없다.
- * 왼쪽 트리는 ResourceExplorerTreeController, 노드그룹 패널은 ResourceExplorerNodeGroupController 가 담당한다.
+ * 왼쪽 트리는 ResourceExplorerTreeController, MDC 패널은 ResourceExplorerMdcController 가 담당한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (노드)", description = "노드 상세 — 주요 지표, 모니터링 요약 차트, 노드 정보, 가상머신 목록, 자원 사용 현황, 수집 서비스·로그")
 @RestController

@@ -4,8 +4,8 @@ import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeMetric;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.nodegroup.NodeStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup.VmGroupSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup.VmListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vmgroup.VmTopResponse;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * 트리에서 배포영역별 가상머신 그룹을 선택했을 때 오른쪽 개요 탭에 표시되는
  * KPI 카드(가상머신 수/Running/Stop/Error), VM Top-N, VM 목록을 제공한다.
- * 노드그룹 패널(ResourceExplorerNodeGroupController)과 동형 구조이며,
+ * MDC 패널(ResourceExplorerMdcController)과 동형 구조이며,
  * 알람 탭은 기존 AlarmController 를 자원 스코프 필터로 재사용한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (가상머신 그룹)", description = "가상머신 그룹 개요 KPI, VM Top-N, VM 목록 조회")

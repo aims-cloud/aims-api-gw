@@ -43,7 +43,7 @@ class ResourceExplorerRootServiceTest {
     }
 
     private void scope(Set<String> roles, List<ScopedHost> hosts, List<ScopedVm> vms) {
-        when(scopeService.currentUserScope()).thenReturn(new Scope(roles, hosts, vms));
+        when(scopeService.currentUserScope()).thenReturn(new Scope(roles, hosts, vms, List.of()));
     }
 
     private void adminAndUserScope() {
@@ -52,8 +52,8 @@ class ResourceExplorerRootServiceTest {
                         new ScopedHost("ADMIN", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
                         new ScopedHost("USER", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
                         new ScopedHost("USER", 13L, "node-03", "mdc-02", ResourceStatus.PENDING)),
-                List.of(new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-1", "vm-1", ResourceStatus.RUNNING),
-                        new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-2", "vm-2", ResourceStatus.STOP)));
+                List.of(new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-1", "vm-1", ResourceStatus.RUNNING, null, "ns-a"),
+                        new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-2", "vm-2", ResourceStatus.STOP, null, "ns-a")));
     }
 
     @Test

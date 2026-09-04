@@ -149,6 +149,19 @@ class ResourceScopeServiceTest {
                 "TB:ns-a/infra-1/vm-2", ResourceStatus.STOP,          // Terminated
                 "TB:ns-a/infra-1/vm-3", ResourceStatus.PENDING,       // Creating
                 "TB:ns-a/infra-1/vm-4", ResourceStatus.ERROR));       // Failed
+
+        // 소속 영역 — 1세부 VM 은 호스트의 MDC, Tumblebug VM 은 Namespace
+        ScopedVm sebu1 = scope.vmsOf("ADMIN").stream().filter(v -> v.resourceId().startsWith("SEBU1:")).findFirst().orElseThrow();
+        assertThat(sebu1.mdcId()).isEqualTo("mdc-01");
+        assertThat(sebu1.nsId()).isNull();
+        ScopedVm tb = scope.vmsOf("ADMIN").stream().filter(v -> v.resourceId().startsWith("TB:")).findFirst().orElseThrow();
+        assertThat(tb.mdcId()).isNull();
+        assertThat(tb.nsId()).isEqualTo("ns-a");
+
+        // 역할별 Namespace 목록 (Tumblebug 표시명 포함)
+        assertThat(scope.namespacesOf("ADMIN")).extracting(n -> n.nsId(), n -> n.name())
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("ns-a", "Namespace A"));
+        assertThat(scope.namespacesOf("USER")).isEmpty();
     }
 
     @Test

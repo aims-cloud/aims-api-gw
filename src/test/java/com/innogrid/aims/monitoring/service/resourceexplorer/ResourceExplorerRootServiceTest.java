@@ -1,145 +1,155 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer;
 
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.root.RoleListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.root.RootSummaryResponse;
-import org.junit.jupiter.api.AfterEach;
+import com.innogrid.aims.auth.repository.UserRepository;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedVm;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest
-// TODO:: 자원 관리 데이터 연동 시 MockDataProvider 기반 검증을 실제 원장 대역 기반 검증으로 교체
+/**
+ * 전체 자원 패널 집계 테스트 — 스코프(ResourceScopeService)는 대역으로 고정하고 집계 규칙만 검증한다.
+ * 스코프 산출 자체는 ResourceScopeServiceTest 가 검증한다.
+ *
+ * 대역 스코프:
+ *   ADMIN → node-01(mdc-01 RUNNING), node-02(mdc-02 ERROR) / TB vm-1 RUNNING, vm-2 STOP
+ *   USER  → node-02(mdc-02 ERROR, ADMIN 과 중복), node-03(mdc-02 PENDING) / VM 없음
+ */
 class ResourceExplorerRootServiceTest {
 
-    @Autowired
-    ResourceExplorerRootService service;
+    ResourceScopeService scopeService = mock(ResourceScopeService.class);
+    UserRepository userRepository = mock(UserRepository.class);
+    ResourceExplorerRootService service = new ResourceExplorerRootService(scopeService, userRepository);
 
-    @AfterEach
-    void clearContext() {
-        SecurityContextHolder.clearContext();
+    @BeforeEach
+    void setUp() {
+        when(userRepository.countByRoles_Name("ADMIN")).thenReturn(2L);
+        when(userRepository.countByRoles_Name("USER")).thenReturn(5L);
     }
 
-    private static void loginWithRoles(String... roles) {
-        var authorities = java.util.Arrays.stream(roles)
-                .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
-                .toList();
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("tester", null, authorities));
+    private void scope(Set<String> roles, List<ScopedHost> hosts, List<ScopedVm> vms) {
+        when(scopeService.currentUserScope()).thenReturn(new Scope(roles, hosts, vms));
     }
 
-    @Test
-    void 개요_KPI는_트리_데이터셋과_같은_수치를_집계한다() {
-        loginWithRoles("ADMIN");
-        RootSummaryResponse summary = service.getRootSummary();
-
-        assertThat(summary.roleCount()).isEqualTo(1);
-        assertThat(summary.deploymentCount()).isEqualTo(1);
-        assertThat(summary.nodeCount()).isEqualTo(1);
-        assertThat(summary.vmCount()).isEqualTo(1);
-        // 상태 카운트는 노드+가상머신 합산 (RUNNING 노드 1 + RUNNING 가상머신 1)
-        assertThat(summary.runningCount()).isEqualTo(2);
-        assertThat(summary.errorCount()).isZero();
-        assertThat(summary.pendingCount()).isZero();
-        assertThat(summary.stopCount()).isZero();
+    private void adminAndUserScope() {
+        scope(new LinkedHashSet<>(List.of("ADMIN", "USER")),
+                List.of(new ScopedHost("ADMIN", 11L, "node-01", "mdc-01", ResourceStatus.RUNNING),
+                        new ScopedHost("ADMIN", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
+                        new ScopedHost("USER", 12L, "node-02", "mdc-02", ResourceStatus.ERROR),
+                        new ScopedHost("USER", 13L, "node-03", "mdc-02", ResourceStatus.PENDING)),
+                List.of(new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-1", "vm-1", ResourceStatus.RUNNING),
+                        new ScopedVm("ADMIN", "TB:ns-a/infra-1/vm-2", "vm-2", ResourceStatus.STOP)));
     }
 
     @Test
-    void 집계는_토큰의_역할_스코프로_제한된다() {
-        // 역할 B만 보유 → 역할 B 스코프(node-02·node-03: ERROR, vm-02: ERROR, vm-03: PENDING)만 집계
-        loginWithRoles("USER");
+    void 개요_KPI는_역할_중복을_제거한_자원_수와_상태를_집계한다() {
+        adminAndUserScope();
         RootSummaryResponse summary = service.getRootSummary();
-        assertThat(summary.roleCount()).isEqualTo(1);
-        assertThat(summary.nodeCount()).isEqualTo(2);
+
+        assertThat(summary.roleCount()).isEqualTo(2);
+        assertThat(summary.mdcCount()).isEqualTo(2);                   // mdc-01, mdc-02
+        assertThat(summary.nodeCount()).isEqualTo(3);                  // node-02 는 두 역할에 있어도 한 번
         assertThat(summary.vmCount()).isEqualTo(2);
-        assertThat(summary.runningCount()).isZero();
-        assertThat(summary.errorCount()).isEqualTo(3);
-        assertThat(summary.pendingCount()).isEqualTo(1);
-        assertThat(service.getRoles(null, 1, 10, "name,asc").items())
-                .extracting(RoleListItemResponse::name).containsExactly("역할 B");
-
-        // 데이터셋에 없는 역할만 보유 → 전부 0
-        loginWithRoles("GUEST");
-        assertThat(service.getRootSummary().roleCount()).isZero();
-        assertThat(service.getNodeStatus().totalCount()).isZero();
-        assertThat(service.getRoles(null, 1, 10, "name,asc").totalElements()).isZero();
+        assertThat(summary.runningCount()).isEqualTo(2);               // node-01 + vm-1
+        assertThat(summary.errorCount()).isEqualTo(1);                 // node-02
+        assertThat(summary.pendingCount()).isEqualTo(1);               // node-03
+        assertThat(summary.stopCount()).isEqualTo(1);                  // vm-2
     }
 
     @Test
     void 미인증이면_빈_집계를_반환한다() {
-        assertThat(service.getRootSummary().roleCount()).isZero();
+        scope(Set.of(), List.of(), List.of());
+
+        RootSummaryResponse summary = service.getRootSummary();
+        assertThat(summary.roleCount()).isZero();
+        assertThat(summary.nodeCount()).isZero();
         assertThat(service.getNodeStatus().totalCount()).isZero();
-        assertThat(service.getVmStatus().totalCount()).isZero();
         assertThat(service.getRoles(null, 1, 10, "name,asc").items()).isEmpty();
     }
 
     @Test
     void 상태_도넛은_카운트가_0인_상태도_전부_내려준다() {
-        loginWithRoles("ADMIN");
-        ResourceStatusDistributionResponse nodeStatus = service.getNodeStatus();
-        assertThat(nodeStatus.resourceKind()).isEqualTo("NODE");
-        assertThat(nodeStatus.totalCount()).isEqualTo(1);
-        assertThat(nodeStatus.statusCounts()).extracting(c -> c.status())
-                .containsExactly(ResourceStatus.RUNNING, ResourceStatus.ERROR,
-                        ResourceStatus.PENDING, ResourceStatus.STOP);
-        assertThat(nodeStatus.statusCounts()).extracting(c -> c.count())
-                .containsExactly(1L, 0L, 0L, 0L);
+        adminAndUserScope();
 
-        ResourceStatusDistributionResponse vmStatus = service.getVmStatus();
-        assertThat(vmStatus.resourceKind()).isEqualTo("VM");
-        assertThat(vmStatus.totalCount()).isEqualTo(1);
+        ResourceStatusDistributionResponse nodes = service.getNodeStatus();
+        assertThat(nodes.resourceKind()).isEqualTo("NODE");
+        assertThat(nodes.totalCount()).isEqualTo(3);
+        assertThat(nodes.statusCounts()).extracting(c -> c.status().name(), ResourceStatusDistributionResponse.StatusCount::count)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("RUNNING", 1L),
+                        org.assertj.core.groups.Tuple.tuple("ERROR", 1L),
+                        org.assertj.core.groups.Tuple.tuple("PENDING", 1L),
+                        org.assertj.core.groups.Tuple.tuple("STOP", 0L));
+
+        ResourceStatusDistributionResponse vms = service.getVmStatus();
+        assertThat(vms.resourceKind()).isEqualTo("VM");
+        assertThat(vms.totalCount()).isEqualTo(2);
+        assertThat(vms.statusCounts()).extracting(ResourceStatusDistributionResponse.StatusCount::count)
+                .containsExactly(1L, 0L, 0L, 1L);
     }
 
     @Test
     void 역할_테이블은_역할별_자원과_상태_스택바를_집계한다() {
-        loginWithRoles("ADMIN");
-        PageResponse<RoleListItemResponse> pageResponse = service.getRoles(null, 1, 10, "name,asc");
+        adminAndUserScope();
+        PageResponse<RoleListItemResponse> page = service.getRoles(null, 1, 10, "name,asc");
 
-        assertThat(pageResponse.totalElements()).isEqualTo(1);
-        RoleListItemResponse row = pageResponse.items().get(0);
-        assertThat(row.roleId()).isEqualTo("ADMIN");
-        assertThat(row.name()).isEqualTo("역할 A");
-        assertThat(row.managerName()).isEqualTo("관리자");
-        assertThat(row.memberCount()).isEqualTo(1);
-        assertThat(row.deploymentCount()).isEqualTo(1);
-        assertThat(row.nodeCount()).isEqualTo(1);
-        assertThat(row.nodeStatus().total()).isEqualTo(1);
-        assertThat(row.nodeStatus().running()).isEqualTo(1);
-        assertThat(row.nodeStatus().stop()).isZero();
-        assertThat(row.vmCount()).isEqualTo(1);
-        assertThat(row.vmStatus().total()).isEqualTo(1);
-        assertThat(row.vmStatus().running()).isEqualTo(1);
+        assertThat(page.items()).extracting(RoleListItemResponse::name).containsExactly("ADMIN", "USER");
+
+        RoleListItemResponse admin = page.items().get(0);
+        assertThat(admin.memberCount()).isEqualTo(2);
+        assertThat(admin.managerName()).isNull();                     // 관리자 개념 미정 → "-"
+        assertThat(admin.mdcCount()).isEqualTo(2);
+        assertThat(admin.nodeCount()).isEqualTo(2);
+        assertThat(admin.nodeStatus().running()).isEqualTo(1);
+        assertThat(admin.nodeStatus().error()).isEqualTo(1);
+        assertThat(admin.vmCount()).isEqualTo(2);
+        assertThat(admin.vmStatus().stop()).isEqualTo(1);
+
+        RoleListItemResponse user = page.items().get(1);
+        assertThat(user.memberCount()).isEqualTo(5);
+        assertThat(user.mdcCount()).isEqualTo(1);
+        assertThat(user.nodeCount()).isEqualTo(2);
+        assertThat(user.nodeStatus().pending()).isEqualTo(1);
+        assertThat(user.vmCount()).isZero();
+        assertThat(user.vmStatus()).isNull();                         // VM 없음 → 스택바 "-"
     }
 
     @Test
-    void 역할_테이블_키워드는_이름과_관리자를_검색한다() {
-        loginWithRoles("ADMIN");
-        assertThat(service.getRoles("역할", 1, 10, "name,asc").totalElements()).isEqualTo(1);
-        assertThat(service.getRoles("관리자", 1, 10, "name,asc").totalElements()).isEqualTo(1);
-        assertThat(service.getRoles("없는역할", 1, 10, "name,asc").totalElements()).isZero();
-    }
+    void 역할_테이블_키워드_정렬_페이징을_지원한다() {
+        adminAndUserScope();
 
-    @Test
-    void 역할_테이블은_요청_페이지_구간만_반환한다() {
-        loginWithRoles("ADMIN");
-        PageResponse<RoleListItemResponse> secondPage = service.getRoles(null, 2, 10, "name,asc");
-        assertThat(secondPage.items()).isEmpty();
-        assertThat(secondPage.totalElements()).isEqualTo(1);
+        assertThat(service.getRoles("adm", 1, 10, "name,asc").items())
+                .extracting(RoleListItemResponse::name).containsExactly("ADMIN");
+
+        assertThat(service.getRoles(null, 1, 10, "memberCount,desc").items())
+                .extracting(RoleListItemResponse::name).containsExactly("USER", "ADMIN");
+        assertThat(service.getRoles(null, 1, 10, "vmCount,desc").items())
+                .extracting(RoleListItemResponse::name).containsExactly("ADMIN", "USER");
+
+        PageResponse<RoleListItemResponse> second = service.getRoles(null, 2, 1, "name,asc");
+        assertThat(second.items()).extracting(RoleListItemResponse::name).containsExactly("USER");
+        assertThat(second.totalElements()).isEqualTo(2);
     }
 
     @Test
     void 지원하지_않는_정렬_필드는_거부한다() {
-        loginWithRoles("ADMIN");
-        assertThatThrownBy(() -> service.getRoles(null, 1, 10, "unknownField,asc"))
+        adminAndUserScope();
+        assertThatThrownBy(() -> service.getRoles(null, 1, 10, "deploymentCount,asc"))
                 .isInstanceOf(BusinessException.class);
     }
 }

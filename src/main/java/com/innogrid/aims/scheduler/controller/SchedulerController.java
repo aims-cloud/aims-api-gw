@@ -250,7 +250,8 @@ public class SchedulerController {
     }
 
     @Operation(summary = "스케줄링 이력 페이징 조회",
-               description = "전량 배열인 /history 와 달리 한 페이지만 돌려줍니다(대량 이력은 이 API 를 쓰세요). page 는 1부터, size 최대 100, "
+               description = "배열로 최근 " + HISTORY_MAX + "건까지만 주는 /history 와 달리, 여기는 상한 없이 페이지로 전량에 닿습니다"
+                       + "(총건수도 잘리지 않습니다). page 는 1부터, size 최대 100, "
                        + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName 필터는 선택입니다.")
     @GetMapping("/history/page")
     public ApiResponse<PageResponse<SchedulingHistoryResponse>> getHistoryPage(

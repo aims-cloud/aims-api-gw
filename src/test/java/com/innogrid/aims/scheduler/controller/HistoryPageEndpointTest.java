@@ -122,9 +122,9 @@ class HistoryPageEndpointTest {
         mockMvc.perform(get(PAGE).param("page", "0")).andExpect(status().isBadRequest());
     }
 
-    @DisplayName("기존 history 는 여전히 배열이고 전량이다")
+    @DisplayName("기존 history 는 여전히 배열이다 — 다만 전량이 아니라 반환 상한까지다")
     @Test
-    void existing_history_full_array() throws Exception {
+    void existing_history_is_array_within_return_limit() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())

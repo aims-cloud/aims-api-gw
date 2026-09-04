@@ -46,6 +46,9 @@ class SchedulerDdlCoverageTest {
     private static final String ENTITY_PACKAGE = "com.innogrid.aims.scheduler.entity";
     private static final Path DDL_DIR = Path.of("deploy", "sql");
 
+    /** 줄 주석({@code --}). 주석 안의 {@code CREATE TABLE} 을 실제 생성으로 세지 않으려고 먼저 걷어낸다. */
+    private static final Pattern COMMENT = Pattern.compile("--.*");   // `.` 는 줄바꿈을 넘지 않으므로 줄 끝까지만 지운다
+
     /** {@code CREATE TABLE [IF NOT EXISTS] <이름>} 의 대상 이름. 따옴표로 감싼 이름도 받는다. */
     private static final Pattern CREATE_TABLE = Pattern.compile(
             "create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?\"?([a-z_][a-z0-9_]*)\"?",
@@ -105,7 +108,9 @@ class SchedulerDdlCoverageTest {
             scripts = files.filter(p -> p.getFileName().toString().endsWith(".sql")).toList();
         }
         for (Path script : scripts) {
-            Matcher matcher = CREATE_TABLE.matcher(Files.readString(script, StandardCharsets.UTF_8));
+            // 주석을 먼저 지운다 — 그러지 않으면 "-- TODO: CREATE TABLE foo" 한 줄로 이 검사를 통과시킬 수 있다.
+            String sql = COMMENT.matcher(Files.readString(script, StandardCharsets.UTF_8)).replaceAll(" ");
+            Matcher matcher = CREATE_TABLE.matcher(sql);
             while (matcher.find()) {
                 created.add(matcher.group(1).toLowerCase());
             }

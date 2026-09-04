@@ -28,6 +28,7 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MonitoringCapa
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.PhysicalTreeBuilder;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -58,6 +59,7 @@ class ResourceExplorerTreeServiceTest {
     VictoriaMetricsClient metricsClient = mock(VictoriaMetricsClient.class);
     AuthService authService = mock(AuthService.class);
     Sebu1VirtualResourceProvider vmProvider = mock(Sebu1VirtualResourceProvider.class);
+    TumblebugTreeBuilder tumblebugTreeBuilder = mock(TumblebugTreeBuilder.class);
 
     MutableClock clock = new MutableClock(Instant.parse("2026-09-04T09:00:00Z"));
     ResourceExplorerProperties properties = new ResourceExplorerProperties();
@@ -97,10 +99,11 @@ class ResourceExplorerTreeServiceTest {
 
         stubThanosHealthy();
         when(vmProvider.findByHost(any())).thenReturn(List.of());
+        when(tumblebugTreeBuilder.build(anyCollection())).thenReturn(Map.of());   // 가상머신 가지는 TumblebugTreeBuilderTest 에서 검증
 
         resolver = new MonitoringCapabilityResolver(metricsClient, properties, clock);
         PhysicalTreeBuilder builder = new PhysicalTreeBuilder(roleAssetRepository, targetRepository, resolver, vmProvider);
-        service = new ResourceExplorerTreeService(builder, authService);
+        service = new ResourceExplorerTreeService(builder, tumblebugTreeBuilder, authService);
     }
 
     private void stubThanosHealthy() {
@@ -183,6 +186,25 @@ class ResourceExplorerTreeServiceTest {
         assertThat(host.resourceId()).isEqualTo("11");                // assets.id
         assertThat(host.status()).isEqualTo("ACTIVE");                // 자원 상태
         assertThat(host.monitoringStatus()).isEqualTo(MonitoringStatus.COLLECTING);
+    }
+
+    @Test
+    void 역할_하위에_물리_가지와_가상머신_가지가_함께_붙는다() {
+        ResourceTreeNodeResponse vmRoot = ResourceTreeNodeResponse.of("vmroot:ADMIN", "role:ADMIN", "가상머신",
+                ResourceTreeNodeType.VM_ROOT, null, "ADMIN", null, null, null, List.of());
+        when(tumblebugTreeBuilder.build(anyCollection())).thenReturn(Map.of("ADMIN", vmRoot));
+        loginWithRoles("ADMIN", "USER");
+
+        ResourceTreeNodeResponse root = service.getTree(noFilter());
+        assertThat(root.children().get(0).children()).extracting(ResourceTreeNodeResponse::type)
+                .containsExactly(ResourceTreeNodeType.PHYSICAL_ROOT, ResourceTreeNodeType.VM_ROOT);
+        assertThat(root.children().get(1).children()).extracting(ResourceTreeNodeResponse::type)
+                .containsExactly(ResourceTreeNodeType.PHYSICAL_ROOT);          // USER 는 Namespace 매핑 없음
+
+        // MDC 필터는 물리 가지 전용 — 걸려 있으면 가상머신 가지는 생략된다
+        root = service.getTree(new ResourceTreeFilter(null, List.of("mdc-01"), null));
+        assertThat(root.children().get(0).children()).extracting(ResourceTreeNodeResponse::type)
+                .containsExactly(ResourceTreeNodeType.PHYSICAL_ROOT);
     }
 
     @Test

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodePowerSpecs;
 import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
@@ -26,6 +27,7 @@ import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Cluster;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Finding;
+import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Mdc;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationTrendResponse;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -111,7 +113,7 @@ public class PowerOptimizationService {
     /** 현재 노드 상태로 진단한다. 수집 단계에서 제외된 노드도 응답에 표기한다. */
     public PowerOptimizationResponse diagnoseCurrent() {
         PlacementContext snapshot = schedulingService.nodeSnapshot();
-        return diagnose(snapshot.nodes(), snapshot.excludedNodes());
+        return diagnose(snapshot.nodes(), snapshot.excludedNodes(), snapshot.mdcBudgets());
     }
 
     /**
@@ -120,7 +122,7 @@ public class PowerOptimizationService {
      * 여러 노드가 섞인 판단을 실환경에서 검증할 수 없다.
      */
     public PowerOptimizationResponse diagnose(List<NodeResource> nodes) {
-        return diagnose(nodes, List.of());
+        return diagnose(nodes, List.of(), MdcPowerBudgets.EMPTY);
     }
 
     /**
@@ -130,6 +132,15 @@ public class PowerOptimizationService {
      * 그러지 않으면 {@code totalNodes} 가 조용히 줄어 "10대 중 1대 제외"가 "9대 클러스터"로 보인다.</p>
      */
     public PowerOptimizationResponse diagnose(List<NodeResource> nodes, List<ExcludedNode> excluded) {
+        return diagnose(nodes, excluded, MdcPowerBudgets.EMPTY);
+    }
+
+    /**
+     * 예산 원장까지 반영해 진단한다. MDC 별 요약에 예산·남은 여유·초과 여부가 함께 나간다.
+     * 원장이 비어 있으면 요약은 나가되 예산 칸이 null 이다 — MDC 별 현황 자체는 예산과 무관하게 쓸모 있다.
+     */
+    public PowerOptimizationResponse diagnose(List<NodeResource> nodes, List<ExcludedNode> excluded,
+                                              MdcPowerBudgets budgets) {
         OffsetDateTime now = OffsetDateTime.now();
         List<NodeResource> safe = nodes == null ? List.of() : nodes;
         List<ExcludedNode> safeExcluded = excluded == null ? List.of() : excluded;
@@ -146,7 +157,7 @@ public class PowerOptimizationService {
                 .filter(java.util.Objects::nonNull)
                 .mapToDouble(Double::doubleValue).sum();
 
-        return new PowerOptimizationResponse(now, cluster, findings,
+        return new PowerOptimizationResponse(now, cluster, mdcs(safe, budgets), findings,
                 new PowerOptimizationResponse.Summary(
                         findings.size(), round(saving), percentOf(saving, cluster.totalPowerWatts())));
     }
@@ -277,6 +288,36 @@ public class PowerOptimizationService {
                 round(total), round(measured ? reclaimable : 0),
                 measured, measured ? null : NO_POWER_METRIC,
                 excluded.size(), excluded.stream().map(ExcludedNodeResponse::from).toList());
+    }
+
+    // ── MDC 별 현황 ────────────────────────────────────────────
+
+    /**
+     * 노드를 MDC 로 묶어 전력 현황을 낸다. MDC 식별자 오름차순이라 응답이 결정적이다.
+     *
+     * <p>합계는 클러스터 합계와 같은 <b>실측</b> 기준이다(배치 판정 C6 은 예약분까지 반영한 실효 전력을 쓴다 —
+     * 기준이 다른 이유는 {@link Mdc} 주석에 적었다). 라벨이 없는 노드는 수집기가 {@code unknown} 으로 묶으므로
+     * 여기서도 한 그룹으로 나온다.</p>
+     */
+    private List<Mdc> mdcs(List<NodeResource> nodes, MdcPowerBudgets budgets) {
+        Map<String, List<NodeResource>> byMdc = new java.util.TreeMap<>();
+        for (NodeResource node : nodes) {
+            byMdc.computeIfAbsent(node.getMdcId() == null ? "unknown" : node.getMdcId(),
+                    k -> new ArrayList<>()).add(node);
+        }
+
+        List<Mdc> result = new ArrayList<>();
+        for (Map.Entry<String, List<NodeResource>> entry : byMdc.entrySet()) {
+            List<NodeResource> group = entry.getValue();
+            double total = group.stream().filter(this::hasPower).mapToDouble(NodeResource::getPowerWatts).sum();
+            int measured = (int) group.stream().filter(this::hasPower).count();
+
+            Double budget = budgets.budgetOf(entry.getKey()).stream().boxed().findFirst().orElse(null);
+            Double remaining = budget == null ? null : round(budget - total);
+            result.add(new Mdc(entry.getKey(), group.size(), measured, round(total),
+                    budget, remaining, remaining != null && remaining < 0));
+        }
+        return result;
     }
 
     // ── 진단 항목 ──────────────────────────────────────────────

@@ -19,12 +19,40 @@ import java.util.List;
 public record PowerOptimizationResponse(
         OffsetDateTime evaluatedAt,
         Cluster cluster,
+        List<Mdc> mdcs,
         List<Finding> findings,
         Summary summary
 ) {
     public PowerOptimizationResponse {
+        mdcs = mdcs == null ? List.of() : List.copyOf(mdcs);
         findings = findings == null ? List.of() : List.copyOf(findings);
     }
+
+    /**
+     * MDC 한 곳의 전력 현황. MDC 식별자 오름차순이다.
+     *
+     * <p>클러스터 합계는 "전체가 얼마를 쓰는가"만 답한다. 그런데 전력 상한은 실제로 <b>MDC 단위</b>로 걸린다 —
+     * 컨테이너·랙의 수전 용량이 곧 상한이다. 이 배열은 그 단위로 쪼갠 현황이며, 예산 원장에 값을 넣은 MDC 는
+     * 남은 여유와 초과 여부까지 함께 보여 준다.</p>
+     *
+     * <p><b>합계 기준</b>은 클러스터 합계와 같은 실측이다. 배치 판정(C6)은 예약분까지 반영한 실효 전력을 쓰므로,
+     * 배치가 막 쌓인 시점에는 판정 쪽 합계가 이 값보다 크다. 이 배열은 "지금 무엇을 쓰고 있나"를 보여 주는
+     * 진단이고, C6 은 "하나 더 얹으면 어떻게 되나"를 보는 판정이라 기준이 다르다.</p>
+     *
+     * @param measuredNodes    전력을 수집한 노드 수. {@code nodeCount} 보다 적으면 합계가 과소 평가다
+     * @param budgetWatts      예산 원장에 등록된 총량. 등록하지 않았으면 null
+     * @param remainingWatts   예산 − 합계. 예산이 없으면 null. 음수면 이미 넘긴 것이다
+     * @param overBudget       합계가 예산을 넘었는지. 예산이 없으면 false
+     */
+    public record Mdc(
+            String mdcId,
+            int nodeCount,
+            int measuredNodes,
+            double totalPowerWatts,
+            Double budgetWatts,
+            Double remainingWatts,
+            boolean overBudget
+    ) {}
 
     /**
      * 클러스터 전력 현황.

@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -15,8 +16,9 @@ class PowerAwareSchedulerTest {
 
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
+    @DisplayName("전력 효율이 높은 노드를 선호한다")
     @Test
-    void 전력_효율이_높은_노드를_선호한다() {
+    void power_efficient_node_preferred() {
         Workload workload = new Workload("power-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
 
@@ -33,8 +35,9 @@ class PowerAwareSchedulerTest {
         assertEquals("efficient", result.selectedNodeId());
     }
 
+    @DisplayName("이미 가동중인 서버를 선호한다 전력통합")
     @Test
-    void 이미_가동중인_서버를_선호한다_전력통합() {
+    void active_server_preferred() {
         Workload workload = new Workload("consolidate-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
 
@@ -51,8 +54,9 @@ class PowerAwareSchedulerTest {
         assertEquals("active", result.selectedNodeId());
     }
 
+    @DisplayName("고온 서버에 냉각 비용 패널티를 부여한다")
     @Test
-    void 고온_서버에_냉각_비용_패널티를_부여한다() {
+    void hot_server_cooling_penalty() {
         Workload workload = new Workload("thermal-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
         policy.setMaxTemperatureCelsius(80);

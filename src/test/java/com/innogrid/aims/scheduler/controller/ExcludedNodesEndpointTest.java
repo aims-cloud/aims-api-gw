@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,16 +28,18 @@ class ExcludedNodesEndpointTest {
     @Autowired
     MockMvc mockMvc;
 
+    @DisplayName("제외 노드 목록은 배열이고 노드 단건 경로에 잡히지 않는다")
     @Test
-    void 제외_노드_목록은_배열이고_노드_단건_경로에_잡히지_않는다() throws Exception {
+    void excluded_nodes_literal_path_array() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/nodes/excluded"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").isArray());
     }
 
+    @DisplayName("노드 목록 계약은 그대로 배열이다")
     @Test
-    void 노드_목록_계약은_그대로_배열이다() throws Exception {
+    void node_list_stays_array() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/nodes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());

@@ -32,6 +32,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *    - 온도 스코어: (maxTemp - currentTemp) / maxTemp (열적 여유가 클수록 높음)
  *    - 네트워크 스코어: 1 / (1 + networkLoad) (트래픽이 적을수록 높음)
  * 3. 가중합 = Σ(weight_i × score_i)
+ *    - 네트워크 스코어는 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜지면
+ *      데이터 MDC ↔ 노드 MDC 링크 점수와 linkWeight 비율로 섞인다 (NetworkModel 참고)
  * 4. 선호도 보너스: preferredMdcId 일치 시 +10%
  * 5. 최고 점수 노드 선택
  *
@@ -110,6 +112,13 @@ public class WeightedScoreScheduler implements SchedulingEngine {
                     : thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
                                                  policy.getMaxTemperatureCelsius());
             double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
+            // 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜졌을 때만 데이터 MDC ↔ 노드 MDC 링크 품질을 섞는다.
+            // 같은 MDC·미등록 쌍은 1.0(중립)이라 순위를 바꾸지 않고, DOWN 은 C5 가 이미 제외했다.
+            Double linkScore = null;
+            if (context.linkAware(workload)) {
+                linkScore = networkModel.linkScore(workload.getDataMdcId(), node.getMdcId(), context.linkMatrix());
+                netScore = networkModel.blend(netScore, linkScore);
+            }
 
             // ── 3단계: 가중합 ────────────────────────────────────
             double totalScore = cpuScore * policy.getCpuWeight()
@@ -135,6 +144,7 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             details.put("전력여유", round(powerScore));
             details.put("온도여유", round(tempScore));
             details.put("네트워크한산도", round(netScore));
+            if (linkScore != null) details.put("링크품질", round(linkScore));   // 게이트 on 일 때만 — 기존 응답 키 불변
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),

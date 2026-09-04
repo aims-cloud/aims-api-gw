@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
@@ -19,9 +20,12 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 import com.innogrid.aims.scheduler.service.EnumSupport;
 import com.innogrid.aims.scheduler.service.PowerEfficiencyService;
+import com.innogrid.aims.scheduler.service.SchedulingHistoryQueryService;
 import com.innogrid.aims.scheduler.service.SchedulingService;
 import com.innogrid.aims.scheduler.service.WorkloadService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -44,17 +48,20 @@ public class SchedulerController {
     private final WorkloadService workloadService;
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
+    private final SchedulingHistoryQueryService historyQueryService;
 
     public SchedulerController(SchedulingService schedulingService,
                                PowerEfficiencyService powerEfficiencyService,
                                WorkloadService workloadService,
                                WorkloadRepository workloadRepository,
-                               SchedulingHistoryRepository historyRepository) {
+                               SchedulingHistoryRepository historyRepository,
+                               SchedulingHistoryQueryService historyQueryService) {
         this.schedulingService = schedulingService;
         this.powerEfficiencyService = powerEfficiencyService;
         this.workloadService = workloadService;
         this.workloadRepository = workloadRepository;
         this.historyRepository = historyRepository;
+        this.historyQueryService = historyQueryService;
     }
 
     // ── 워크로드 ────────────────────────────────────────────────
@@ -143,7 +150,7 @@ public class SchedulerController {
     }
 
     @Operation(summary = "수집 제외 노드 목록",
-               description = "핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
+               description = "메트릭 저장소가 상한 안에 응답하지 않아 뺀 노드(사유: 메트릭 질의 응답 없음)도 함께 나옵니다 — 저장소가 멈춰도 배치는 나머지 노드로 계속됩니다. 핵심 메트릭(CPU 사용률·코어 수·메모리)을 조회 실패나 시리즈 없음으로 알 수 없어 후보에서 뺀 노드와 사유입니다. "
                        + "노드 목록(/nodes)은 배열 계약을 지키느라 이들을 담지 않으므로 여기서 확인합니다. 정상이면 빈 배열입니다.")
     @GetMapping("/nodes/excluded")
     public ApiResponse<List<ExcludedNodeResponse>> getExcludedNodes() {
@@ -215,6 +222,20 @@ public class SchedulerController {
     public ApiResponse<List<SchedulingHistoryResponse>> getHistory() {
         return ApiResponse.ok(historyRepository.findAllByOrderByCreatedAtDesc().stream()
                 .map(SchedulingHistoryResponse::from).toList());
+    }
+
+    @Operation(summary = "스케줄링 이력 페이징 조회",
+               description = "전량 배열인 /history 와 달리 한 페이지만 돌려줍니다(대량 이력은 이 API 를 쓰세요). page 는 1부터, size 최대 100, "
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName 필터는 선택입니다.")
+    @GetMapping("/history/page")
+    public ApiResponse<PageResponse<SchedulingHistoryResponse>> getHistoryPage(
+            @RequestParam(required = false) Long workloadId,
+            @RequestParam(required = false) Boolean success,
+            @RequestParam(required = false) String engineName,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort) {
+        return ApiResponse.ok(historyQueryService.page(workloadId, success, engineName, page, size, sort));
     }
 
     @Operation(summary = "워크로드별 스케줄링 이력")

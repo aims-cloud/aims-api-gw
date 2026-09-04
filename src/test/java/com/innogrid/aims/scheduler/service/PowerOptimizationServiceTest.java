@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -30,8 +31,9 @@ class PowerOptimizationServiceTest {
 
     // ── 클러스터 현황 ───────────────────────────────────────────
 
+    @DisplayName("가동 노드와 유휴 노드를 나눠 센다")
     @Test
-    void 가동_노드와_유휴_노드를_나눠_센다() {
+    void active_and_idle_nodes_counted() {
         var result = service.diagnose(List.of(
                 node("busy", 60, 300),
                 node("mid", 30, 220),
@@ -44,8 +46,9 @@ class PowerOptimizationServiceTest {
         assertEquals(820.0, result.cluster().totalPowerWatts(), 1e-9);
     }
 
+    @DisplayName("유휴 노드의 유휴 전력을 반납 가능으로 집계한다")
     @Test
-    void 유휴_노드의_유휴_전력을_반납_가능으로_집계한다() {
+    void idle_power_aggregated_as_releasable() {
         var result = service.diagnose(List.of(
                 node("busy", 60, 300),
                 node("idle-1", 2, 150),
@@ -57,8 +60,9 @@ class PowerOptimizationServiceTest {
 
     // ── 진단 항목 ──────────────────────────────────────────────
 
+    @DisplayName("유휴 노드를 찾아 반납을 권고한다")
     @Test
-    void 유휴_노드를_찾아_반납을_권고한다() {
+    void idle_nodes_recommended_for_release() {
         var result = service.diagnose(List.of(node("idle", 2, 150)));
 
         Finding f = find(result, "IDLE_NODE");
@@ -68,8 +72,9 @@ class PowerOptimizationServiceTest {
         assertTrue(f.detail().contains("2.0%"), f.detail());
     }
 
+    @DisplayName("부하에 비해 전력을 많이 쓰면 낭비로 본다")
     @Test
-    void 부하에_비해_전력을_많이_쓰면_낭비로_본다() {
+    void high_power_low_load_is_waste() {
         // CPU 20% → 이상 전력 150 + 350×0.2 = 220W. 실측 420W 는 200W 초과
         var result = service.diagnose(List.of(node("wasteful", 20, 420)));
 
@@ -78,8 +83,9 @@ class PowerOptimizationServiceTest {
         assertEquals(200.0, f.estimatedSavingWatts(), 1.0);
     }
 
+    @DisplayName("이상 곡선 안에 있으면 낭비로 보지 않는다")
     @Test
-    void 이상_곡선_안에_있으면_낭비로_보지_않는다() {
+    void within_ideal_curve_not_waste() {
         // CPU 60% → 이상 250 + ... 실측 300W 는 곡선 아래
         var result = service.diagnose(List.of(node("efficient", 60, 300)));
 
@@ -87,8 +93,9 @@ class PowerOptimizationServiceTest {
     }
 
     /** 여유 부족은 절감 항목이 아니라 배치 제약이다. 숫자를 채우면 절감 합계가 부풀려진다. */
+    @DisplayName("전력 여유 부족은 절감액을 비운다")
     @Test
-    void 전력_여유_부족은_절감액을_비운다() {
+    void low_headroom_leaves_saving_empty() {
         var result = service.diagnose(List.of(node("tight", 70, 460)));
 
         Finding f = find(result, "LOW_HEADROOM");
@@ -96,8 +103,9 @@ class PowerOptimizationServiceTest {
         assertNull(f.estimatedSavingWatts(), "절감이 아니라 제약이다");
     }
 
+    @DisplayName("절감이 큰 항목이 위로 온다")
     @Test
-    void 절감이_큰_항목이_위로_온다() {
+    void larger_saving_comes_first() {
         // 낭비 노드는 이상 곡선(150 + 350×0.4 = 290W)을 130W 넘겨 임계 0.8 아래로 떨어진다.
         // 350W 로 두면 초과가 60W 뿐이라 낭비로 잡히지 않아 항목이 하나만 나온다.
         var result = service.diagnose(List.of(
@@ -115,8 +123,9 @@ class PowerOptimizationServiceTest {
 
     // ── 계측이 없을 때 ─────────────────────────────────────────
 
+    @DisplayName("전력을 수집하지 못하면 진단을 비우고 사유를 남긴다")
     @Test
-    void 전력을_수집하지_못하면_진단을_비우고_사유를_남긴다() {
+    void uncollected_power_empty_diagnosis() {
         var result = service.diagnose(List.of(
                 node("no-ipmi-1", 40, 0),
                 node("no-ipmi-2", 10, 0)));
@@ -128,15 +137,17 @@ class PowerOptimizationServiceTest {
         assertEquals(0.0, result.cluster().reclaimableIdleWatts(), 1e-9);
     }
 
+    @DisplayName("총 전력이 0이면 절감 비율을 내지 않는다")
     @Test
-    void 총_전력이_0이면_절감_비율을_내지_않는다() {
+    void zero_total_power_no_saving_ratio() {
         var result = service.diagnose(List.of(node("no-ipmi", 40, 0)));
 
         assertNull(result.summary().savingPercent(), "0% 로 채우면 절감 없음으로 읽힌다");
     }
 
+    @DisplayName("노드가 없어도 예외가 나지 않는다")
     @Test
-    void 노드가_없어도_예외가_나지_않는다() {
+    void no_nodes_raises_no_exception() {
         var result = service.diagnose(List.of());
 
         assertEquals(0, result.cluster().totalNodes());
@@ -144,8 +155,9 @@ class PowerOptimizationServiceTest {
         assertFalse(result.cluster().measured());
     }
 
+    @DisplayName("절감 비율은 클러스터 총 전력 대비다")
     @Test
-    void 절감_비율은_클러스터_총_전력_대비다() {
+    void saving_ratio_over_cluster_total_power() {
         var result = service.diagnose(List.of(
                 node("busy", 60, 300),
                 node("idle", 2, 150)));

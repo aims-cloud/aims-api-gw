@@ -25,6 +25,9 @@ public record PowerEfficiencyResponse(
      * 클러스터 요약.
      *
      * @param averagePeiRaw          평가 가능 노드만의 평균. 하나도 없으면 null
+     * @param minPeiRaw              평가 가능 노드 중 가장 낮은 PEI 원값(%/W). 평가 가능 노드가 없으면 null
+     * @param maxPeiRaw              평가 가능 노드 중 가장 높은 PEI 원값. 상대 등급 A 가 "좋다"가 아니라 "클러스터 안에서 상대적으로
+     *                               낫다"라는 뜻임을 화면이 절대 수준과 함께 보여 주기 위한 값(12장 T1 → 단계 13)
      * @param gradeAvailable         상대 등급을 매길 만큼 표본이 있는지
      * @param gradeUnavailableReason 매길 수 없을 때의 사유. 화면에 그대로 띄운다
      */
@@ -32,6 +35,8 @@ public record PowerEfficiencyResponse(
             int totalNodes,
             int evaluableNodes,
             Double averagePeiRaw,
+            Double minPeiRaw,
+            Double maxPeiRaw,
             double totalPowerWatts,
             double totalCapacityWatts,
             boolean gradeAvailable,

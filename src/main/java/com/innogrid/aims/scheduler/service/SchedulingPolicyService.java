@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.scheduler.dto.ActivationResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingPolicyRequest;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -26,6 +28,10 @@ import tools.jackson.databind.JsonNode;
  * <p>이름 중복은 DB 유니크 제약이 잡아 주지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다.
  * {@code defaultEngine} 은 등록된 엔진이어야 한다 — 모르는 이름을 저장하면 실행 시 기본 엔진으로 조용히
  * 대체되어 정책의 의도가 사라진다.</p>
+ *
+ * <p><b>활성 정책은 종류(공통 포함)당 하나</b>(단계 13). 생성 시 {@code active} 를 생략하면 그 종류에 활성이 없을 때만
+ * 켜지고, 명시적 {@code active:true} 나 {@code PUT active:true} 는 충돌 시 409, 전환은 {@link #activate} 로 한다.
+ * 다른 정책의 상태를 조용히 바꾸는 경로는 없다.</p>
  */
 @Service
 public class SchedulingPolicyService {
@@ -76,6 +82,12 @@ public class SchedulingPolicyService {
         SchedulingPolicy policy = new SchedulingPolicy(name, description);
         apply(policy, request);
         validate(policy);
+        if (request.active() == null) {
+            // 조건부 기본 활성 — 그 종류(반영 후)에 활성 정책이 없을 때만 켠다. 빈 상태의 첫 정책은 지금처럼 바로 쓰이고,
+            // 이미 활성이 있으면 비활성으로 만들어져 응답에 드러난다. 다른 정책의 상태는 바꾸지 않는다.
+            policy.setActive(otherActives(policy).isEmpty());
+        }
+        ensureActiveUnique(policy);
         return repository.save(policy);
     }
 
@@ -98,7 +110,25 @@ public class SchedulingPolicyService {
         }
         apply(policy, request);
         validate(policy);
+        ensureActiveUnique(policy);
         return repository.save(policy);
+    }
+
+    /**
+     * 전환 — 같은 리소스 종류의 다른 활성 정책을 끄고 이 정책을 켠다. 한 트랜잭션이다.
+     *
+     * <p>{@code PUT active:true} 는 충돌 시 409 로 거부한다(다른 정책을 조용히 바꾸지 않기 위해). 전환은 "다른 것을
+     * 끄고 이것을 켜라"가 요청의 명시된 의미이므로 끈 정책을 응답에 담아 돌려준다. 이미 활성이면 끄는 것 없이 200.</p>
+     */
+    @Transactional
+    public ActivationResponse activate(Long id) {
+        SchedulingPolicy target = require(id);
+        List<SchedulingPolicy> others = otherActives(target);
+        for (SchedulingPolicy other : others) other.setActive(false);
+        target.setActive(true);
+        repository.saveAll(others);
+        repository.save(target);
+        return ActivationResponse.of(target, others);
     }
 
     /** 없으면 404. */
@@ -151,6 +181,7 @@ public class SchedulingPolicyService {
 
         if (r.powerAwareEnabled() != null) policy.setPowerAwareEnabled(r.powerAwareEnabled());
         if (r.temperatureAwareEnabled() != null) policy.setTemperatureAwareEnabled(r.temperatureAwareEnabled());
+        if (r.affinityEnabled() != null) policy.setAffinityEnabled(r.affinityEnabled());
         if (r.active() != null) policy.setActive(r.active());
     }
 
@@ -182,6 +213,33 @@ public class SchedulingPolicyService {
         if (v <= 0 || v > 100) {
             throw badRequest(String.format("사용률 임계는 0 초과 100 이하여야 합니다: %s=%s", field, v));
         }
+    }
+
+    // ── 활성 유일성 — 종류(공통 포함)당 활성 정책은 하나 ─────────────
+
+    /** 같은 리소스 종류의 다른 활성 정책. 자기 자신(id 일치)은 뺀다. */
+    private List<SchedulingPolicy> otherActives(SchedulingPolicy policy) {
+        List<SchedulingPolicy> actives = policy.getResourceType() == null
+                ? repository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc()
+                : repository.findByActiveTrueAndResourceTypeOrderByNameAsc(policy.getResourceType());
+        return actives.stream()
+                .filter(p -> policy.getId() == null || !p.getId().equals(policy.getId()))
+                .toList();
+    }
+
+    /**
+     * 반영이 끝난 정책이 활성이면 같은 종류에 다른 활성이 없어야 한다. 있으면 409.
+     * 요청이 아니라 반영 후 정책을 보므로 종류를 바꾸는 부분 수정도 걸린다.
+     */
+    private void ensureActiveUnique(SchedulingPolicy policy) {
+        if (!policy.isActive()) return;
+        List<SchedulingPolicy> others = otherActives(policy);
+        if (others.isEmpty()) return;
+        SchedulingPolicy other = others.get(0);
+        throw new BusinessException(HttpStatus.CONFLICT, String.format(
+                "같은 리소스 종류(%s)에 이미 활성 정책이 있습니다: %s(%d). 먼저 그 정책을 비활성화하거나 POST /policies/%d/activate 로 전환하세요",
+                policy.getResourceType() == null ? "공통" : policy.getResourceType().name(),
+                other.getName(), other.getId(), policy.getId() == null ? 0 : policy.getId()).replace("/policies/0/activate", "/policies/{id}/activate"));
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

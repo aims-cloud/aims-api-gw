@@ -6,6 +6,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +20,11 @@ import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
+import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -31,6 +36,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  */
 @Service
 public class SchedulingService {
+
+    private static final Logger log = LoggerFactory.getLogger(SchedulingService.class);
 
     /** 예약으로 잡아 둘 워크로드 상태. 배치됐지만 아직 끝나지 않은 것들이다. */
     private static final List<Workload.WorkloadStatus> RESERVED_STATUSES =
@@ -44,13 +51,22 @@ public class SchedulingService {
     private final ConstraintEvaluator constraintEvaluator;
     private final SchedulerProperties properties;
 
+    /** MDC 링크 원장. null 이면(원장 없이 조립한 테스트 경로) 링크 스냅샷은 항상 비어 있다. */
+    private final MdcLinkRepository linkRepository;
+
+    /** 실행 계층 연동. null 이면(직접 조립한 테스트 경로) 결정만 하고 넘기지 않는다. */
+    private final PlacementDispatchService dispatchService;
+
+    @Autowired
     public SchedulingService(WorkloadRepository workloadRepository,
                              SchedulingPolicyRepository policyRepository,
                              NodeResourceCollector nodeCollector,
                              PlacementService placementService,
                              EngineRegistry engineRegistry,
                              ConstraintEvaluator constraintEvaluator,
-                             SchedulerProperties properties) {
+                             SchedulerProperties properties,
+                             MdcLinkRepository linkRepository,
+                             PlacementDispatchService dispatchService) {
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.nodeCollector = nodeCollector;
@@ -58,6 +74,33 @@ public class SchedulingService {
         this.engineRegistry = engineRegistry;
         this.constraintEvaluator = constraintEvaluator;
         this.properties = properties;
+        this.linkRepository = linkRepository;
+        this.dispatchService = dispatchService;
+    }
+
+    /** 실행 계층 연동 없이 조립하는 형태 — 링크 원장은 있으나 디스패치는 하지 않는다(기존 테스트 경로). */
+    public SchedulingService(WorkloadRepository workloadRepository,
+                             SchedulingPolicyRepository policyRepository,
+                             NodeResourceCollector nodeCollector,
+                             PlacementService placementService,
+                             EngineRegistry engineRegistry,
+                             ConstraintEvaluator constraintEvaluator,
+                             SchedulerProperties properties,
+                             MdcLinkRepository linkRepository) {
+        this(workloadRepository, policyRepository, nodeCollector, placementService, engineRegistry,
+             constraintEvaluator, properties, linkRepository, null);
+    }
+
+    /** 링크 원장 없이 조립하는 형태 — 기존 단위 테스트 경로. 링크 스냅샷은 항상 {@link LinkMatrix#EMPTY}. */
+    public SchedulingService(WorkloadRepository workloadRepository,
+                             SchedulingPolicyRepository policyRepository,
+                             NodeResourceCollector nodeCollector,
+                             PlacementService placementService,
+                             EngineRegistry engineRegistry,
+                             ConstraintEvaluator constraintEvaluator,
+                             SchedulerProperties properties) {
+        this(workloadRepository, policyRepository, nodeCollector, placementService, engineRegistry,
+             constraintEvaluator, properties, null);
     }
 
     /**
@@ -81,7 +124,17 @@ public class SchedulingService {
             return SchedulingResult.failure(noActiveNodesReason(context));
         }
 
-        return placementService.place(workload, context, engineId);
+        SchedulingResult result = placementService.place(workload, context, engineId);
+        return dispatch(workload, result, null);
+    }
+
+    /**
+     * 결정을 실행 계층으로 넘기고, 실행 계층이 받지 않았으면 결과를 실패로 낮춰 돌려준다(워크로드는 이미 FAILED·배정 해제).
+     * {@link PlacementService#place} 의 트랜잭션이 끝난 뒤라 결정은 이미 커밋되어 있다. 스케줄 실행 경로도 같은 메서드를 쓴다.
+     */
+    public SchedulingResult dispatch(Workload workload, SchedulingResult result, Long scheduleRunId) {
+        if (dispatchService == null) return result;
+        return PlacementDispatchService.downgrade(result, dispatchService.afterPlacement(workload, result, scheduleRunId));
     }
 
     /**
@@ -107,9 +160,21 @@ public class SchedulingService {
         NodeResourceCollector.Snapshot snapshot = nodeCollector.collect();
         PlacementContext context =
                 PlacementContext.of(snapshot.nodes(), policy, constraintEvaluator)
-                        .withExcluded(snapshot.excluded());
+                        .withExcluded(snapshot.excluded())
+                        .withLinkMatrix(loadLinkMatrix(policy));
         applyReservations(context);
         return context;
+    }
+
+    /**
+     * 정책이 링크 반영을 켰을 때만 원장을 <b>실행당 1회</b> 읽는다. 꺼져 있으면 조회 자체를 하지 않아
+     * 기존 정책(전부 false)의 배치 비용과 결과가 그대로다.
+     */
+    private LinkMatrix loadLinkMatrix(SchedulingPolicy policy) {
+        if (linkRepository == null || policy == null || !policy.isAffinityEnabled()) {
+            return LinkMatrix.EMPTY;
+        }
+        return LinkMatrix.of(linkRepository.findAll());
     }
 
     /**
@@ -199,18 +264,50 @@ public class SchedulingService {
         return engineRegistry.describe();
     }
 
+    /** 활성 정책이 하나도 없을 때 쓰는 기본 정책의 이름. */
+    public static final String DEFAULT_POLICY_NAME = "default";
+
     /**
      * 리소스 종류에 맞는 활성 정책을 고른다.
-     * 종류별 활성 → 공통 활성 → 기본 정책 생성 순으로 찾는다.
+     * 종류별 활성 → 공통 활성 → 기본 정책 순으로 찾는다.
+     *
+     * <p>활성 정책은 종류당 하나가 규칙이지만(단계 13, {@code SchedulingPolicyService} 가 409 로 지킨다) API 밖에서
+     * 들어온 데이터로 둘 이상일 수 있다. 그때는 <b>이름 사전순 첫 번째</b>를 골라 결과가 DB 순서에 흔들리지 않게
+     * 하고 WARN 을 남긴다.</p>
+     *
+     * <p>공통 활성이 없으면 기본 정책을 쓴다. 이름이 {@value #DEFAULT_POLICY_NAME} 인 정책이 이미 있으면(전환이나
+     * 비활성화로 꺼진 경우) 그 행을 <b>저장·재활성화하지 않고 값만</b> 쓴다 — 예전에는 같은 이름으로 다시 저장하려다
+     * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 단계 13 점검). 없을 때만 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
         if (resourceType != null) {
             Optional<SchedulingPolicy> byType =
-                    policyRepository.findFirstByActiveTrueAndResourceType(resourceType);
+                    pickOne(policyRepository.findByActiveTrueAndResourceTypeOrderByNameAsc(resourceType), resourceType.name())
+                            .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
             if (byType.isPresent()) return byType.get();
         }
-        return policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
-                .orElseGet(() -> policyRepository.save(new SchedulingPolicy("default", "기본 스케줄링 정책")));
+        // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
+        // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
+        Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
+                .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
+        if (common.isPresent()) return common.get();
+
+        Optional<SchedulingPolicy> existing = policyRepository.findByName(DEFAULT_POLICY_NAME);
+        if (existing.isPresent()) {
+            log.warn("활성 배치 정책이 없어 비활성 상태의 '{}' 정책 값으로 배치합니다 (저장·상태 변경 없음)", DEFAULT_POLICY_NAME);
+            return existing.get();
+        }
+        return policyRepository.save(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"));
+    }
+
+    /** 활성 정책 목록에서 하나를 결정적으로 고른다(이름순 첫 번째). 둘 이상이면 WARN. */
+    private static Optional<SchedulingPolicy> pickOne(List<SchedulingPolicy> actives, String scope) {
+        if (actives.isEmpty()) return Optional.empty();
+        if (actives.size() > 1) {
+            log.warn("{} 활성 배치 정책이 {}개입니다 — 이름순 첫 번째 '{}' 를 씁니다: {}", scope, actives.size(),
+                    actives.get(0).getName(), actives.stream().map(SchedulingPolicy::getName).toList());
+        }
+        return Optional.of(actives.get(0));
     }
 
     /** 종류를 지정하지 않은 호출(공통 정책 기준). */

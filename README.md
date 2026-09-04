@@ -76,6 +76,12 @@ com.innogrid.aims
 ./gradlew bootJar    # → build/libs/app.jar
 ```
 
+### 테스트 작성 규칙
+
+- 테스트 메서드 이름은 **영문 snake_case 문장**으로 쓴다. 예: `delete_missing_workload_404`, `unknown_engine_falls_back_default`
+- 의도를 한글로 남기려면 `@DisplayName("…")`을 붙인다. 리포트·IDE에는 그 문장이 표시된다.
+- 판정에 쓰인 수치·상태코드는 이름에 남긴다. 예: `page_response_5_fields`, `required_cpu_0_400`
+
 ## 환경 설정
 
 모든 외부 서비스 주소는 환경변수로 주입한다. 로컬 개발 시에는 `application-local.yml`의 기본값이 적용되므로 별도 설정 없이 실행 가능하다.

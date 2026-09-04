@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -15,8 +16,9 @@ class WeightedScoreSchedulerTest {
 
     private final WeightedScoreScheduler scheduler = new WeightedScoreScheduler();
 
+    @DisplayName("자원 여유가 많은 노드를 선택한다")
     @Test
-    void 자원_여유가_많은_노드를_선택한다() {
+    void more_headroom_node_selected() {
         Workload workload = new Workload("test-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
 
@@ -32,8 +34,9 @@ class WeightedScoreSchedulerTest {
         assertTrue(result.finalScore() > 0);
     }
 
+    @DisplayName("자원 부족한 노드는 제외한다")
     @Test
-    void 자원_부족한_노드는_제외한다() {
+    void resource_short_node_excluded() {
         Workload workload = new Workload("big-job", 16, 32768);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
 
@@ -48,8 +51,9 @@ class WeightedScoreSchedulerTest {
         assertFalse(result.candidateScores().get(0).eligible());
     }
 
+    @DisplayName("선호 MDC에 보너스를 준다")
     @Test
-    void 선호_MDC에_보너스를_준다() {
+    void preferred_mdc_gets_bonus() {
         Workload workload = new Workload("preferred-job", 2, 4096);
         workload.setPreferredMdcId("mdc-02");
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
@@ -66,8 +70,9 @@ class WeightedScoreSchedulerTest {
         assertEquals("node-2", result.selectedNodeId()); // 선호 MDC 선택
     }
 
+    @DisplayName("온도 임계치 초과 노드는 제외한다")
     @Test
-    void 온도_임계치_초과_노드는_제외한다() {
+    void over_temp_threshold_excluded() {
         Workload workload = new Workload("temp-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
         policy.setMaxTemperatureCelsius(70);
@@ -83,8 +88,9 @@ class WeightedScoreSchedulerTest {
         assertEquals("node-cool", result.selectedNodeId());
     }
 
+    @DisplayName("후보 노드가 없으면 실패한다")
     @Test
-    void 후보_노드가_없으면_실패한다() {
+    void no_candidate_nodes_fails() {
         Workload workload = new Workload("empty-job", 2, 4096);
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
 

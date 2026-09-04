@@ -11,7 +11,7 @@ import java.util.List;
  * 데도 쓴다.</p>
  */
 public record ConstraintDescriptionResponse(
-        String code,            // C0 ~ C4
+        String code,            // C0 ~ C5
         String name,
         String description,
         String source,          // 임계값의 출처 (정책 필드 / 워크로드 필드 / 설정)
@@ -27,8 +27,9 @@ public record ConstraintDescriptionResponse(
                         "메트릭 저장소 응답 (설정의 node-job 으로 대상 노드 선택)", false),
                 new ConstraintDescriptionResponse("C1", "자원 가용성",
                         "예약분을 뺀 가용 CPU·메모리·GPU 가 워크로드 요구량 이상이어야 한다. "
-                                + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다.",
-                        "워크로드의 requiredCpu / requiredMemoryMb / requiredGpu", false),
+                                + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다. "
+                                + "디스크(requiredDiskGb)는 노드의 파일시스템 총량을 알 때만 검사하고, 총량을 모르면 건너뛴다.",
+                        "워크로드의 requiredCpu / requiredMemoryMb / requiredGpu / requiredDiskGb", false),
                 new ConstraintDescriptionResponse("C2", "사용률 임계",
                         "노드의 현재 CPU·메모리 사용률이 정책 임계치를 넘으면 제외한다.",
                         "정책의 maxCpuUsagePercent / maxMemoryUsagePercent", false),
@@ -42,6 +43,12 @@ public record ConstraintDescriptionResponse(
                         "전력 여유율이 정책 기준에 못 미치거나, 워크로드가 지정한 전력 예산을 넘거나, "
                                 + "배치 후 예상 전력이 노드 용량을 넘으면 제외한다.",
                         "정책의 maxPowerUsagePercent, 워크로드의 maxPowerBudgetWatts, 설정의 전력 용량",
+                        true),
+                new ConstraintDescriptionResponse("C5", "MDC 링크",
+                        "정책이 affinityEnabled 이고 워크로드에 dataMdcId 가 있을 때만 검사한다. 데이터 MDC 와 노드 MDC 사이의 "
+                                + "링크(MDC 링크 원장)가 DOWN 이면 제외한다. 같은 MDC·미등록 쌍은 통과하고, UP·DEGRADED 의 "
+                                + "지연·손실은 제약이 아니라 weighted 엔진의 네트워크 점수에 반영된다.",
+                        "정책의 affinityEnabled, 워크로드의 dataMdcId, MDC 링크 원장(/scheduler/mdc-links)의 status",
                         true));
     }
 }

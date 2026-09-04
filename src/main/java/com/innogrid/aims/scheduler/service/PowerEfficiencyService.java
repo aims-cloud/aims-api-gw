@@ -1,6 +1,5 @@
 package com.innogrid.aims.scheduler.service;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -10,16 +9,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
@@ -55,21 +55,43 @@ public class PowerEfficiencyService {
     private static final double LOW_HEADROOM_PERCENT = 20.0;
 
     /** {@code 30s}·{@code 5m}·{@code 1h}·{@code 1d} 형식. */
-    private static final Pattern STEP = Pattern.compile("^(\\d+)([smhd])$");
 
     private final SchedulingService schedulingService;
     private final PowerModel powerModel;
-    private final VictoriaMetricsClient metricsClient;
+    private final SchedulerMetricsGateway metricsClient;
     private final SchedulerProperties properties;
 
+    private final MetricsQueryGuard guard;
+
+    @Autowired
+    public PowerEfficiencyService(SchedulingService schedulingService,
+                                  PowerModel powerModel,
+                                  SchedulerMetricsGateway metrics,
+                                  SchedulerProperties properties,
+                                  MetricsQueryGuard guard) {
+        this.schedulingService = schedulingService;
+        this.powerModel = powerModel;
+        this.metricsClient = metrics;
+        this.properties = properties;
+        this.guard = guard;
+    }
+
+    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. */
+    public PowerEfficiencyService(SchedulingService schedulingService,
+                                  PowerModel powerModel,
+                                  VictoriaMetricsClient metricsClient,
+                                  SchedulerProperties properties,
+                                  MetricsQueryGuard guard) {
+        this(schedulingService, powerModel, VictoriaMetricsGateway.of(metricsClient), properties, guard);
+    }
+
+    /** 스프링 없이 조립하는 형태(기존 단위 테스트). */
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,
                                   SchedulerProperties properties) {
-        this.schedulingService = schedulingService;
-        this.powerModel = powerModel;
-        this.metricsClient = metricsClient;
-        this.properties = properties;
+        this(schedulingService, powerModel, VictoriaMetricsGateway.of(metricsClient), properties,
+             new MetricsQueryGuard(properties.getMetrics().getParallelism()));
     }
 
     /** 현재 노드 상태를 수집해 평가한다. */
@@ -190,8 +212,14 @@ public class PowerEfficiencyService {
                         + "전력 메트릭이 있는 노드가 늘어나면 자동으로 매겨집니다.",
                 evaluable.size(), MIN_NODES_FOR_GRADE);
 
+        // 절대 기준값 — 4분위 등급은 클러스터 전체가 비효율이어도 누군가는 A 를 받으므로 최소·최대 원값을 함께 낸다
+        Double minPei = evaluable.isEmpty() ? null
+                : round(evaluable.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::peiRaw).min().orElse(0));
+        Double maxPei = evaluable.isEmpty() ? null
+                : round(evaluable.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::peiRaw).max().orElse(0));
+
         return new PowerEfficiencyResponse.Summary(
-                nodes.size(), evaluable.size(), averagePei,
+                nodes.size(), evaluable.size(), averagePei, minPei, maxPei,
                 round(nodes.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::powerWatts).sum()),
                 round(nodes.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::powerCapacityWatts).sum()),
                 gradeAvailable, reason);
@@ -276,41 +304,9 @@ public class PowerEfficiencyService {
         }
     }
 
-    /**
-     * 구간과 간격이 감당할 만한지 본다.
-     * 메트릭 클라이언트에 읽기 타임아웃이 없어, 무거운 질의는 애초에 내보내지 않는다.
-     */
+    /** 구간과 간격 검증 — 클러스터 추세와 같은 규칙({@link TrendRangeSupport}). */
     private void validateRange(OffsetDateTime start, OffsetDateTime end, String step) {
-        if (!start.isBefore(end)) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "from 은 to 보다 앞서야 합니다");
-        }
-        long stepSeconds = parseStepSeconds(step);
-        long points = Duration.between(start, end).getSeconds() / stepSeconds;
-        int max = properties.getPower().getTrendMaxPoints();
-        if (points > max) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
-                    "조회 지점이 너무 많습니다(%d개, 최대 %d개). 구간을 줄이거나 step 을 늘리세요",
-                    points, max));
-        }
-    }
-
-    /** {@code 30s}·{@code 5m}·{@code 1h}·{@code 1d} 형식을 초로 옮긴다. */
-    private long parseStepSeconds(String step) {
-        Matcher matcher = STEP.matcher(step);
-        if (!matcher.matches()) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST,
-                    "step 형식이 올바르지 않습니다: " + step + " (예: 30s, 5m, 1h, 1d)");
-        }
-        long amount = Long.parseLong(matcher.group(1));
-        if (amount <= 0) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "step 은 0보다 커야 합니다: " + step);
-        }
-        return switch (matcher.group(2)) {
-            case "s" -> amount;
-            case "m" -> amount * 60;
-            case "h" -> amount * 3600;
-            default -> amount * 86400;
-        };
+        TrendRangeSupport.validate(start, end, step, properties.getPower().getTrendMaxPoints());
     }
 
     /**
@@ -333,8 +329,11 @@ public class PowerEfficiencyService {
     /** 시계열 하나를 타임스탬프→값 으로 편다. 여러 시리즈가 오면 첫 건만 쓴다. */
     private Map<Long, Double> seriesOf(String promQL, OffsetDateTime start,
                                        OffsetDateTime end, String step) {
-        List<Map<String, Object>> results = metricsClient.queryRangeResults(
-                promQL, start.toInstant(), end.toInstant(), step);
+        // 저장소가 응답을 안 주면 요청 스레드가 무한 대기하던 경로다(단계 14). 상한 안에서만 기다리고, 넘기면
+        // 보호 장치의 예외가 trend() 의 기존 처리로 올라가 "메트릭 저장소를 조회하지 못했습니다: 질의가 상한 …" 사유를
+        // 담은 빈 결과(200)가 된다 — 조회 실패에 500 을 내지 않는다는 이 클래스의 원칙 그대로다.
+        List<Map<String, Object>> results = guard.call(() -> metricsClient.queryRangeResults(
+                promQL, start.toInstant(), end.toInstant(), step), properties.getMetrics().getQueryTimeoutMs());
         Map<Long, Double> series = new LinkedHashMap<>();
         if (results.isEmpty()) return series;
 

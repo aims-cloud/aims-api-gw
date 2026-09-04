@@ -290,8 +290,17 @@ public class ScheduleService {
         if (request.maxTemperatureCelsius() != null) {
             schedule.setMaxTemperatureCelsius(request.maxTemperatureCelsius());
         }
+        if (request.placementOrder() != null) schedule.setPlacementOrder(parsePlacementOrder(request.placementOrder()));
         if (request.autoRun() != null) schedule.setAutoRun(request.resolveAutoRun());
         if (request.enabled() != null) schedule.setEnabled(request.resolveEnabled());
+    }
+
+    /** 배치 순서 — 정식 이름 외에 "size"·"age" 도 받는다(화면에서 짧게 보내기 쉽게). 모르는 값은 400. */
+    static Schedule.PlacementOrder parsePlacementOrder(String raw) {
+        String v = raw.trim().toUpperCase();
+        if (v.equals("SIZE") || v.equals("PRIORITY_THEN_SIZE")) return Schedule.PlacementOrder.PRIORITY_THEN_SIZE;
+        if (v.equals("AGE") || v.equals("PRIORITY_THEN_AGE")) return Schedule.PlacementOrder.PRIORITY_THEN_AGE;
+        return EnumSupport.parse(Schedule.PlacementOrder.class, raw, "배치 순서");
     }
 
     private void validateEngine(String engine) {

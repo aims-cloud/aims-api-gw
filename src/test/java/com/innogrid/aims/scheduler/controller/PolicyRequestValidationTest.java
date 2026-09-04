@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.controller;
 
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,27 +36,31 @@ class PolicyRequestValidationTest {
 
     // ── 생성 검증 ──────────────────────────────────────────────
 
+    @DisplayName("이름이 없으면 400")
     @Test
-    void 이름이_없으면_400() throws Exception {
+    void missing_name_400() throws Exception {
         create("{\"cpuWeight\":0.3}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("정책 이름")));
     }
 
+    @DisplayName("가중치가 음수면 400 점수 부호가 뒤집힌다")
     @Test
-    void 가중치가_음수면_400_점수_부호가_뒤집힌다() throws Exception {
+    void negative_weight_400() throws Exception {
         create("{\"name\":\"" + name() + "\",\"cpuWeight\":-1}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("가중치는 0 이상")));
     }
 
+    @DisplayName("가중치가 전부 0 이면 400")
     @Test
-    void 가중치가_전부_0_이면_400() throws Exception {
+    void all_weights_zero_400() throws Exception {
         create("{\"name\":\"" + name() + "\",\"cpuWeight\":0,\"memoryWeight\":0,\"powerWeight\":0,"
                 + "\"temperatureWeight\":0,\"networkWeight\":0}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("가중치 합")));
     }
 
+    @DisplayName("가중치 합이 1 이 아니어도 허용한다 비율 원칙")
     @Test
-    void 가중치_합이_1_이_아니어도_허용한다_비율_원칙() throws Exception {
+    void weight_sum_not_1_allowed() throws Exception {
         String body = create("{\"name\":\"" + name() + "\",\"cpuWeight\":25,\"memoryWeight\":25,\"powerWeight\":20,"
                 + "\"temperatureWeight\":15,\"networkWeight\":15}")
                 .andExpect(status().isOk())
@@ -64,22 +69,25 @@ class PolicyRequestValidationTest {
         cleanup(body);
     }
 
+    @DisplayName("사용률 임계가 0 이하거나 100 초과면 400")
     @Test
-    void 사용률_임계가_0_이하거나_100_초과면_400() throws Exception {
+    void utilization_threshold_out_of_range_400() throws Exception {
         create("{\"name\":\"" + name() + "\",\"maxCpuUsagePercent\":0}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("maxCpuUsagePercent")));
         create("{\"name\":\"" + name() + "\",\"maxMemoryUsagePercent\":101}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("maxMemoryUsagePercent")));
     }
 
+    @DisplayName("온도 임계가 0 이면 400")
     @Test
-    void 온도_임계가_0_이면_400() throws Exception {
+    void temperature_threshold_0_400() throws Exception {
         create("{\"name\":\"" + name() + "\",\"maxTemperatureCelsius\":0}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("온도 임계")));
     }
 
+    @DisplayName("모르는 기본 엔진은 400 아는 엔진은 200")
     @Test
-    void 모르는_기본_엔진은_400_아는_엔진은_200() throws Exception {
+    void unknown_engine_400() throws Exception {
         create("{\"name\":\"" + name() + "\",\"defaultEngine\":\"nope\"}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("알 수 없는 스케줄링 엔진")));
         String body = create("{\"name\":\"" + name() + "\",\"defaultEngine\":\"power\"}")
@@ -89,8 +97,9 @@ class PolicyRequestValidationTest {
         cleanup(body);
     }
 
+    @DisplayName("이름이 중복되면 409 예전에는 DB 예외 500")
     @Test
-    void 이름이_중복되면_409_예전에는_DB_예외_500() throws Exception {
+    void duplicate_name_409() throws Exception {
         String n = name();
         String body = create("{\"name\":\"" + n + "\"}").andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -101,10 +110,13 @@ class PolicyRequestValidationTest {
 
     // ── 부분 수정 의미 ─────────────────────────────────────────
 
+    @DisplayName("부분 수정은 보낸 키만 반영하고 명시적 null 은 비운다")
     @Test
-    void 부분_수정은_보낸_키만_반영하고_명시적_null_은_비운다() throws Exception {
+    void patch_null_clears_field() throws Exception {
+        // active:false — 이 테스트는 null 의미만 본다. 활성으로 만들면 종류를 공통(null)으로 바꾸는 순간 다른 테스트가
+        // 스케줄링 중 저장해 둔 활성 공통 정책(default)과 충돌해 409 가 나 실행 순서에 따라 흔들린다(단계 18 에서 확인).
         String body = create("{\"name\":\"" + name() + "\",\"resourceType\":\"gpu\",\"defaultEngine\":\"power\","
-                + "\"warningTemperatureCelsius\":60,\"cpuWeight\":0.3}")
+                + "\"warningTemperatureCelsius\":60,\"cpuWeight\":0.3,\"active\":false}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         long id = idOf(body);
 
@@ -127,8 +139,9 @@ class PolicyRequestValidationTest {
         mockMvc.perform(delete("/api/v1/scheduler/policies/" + id)).andExpect(status().isOk());
     }
 
+    @DisplayName("수정으로 다른 정책의 이름을 쓰면 409 자기 이름은 200")
     @Test
-    void 수정으로_다른_정책의_이름을_쓰면_409_자기_이름은_200() throws Exception {
+    void update_to_other_name_409() throws Exception {
         String a = name(), b = name();
         String bodyA = create("{\"name\":\"" + a + "\"}").andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String bodyB = create("{\"name\":\"" + b + "\"}").andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
@@ -140,8 +153,9 @@ class PolicyRequestValidationTest {
         cleanup(bodyB);
     }
 
+    @DisplayName("수정으로 가중치를 음수로 바꾸면 400 이고 저장되지 않는다")
     @Test
-    void 수정으로_가중치를_음수로_바꾸면_400_이고_저장되지_않는다() throws Exception {
+    void update_negative_weight_400() throws Exception {
         String body = create("{\"name\":\"" + name() + "\"}").andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         long id = idOf(body);
 
@@ -153,8 +167,9 @@ class PolicyRequestValidationTest {
         cleanup(body);
     }
 
+    @DisplayName("없는 정책 수정은 404")
     @Test
-    void 없는_정책_수정은_404() throws Exception {
+    void update_missing_policy_404() throws Exception {
         update(999999L, "{\"description\":\"x\"}").andExpect(status().isNotFound());
     }
 

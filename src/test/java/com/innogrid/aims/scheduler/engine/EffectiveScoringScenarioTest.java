@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
@@ -44,8 +45,9 @@ class EffectiveScoringScenarioTest {
      *        한 노드가 4건을 넘지 않는다 — 수정 전에는 첫 선택 노드로 [A,A,A,…] 몰렸다.
      * </pre>
      */
+    @DisplayName("시나리오1 다건 연속 배치가 세 엔진에서 모두 분산된다")
     @Test
-    void 시나리오1_다건_연속_배치가_세_엔진에서_모두_분산된다() {
+    void scenario1_spread_across_engines() {
         Map<String, Map<String, Integer>> table = new LinkedHashMap<>();
 
         for (SchedulingEngine engine : List.of(new WeightedScoreScheduler(),
@@ -84,8 +86,9 @@ class EffectiveScoringScenarioTest {
      *        계측 노드가 합쳐 2건 이상 받는다 — 수정 전에는 미계측이 만점(1.0·1.0)이라 6건 전부 U 로.
      * </pre>
      */
+    @DisplayName("시나리오2 IPMI 혼합 클러스터에서 미계측 노드가 독식하지 않는다")
     @Test
-    void 시나리오2_IPMI_혼합_클러스터에서_미계측_노드가_독식하지_않는다() {
+    void scenario2_unmeasured_no_monopoly() {
         List<NodeResource> nodes = List.of(
                 node("M1", 30, 40, 200, 40), node("M2", 30, 40, 220, 45),
                 node("U1", 30, 40, 0, 0), node("U2", 30, 40, 0, 0));
@@ -117,8 +120,9 @@ class EffectiveScoringScenarioTest {
      *        수정 전에는 n2 가 "CPU 0%" 로 들어와 첫 선택을 독식했다.
      * </pre>
      */
+    @DisplayName("시나리오3 수집 실패 노드는 후보에서 빠지고 나머지로 배치된다")
     @Test
-    void 시나리오3_수집_실패_노드는_후보에서_빠지고_나머지로_배치된다() {
+    void scenario3_failed_node_dropped() {
         VictoriaMetricsClient vm = mock(VictoriaMetricsClient.class);
         when(vm.query(startsWith("up{"))).thenReturn(Map.of("data", Map.of("result", List.of(
                 up("n1:9100"), up("n2:9100"), up("n3:9100")))));
@@ -166,8 +170,9 @@ class EffectiveScoringScenarioTest {
      *        g4 직후에는 totalNodes=2 만 보여 1대가 조용히 사라졌다.
      * </pre>
      */
+    @DisplayName("시나리오4 제외 노드는 진단 응답에 수와 사유로 드러난다")
     @Test
-    void 시나리오4_제외_노드는_진단_응답에_수와_사유로_드러난다() {
+    void scenario4_exclusions_in_diagnostics() {
         SchedulingService schedulingService = realSchedulingService(vmWithBrokenCpu("n2:9100"));
         PowerOptimizationService diagnosis =
                 new PowerOptimizationService(schedulingService, new PowerModel(properties), properties);
@@ -193,8 +198,9 @@ class EffectiveScoringScenarioTest {
      *        — "활성 노드가 없습니다"만으로는 노드가 꺼진 것인지 저장소가 아픈 것인지 구분할 수 없었다.
      * </pre>
      */
+    @DisplayName("시나리오5 전 노드가 제외되면 실패 사유가 원인을 말한다")
     @Test
-    void 시나리오5_전_노드가_제외되면_실패_사유가_원인을_말한다() {
+    void scenario5_all_excluded_reason() {
         SchedulingService schedulingService = realSchedulingService(vmWithBrokenCpu("n1:9100", "n2:9100", "n3:9100"));
 
         SchedulingResult dry = schedulingService.dryRun(1L, "weighted");

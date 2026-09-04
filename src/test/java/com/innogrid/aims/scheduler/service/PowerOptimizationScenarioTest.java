@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -31,8 +32,9 @@ class PowerOptimizationScenarioTest {
      * 시나리오 1 — 전형적인 혼재 클러스터.
      * 유휴·낭비·여유부족·정상 노드가 섞여 있다.
      */
+    @DisplayName("시나리오 혼재된 클러스터에서 유형별로 진단한다")
     @Test
-    void 시나리오_혼재된_클러스터에서_유형별로_진단한다() {
+    void scenario_mixed_cluster_by_type() {
         var result = run("시나리오 1 — 혼재 클러스터", List.of(
                 node("정상-효율", 55, 260),
                 node("낭비-저부하", 20, 420),
@@ -50,8 +52,9 @@ class PowerOptimizationScenarioTest {
      * 시나리오 2 — 전부 건강한 클러스터.
      * 진단할 것이 없으면 없다고 답해야 한다. 억지로 항목을 만들지 않는다.
      */
+    @DisplayName("시나리오 전부 건강하면 진단 항목이 없다")
     @Test
-    void 시나리오_전부_건강하면_진단_항목이_없다() {
+    void scenario_all_healthy_no_diagnosis() {
         var result = run("시나리오 2 — 건강한 클러스터", List.of(
                 node("정상-1", 50, 250),
                 node("정상-2", 45, 240),
@@ -66,8 +69,9 @@ class PowerOptimizationScenarioTest {
      * 시나리오 3 — 유휴 노드가 여럿.
      * 반납 가능 전력이 대수만큼 쌓여야 한다.
      */
+    @DisplayName("시나리오 유휴 노드가 많으면 반납 가능 전력이 쌓인다")
     @Test
-    void 시나리오_유휴_노드가_많으면_반납_가능_전력이_쌓인다() {
+    void scenario_many_idle_releasable_power() {
         var result = run("시나리오 3 — 유휴 3대", List.of(
                 node("가동", 55, 260),
                 node("유휴-1", 2, 150),
@@ -84,8 +88,9 @@ class PowerOptimizationScenarioTest {
      * 시나리오 4 — 배포 VM 과 같은 상태.
      * IPMI 가 없어 전력이 전부 0 이면 진단을 비우고 사유를 남긴다.
      */
+    @DisplayName("시나리오 계측이 없으면 진단을 비우고 사유를 남긴다")
     @Test
-    void 시나리오_계측이_없으면_진단을_비우고_사유를_남긴다() {
+    void scenario_no_measurement_empty_diagnosis() {
         var result = run("시나리오 4 — 계측 없음(배포 VM 과 동일)", List.of(
                 node("no-ipmi-1", 12, 0),
                 node("no-ipmi-2", 40, 0)));
@@ -100,8 +105,9 @@ class PowerOptimizationScenarioTest {
      * 시나리오 5 — 일부만 계측된 클러스터.
      * 계측된 노드만 진단하고 나머지는 건너뛴다.
      */
+    @DisplayName("시나리오 일부만 계측되면 그 노드만 진단한다")
     @Test
-    void 시나리오_일부만_계측되면_그_노드만_진단한다() {
+    void scenario_partial_measurement_only_those() {
         var result = run("시나리오 5 — 일부만 계측", List.of(
                 node("계측됨-유휴", 2, 150),
                 node("미계측", 40, 0)));

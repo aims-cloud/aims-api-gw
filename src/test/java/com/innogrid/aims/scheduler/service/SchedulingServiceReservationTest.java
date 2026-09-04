@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -42,56 +43,63 @@ class SchedulingServiceReservationTest {
             ConstraintEvaluator.withDefaults(),
             properties);
 
+    @DisplayName("배치 대기중인 워크로드는 예약으로 잡는다")
     @Test
-    void 배치_대기중인_워크로드는_예약으로_잡는다() {
+    void pending_workload_held_as_reservation() {
         int reserved = reservedCpuAfterContext(
                 workload(Workload.WorkloadStatus.SCHEDULED, OffsetDateTime.now().minusMinutes(1)));
 
         assertEquals(2, reserved, "아직 실행 전이라 메트릭에 없다");
     }
 
+    @DisplayName("오래 대기한 워크로드도 실행 전이면 예약으로 남는다")
     @Test
-    void 오래_대기한_워크로드도_실행_전이면_예약으로_남는다() {
+    void long_pending_stays_reserved() {
         int reserved = reservedCpuAfterContext(
                 workload(Workload.WorkloadStatus.SCHEDULED, OffsetDateTime.now().minusHours(3)));
 
         assertEquals(2, reserved, "SCHEDULED 는 실행되지 않았으므로 언제까지나 메트릭에 없다");
     }
 
+    @DisplayName("방금 시작한 실행중 워크로드는 예약에 남는다")
     @Test
-    void 방금_시작한_실행중_워크로드는_예약에_남는다() {
+    void just_started_running_stays_reserved() {
         int reserved = reservedCpuAfterContext(
                 workload(Workload.WorkloadStatus.RUNNING, OffsetDateTime.now().minusMinutes(2)));
 
         assertEquals(2, reserved, "메트릭 지연(10분) 이내라 아직 사용률에 잡히지 않았다");
     }
 
+    @DisplayName("오래 실행중인 워크로드는 예약에서 뺀다")
     @Test
-    void 오래_실행중인_워크로드는_예약에서_뺀다() {
+    void long_running_released_from_reservation() {
         int reserved = reservedCpuAfterContext(
                 workload(Workload.WorkloadStatus.RUNNING, OffsetDateTime.now().minusMinutes(30)));
 
         assertEquals(0, reserved, "이미 메트릭에 있는데 예약으로 또 잡으면 이중 계상이다");
     }
 
+    @DisplayName("배치 시각을 모르는 행은 보수적으로 예약에 남긴다")
     @Test
-    void 배치_시각을_모르는_행은_보수적으로_예약에_남긴다() {
+    void unknown_placement_time_stays_reserved() {
         int reserved = reservedCpuAfterContext(
                 workload(Workload.WorkloadStatus.RUNNING, null));
 
         assertEquals(2, reserved, "판단 근거가 없으면 자원을 넉넉히 잡는 쪽이 안전하다");
     }
 
+    @DisplayName("TTL 을 넘긴 워크로드는 자원을 묶지 않는다")
     @Test
-    void TTL_을_넘긴_워크로드는_자원을_묶지_않는다() {
+    void past_ttl_holds_no_resources() {
         int reserved = reservedCpuAfterContext(
                 workload(Workload.WorkloadStatus.SCHEDULED, OffsetDateTime.now().minusHours(25)));
 
         assertEquals(0, reserved, "보존 기간(24시간)을 넘기면 예약을 푼다");
     }
 
+    @DisplayName("메트릭 지연 설정을 늘리면 경계가 함께 움직인다")
     @Test
-    void 메트릭_지연_설정을_늘리면_경계가_함께_움직인다() {
+    void larger_metric_delay_moves_boundary() {
         properties.setMetricLagMinutes(60);
 
         int reserved = reservedCpuAfterContext(

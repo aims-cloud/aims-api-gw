@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -29,8 +30,9 @@ class PowerAwareSchedulerBehaviourTest {
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
     /** 모든 후보가 결과에 담기고, 점수 내림차순으로 정렬된다. */
+    @DisplayName("후보 전체가 점수 내림차순으로 담긴다")
     @Test
-    void 후보_전체가_점수_내림차순으로_담긴다() {
+    void candidates_sorted_by_score_desc() {
         SchedulingResult result = scheduler.schedule(workload(2), threeNodes(), policy());
 
         assertTrue(result.success());
@@ -44,8 +46,9 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /** 선택된 노드는 배치 가능한 후보 중 최고점이어야 한다. */
+    @DisplayName("선택된 노드는 배치 가능한 최고점이다")
     @Test
-    void 선택된_노드는_배치_가능한_최고점이다() {
+    void selected_is_highest_placeable() {
         SchedulingResult result = scheduler.schedule(workload(2), threeNodes(), policy());
 
         NodeScore best = result.candidateScores().stream()
@@ -57,8 +60,9 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /** 점수는 0~1 범위를 벗어나지 않는다. 음수 점수는 표시도 비교도 곤란하다. */
+    @DisplayName("점수는 0과 1 사이다")
     @Test
-    void 점수는_0과_1_사이다() {
+    void score_between_0_and_1() {
         SchedulingResult result = scheduler.schedule(workload(2), threeNodes(), policy());
 
         for (NodeScore s : result.candidateScores()) {
@@ -74,8 +78,9 @@ class PowerAwareSchedulerBehaviourTest {
      * 전력 엔진이라면 반드시 설명해야 하는 두 가지 — 전력 효율과 배치 후 예상 전력 — 이
      * 들어 있는지만 본다.</p>
      */
+    @DisplayName("판단 근거를 details 로 남긴다")
     @Test
-    void 판단_근거를_details_로_남긴다() {
+    void basis_recorded_in_details() {
         SchedulingResult result = scheduler.schedule(workload(2), threeNodes(), policy());
         NodeScore top = result.candidateScores().get(0);
 
@@ -86,8 +91,9 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /** 제약을 어긴 노드는 사유와 함께 남고 선택되지 않는다. */
+    @DisplayName("제외된 노드는 사유와 함께 남는다")
     @Test
-    void 제외된_노드는_사유와_함께_남는다() {
+    void excluded_nodes_have_reason() {
         SchedulingPolicy policy = policy();
         policy.setMaxCpuUsagePercent(70);
 
@@ -109,8 +115,9 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /** 배치 가능한 노드가 하나도 없으면 실패하되 근거는 남긴다. */
+    @DisplayName("전부 제외되면 실패하고 근거를 남긴다")
     @Test
-    void 전부_제외되면_실패하고_근거를_남긴다() {
+    void all_excluded_fails_with_basis() {
         SchedulingPolicy policy = policy();
         policy.setMaxCpuUsagePercent(1);   // 가장 한산한 노드(CPU 5%)까지 걸리는 값
 
@@ -122,8 +129,9 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /** 후보가 비면 즉시 실패한다. */
+    @DisplayName("후보가 없으면 실패한다")
     @Test
-    void 후보가_없으면_실패한다() {
+    void no_candidates_fails() {
         SchedulingResult result = scheduler.schedule(workload(2), List.of(), policy());
 
         assertTrue(!result.success());
@@ -131,8 +139,9 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /** 같은 입력이면 같은 결과가 나온다. 배치 결정은 재현 가능해야 한다. */
+    @DisplayName("같은 입력에 같은 결과가 나온다")
     @Test
-    void 같은_입력에_같은_결과가_나온다() {
+    void same_input_same_result() {
         SchedulingResult a = scheduler.schedule(workload(2), threeNodes(), policy());
         SchedulingResult b = scheduler.schedule(workload(2), threeNodes(), policy());
 

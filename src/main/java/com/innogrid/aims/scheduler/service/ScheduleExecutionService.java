@@ -56,11 +56,28 @@ public class ScheduleExecutionService {
     private static final List<Workload.WorkloadStatus> TARGET_STATUSES =
             List.of(Workload.WorkloadStatus.PENDING, Workload.WorkloadStatus.FAILED);
 
-    /** 우선순위 높은 것부터, 같으면 먼저 등록된 것부터. */
-    private static final Comparator<Workload> BY_PRIORITY_THEN_AGE =
+    /** 우선순위 높은 것부터, 같으면 먼저 등록된 것부터(현행 기본). */
+    static final Comparator<Workload> BY_PRIORITY_THEN_AGE =
             Comparator.comparingInt((Workload w) -> w.getPriority().ordinal()).reversed()
                     .thenComparing(Workload::getCreatedAt,
                             Comparator.nullsLast(Comparator.naturalOrder()));
+
+    /**
+     * 우선순위 높은 것부터, 같으면 요구 CPU → 요구 메모리가 큰 것부터, 그래도 같으면 먼저 등록된 것부터.
+     * 전력 통합에서 큰 워크로드를 먼저 채우면 노드 조각화가 준다(빈 패킹의 first-fit-decreasing). 우선순위가
+     * 첫 기준이라 공정성은 그대로다.
+     */
+    static final Comparator<Workload> BY_PRIORITY_THEN_SIZE =
+            Comparator.comparingInt((Workload w) -> w.getPriority().ordinal()).reversed()
+                    .thenComparing(Comparator.comparingInt(Workload::getRequiredCpu).reversed())
+                    .thenComparing(Comparator.comparingInt(Workload::getRequiredMemoryMb).reversed())
+                    .thenComparing(Workload::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()));
+
+    /** 스케줄이 고른 배치 순서의 비교자. 지정이 없으면 현행 비교자 객체 그대로다. */
+    static Comparator<Workload> orderFor(Schedule schedule) {
+        return schedule.resolvePlacementOrder() == Schedule.PlacementOrder.PRIORITY_THEN_SIZE
+                ? BY_PRIORITY_THEN_SIZE : BY_PRIORITY_THEN_AGE;
+    }
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
@@ -151,8 +168,8 @@ public class ScheduleExecutionService {
             int success = 0;
             String firstFailure = null;
             for (Workload workload : targets) {
-                SchedulingResult result =
-                        placementService.place(workload, context, engineId, run.getId());
+                SchedulingResult result = schedulingService.dispatch(workload,
+                        placementService.place(workload, context, engineId, run.getId()), run.getId());
                 if (result.success()) {
                     success++;
                 } else if (firstFailure == null) {
@@ -205,14 +222,14 @@ public class ScheduleExecutionService {
      * <p>정렬을 SQL 에 맡기지 않는다. 우선순위가 문자열로 저장돼 있어 {@code order by} 로는
      * 사전순(CRITICAL, HIGH, LOW, NORMAL)이 되어 NORMAL 이 LOW 보다 뒤로 간다.</p>
      */
-    private List<Workload> findTargets(Schedule schedule) {
+    List<Workload> findTargets(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
         boolean matchNullType = type == Workload.ResourceType.VM;   // 기존 행은 VM 으로 해석한다
 
         return workloadRepository.findSchedulingCandidates(
                         TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount())
                 .stream()
-                .sorted(BY_PRIORITY_THEN_AGE)
+                .sorted(orderFor(schedule))
                 .toList();
     }
 
@@ -246,8 +263,12 @@ public class ScheduleExecutionService {
      *
      * <p>저장된 정책을 고치지 않으려고 <b>영속되지 않는 사본</b>을 만들어 쓴다.
      * 정책은 여러 스케줄이 공유하므로 한 스케줄의 설정이 남으면 안 된다.</p>
+     *
+     * <p>사본은 정책의 <b>모든 판단 필드</b>를 옮겨야 한다. {@code affinityEnabled} 가 빠져 있어
+     * 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가 조용히 꺼지던 결함이 있었다
+     * (2026-09-02, 단계 4-② 설계 중 발견). 테스트 {@code ScheduleOverridePolicyCopyTest} 가 고정한다.</p>
      */
-    private SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
+    SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
         if (schedule.getMaxTemperatureCelsius() == null) {
             return policy;
         }
@@ -265,6 +286,7 @@ public class ScheduleExecutionService {
         copy.setMaxPowerUsagePercent(policy.getMaxPowerUsagePercent());
         copy.setPowerAwareEnabled(policy.isPowerAwareEnabled());
         copy.setTemperatureAwareEnabled(policy.isTemperatureAwareEnabled());
+        copy.setAffinityEnabled(policy.isAffinityEnabled());
         copy.setMaxTemperatureCelsius(schedule.getMaxTemperatureCelsius());
         return copy;
     }

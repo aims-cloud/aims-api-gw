@@ -26,6 +26,11 @@ ALTER TABLE scheduling_policies ADD CONSTRAINT scheduling_policies_resource_type
     CHECK (resource_type IS NULL OR resource_type IN ('VM', 'GPU', 'NPU', 'CONTAINER'));
 
 -- 활성 정책은 리소스 종류별 1개 + 공통(NULL) 1개까지만 존재해야 한다.
+-- ※ 아래 두 부분 유니크 인덱스는 Hibernate(ddl-auto=update)가 만들어 주지 않는다 — 배포 VM 에는 없다(2026-09-02 실측).
+--    유일성은 애플리케이션이 보장한다(단계 13): 생성·수정 시 같은 종류의 다른 활성이 있으면 409, 전환은
+--    POST /scheduler/policies/{id}/activate 가 한 트랜잭션으로 처리, 배치는 활성이 둘이어도 이름순으로 결정적으로 고른다.
+--    이 인덱스는 동시 요청의 경쟁 조건까지 막고 싶을 때 **선택적으로** 수동 실행한다. 실행 전 중복 활성이 없는지 확인:
+--    SELECT resource_type, count(*) FROM scheduling_policies WHERE active GROUP BY resource_type HAVING count(*) > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_scheduling_policies_active_type
     ON scheduling_policies (resource_type) WHERE active;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_scheduling_policies_active_common

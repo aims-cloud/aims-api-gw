@@ -19,6 +19,19 @@ public class SchedulerProperties {
     /** 노드 수집 대상 Prometheus job 이름. */
     private String nodeJob = "mdc-nodes";
 
+    /**
+     * 모의 메트릭 모드 — 실제 저장소 대신 가상 클러스터({@link #syntheticClusterPath})를 본다(단계 19).
+     * 1세부 데이터가 없는 동안 시연·검증용. 팀 관행({@code aims.gpu-dashboard.mock-enabled})과 같은 플래그 방식이며
+     * 환경변수 {@code AIMS_SCHEDULER_MOCK_ENABLED} 로 켠다. 기본 false — 배포는 항상 꺼진 채로.
+     */
+    private boolean mockEnabled = false;
+
+    /** 가상 클러스터 정의 파일. {@code classpath:} 또는 파일 경로. */
+    private String syntheticClusterPath = "classpath:scheduler/synthetic-cluster.yml";
+
+    /** 메트릭 질의 시간 상한. 저장소가 응답을 안 줄 때 스케줄러가 멈추지 않게 한다(단계 14). */
+    private Metrics metrics = new Metrics();
+
     /** 디스크 사용률을 읽을 마운트 포인트. 여러 시리즈 중 하나를 고정하기 위해 사용한다. */
     private String diskMountPoint = "/";
 
@@ -81,8 +94,16 @@ public class SchedulerProperties {
     private final Power power = new Power();
     private final Thermal thermal = new Thermal();
     private final Network network = new Network();
+    private final Dispatch dispatch = new Dispatch();
 
     public String getNodeJob() { return nodeJob; }
+    public boolean isMockEnabled() { return mockEnabled; }
+    public void setMockEnabled(boolean v) { this.mockEnabled = v; }
+    public String getSyntheticClusterPath() { return syntheticClusterPath; }
+    public void setSyntheticClusterPath(String v) { this.syntheticClusterPath = v; }
+    public Dispatch getDispatch() { return dispatch; }
+    public Metrics getMetrics() { return metrics; }
+    public void setMetrics(Metrics v) { this.metrics = v; }
     public void setNodeJob(String nodeJob) { this.nodeJob = nodeJob; }
     public String getDiskMountPoint() { return diskMountPoint; }
     public void setDiskMountPoint(String diskMountPoint) { this.diskMountPoint = diskMountPoint; }
@@ -281,9 +302,64 @@ public class SchedulerProperties {
         /** DEGRADED 링크에 더할 비용. */
         private double degradedPenalty = 0.3;
 
+        /**
+         * 네트워크 점수에서 링크 점수가 차지하는 비중(0~1). 나머지는 노드 트래픽 점수.
+         * 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜진 배치에서만 쓰인다.
+         */
+        private double linkWeight = 0.5;
+
         public double getLatencyScaleMs() { return latencyScaleMs; }
         public void setLatencyScaleMs(double v) { this.latencyScaleMs = v; }
         public double getDegradedPenalty() { return degradedPenalty; }
         public void setDegradedPenalty(double v) { this.degradedPenalty = v; }
+        public double getLinkWeight() { return linkWeight; }
+        public void setLinkWeight(double v) { this.linkWeight = v; }
+    }
+
+    /**
+     * 메트릭 질의 시간 상한 — 저장소 클라이언트에 타임아웃이 없어(타 담당자 파일) 스케줄러 쪽에서 기다리기를 멈춘다.
+     *
+     * <p>기다리기를 멈춰도 HTTP 호출 자체는 저장소가 응답할 때까지 풀 스레드를 붙잡는다. 그래서 풀은 고정 크기이고,
+     * 붙잡힌 스레드를 실제로 회수하는 것은 클라이언트 타임아웃(12장 T8)만 할 수 있다.</p>
+     */
+    public static class Metrics {
+
+        /** 노드 한 대의 질의(핵심 4 + 부가 6) 전체 상한(ms). 넘으면 그 노드를 "응답 없음"으로 제외한다. */
+        private long nodeTimeoutMs = 10_000;
+
+        /** 스냅샷 전체 상한(ms). 넘으면 끝나지 않은 노드를 전부 제외한다. */
+        private long collectTimeoutMs = 30_000;
+
+        /** 단건 질의(대상 노드 목록·GPU 개수·전력 효율 추세) 상한(ms). */
+        private long queryTimeoutMs = 5_000;
+
+        /** 내부 풀 크기 = 저장소 동시 질의 수. */
+        private int parallelism = 4;
+
+        public long getNodeTimeoutMs() { return nodeTimeoutMs; }
+        public void setNodeTimeoutMs(long v) { this.nodeTimeoutMs = v; }
+        public long getCollectTimeoutMs() { return collectTimeoutMs; }
+        public void setCollectTimeoutMs(long v) { this.collectTimeoutMs = v; }
+        public long getQueryTimeoutMs() { return queryTimeoutMs; }
+        public void setQueryTimeoutMs(long v) { this.queryTimeoutMs = v; }
+        public int getParallelism() { return parallelism; }
+        public void setParallelism(int v) { this.parallelism = v; }
+    }
+
+    /**
+     * 실행 계층 연동(디스패치) — 배치 결정을 실행 계층으로 넘기는 방식.
+     *
+     * <p>{@code mode} 는 등록된 디스패처 식별자다. 기본 {@code record} 는 외부를 부르지 않고 기록만 한다(실행 API 미정).
+     * {@code timeoutMinutes} 는 원격 모드에서 응답 없는 요청을 TIMED_OUT 으로 볼 시간이며 record 모드에서는 쓰지 않는다.</p>
+     */
+    public static class Dispatch {
+
+        private String mode = "record";
+        private int timeoutMinutes = 30;
+
+        public String getMode() { return mode; }
+        public void setMode(String v) { this.mode = v; }
+        public int getTimeoutMinutes() { return timeoutMinutes; }
+        public void setTimeoutMinutes(int v) { this.timeoutMinutes = v; }
     }
 }

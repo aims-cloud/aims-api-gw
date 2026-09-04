@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.controller;
 
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,15 +36,17 @@ class DeleteRuleTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired WorkloadRepository workloadRepository;
 
+    @DisplayName("없는 워크로드 삭제는 404 예전에는 조용히 200")
     @Test
-    void 없는_워크로드_삭제는_404_예전에는_조용히_200() throws Exception {
+    void delete_missing_workload_404() throws Exception {
         mockMvc.perform(delete("/api/v1/scheduler/workloads/999999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value(containsString("워크로드를 찾을 수 없습니다")));
     }
 
+    @DisplayName("실행 중 워크로드 삭제는 409 종료 후에는 200")
     @Test
-    void 실행_중_워크로드_삭제는_409_종료_후에는_200() throws Exception {
+    void delete_running_workload_409() throws Exception {
         // 테스트 환경에는 노드가 없어 API 로는 배치할 수 없다 — 배치된 상태를 직접 만든다
         Workload w = new Workload("del-rule", 1, 512);
         w.assignTo("mdc-01", "node-1", 0.9, "test");            // SCHEDULED
@@ -68,8 +71,9 @@ class DeleteRuleTest {
         mockMvc.perform(get("/api/v1/scheduler/workloads/" + id)).andExpect(status().isNotFound());
     }
 
+    @DisplayName("PENDING 워크로드는 바로 지울 수 있다")
     @Test
-    void PENDING_워크로드는_바로_지울_수_있다() throws Exception {
+    void pending_workload_deletable() throws Exception {
         String body = mockMvc.perform(post("/api/v1/scheduler/workloads")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"del-pending\",\"requiredCpu\":1,\"requiredMemoryMb\":512}"))
@@ -78,15 +82,17 @@ class DeleteRuleTest {
         mockMvc.perform(delete("/api/v1/scheduler/workloads/" + idOf(body))).andExpect(status().isOk());
     }
 
+    @DisplayName("없는 정책 삭제는 404")
     @Test
-    void 없는_정책_삭제는_404() throws Exception {
+    void delete_missing_policy_404() throws Exception {
         mockMvc.perform(delete("/api/v1/scheduler/policies/999999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value(containsString("정책을 찾을 수 없습니다")));
     }
 
+    @DisplayName("스케줄이 참조하는 정책 삭제는 409 스케줄을 지우면 200")
     @Test
-    void 스케줄이_참조하는_정책_삭제는_409_스케줄을_지우면_200() throws Exception {
+    void delete_referenced_policy_409() throws Exception {
         String policy = mockMvc.perform(post("/api/v1/scheduler/policies")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"del-ref-" + System.nanoTime() + "\"}"))

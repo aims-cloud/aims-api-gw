@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -48,8 +49,9 @@ class RequestValidationScenarioTest {
 
     record Step(String no, String input, int expected, String expectMessage, int actual, String message) {}
 
+    @DisplayName("시나리오 운영자 실수 시퀀스가 설계된 상태코드와 사유로 거부된다")
     @Test
-    void 시나리오_운영자_실수_시퀀스가_설계된_상태코드와_사유로_거부된다() throws Exception {
+    void scenario_operator_mistakes() throws Exception {
         List<Step> steps = new ArrayList<>();
         String tag = String.valueOf(System.nanoTime());
 

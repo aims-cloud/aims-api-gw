@@ -18,6 +18,8 @@
 --   그 두 파일이 여기 있는 표에 ALTER 를 걸기 때문에, 파일명(날짜) 순으로 돌리면 대상이 없어 실패한다.
 --   이미 표가 있는 DB(배포 VM)에서는 IF NOT EXISTS 라 아무 일도 하지 않는다 — 언제 돌려도 안전하다.
 --
+-- 컬럼에 DEFAULT 를 두지 않는다. 배포 VM 의 이 세 표에는 컬럼 기본값이 **하나도 없고**(2026-09-04 information_schema 실측),
+-- 이 스크립트는 그 스키마의 기록이어야 한다. 값은 애플리케이션이 항상 채운다.
 -- 컬럼 구성은 엔티티를 기준으로 적었다. 나중에 ALTER 로 더해진 컬럼(resource_type·data_mdc_id·retry_count·
 -- schedule_run_id·success 등)도 여기에 이미 포함돼 있어, 새 DB 는 이 파일 하나로 최종 형태가 된다.
 -- 뒤이어 2026-08-31_* 을 돌려도 전부 IF NOT EXISTS / DROP 후 재생성이라 부작용이 없다.
@@ -31,10 +33,10 @@ CREATE TABLE IF NOT EXISTS workloads (
     description             VARCHAR(300),
 
     -- 자원 요구량
-    required_cpu            INTEGER          NOT NULL DEFAULT 0,
-    required_memory_mb      INTEGER          NOT NULL DEFAULT 0,
-    required_gpu            INTEGER          NOT NULL DEFAULT 0,
-    required_disk_gb        INTEGER          NOT NULL DEFAULT 0,
+    required_cpu            INTEGER          NOT NULL,
+    required_memory_mb      INTEGER          NOT NULL,
+    required_gpu            INTEGER          NOT NULL,
+    required_disk_gb        INTEGER          NOT NULL,
     resource_type           VARCHAR(20),                        -- NULL = VM 으로 해석
 
     -- 제약 조건
@@ -42,12 +44,12 @@ CREATE TABLE IF NOT EXISTS workloads (
     data_mdc_id             VARCHAR(50),                        -- 데이터가 있는 MDC — 링크 비용 계산에 쓴다
     max_power_budget_watts  DOUBLE PRECISION,
     max_temperature_celsius DOUBLE PRECISION,
-    priority                VARCHAR(20)      NOT NULL DEFAULT 'NORMAL',
+    priority                VARCHAR(20)      NOT NULL,
 
     -- 배치 결과
     assigned_mdc_id         VARCHAR(50),
     assigned_node_id        VARCHAR(100),
-    status                  VARCHAR(20)      NOT NULL DEFAULT 'PENDING',
+    status                  VARCHAR(20)      NOT NULL,
     scheduling_score        DOUBLE PRECISION,
     scheduling_reason       VARCHAR(500),
     retry_count             INTEGER,                            -- NULL = 0 으로 해석
@@ -68,22 +70,22 @@ CREATE TABLE IF NOT EXISTS scheduling_policies (
     warning_temperature_celsius DOUBLE PRECISION,               -- NULL = 설정 기본값
 
     -- 스코어링 가중치 (합계 1.0)
-    cpu_weight                  DOUBLE PRECISION NOT NULL DEFAULT 0.25,
-    memory_weight               DOUBLE PRECISION NOT NULL DEFAULT 0.25,
-    power_weight                DOUBLE PRECISION NOT NULL DEFAULT 0.20,
-    temperature_weight          DOUBLE PRECISION NOT NULL DEFAULT 0.15,
-    network_weight              DOUBLE PRECISION NOT NULL DEFAULT 0.15,
+    cpu_weight                  DOUBLE PRECISION NOT NULL,
+    memory_weight               DOUBLE PRECISION NOT NULL,
+    power_weight                DOUBLE PRECISION NOT NULL,
+    temperature_weight          DOUBLE PRECISION NOT NULL,
+    network_weight              DOUBLE PRECISION NOT NULL,
 
     -- 제약 임계치
-    max_cpu_usage_percent       DOUBLE PRECISION NOT NULL DEFAULT 80.0,
-    max_memory_usage_percent    DOUBLE PRECISION NOT NULL DEFAULT 85.0,
-    max_temperature_celsius     DOUBLE PRECISION NOT NULL DEFAULT 75.0,
-    max_power_usage_percent     DOUBLE PRECISION NOT NULL DEFAULT 90.0,
+    max_cpu_usage_percent       DOUBLE PRECISION NOT NULL,
+    max_memory_usage_percent    DOUBLE PRECISION NOT NULL,
+    max_temperature_celsius     DOUBLE PRECISION NOT NULL,
+    max_power_usage_percent     DOUBLE PRECISION NOT NULL,
 
-    power_aware_enabled         BOOLEAN          NOT NULL DEFAULT TRUE,
-    temperature_aware_enabled   BOOLEAN          NOT NULL DEFAULT TRUE,
-    affinity_enabled            BOOLEAN          NOT NULL DEFAULT FALSE,
-    active                      BOOLEAN          NOT NULL DEFAULT TRUE,
+    power_aware_enabled         BOOLEAN          NOT NULL,
+    temperature_aware_enabled   BOOLEAN          NOT NULL,
+    affinity_enabled            BOOLEAN          NOT NULL,
+    active                      BOOLEAN          NOT NULL,
 
     created_at                  TIMESTAMPTZ
 );
@@ -98,22 +100,22 @@ CREATE TABLE IF NOT EXISTS scheduling_history (
     workload_name     VARCHAR(100),
     selected_mdc_id   VARCHAR(50),
     selected_node_id  VARCHAR(100),
-    final_score       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    final_score       DOUBLE PRECISION NOT NULL,
 
     -- 차원별 점수
-    cpu_score         DOUBLE PRECISION NOT NULL DEFAULT 0,
-    memory_score      DOUBLE PRECISION NOT NULL DEFAULT 0,
-    power_score       DOUBLE PRECISION NOT NULL DEFAULT 0,
-    temperature_score DOUBLE PRECISION NOT NULL DEFAULT 0,
-    network_score     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    cpu_score         DOUBLE PRECISION NOT NULL,
+    memory_score      DOUBLE PRECISION NOT NULL,
+    power_score       DOUBLE PRECISION NOT NULL,
+    temperature_score DOUBLE PRECISION NOT NULL,
+    network_score     DOUBLE PRECISION NOT NULL,
 
     -- 결정 시점의 노드 상태
-    node_cpu_usage    DOUBLE PRECISION NOT NULL DEFAULT 0,
-    node_memory_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
-    node_power_watts  DOUBLE PRECISION NOT NULL DEFAULT 0,
-    node_temperature  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    node_cpu_usage    DOUBLE PRECISION NOT NULL,
+    node_memory_usage DOUBLE PRECISION NOT NULL,
+    node_power_watts  DOUBLE PRECISION NOT NULL,
+    node_temperature  DOUBLE PRECISION NOT NULL,
 
-    candidate_count   INTEGER          NOT NULL DEFAULT 0,
+    candidate_count   INTEGER          NOT NULL,
     reason            VARCHAR(500),
     engine_name       VARCHAR(50),
     policy_name       VARCHAR(100),
@@ -129,6 +131,9 @@ CREATE TABLE IF NOT EXISTS scheduling_history (
 -- 채워 줘서 드러나지 않았을 뿐, update 를 쓰지 않는 기존 DB 에는 이 컬럼이 없다. 여기서 함께 보정한다.
 -- 이미 있으면 아무 일도 하지 않는다. 기존 행에는 DEFAULT 0 이 즉시 채워진다(PostgreSQL 11+ 는 표를 다시 쓰지 않는다).
 ALTER TABLE workloads ADD COLUMN IF NOT EXISTS required_disk_gb INTEGER NOT NULL DEFAULT 0;
+-- 기존 행을 채우고 나면 기본값은 떼어 낸다 — 배포 VM 의 스케줄러 표에는 컬럼 기본값이 하나도 없고(실측),
+-- 이 스크립트는 그 스키마의 기록이어야 하기 때문이다. 애플리케이션은 항상 값을 채워 넣으므로 영향이 없다.
+ALTER TABLE workloads ALTER COLUMN required_disk_gb DROP DEFAULT;
 
 -- ── 열거형 CHECK 제약 ────────────────────────────────────────
 -- Hibernate 는 @Enumerated(EnumType.STRING) 컬럼에 CHECK 를 만든다. 자동 생성되지 않은 환경을 위해 명시한다.

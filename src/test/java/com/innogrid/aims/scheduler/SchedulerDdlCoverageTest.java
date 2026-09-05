@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -12,6 +14,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 import org.junit.jupiter.api.DisplayName;
@@ -54,6 +57,11 @@ class SchedulerDdlCoverageTest {
             "create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?\"?([a-z_][a-z0-9_]*)\"?",
             Pattern.CASE_INSENSITIVE);
 
+    /** {@code CREATE INDEX [IF NOT EXISTS] <이름> ON <표> (<컬럼들>)}. 부분 인덱스의 WHERE 절은 보지 않는다. */
+    private static final Pattern CREATE_INDEX = Pattern.compile(
+            "create\\s+(?:unique\\s+)?index\\s+(?:if\\s+not\\s+exists\\s+)?(\\w+)\\s+on\\s+(\\w+)\\s*\\(([^)]*)\\)",
+            Pattern.CASE_INSENSITIVE);
+
     @DisplayName("스케줄러 엔티티의 테이블이 모두 deploy/sql 에 CREATE 로 있다")
     @Test
     void every_scheduler_table_has_create_script() throws Exception {
@@ -81,6 +89,67 @@ class SchedulerDdlCoverageTest {
         assertFalse(tablesCreatedByDdl().isEmpty(), "deploy/sql 에서 CREATE TABLE 을 하나도 읽지 못했다");
     }
 
+    @DisplayName("엔티티가 선언한 인덱스가 모두 deploy/sql 에도 같은 이름·같은 컬럼으로 있다")
+    @Test
+    void every_entity_index_has_matching_ddl() throws Exception {
+        Map<String, String> declared = entityIndexes();
+        Map<String, String> inDdl = indexesCreatedByDdl();
+
+        assertFalse(declared.isEmpty(), "스케줄러 엔티티에서 @Index 를 하나도 찾지 못했다");
+
+        Set<String> missing = new TreeSet<>(declared.keySet());
+        missing.removeAll(inDdl.keySet());
+        assertTrue(missing.isEmpty(),
+                "deploy/sql 에 CREATE INDEX 가 없는 엔티티 인덱스: " + missing
+                        + "\n  ddl-auto=update 인 환경은 Hibernate 가 만들어 주지만, validate 인 DB 에는 생기지 않는다."
+                        + "\n  DDL 인덱스 " + inDdl.keySet());
+
+        declared.forEach((name, columns) -> assertEquals(columns, inDdl.get(name),
+                "인덱스 " + name + " 의 대상이 엔티티 선언과 DDL 에서 다르다"));
+    }
+
+    /** 스케줄러 엔티티의 {@code @Index} → {@code 이름 -> "표(컬럼,컬럼)"}. 자바 속성명을 컬럼명으로 바꿔 비교한다. */
+    private Map<String, String> entityIndexes() throws ClassNotFoundException {
+        var scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(Entity.class));
+
+        Map<String, String> found = new LinkedHashMap<>();
+        for (var candidate : scanner.findCandidateComponents(ENTITY_PACKAGE)) {
+            Table table = Class.forName(candidate.getBeanClassName()).getAnnotation(Table.class);
+            if (table == null) continue;
+            for (Index index : table.indexes()) {
+                found.put(index.name().toLowerCase(),
+                        table.name().toLowerCase() + "(" + toColumns(index.columnList()) + ")");
+            }
+        }
+        return found;
+    }
+
+    /** {@code deploy/sql} 의 {@code CREATE INDEX} → 같은 형식의 {@code 이름 -> "표(컬럼,컬럼)"}. */
+    private Map<String, String> indexesCreatedByDdl() throws IOException {
+        Map<String, String> found = new LinkedHashMap<>();
+        for (Path script : ddlScripts()) {
+            Matcher matcher = CREATE_INDEX.matcher(readWithoutComments(script));
+            while (matcher.find()) {
+                found.put(matcher.group(1).toLowerCase(),
+                        matcher.group(2).toLowerCase() + "(" + toColumns(matcher.group(3)) + ")");
+            }
+        }
+        return found;
+    }
+
+    /** {@code "workloadId, createdAt"} → {@code "workload_id,created_at"}. 공백·대소문자·표기 차이를 없앤다. */
+    private static String toColumns(String list) {
+        StringBuilder sb = new StringBuilder();
+        for (String raw : list.split(",")) {
+            String col = raw.trim().replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase();
+            if (col.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(',');
+            sb.append(col);
+        }
+        return sb.toString();
+    }
+
     /** 스케줄러 패키지의 {@code @Entity} 가 쓰는 테이블 이름. {@code @Table} 이 없으면 클래스 이름을 쓴다. */
     private Set<String> schedulerEntityTables() throws ClassNotFoundException {
         var scanner = new ClassPathScanningCandidateComponentProvider(false);
@@ -103,18 +172,24 @@ class SchedulerDdlCoverageTest {
         Set<String> created = new TreeSet<>();
         if (!Files.isDirectory(DDL_DIR)) return created;
 
-        List<Path> scripts;
-        try (Stream<Path> files = Files.list(DDL_DIR)) {
-            scripts = files.filter(p -> p.getFileName().toString().endsWith(".sql")).toList();
-        }
-        for (Path script : scripts) {
-            // 주석을 먼저 지운다 — 그러지 않으면 "-- TODO: CREATE TABLE foo" 한 줄로 이 검사를 통과시킬 수 있다.
-            String sql = COMMENT.matcher(Files.readString(script, StandardCharsets.UTF_8)).replaceAll(" ");
-            Matcher matcher = CREATE_TABLE.matcher(sql);
+        for (Path script : ddlScripts()) {
+            Matcher matcher = CREATE_TABLE.matcher(readWithoutComments(script));
             while (matcher.find()) {
                 created.add(matcher.group(1).toLowerCase());
             }
         }
         return created;
+    }
+
+    private List<Path> ddlScripts() throws IOException {
+        if (!Files.isDirectory(DDL_DIR)) return List.of();
+        try (Stream<Path> files = Files.list(DDL_DIR)) {
+            return files.filter(p -> p.getFileName().toString().endsWith(".sql")).toList();
+        }
+    }
+
+    /** 주석을 먼저 지운다 — 그러지 않으면 "-- TODO: CREATE TABLE foo" 한 줄로 이 검사를 통과시킬 수 있다. */
+    private static String readWithoutComments(Path script) throws IOException {
+        return COMMENT.matcher(Files.readString(script, StandardCharsets.UTF_8)).replaceAll(" ");
     }
 }

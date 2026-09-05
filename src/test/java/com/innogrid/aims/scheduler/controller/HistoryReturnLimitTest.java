@@ -128,6 +128,26 @@ class HistoryReturnLimitTest {
         }
     }
 
+    @DisplayName("정확히 상한 건수면 자르지 않는다 — 경계에서 한 건도 잃지 않는다")
+    @Test
+    void exactly_at_limit_returns_everything() throws Exception {
+        long other = WORKLOAD + 3;
+        List<Long> rows = new ArrayList<>();
+        List<SchedulingHistory> bulk = new ArrayList<>(EXPECTED_LIMIT);
+        for (int i = 0; i < EXPECTED_LIMIT; i++) {
+            bulk.add(row(other, "edge-" + i));
+        }
+        repository.saveAll(bulk).forEach(h -> rows.add(h.getId()));
+        try {
+            // 초과가 아니라 "딱 상한"이다. 자르는 조건을 > 에서 >= 로 잘못 바꾸면 여기서 한 건이 사라진다.
+            assertEquals(EXPECTED_LIMIT,
+                    fetch("/api/v1/scheduler/workloads/" + other + "/history").size(),
+                    "정확히 상한 건수인데 잘렸다 — 자르는 조건이 한 칸 어긋났다");
+        } finally {
+            repository.deleteAllById(rows);
+        }
+    }
+
     @DisplayName("저장소도 정렬한 뒤에 자른다 — 자르고 정렬하면 오래된 것이 남는다")
     @Test
     void repository_sorts_before_limiting() {

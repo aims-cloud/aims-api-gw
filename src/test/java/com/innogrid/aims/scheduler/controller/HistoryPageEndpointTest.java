@@ -38,6 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HistoryPageEndpointTest {
 
     private static final String PAGE = "/api/v1/scheduler/history/page";
+    /** {@code SchedulerController.HISTORY_MAX} 와 같다. {@link HistoryReturnLimitTest} 가 그 값을 고정한다. */
+    private static final int HISTORY_RETURN_MAX = 1000;
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -120,17 +122,20 @@ class HistoryPageEndpointTest {
         mockMvc.perform(get(PAGE).param("page", "0")).andExpect(status().isBadRequest());
     }
 
-    @DisplayName("기존 history 는 여전히 배열이고 전량이다")
+    @DisplayName("기존 history 는 여전히 배열이다 — 다만 전량이 아니라 반환 상한까지다")
     @Test
-    void existing_history_full_array() throws Exception {
+    void existing_history_is_array_within_return_limit() throws Exception {
         mockMvc.perform(get("/api/v1/scheduler/history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data[?(@.workloadName == 'hp-24')]").exists());
-        // 페이지 총합은 배열 길이와 같다
+        // 페이지 총합은 배열 길이와 같다.
+        // 단, 배열에는 반환 상한이 있고(단계 23) 페이지 총건수에는 없다. 이 단언은 전체 이력이 상한 아래일 때만
+        // 성립하므로 상한으로 한 번 감싼다 — 그러지 않으면 이 스위트가 커진 어느 날 원인 모를 실패가 된다.
         int arrayLength = objectMapper.readTree(mockMvc.perform(get("/api/v1/scheduler/history")).andReturn()
                 .getResponse().getContentAsString()).get("data").size();
-        assertEquals(arrayLength, data(get(PAGE).param("size", "1")).get("totalElements").asInt());
+        int total = data(get(PAGE).param("size", "1")).get("totalElements").asInt();
+        assertEquals(Math.min(total, HISTORY_RETURN_MAX), arrayLength);
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

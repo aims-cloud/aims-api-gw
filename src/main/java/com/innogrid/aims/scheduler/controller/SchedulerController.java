@@ -15,6 +15,7 @@ import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
+import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -27,6 +28,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Limit;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -42,6 +46,25 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/scheduler")
 public class SchedulerController {
+
+    private static final Logger log = LoggerFactory.getLogger(SchedulerController.class);
+
+    /**
+     * 배열로 전량 반환하던 이력 API 의 반환 상한.
+     *
+     * <p>{@code scheduling_history} 는 연구 근거라 지우지 않는다 — 즉 단조 증가한다. 상한이 없으면
+     * 응답 하나가 표 전체가 되어 메모리와 응답 크기가 행 수를 따라간다. 응답 <b>형태</b>는 배열 그대로 두고
+     * (프런트 영향 없음) 건수만 최신 기준으로 자른다. 더 필요하면 {@code /history/page} 를 쓴다.</p>
+     */
+    private static final int HISTORY_MAX = 1000;
+
+    /**
+     * 실제로 읽어 오는 건수 — 상한보다 하나 많다.
+     *
+     * <p>딱 상한만 읽으면 "정말 잘렸는지"와 "우연히 상한과 같은 건수인지"를 구분할 수 없어, 잘리지 않았는데도
+     * 경고가 찍힌다. 한 건을 더 읽어 보면 그 구분이 확실해진다. 남는 한 건은 응답에서 버린다.</p>
+     */
+    private static final int PROBE = HISTORY_MAX + 1;
 
     private final SchedulingService schedulingService;
     private final PowerEfficiencyService powerEfficiencyService;
@@ -217,15 +240,18 @@ public class SchedulerController {
 
     // ── 스케줄링 이력 ───────────────────────────────────────────
 
-    @Operation(summary = "스케줄링 이력 조회")
+    @Operation(summary = "스케줄링 이력 조회",
+               description = "최신순 배열로 돌려줍니다. 이력은 삭제되지 않아 계속 늘어나므로 최근 "
+                       + HISTORY_MAX + "건까지만 반환합니다. 전체가 필요하면 /history/page 를 쓰세요.")
     @GetMapping("/history")
     public ApiResponse<List<SchedulingHistoryResponse>> getHistory() {
-        return ApiResponse.ok(historyRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(SchedulingHistoryResponse::from).toList());
+        return ApiResponse.ok(capped(historyRepository.findAllByOrderByCreatedAtDesc(Limit.of(PROBE)),
+                "전체 이력"));
     }
 
     @Operation(summary = "스케줄링 이력 페이징 조회",
-               description = "전량 배열인 /history 와 달리 한 페이지만 돌려줍니다(대량 이력은 이 API 를 쓰세요). page 는 1부터, size 최대 100, "
+               description = "배열로 최근 " + HISTORY_MAX + "건까지만 주는 /history 와 달리, 여기는 상한 없이 페이지로 전량에 닿습니다"
+                       + "(총건수도 잘리지 않습니다). page 는 1부터, size 최대 100, "
                        + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName 필터는 선택입니다.")
     @GetMapping("/history/page")
     public ApiResponse<PageResponse<SchedulingHistoryResponse>> getHistoryPage(
@@ -238,10 +264,28 @@ public class SchedulerController {
         return ApiResponse.ok(historyQueryService.page(workloadId, success, engineName, page, size, sort));
     }
 
-    @Operation(summary = "워크로드별 스케줄링 이력")
+    @Operation(summary = "워크로드별 스케줄링 이력",
+               description = "최신순 배열입니다. 전체 이력과 같은 이유로 최근 " + HISTORY_MAX + "건까지만 반환합니다.")
     @GetMapping("/workloads/{workloadId}/history")
     public ApiResponse<List<SchedulingHistoryResponse>> getWorkloadHistory(@PathVariable Long workloadId) {
-        return ApiResponse.ok(historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId).stream()
-                .map(SchedulingHistoryResponse::from).toList());
+        return ApiResponse.ok(capped(
+                historyRepository.findByWorkloadIdOrderByCreatedAtDesc(workloadId, Limit.of(PROBE)),
+                "워크로드 " + workloadId + " 이력"));
+    }
+
+    /**
+     * 이력 목록을 응답 DTO 로 옮기고, 상한에 닿았으면 로그로 알린다.
+     *
+     * <p>응답에는 잘렸다는 표시를 넣지 않는다 — 넣으면 배열이던 응답 형태가 바뀌어 프런트가 영향을 받는다.
+     * 대신 운영 로그에 남겨, 잘린 목록을 화면에서 보고 있다는 사실을 알 수 있게 한다.</p>
+     */
+    private List<SchedulingHistoryResponse> capped(List<SchedulingHistory> rows, String what) {
+        List<SchedulingHistory> kept = rows;
+        if (rows.size() > HISTORY_MAX) {
+            log.warn("{}가 반환 상한 {}건을 넘어 잘렸습니다 — 더 오래된 이력은 /history/page 로 조회하세요",
+                    what, HISTORY_MAX);
+            kept = rows.subList(0, HISTORY_MAX);
+        }
+        return kept.stream().map(SchedulingHistoryResponse::from).toList();
     }
 }

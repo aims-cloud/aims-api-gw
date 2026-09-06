@@ -9,7 +9,15 @@ import jakarta.persistence.*;
  * 어떤 워크로드가 어떤 노드에 왜 배치되었는지 기록한다.
  */
 @Entity
-@Table(name = "scheduling_history")
+@Table(name = "scheduling_history", indexes = {
+        // 이 표는 지워지지 않는다(연구 근거 보존) — 단조 증가하므로 조회는 전부 인덱스를 타야 한다.
+        // 실행 상세 화면: 한 실행이 만든 결정 목록
+        @Index(name = "idx_scheduling_history_run", columnList = "scheduleRunId"),
+        // 워크로드별 이력: 특정 워크로드의 결정 흐름
+        @Index(name = "idx_scheduling_history_workload_created", columnList = "workloadId, createdAt"),
+        // 전체 이력·페이징의 기본 정렬
+        @Index(name = "idx_scheduling_history_created", columnList = "createdAt")
+})
 public class SchedulingHistory {
 
     @Id

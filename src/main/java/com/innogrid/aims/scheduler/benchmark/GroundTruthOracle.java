@@ -1,0 +1,229 @@
+package com.innogrid.aims.scheduler.benchmark;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
+
+/**
+ * 지상진실 오라클 — 합성 클러스터 <b>생성식의 진짜 물리</b>로 전력·온도를 계산하는 평가자 전용 계산기.
+ *
+ * <p><b>왜 전력 모델을 쓰지 않는가 — 순환 논증이기 때문이다.</b> 배치 비교의 주 지표로 엔진의
+ * 한계 전력({@code PowerModel.realMarginalPower})을 쓰면, 그것은 <b>우리 전력 엔진 총점의 한 항을
+ * 그대로 합한 값</b>이다(가중치 0.35 × {@code marginalScore}, {@code marginalScore = 1 −
+ * realMarginalPower / pMax}). 그 지표에서 우리 전략이 1등인 것은 발견이 아니라 <b>정의</b>다.
+ * 목적 함수를 그대로 평가 함수로 쓰면 어떤 전략을 넣어도 그 목적 함수를 최대화한 전략이 이긴다.</p>
+ *
+ * <p><b>그래서 평가자만 다른 물리를 본다.</b> 합성 클러스터 파일에는 노드별 <b>실제 유휴 전력</b>
+ * ({@code idleWatts})이 적혀 있다. 엔진은 그 값을 모른다 — 엔진의 유휴 전력은 {@code 정격 × idleRatio}
+ * (기본 0.3)라는 <b>가정</b>이고, 실제와 얼마나 벌어져 있는지는 {@link #idleAssumptionGaps(double)} 가
+ * 노드별로 돌려준다. 이 클래스는 그 실제 값으로만 계산하고, <b>엔진에게는 아무것도 주지 않는다.</b>
+ * 평가 기준이 엔진의 입력이 아니므로 순환이 아니다.</p>
+ *
+ * <p>계산식은 클러스터 파일 머리말에 적힌 생성식 그대로다.</p>
+ * <ul>
+ *   <li>전력 = {@code idleWatts + (capacityWatts − idleWatts) × CPU사용률/100}</li>
+ *   <li>온도 = {@code baseTemperature + 0.3 × CPU사용률}</li>
+ * </ul>
+ *
+ * <p><b>전원 제어 두 판의 의미.</b> 배치가 전력을 얼마나 늘리는지는 <b>전원 상태 가정에 따라 답이
+ * 다르다.</b> 그래서 두 판을 따로 계산하고, 결과는 반드시 판 이름과 함께 인용한다.</p>
+ * <ul>
+ *   <li>{@link PowerControl#AVAILABLE} — <b>가정</b>이다. 쓰지 않는 노드는 꺼져 있다고 보고, 빈 노드에
+ *       처음 얹으면 그 노드의 유휴 전력이 통째로 새로 든다. 통합(consolidation)의 이득이 이 판에서만 보인다.</li>
+ *   <li>{@link PowerControl#UNAVAILABLE} — <b>현 시스템의 사실</b>이다. 이 시스템에는 노드 전원을 끄는
+ *       수단도, 이미 돌고 있는 워크로드를 옮기는 수단도 없다. 유휴 노드도 계속 {@code idleWatts} 를 먹으므로
+ *       배치의 증분은 <b>동적분뿐</b>이고, 통합으로 아낄 수 있는 전력은 <b>0</b>이다. 전원 제어가 없는데도
+ *       통합 이득을 주장하면 그것은 측정이 아니라 희망이다.</li>
+ * </ul>
+ *
+ * <p><b>한계.</b> 이 오라클도 실측이 아니다 — 합성 클러스터의 생성식을 기준으로 삼으므로, 확인하는 것은
+ * "엔진의 모델 가정과 생성식이 얼마나 다른가"이고 "생성식이 실제 서버와 같은가"는 확인하지 못한다
+ * ({@link BenchmarkRules#LIMITATION} 과 같은 취지). 값은 반올림하지 않는다 — 반올림은 DTO 계층의 일이다.</p>
+ *
+ * <p>이 클래스는 스프링 빈이 아닌 <b>내부 계산기</b>다. 호출자는 항상 자기 클러스터의 노드만 넘기므로,
+ * 모르는 노드나 어긋난 인자는 사용자 입력 오류가 아니라 <b>하네스의 결함</b>이다 — 조용히 0 을 돌려주지 않고
+ * {@link IllegalStateException} 으로 크게 실패한다.</p>
+ */
+public final class GroundTruthOracle {
+
+    /** 전원 상태 가정. 이 시스템에는 노드 전원을 끄는 수단이 없다 — {@code UNAVAILABLE} 이 현 사실이다. */
+    public enum PowerControl { AVAILABLE, UNAVAILABLE }
+
+    /** 온도 생성식의 CPU 기여 계수 — 클러스터 파일 머리말의 0.3(100% 이면 +30℃). */
+    private static final double TEMPERATURE_CPU_COEFFICIENT = 0.3;
+
+    private final Map<String, SyntheticCluster.Node> nodesById;
+    private final List<String> sortedNodeIds;
+
+    public GroundTruthOracle(SyntheticCluster cluster) {
+        if (cluster == null) {
+            throw new IllegalStateException("지상진실 오라클에 클러스터가 없습니다");
+        }
+        Map<String, SyntheticCluster.Node> byId = new LinkedHashMap<>();
+        for (SyntheticCluster.Node node : cluster.nodes()) {
+            if (node.capacityWatts() <= 0) {
+                throw new IllegalStateException("정격 전력이 0 이하인 노드로는 지상진실을 계산할 수 없습니다: " + node.nodeId());
+            }
+            if (node.idleWatts() < 0 || node.idleWatts() > node.capacityWatts()) {
+                throw new IllegalStateException("유휴 전력이 0~정격 밖입니다: " + node.nodeId()
+                        + " (유휴 " + node.idleWatts() + "W, 정격 " + node.capacityWatts() + "W)");
+            }
+            byId.put(node.nodeId(), node);
+        }
+        this.nodesById = Map.copyOf(byId);
+        this.sortedNodeIds = byId.keySet().stream().sorted().toList();
+    }
+
+    // ── 노드 단위 물리량 ──────────────────────────────────────
+
+    /**
+     * 노드 한 대의 실제 소비 전력(W). {@code cpuPercent} 는 0~100.
+     *
+     * <p>생성식 그대로: {@code idleWatts + (capacityWatts − idleWatts) × cpuPercent/100}. 사용률은 물리적으로
+     * 0~100 을 벗어날 수 없으므로 범위를 벗어난 값은 잘라 쓴다 — 정격을 넘는 전력을 만들어내지 않는다.</p>
+     */
+    public double nodePowerWatts(String nodeId, double cpuPercent) {
+        SyntheticCluster.Node node = node(nodeId);
+        return node.idleWatts() + (node.capacityWatts() - node.idleWatts()) * utilization(cpuPercent);
+    }
+
+    /**
+     * 노드 한 대의 실제 온도(℃).
+     *
+     * <p>생성식 그대로: {@code baseTemperature + 0.3 × cpuPercent}. 전력과 달리 <b>계측 여부를 보지 않는다</b> —
+     * {@code ipmi: false} 인 노드도 물리적으로는 뜨거워지고, 엔진이 그것을 못 볼 뿐이다. 미계측 노드를
+     * 지표에서 뺄지는 판정 규칙({@link BenchmarkRules#WARN_ZONE_NODES})의 일이고, 오라클의 일이 아니다.</p>
+     */
+    public double nodeTemperatureC(String nodeId, double cpuPercent) {
+        SyntheticCluster.Node node = node(nodeId);
+        return node.baseTemperature() + TEMPERATURE_CPU_COEFFICIENT * clampPercent(cpuPercent);
+    }
+
+    // ── 클러스터 총량 ─────────────────────────────────────────
+
+    /**
+     * 클러스터 총전력(W).
+     *
+     * <p>{@link PowerControl#AVAILABLE} — 사용 노드({@code usedNodeIds})만 통전한다. 나머지는 0.<br>
+     * {@link PowerControl#UNAVAILABLE} — 전 노드가 통전된다(유휴 노드도 {@code idleWatts} 를 먹는다).</p>
+     *
+     * <p>사용률이 없는 노드는 0%(완전 유휴)로 본다 — {@code UNAVAILABLE} 판에서 그 노드는 0W 가 아니라
+     * <b>{@code idleWatts}</b> 를 낸다. 이것이 두 판의 차이가 드러나는 자리다.</p>
+     */
+    public double clusterPowerWatts(Map<String, Double> cpuPercentByNode,
+                                    Set<String> usedNodeIds, PowerControl mode) {
+        if (cpuPercentByNode == null || usedNodeIds == null || mode == null) {
+            throw new IllegalStateException(
+                    "클러스터 총전력에는 노드별 사용률·사용 노드 집합·전원 상태 가정이 모두 필요합니다");
+        }
+        cpuPercentByNode.keySet().forEach(this::node);   // 모르는 노드가 섞였으면 여기서 크게 실패한다
+        usedNodeIds.forEach(this::node);
+
+        double total = 0;
+        for (String nodeId : sortedNodeIds) {
+            if (mode == PowerControl.AVAILABLE && !usedNodeIds.contains(nodeId)) continue;
+            Double cpuPercent = cpuPercentByNode.get(nodeId);
+            total += nodePowerWatts(nodeId, cpuPercent == null ? 0 : cpuPercent);
+        }
+        return total;
+    }
+
+    // ── 배치 1건의 증분 ───────────────────────────────────────
+
+    /**
+     * 지상진실 기준 배치 1건의 증분 전력(W) — 동적분 + (전원 제어가 있고 빈 노드였으면) <b>실제</b> {@code idleWatts}.
+     *
+     * <p>동적분 = {@code (capacityWatts − idleWatts) × requiredCpu/cores}. 생성식이 선형이므로 현재 부하와
+     * 무관하다 — 엔진의 볼록 곡선({@code curveAlpha})은 엔진의 모델링 선택이고, 생성식의 물리가 아니다.</p>
+     *
+     * <p>깨우는 비용은 {@code AVAILABLE} 판에서만 든다. {@code UNAVAILABLE} 판에서는 그 노드가 이미 통전되어
+     * 유휴 전력을 먹고 있으므로 <b>새로 드는 유휴 전력이 없다</b>. 엔진은 이 자리에서 실제 유휴 대신
+     * {@code 정격 × 0.3} 을 쓴다 — 그 격차가 모델 오사양의 크기다.</p>
+     */
+    public double marginalPowerWatts(String nodeId, int requiredCpu, boolean nodeWasIdle, PowerControl mode) {
+        if (mode == null) {
+            throw new IllegalStateException("증분 전력에는 전원 상태 가정이 필요합니다: " + nodeId);
+        }
+        SyntheticCluster.Node node = node(nodeId);
+        double share = Math.max(0, Math.min(1.0, (double) requiredCpu / node.cores()));
+        double dynamic = (node.capacityWatts() - node.idleWatts()) * share;
+        boolean wakesNode = mode == PowerControl.AVAILABLE && nodeWasIdle;
+        return wakesNode ? dynamic + node.idleWatts() : dynamic;
+    }
+
+    // ── 엔진 가정과의 격차 ───────────────────────────────────
+
+    /**
+     * 엔진 가정({@code 정격 × engineIdleRatio})과 실제 {@code idleWatts} 의 노드별 격차. 응답의 전제 블록에 그대로 싣는다.
+     *
+     * <p>이 목록이 <b>순환이 아님을 보이는 증거</b>다. 엔진이 쓰는 유휴 전력은 정격의 상수배이고, 오라클이 쓰는
+     * 유휴 전력은 파일에 적힌 실제값이다. 두 값이 노드마다 얼마나 다른지 밝혀 두면, 지상진실 전력이 엔진 점수의
+     * 재탕이 아니라는 것이 표에서 바로 보인다.</p>
+     *
+     * <p>정렬은 {@link #nodeIds()} 와 같다(노드 id 오름차순) — 표의 행 순서가 실행마다 바뀌지 않게.</p>
+     */
+    public List<IdleGap> idleAssumptionGaps(double engineIdleRatio) {
+        if (!(engineIdleRatio >= 0) || engineIdleRatio > 1) {
+            throw new IllegalStateException("엔진 유휴 비율은 0~1 이어야 합니다: " + engineIdleRatio);
+        }
+        List<IdleGap> gaps = new ArrayList<>(sortedNodeIds.size());
+        for (String nodeId : sortedNodeIds) {
+            SyntheticCluster.Node node = nodesById.get(nodeId);
+            gaps.add(new IdleGap(nodeId, node.capacityWatts(), node.idleWatts(),
+                    node.capacityWatts() * engineIdleRatio,
+                    node.idleWatts() / node.capacityWatts(),
+                    (node.capacityWatts() - node.idleWatts()) / node.cores()));
+        }
+        return List.copyOf(gaps);
+    }
+
+    /**
+     * 노드 한 대의 유휴 전력 가정 대 실제.
+     *
+     * @param nodeId                 노드 id
+     * @param capacityWatts          정격 전력(W) — 생성식이 쓰는 값
+     * @param actualIdleWatts        파일에 적힌 실제 유휴 전력(W). 엔진은 이 값을 <b>모른다</b>
+     * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = 정격 × idleRatio
+     * @param actualIdleRatio        실제 유휴 비율 = 실제 유휴 / 정격. 엔진의 idleRatio 와 견줄 수 있는 형태
+     * @param groundTruthWattsPerCore 코어당 동적 전력(W/코어) = (정격 − 실제 유휴) / 코어.
+     *                               유휴 전력은 뺀 값이다 — 빈 노드를 깨우는 비용은
+     *                               {@link GroundTruthOracle#marginalPowerWatts} 가 따로 센다
+     */
+    public record IdleGap(String nodeId, double capacityWatts,
+                          double actualIdleWatts, double engineAssumedIdleWatts,
+                          double actualIdleRatio, double groundTruthWattsPerCore) {
+
+        /** 가정과 실제의 절대 격차(W). 부호는 노드마다 다르므로 크기 비교에는 이 값을 쓴다. */
+        public double absoluteGapWatts() {
+            return Math.abs(actualIdleWatts - engineAssumedIdleWatts);
+        }
+    }
+
+    /** 노드 id 목록(정렬됨). */
+    public List<String> nodeIds() {
+        return sortedNodeIds;
+    }
+
+    // ── 내부 ─────────────────────────────────────────────────
+
+    private SyntheticCluster.Node node(String nodeId) {
+        SyntheticCluster.Node node = nodesById.get(nodeId);
+        if (node == null) {
+            throw new IllegalStateException("지상진실 오라클이 모르는 노드입니다: " + nodeId
+                    + " (클러스터 노드: " + sortedNodeIds + ")");
+        }
+        return node;
+    }
+
+    private static double utilization(double cpuPercent) {
+        return clampPercent(cpuPercent) / 100.0;
+    }
+
+    private static double clampPercent(double cpuPercent) {
+        return Math.max(0, Math.min(100, cpuPercent));
+    }
+}

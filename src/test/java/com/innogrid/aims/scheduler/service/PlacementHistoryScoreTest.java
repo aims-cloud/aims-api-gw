@@ -77,6 +77,9 @@ class PlacementHistoryScoreTest {
 
         SchedulingHistory saved = captureSaved();
         assertEquals("gpu", saved.getSelectedNodeId(), "이 시나리오는 GPU 가 있는 노드가 뽑혀야 성립한다");
+        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다 — 예전엔 여기가 NULL 이라 성공 필터에서 빠졌다.
+        assertEquals(Boolean.TRUE, saved.getSuccess(), "단건 배치의 성공 여부가 기록되지 않았다");
+        assertNull(saved.getScheduleRunId(), "실행 연결이 없는데 runId 가 채워졌다");
 
         // 저장된 다섯 점수가 모두 선택된 노드에서 왔는가 — 한 행 안의 불변식으로 본다.
         // 총점은 승자 것이므로, 다섯 중 하나라도 다른 노드에서 오면 가중합이 총점과 어긋난다.
@@ -115,6 +118,7 @@ class PlacementHistoryScoreTest {
 
         SchedulingHistory saved = captureSaved();
         assertNull(saved.getSelectedNodeId(), "이 시나리오는 배치가 실패해야 성립한다");
+        assertEquals(Boolean.FALSE, saved.getSuccess(), "실패는 언제나 명시적 false 여야 한다");
         assertEquals(0.0, saved.getCpuScore());
         assertEquals(0.0, saved.getMemoryScore());
         assertEquals(0.0, saved.getPowerScore());

@@ -100,6 +100,26 @@ class SchedulerParameterErrorTest {
                 .andExpect(jsonPath("$.message").value(containsString("step")));
     }
 
+    /**
+     * 자릿수는 long 에 들어가도 <b>단위 환산 곱셈</b>이 넘칠 수 있다. {@code 2^57 d} 는 곱하면 정확히 0 이 되어
+     * 뒤의 나눗셈이 터지고(배포본 실측 403), {@code 2×10^14 d} 는 음수로 감겨 점 수 상한이 통째로 무력화된다
+     * (배포본 실측 200 — 무거운 질의가 그대로 나갔다). 위의 {@code step_overflow_400} 은 파싱 단계만 보므로
+     * 이 두 경로는 따로 고정한다.
+     */
+    @DisplayName("단위 환산이 넘치는 step 도 400 — 0 나눗셈과 음수 랩어라운드 둘 다")
+    @Test
+    void step_unit_multiplication_overflow_400() throws Exception {
+        for (String step : new String[]{"144115188075855872d", "200000000000000d"}) {
+            mockMvc.perform(get("/api/v1/scheduler/optimization/power/trend")
+                            .param("from", "2026-09-06T00:00:00Z")
+                            .param("to", "2026-09-07T00:00:00Z")
+                            .param("step", step))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.message").value(containsString("step")));
+        }
+    }
+
     @DisplayName("받은 값이 길면 사유에서 잘린다 — 사용자 입력이 응답을 통째로 채우지 않게")
     @Test
     void long_value_is_shortened_in_reason() throws Exception {
@@ -125,6 +145,7 @@ class SchedulerParameterErrorTest {
     @Test
     void advice_does_not_leak_outside_scheduler() throws Exception {
         mockMvc.perform(get("/api/v1/roles/abc"))
+                .andExpect(status().isBadRequest())   // 매핑·인증은 통과하고 변환에서 걸린 400 이어야 의미가 있다
                 .andExpect(content().string(""));
     }
 }

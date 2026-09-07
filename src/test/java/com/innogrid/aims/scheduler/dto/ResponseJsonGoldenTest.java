@@ -101,10 +101,10 @@ public class ResponseJsonGoldenTest {
         assertEquals(77L, json.get("scheduleRunId"));
     }
 
-    @DisplayName("배치 이력 단건 배치의 success 는 null 이다")
+    @DisplayName("성공 여부가 비어 있는 기존 이력 행은 success 가 null 로 나간다")
     @Test
-    void history_success_null_when_single() {
-        // 단건 스케줄링 API 가 만든 이력은 실행에 연결되지 않아 success 가 비어 있다(기존 행 호환)
+    void history_success_null_for_legacy_row() {
+        // 컬럼 도입 전에 쌓인 행은 success 가 비어 있고, 응답은 그 값을 그대로 낸다(필터는 성공으로 해석한다)
         Map<String, Object> json = toMap(new SchedulingHistory(1L, "w", "mdc-01", "n1", 0.5, "r", "weighted", "default"));
 
         assertEquals(HISTORY_FIELDS, new TreeSet<>(json.keySet()));

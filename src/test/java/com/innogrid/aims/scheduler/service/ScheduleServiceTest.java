@@ -75,6 +75,18 @@ class ScheduleServiceTest {
         assertTrue(e.getMessage().contains(String.valueOf(Schedule.CRON_MAX)), e.getMessage());
     }
 
+    @DisplayName("정확히 상한 길이는 통과하고 저장까지 된다 — 검증 상수와 컬럼 길이가 어긋나면 여기서 INSERT 가 터진다")
+    @Test
+    void exactly_at_limit_is_saved() {
+        ScheduleResponse created = scheduleService.create(new ScheduleRequest(
+                "len-edge", "가".repeat(Schedule.NAME_MAX), null, "0 0 2 * * ?",
+                null, null, "설".repeat(Schedule.DESCRIPTION_MAX), null, null, null, null));
+
+        Schedule saved = scheduleRepository.findById(created.id()).orElseThrow();
+        assertEquals(Schedule.NAME_MAX, saved.getName().length());
+        assertEquals(Schedule.DESCRIPTION_MAX, saved.getDescription().length());
+    }
+
     @DisplayName("설명이 컬럼 길이를 넘으면 400 — 검증 없이 대입되던 자리다")
     @Test
     void description_over_column_length_400() {

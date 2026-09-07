@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 트리에서 역할 하위 MDC(물리 노드 가지)를 선택했을 때 오른쪽 개요 탭에 표시되는
  * KPI 카드(물리 호스트 수/Running/Pending/Stop/Error), 노드 Top-N, 노드 목록을 제공한다.
  * 조회 대상은 현재 사용자 토큰에 부여된 역할 스코프의 물리 호스트로 제한된다(트리와 동일) —
- * roleId/mdcId 는 스코프 안에서의 필터이며, 토큰에 없는 역할을 지정하면 빈 결과다.
+ * roleName/mdcId 는 스코프 안에서의 필터이며, 토큰에 없는 역할을 지정하면 빈 결과다.
  * 왼쪽 트리는 ResourceExplorerTreeController 가 담당한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (MDC)", description = "MDC 개요 KPI, 노드 Top-N, 노드 목록 조회")
@@ -43,12 +43,12 @@ public class ResourceExplorerMdcController {
 
     @Operation(summary = "MDC 개요 KPI",
             description = "선택한 MDC(역할·mdcId)의 물리 호스트 수, Running, Pending, Stop, Error 카드 값을 조회합니다. "
-                    + "roleId 를 생략하면 토큰의 모든 역할을 합치되 같은 호스트는 한 번만 셉니다.")
+                    + "roleName 을 생략하면 토큰의 모든 역할을 합치되 같은 호스트는 한 번만 셉니다.")
     @GetMapping("/summary")
     public ApiResponse<MdcSummaryResponse> getMdcSummary(
-            @RequestParam(required = false) String roleId,
+            @RequestParam(required = false) String roleName,
             @RequestParam(required = false) String mdcId) {
-        return ApiResponse.ok(resourceExplorerMdcService.getMdcSummary(roleId, mdcId));
+        return ApiResponse.ok(resourceExplorerMdcService.getMdcSummary(roleName, mdcId));
     }
 
     @Operation(summary = "MDC 노드 Top-N",
@@ -58,12 +58,12 @@ public class ResourceExplorerMdcController {
                     + "요청 지표가 미수집인 호스트는 제외됩니다.")
     @GetMapping("/top")
     public ApiResponse<List<NodeTopResponse>> getMdcTop(
-            @RequestParam(required = false) String roleId,
+            @RequestParam(required = false) String roleName,
             @RequestParam(required = false) String mdcId,
             @RequestParam(defaultValue = "CPU") NodeMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval,
             @RequestParam(defaultValue = "5") @Min(1) @Max(20) int limit) {
-        return ApiResponse.ok(resourceExplorerMdcService.getMdcTop(roleId, mdcId, metric, interval, limit));
+        return ApiResponse.ok(resourceExplorerMdcService.getMdcTop(roleName, mdcId, metric, interval, limit));
     }
 
     @Operation(summary = "MDC 노드 목록",
@@ -73,7 +73,7 @@ public class ResourceExplorerMdcController {
                     + "컬럼 정렬, 페이징을 지원합니다. page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
     @GetMapping("/nodes")
     public ApiResponse<PageResponse<NodeListItemResponse>> getMdcNodes(
-            @RequestParam(required = false) String roleId,
+            @RequestParam(required = false) String roleName,
             @RequestParam(required = false) String mdcId,
             @RequestParam(required = false) NodeStatus status,
             @RequestParam(defaultValue = "NAME") NodeSearchField searchField,
@@ -82,6 +82,6 @@ public class ResourceExplorerMdcController {
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "name,asc") String sort) {
         return ApiResponse.ok(resourceExplorerMdcService.getMdcNodes(
-                roleId, mdcId, status, searchField, keyword, page, size, sort));
+                roleName, mdcId, status, searchField, keyword, page, size, sort));
     }
 }

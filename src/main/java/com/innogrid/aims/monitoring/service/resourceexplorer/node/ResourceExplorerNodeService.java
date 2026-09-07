@@ -36,11 +36,11 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetr
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.HostSummaryMetrics;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 자원 탐색기 노드(물리 호스트) 상세 패널 조회 서비스.
@@ -78,16 +78,15 @@ public class ResourceExplorerNodeService {
         this.hostMetrics = hostMetrics;
     }
 
-    /** 접근 검증을 통과한 노드 — 자산, 스코프 호스트, exporter instance */
-    record NodeContext(Asset asset, ScopedHost host, String nodeInstance, String dcgmInstance) {}
+    /** 접근 검증을 통과한 노드 — 자산, 스코프 호스트, exporter 선택자(instance 기준, 없으면 null) */
+    record NodeContext(Asset asset, ScopedHost host, MetricSelector node, MetricSelector dcgm) {}
 
     // ── 공개 API ────────────────────────────────────────────────
 
     /** 개요 탭 주요 지표 카드 6종 — 미수집이거나 GPU 미탑재면 해당 카드가 null 로 내려간다 */
-    @Transactional(readOnly = true)
     public NodeSummaryResponse getNodeSummary(String nodeId) {
         NodeContext ctx = accessibleNode(nodeId);
-        HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
+        HostSummaryMetrics m = detailMetrics.summary(ctx.node(), ctx.dcgm());
         return new NodeSummaryResponse(
                 now(),
                 m.cpuPercent() == null ? null : new CpuCard(m.cpuPercent(), zeroIfNull(m.coreCount())),
@@ -102,7 +101,6 @@ public class ResourceExplorerNodeService {
     /** 개요 탭 모니터링 요약 차트 — 지표별 시계열 (NETWORK 는 수신/송신 2개 시리즈, 미수집이면 빈 시리즈).
      *  metric 미지정 시 전체 지표(6종)를 반환한다.
      *  조회 구간은 지금 기준 interval 기간(지금-window ~ 지금), 버킷 간격은 기간별 defaultStep 이다. */
-    @Transactional(readOnly = true)
     public List<NodeMetricTrendResponse> getNodeMetricTrend(String nodeId, NodeDetailMetric metric,
                                                             NodeMetricInterval interval) {
         NodeContext ctx = accessibleNode(nodeId);
@@ -113,7 +111,7 @@ public class ResourceExplorerNodeService {
         List<NodeDetailMetric> metrics = metric == null ? List.of(NodeDetailMetric.values()) : List.of(metric);
         return metrics.stream()
                 .map(m -> new NodeMetricTrendResponse(m, m.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
-                        detailMetrics.trend(m, ctx.nodeInstance(), ctx.dcgmInstance(), from, to, step)))
+                        detailMetrics.trend(m, ctx.node(), ctx.dcgm(), from, to, step)))
                 .toList();
     }
 
@@ -121,10 +119,9 @@ public class ResourceExplorerNodeService {
      * 개요 탭 노드 정보 표 — 자산 원장(유형·제조사·시스템 유형)과 Thanos 현재값(가동일수·코어·메모리·스토리지), 1세부 VM 수.
      * provider 배지는 자산 제조사, platformType 은 자산 시스템 유형으로 채운다.
      */
-    @Transactional(readOnly = true)
     public NodeInfoResponse getNodeInfo(String nodeId) {
         NodeContext ctx = accessibleNode(nodeId);
-        HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
+        HostSummaryMetrics m = detailMetrics.summary(ctx.node(), ctx.dcgm());
         int vmCount = virtualResourceProvider.findByHost(ctx.asset()).size();
         return new NodeInfoResponse(
                 nodeId,
@@ -142,7 +139,6 @@ public class ResourceExplorerNodeService {
 
     /** 가상머신 탭 — 이 물리 호스트에 배치된 1세부 VM 목록, 상태·키워드(이름/별칭) 필터·정렬·페이징(1부터).
      *  사용률은 VM 내부 node_exporter 의 최근 10분 평균, exporter 가 없으면 미수집(null). */
-    @Transactional(readOnly = true)
     public PageResponse<NodeVmListItemResponse> getNodeVms(String nodeId, NodeStatus status,
                                                            String keyword, int page, int size, String sort) {
         Comparator<NodeVmListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
@@ -165,7 +161,6 @@ public class ResourceExplorerNodeService {
      *  interval 기간(지금 기준)에 걸친 일자의 행을 반환한다. 값이 null 이면 해당 일자 미수집("-")이다.
      *  가상머신수는 이력이 없어 오늘 행에만 현재 1세부 VM 수를 싣는다. */
     // TODO:: 1세부 VM 배치 이력(일간 최대 VM 수)이 제공되면 과거 일자의 maxVmCount 채우기
-    @Transactional(readOnly = true)
     public PageResponse<NodeDailyUsageResponse> getNodeUsage(String nodeId, NodeMetricInterval interval,
                                                              int page, int size, String sort) {
         Comparator<NodeDailyUsageResponse> comparator = usageComparator(sort);   // 미지원 필드는 조회 전에 400
@@ -174,7 +169,7 @@ public class ResourceExplorerNodeService {
         LocalDate from = today.minusDays(Math.max(0, interval.window().toDays()));
         long vmCount = virtualResourceProvider.findByHost(ctx.asset()).size();
 
-        List<NodeDailyUsageResponse> rows = detailMetrics.dailyMax(ctx.nodeInstance(), from, today).stream()
+        List<NodeDailyUsageResponse> rows = detailMetrics.dailyMax(ctx.node(), from, today).stream()
                 .map(d -> new NodeDailyUsageResponse(d.date(), d.cpuPercent(), d.memoryPercent(), d.fileSystemPercent(),
                         d.date().equals(today) ? vmCount : null))
                 .sorted(comparator)
@@ -202,7 +197,11 @@ public class ResourceExplorerNodeService {
                 .map(MonitoringTarget::getScrapeEndpoint)
                 .findFirst()
                 .orElse(null);
-        return new NodeContext(asset, host, host.instance(), dcgmInstance);
+        return new NodeContext(asset, host, selector(host.instance()), selector(dcgmInstance));
+    }
+
+    private static MetricSelector selector(String instance) {
+        return instance == null ? null : MetricSelector.instance(instance);
     }
 
     private static BusinessException notFound(String nodeId) {

@@ -16,9 +16,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * 물리 호스트 1대의 상세 지표를 Thanos 에서 읽는다 — 노드 상세 패널(주요 지표 카드·요약 차트·일간 최대치) 전용.
+ * 자원 1개(물리 호스트 또는 Tumblebug VM)의 상세 지표를 Thanos 에서 읽는다 — 상세 패널(주요 지표 카드·요약 차트·일간 최대치) 전용.
  *
- * node_exporter 는 {@code instance} 라벨(address:port)로, GPU/VRAM 은 dcgm_exporter 의 instance 로 필터한다.
+ * 자원은 {@link MetricSelector} 로 가리킨다. 물리 호스트는 node_exporter·dcgm_exporter 의 {@code instance} 라벨로,
+ * Tumblebug VM 은 {@code tb_ns/tb_infra/tb_node} 라벨로 좁힌다(두 exporter 에 같은 라벨이 붙으므로 선택자 하나로 충분).
  * 표준 PromQL(MDC 수집 SW 인터페이스 분석)을 그대로 쓰고, Thanos 장애나 시계열 부재는 null(미수집)로 돌려준다.
  */
 @Component
@@ -29,7 +30,7 @@ public class HostDetailMetricsQueryService {
     private static final double MB_TO_GB = 1024.0;
     private static final String RATE_WINDOW = "5m";
     private static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
-    private static final String NET_FILTER = "device!~\"lo|veth.*|docker.*|br.*|virbr.*\"";
+    static final String NET_FILTER = "device!~\"lo|veth.*|docker.*|br.*|virbr.*\"";
 
     /** 주요 지표 카드용 현재값 — null 은 미수집 */
     public record HostSummaryMetrics(Double cpuPercent, Integer coreCount,
@@ -54,99 +55,95 @@ public class HostDetailMetricsQueryService {
 
     // ── PromQL ──────────────────────────────────────────────────
 
-    static String cpuPercent(String instance, String window) {
-        return "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\",instance=\"" + instance + "\"}["
-                + window + "])) * 100)";
+    static String cpuPercent(MetricSelector s, String window) {
+        return "100 - (avg by (instance) (rate(node_cpu_seconds_total" + s.braces("mode=\"idle\"") + "[" + window + "])) * 100)";
     }
 
-    static String coreCount(String instance) {
-        return "count by (instance) (node_cpu_seconds_total{mode=\"idle\",instance=\"" + instance + "\"})";
+    static String coreCount(MetricSelector s) {
+        return "count by (instance) (node_cpu_seconds_total" + s.braces("mode=\"idle\"") + ")";
     }
 
-    static String memoryPercent(String instance) {
-        return "(1 - node_memory_MemAvailable_bytes{instance=\"" + instance + "\"} / node_memory_MemTotal_bytes{instance=\""
-                + instance + "\"}) * 100";
+    static String memoryPercent(MetricSelector s) {
+        return "(1 - node_memory_MemAvailable_bytes" + s.braces() + " / node_memory_MemTotal_bytes" + s.braces() + ") * 100";
     }
 
-    static String memoryTotalBytes(String instance) {
-        return "node_memory_MemTotal_bytes{instance=\"" + instance + "\"}";
+    static String memoryTotalBytes(MetricSelector s) {
+        return "node_memory_MemTotal_bytes" + s.braces();
     }
 
-    static String memoryAvailableBytes(String instance) {
-        return "node_memory_MemAvailable_bytes{instance=\"" + instance + "\"}";
+    static String memoryAvailableBytes(MetricSelector s) {
+        return "node_memory_MemAvailable_bytes" + s.braces();
     }
 
-    static String fileSystemSizeBytes(String instance) {
-        return "sum by (instance) (node_filesystem_size_bytes{" + FS_FILTER + ",instance=\"" + instance + "\"})";
+    static String fileSystemSizeBytes(MetricSelector s) {
+        return "sum by (instance) (node_filesystem_size_bytes" + s.braces(FS_FILTER) + ")";
     }
 
-    static String fileSystemAvailBytes(String instance) {
-        return "sum by (instance) (node_filesystem_avail_bytes{" + FS_FILTER + ",instance=\"" + instance + "\"})";
+    static String fileSystemAvailBytes(MetricSelector s) {
+        return "sum by (instance) (node_filesystem_avail_bytes" + s.braces(FS_FILTER) + ")";
     }
 
-    static String fileSystemPercent(String instance) {
-        return "(1 - " + fileSystemAvailBytes(instance) + " / " + fileSystemSizeBytes(instance) + ") * 100";
+    static String fileSystemPercent(MetricSelector s) {
+        return "(1 - " + fileSystemAvailBytes(s) + " / " + fileSystemSizeBytes(s) + ") * 100";
     }
 
-    static String receiveBytesPerSec(String instance, String window) {
-        return "sum by (instance) (rate(node_network_receive_bytes_total{" + NET_FILTER + ",instance=\"" + instance + "\"}["
-                + window + "]))";
+    static String receiveBytesPerSec(MetricSelector s, String window) {
+        return "sum by (instance) (rate(node_network_receive_bytes_total" + s.braces(NET_FILTER) + "[" + window + "]))";
     }
 
-    static String transmitBytesPerSec(String instance, String window) {
-        return "sum by (instance) (rate(node_network_transmit_bytes_total{" + NET_FILTER + ",instance=\"" + instance + "\"}["
-                + window + "]))";
+    static String transmitBytesPerSec(MetricSelector s, String window) {
+        return "sum by (instance) (rate(node_network_transmit_bytes_total" + s.braces(NET_FILTER) + "[" + window + "]))";
     }
 
-    static String bootTimeSeconds(String instance) {
-        return "node_boot_time_seconds{instance=\"" + instance + "\"}";
+    static String bootTimeSeconds(MetricSelector s) {
+        return "node_boot_time_seconds" + s.braces();
     }
 
-    static String gpuPercent(String dcgmInstance) {
-        return "avg by (instance) (DCGM_FI_DEV_GPU_UTIL{instance=\"" + dcgmInstance + "\"})";
+    static String gpuPercent(MetricSelector dcgm) {
+        return "avg by (instance) (DCGM_FI_DEV_GPU_UTIL" + dcgm.braces() + ")";
     }
 
-    static String gpuCount(String dcgmInstance) {
-        return "count by (instance) (DCGM_FI_DEV_GPU_UTIL{instance=\"" + dcgmInstance + "\"})";
+    static String gpuCount(MetricSelector dcgm) {
+        return "count by (instance) (DCGM_FI_DEV_GPU_UTIL" + dcgm.braces() + ")";
     }
 
-    static String vramUsedMb(String dcgmInstance) {
-        return "sum by (instance) (DCGM_FI_DEV_FB_USED{instance=\"" + dcgmInstance + "\"})";
+    static String vramUsedMb(MetricSelector dcgm) {
+        return "sum by (instance) (DCGM_FI_DEV_FB_USED" + dcgm.braces() + ")";
     }
 
-    static String vramFreeMb(String dcgmInstance) {
-        return "sum by (instance) (DCGM_FI_DEV_FB_FREE{instance=\"" + dcgmInstance + "\"})";
+    static String vramFreeMb(MetricSelector dcgm) {
+        return "sum by (instance) (DCGM_FI_DEV_FB_FREE" + dcgm.braces() + ")";
     }
 
-    static String vramPercent(String dcgmInstance) {
-        return vramUsedMb(dcgmInstance) + " / (" + vramUsedMb(dcgmInstance) + " + " + vramFreeMb(dcgmInstance) + ") * 100";
+    static String vramPercent(MetricSelector dcgm) {
+        return vramUsedMb(dcgm) + " / (" + vramUsedMb(dcgm) + " + " + vramFreeMb(dcgm) + ") * 100";
     }
 
-    // ── 조회 ────────────────────────────────────────────────────
+    // ── 조회 (선택자) ───────────────────────────────────────────
 
-    /** 주요 지표 카드용 현재값. instance 가 null 인 exporter 그룹은 조회하지 않고 미수집으로 둔다. */
-    public HostSummaryMetrics summary(String nodeInstance, String dcgmInstance) {
+    /** 주요 지표 카드용 현재값. 선택자가 null 인 exporter 그룹은 조회하지 않고 미수집으로 둔다. */
+    public HostSummaryMetrics summary(MetricSelector node, MetricSelector dcgm) {
         try {
             Double cpu = null, memTotal = null, memAvail = null, fsSize = null, fsAvail = null, rx = null, tx = null, boot = null;
             Integer cores = null;
-            if (nodeInstance != null) {
-                cpu = scalar(cpuPercent(nodeInstance, RATE_WINDOW));
-                cores = toInt(scalar(coreCount(nodeInstance)));
-                memTotal = scalar(memoryTotalBytes(nodeInstance));
-                memAvail = scalar(memoryAvailableBytes(nodeInstance));
-                fsSize = scalar(fileSystemSizeBytes(nodeInstance));
-                fsAvail = scalar(fileSystemAvailBytes(nodeInstance));
-                rx = scalar(receiveBytesPerSec(nodeInstance, RATE_WINDOW));
-                tx = scalar(transmitBytesPerSec(nodeInstance, RATE_WINDOW));
-                boot = scalar(bootTimeSeconds(nodeInstance));
+            if (node != null) {
+                cpu = scalar(cpuPercent(node, RATE_WINDOW));
+                cores = toInt(scalar(coreCount(node)));
+                memTotal = scalar(memoryTotalBytes(node));
+                memAvail = scalar(memoryAvailableBytes(node));
+                fsSize = scalar(fileSystemSizeBytes(node));
+                fsAvail = scalar(fileSystemAvailBytes(node));
+                rx = scalar(receiveBytesPerSec(node, RATE_WINDOW));
+                tx = scalar(transmitBytesPerSec(node, RATE_WINDOW));
+                boot = scalar(bootTimeSeconds(node));
             }
             Double gpu = null, vramUsed = null, vramFree = null;
             Integer gpus = null;
-            if (dcgmInstance != null) {
-                gpu = scalar(gpuPercent(dcgmInstance));
-                gpus = toInt(scalar(gpuCount(dcgmInstance)));
-                vramUsed = scalar(vramUsedMb(dcgmInstance));
-                vramFree = scalar(vramFreeMb(dcgmInstance));
+            if (dcgm != null) {
+                gpu = scalar(gpuPercent(dcgm));
+                gpus = toInt(scalar(gpuCount(dcgm)));
+                vramUsed = scalar(vramUsedMb(dcgm));
+                vramFree = scalar(vramFreeMb(dcgm));
             }
             return new HostSummaryMetrics(
                     round1(cpu), cores,
@@ -158,32 +155,33 @@ public class HostDetailMetricsQueryService {
                     vramUsed == null || vramFree == null ? null : round1((vramUsed + vramFree) / MB_TO_GB),
                     boot == null ? null : boot.longValue());
         } catch (RuntimeException e) {
-            log.warn("Thanos 노드 상세 지표 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
+            log.warn("Thanos 상세 지표 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
             return HostSummaryMetrics.EMPTY;
         }
     }
 
     /** 요약 차트 시계열. 미수집이면 빈 목록, NETWORK 는 receive/transmit 2개 시리즈. */
-    public List<Series> trend(NodeDetailMetric metric, String nodeInstance, String dcgmInstance,
+    public List<Series> trend(NodeDetailMetric metric, MetricSelector node, MetricSelector dcgm,
                               Instant from, Instant to, String step) {
         try {
+            String rate = rateWindow(step);
             return switch (metric) {
-                case CPU -> series("cpu", nodeInstance == null ? null : cpuPercent(nodeInstance, step), from, to, step);
-                case MEMORY -> series("memory", nodeInstance == null ? null : memoryPercent(nodeInstance), from, to, step);
-                case FILE_SYSTEM -> series("file_system", nodeInstance == null ? null : fileSystemPercent(nodeInstance), from, to, step);
+                case CPU -> series("cpu", node == null ? null : cpuPercent(node, rate), from, to, step);
+                case MEMORY -> series("memory", node == null ? null : memoryPercent(node), from, to, step);
+                case FILE_SYSTEM -> series("file_system", node == null ? null : fileSystemPercent(node), from, to, step);
                 case NETWORK -> {
                     List<Series> both = new ArrayList<>();
-                    if (nodeInstance != null) {
-                        both.addAll(series("receive", receiveBytesPerSec(nodeInstance, step), from, to, step));
-                        both.addAll(series("transmit", transmitBytesPerSec(nodeInstance, step), from, to, step));
+                    if (node != null) {
+                        both.addAll(series("receive", receiveBytesPerSec(node, rate), from, to, step));
+                        both.addAll(series("transmit", transmitBytesPerSec(node, rate), from, to, step));
                     }
                     yield both;
                 }
-                case GPU -> series("gpu", dcgmInstance == null ? null : gpuPercent(dcgmInstance), from, to, step);
-                case VRAM -> series("vram", dcgmInstance == null ? null : vramPercent(dcgmInstance), from, to, step);
+                case GPU -> series("gpu", dcgm == null ? null : gpuPercent(dcgm), from, to, step);
+                case VRAM -> series("vram", dcgm == null ? null : vramPercent(dcgm), from, to, step);
             };
         } catch (RuntimeException e) {
-            log.warn("Thanos 노드 요약 차트 조회 실패 — 빈 시계열을 돌려줍니다: {}", e.getMessage());
+            log.warn("Thanos 요약 차트 조회 실패 — 빈 시계열을 돌려줍니다: {}", e.getMessage());
             return List.of();
         }
     }
@@ -192,17 +190,17 @@ public class HostDetailMetricsQueryService {
      * 일자별 일간 최대 사용률 — {@code max_over_time((expr)[1d:5m])} 을 하루 step 으로 range 조회한다.
      * 각 샘플의 평가 시각은 그 날의 끝(다음날 00:00)이라 당일 구간 [00:00, 24:00) 의 최대가 된다.
      */
-    public List<DailyMax> dailyMax(String nodeInstance, LocalDate fromDate, LocalDate toDate) {
-        if (nodeInstance == null || fromDate.isAfter(toDate)) {
+    public List<DailyMax> dailyMax(MetricSelector node, LocalDate fromDate, LocalDate toDate) {
+        if (node == null || fromDate.isAfter(toDate)) {
             return List.of();
         }
         ZoneId zone = ZoneId.systemDefault();
         Instant start = fromDate.plusDays(1).atStartOfDay(zone).toInstant();
         Instant end = toDate.plusDays(1).atStartOfDay(zone).toInstant();
         try {
-            Map<LocalDate, Double> cpu = byDay(dailyMaxQuery(cpuPercent(nodeInstance, RATE_WINDOW)), start, end, zone);
-            Map<LocalDate, Double> memory = byDay(dailyMaxQuery(memoryPercent(nodeInstance)), start, end, zone);
-            Map<LocalDate, Double> fs = byDay(dailyMaxQuery(fileSystemPercent(nodeInstance)), start, end, zone);
+            Map<LocalDate, Double> cpu = byDay(dailyMaxQuery(cpuPercent(node, RATE_WINDOW)), start, end, zone);
+            Map<LocalDate, Double> memory = byDay(dailyMaxQuery(memoryPercent(node)), start, end, zone);
+            Map<LocalDate, Double> fs = byDay(dailyMaxQuery(fileSystemPercent(node)), start, end, zone);
 
             List<DailyMax> rows = new ArrayList<>();
             for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) {
@@ -219,11 +217,32 @@ public class HostDetailMetricsQueryService {
         }
     }
 
+    // ── 내부 ────────────────────────────────────────────────────
+
+    /**
+     * rate() 범위 창 — 버킷 간격(step)이 5분보다 짧으면 5분을 쓴다.
+     * rate 는 창 안에 샘플이 2개 이상 있어야 값이 나오므로 스크랩 간격(15~30초)의 4배 이상을 확보한다.
+     */
+    static String rateWindow(String step) {
+        try {
+            String s = step.trim().toLowerCase();
+            long value = Long.parseLong(s.substring(0, s.length() - 1));
+            long seconds = switch (s.charAt(s.length() - 1)) {
+                case 's' -> value;
+                case 'm' -> value * 60;
+                case 'h' -> value * 3600;
+                case 'd' -> value * 86_400;
+                default -> 0;
+            };
+            return seconds >= 300 ? step : RATE_WINDOW;
+        } catch (RuntimeException e) {
+            return RATE_WINDOW;
+        }
+    }
+
     static String dailyMaxQuery(String expr) {
         return "max_over_time((" + expr + ")[1d:5m])";
     }
-
-    // ── 내부 ────────────────────────────────────────────────────
 
     private List<Series> series(String name, String query, Instant from, Instant to, String step) {
         if (query == null) {
@@ -255,7 +274,7 @@ public class HostDetailMetricsQueryService {
     }
 
     /** range 결과 1개의 values → [timestamp(Number), value(Double)] 목록. 비수치 샘플은 건너뛴다. */
-    private static List<Object[]> values(Map<String, Object> result) {
+    static List<Object[]> values(Map<String, Object> result) {
         List<Object[]> out = new ArrayList<>();
         Object values = result.get("values");
         if (!(values instanceof List<?> list)) {
@@ -285,7 +304,7 @@ public class HostDetailMetricsQueryService {
         return null;
     }
 
-    private static Double parse(Object raw) {
+    static Double parse(Object raw) {
         if (raw == null) {
             return null;
         }
@@ -305,7 +324,7 @@ public class HostDetailMetricsQueryService {
         return bytes == null ? null : round1(bytes / GB);
     }
 
-    private static Double round1(Double value) {
+    static Double round1(Double value) {
         return value == null ? null : Math.round(value * 10) / 10.0;
     }
 }

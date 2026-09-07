@@ -3,6 +3,7 @@ package com.innogrid.aims.monitoring.repository;
 import java.util.Collection;
 import java.util.List;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
@@ -16,6 +17,8 @@ public interface MonitoringTargetRepository extends JpaRepository<MonitoringTarg
 
     List<MonitoringTarget> findByMdcIdAndExporterType(String mdcId, ExporterType exporterType);
 
-    /** 자원 탐색기 트리 — 역할 스코프의 물리 호스트(자산) 목록에 등록된 exporter 를 한 번에 조회한다 */
+    /** 자원 탐색기 트리 — 역할 스코프의 물리 호스트(자산) 목록에 등록된 exporter 를 한 번에 조회한다.
+     *  호출측이 트랜잭션 밖에서 asset 을 읽으므로 함께 적재한다 */
+    @EntityGraph(attributePaths = "asset")
     List<MonitoringTarget> findByAsset_IdIn(Collection<Long> assetIds);
 }

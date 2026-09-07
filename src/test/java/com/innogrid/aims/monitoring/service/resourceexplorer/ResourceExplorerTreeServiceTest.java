@@ -112,12 +112,12 @@ class ResourceExplorerTreeServiceTest {
                 vector(Map.of("instance", NODE01_DCGM), "1"),
                 vector(Map.of("instance", NODE01_IPMI), "1"),
                 vector(Map.of("instance", NODE02_NE), "0")));
-        when(metricsClient.queryResults(MonitoringCapabilityResolver.GPU_DEVICE_QUERY)).thenReturn(List.of(
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.gpuDeviceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
                 vector(Map.of("instance", NODE01_DCGM, "UUID", "GPU-bbbb", "gpu", "1"), "1"),
                 vector(Map.of("instance", NODE01_DCGM, "UUID", "GPU-aaaa", "gpu", "0"), "1")));
-        when(metricsClient.queryResults(MonitoringCapabilityResolver.IPMI_METRIC_QUERY)).thenReturn(List.of(
-                vector(Map.of("instance", NODE01_IPMI, "__name__", "ipmi_temperature_celsius"), "12"),
-                vector(Map.of("instance", NODE01_IPMI, "__name__", "ipmi_fan_speed_rpm"), "6")));
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.ipmiMetricQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
+                vector(Map.of("instance", NODE01_IPMI, "metric", "ipmi_temperature_celsius"), "12"),
+                vector(Map.of("instance", NODE01_IPMI, "metric", "ipmi_fan_speed_rpm"), "6")));
     }
 
     private void loginWithRoles(String... roles) {
@@ -254,8 +254,28 @@ class ResourceExplorerTreeServiceTest {
     }
 
     @Test
+    void dcgm_ipmi가_일시_중단되어도_GPU_Hardware_항목은_유지되고_UNAVAILABLE로_표시된다() {
+        // 존재는 24시간 이력(count_over_time)으로 보고, 현재 up 만 0 → 항목 유지 + 미수집 (docs/06 §5.1)
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.UP_QUERY)).thenReturn(List.of(
+                vector(Map.of("instance", NODE01_NE), "1"),
+                vector(Map.of("instance", NODE01_DCGM), "0"),
+                vector(Map.of("instance", NODE02_NE), "0")));          // NODE01_IPMI 는 up 자체가 사라짐(5분 초과)
+        loginWithRoles("ADMIN");
+        ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
+
+        ResourceTreeNodeResponse gpu = node01.children().get(8);
+        assertThat(gpu.type()).isEqualTo(ResourceTreeNodeType.GPU_GROUP);
+        assertThat(gpu.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
+        assertThat(gpu.children()).hasSize(2);
+        ResourceTreeNodeResponse hardware = node01.children().get(9);
+        assertThat(hardware.type()).isEqualTo(ResourceTreeNodeType.HARDWARE);
+        assertThat(hardware.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
+        assertThat(hardware.children()).hasSize(2);
+    }
+
+    @Test
     void GPU_장치_메트릭이_없으면_GPU_그룹을_만들지_않는다() {
-        when(metricsClient.queryResults(MonitoringCapabilityResolver.GPU_DEVICE_QUERY)).thenReturn(List.of());
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.gpuDeviceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of());
         loginWithRoles("ADMIN");
         ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
         assertThat(node01.children()).extracting(ResourceTreeNodeResponse::type)

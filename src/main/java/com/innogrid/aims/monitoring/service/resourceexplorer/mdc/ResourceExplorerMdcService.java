@@ -31,8 +31,8 @@ import org.springframework.stereotype.Service;
  * 트리에서 역할 하위 MDC 를 선택했을 때 개요 탭의 KPI 카드·노드 Top-N·노드 목록을 제공한다.
  *
  * 조회 대상은 현재 사용자 토큰에 부여된 역할 스코프의 물리 호스트(트리와 같은 원장, {@link ResourceScopeService})다.
- * roleId/mdcId 파라미터는 스코프 안에서의 필터 — 토큰에 없는 역할을 지정하면 빈 결과다.
- * roleId 를 생략하면 토큰의 모든 역할을 합치되 같은 호스트는 한 번만 센다.
+ * roleName/mdcId 파라미터는 스코프 안에서의 필터 — 토큰에 없는 역할을 지정하면 빈 결과다.
+ * roleName 을 생략하면 토큰의 모든 역할을 합치되 같은 호스트는 한 번만 센다.
  * 사용률은 Thanos 기간 평균({@link HostMetricsQueryService})이며 node_exporter instance 라벨로 조인한다.
  * 왼쪽 트리 구성은 ResourceExplorerTreeService 가 담당한다.
  */
@@ -57,8 +57,8 @@ public class ResourceExplorerMdcService {
     // ── 공개 API ────────────────────────────────────────────────
 
     /** MDC KPI 카드 — 물리 호스트 수 / Running / Pending / Stop / Error */
-    public MdcSummaryResponse getMdcSummary(String roleId, String mdcId) {
-        List<ScopedHost> hosts = scopedHosts(roleId, mdcId);
+    public MdcSummaryResponse getMdcSummary(String roleName, String mdcId) {
+        List<ScopedHost> hosts = scopedHosts(roleName, mdcId);
         return new MdcSummaryResponse(
                 hosts.size(),
                 countStatus(hosts, NodeStatus.RUNNING),
@@ -69,9 +69,9 @@ public class ResourceExplorerMdcService {
 
     /** MDC 내 노드 Top-N — 요청 지표의 interval 기간 평균 내림차순, CPU/MEM/FS 보조 지표 동봉.
      *  요청 지표가 미수집인 호스트는 제외한다 — 남는 슬롯은 화면이 "미수집"으로 채운다. */
-    public List<NodeTopResponse> getMdcTop(String roleId, String mdcId,
+    public List<NodeTopResponse> getMdcTop(String roleName, String mdcId,
                                            NodeMetric metric, NodeMetricInterval interval, int limit) {
-        List<ScopedHost> hosts = scopedHosts(roleId, mdcId);
+        List<ScopedHost> hosts = scopedHosts(roleName, mdcId);
         if (hosts.isEmpty()) {
             return List.of();
         }
@@ -86,7 +86,7 @@ public class ResourceExplorerMdcService {
 
     /** MDC 내 노드 목록 — 상태·검색(필드 지정) 필터, 컬럼 정렬, 페이징(1부터). 사용률은 최근 10분 평균 */
     public PageResponse<NodeListItemResponse> getMdcNodes(
-            String roleId,
+            String roleName,
             String mdcId,
             NodeStatus status,
             NodeSearchField searchField,
@@ -95,7 +95,7 @@ public class ResourceExplorerMdcService {
             int size,
             String sort) {
         Comparator<NodeListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
-        List<ScopedHost> hosts = scopedHosts(roleId, mdcId).stream()
+        List<ScopedHost> hosts = scopedHosts(roleName, mdcId).stream()
                 .filter(h -> status == null || nodeStatus(h) == status)
                 .toList();
         Map<String, HostUtilization> utilization = hosts.isEmpty()
@@ -111,14 +111,14 @@ public class ResourceExplorerMdcService {
 
     // ── 스코프 ──────────────────────────────────────────────────
 
-    /** 사용자 토큰 역할 스코프의 물리 호스트에 roleId/mdcId 필터를 적용한다. roleId 생략 시 자산 ID 기준 중복 제거. */
-    private List<ScopedHost> scopedHosts(String roleId, String mdcId) {
+    /** 사용자 토큰 역할 스코프의 물리 호스트에 roleName/mdcId 필터를 적용한다. roleName 생략 시 자산 ID 기준 중복 제거. */
+    private List<ScopedHost> scopedHosts(String roleName, String mdcId) {
         Set<String> userRoles = authService.currentUserRoleIds();
         Collection<String> roles;
-        if (roleId == null) {
+        if (roleName == null) {
             roles = userRoles;
-        } else if (userRoles.contains(roleId)) {
-            roles = List.of(roleId);
+        } else if (userRoles.contains(roleName)) {
+            roles = List.of(roleName);
         } else {
             return List.of();
         }

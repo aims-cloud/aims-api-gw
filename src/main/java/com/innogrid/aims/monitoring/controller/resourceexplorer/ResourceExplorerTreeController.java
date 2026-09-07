@@ -74,7 +74,7 @@ public class ResourceExplorerTreeController {
         return ApiResponse.ok(resourceExplorerService.search(keyword, types, limit));
     }
 
-    /** 역할은 서비스가 사용자 토큰에서 추출하므로 필터의 roleIds 는 사용하지 않는다 */
+    /** 역할은 서비스가 사용자 토큰에서 추출하므로 필터의 roleNames 는 사용하지 않는다 */
     private ResourceTreeFilter filter(List<String> mdcIds, String keyword) {
         return new ResourceTreeFilter(null, mdcIds, keyword);
     }

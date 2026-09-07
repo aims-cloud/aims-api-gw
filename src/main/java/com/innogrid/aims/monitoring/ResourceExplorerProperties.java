@@ -22,9 +22,18 @@ public class ResourceExplorerProperties {
      */
     private Duration tumblebugCacheTtl = Duration.ofMinutes(1);
 
+    /**
+     * 모니터링 항목 "존재" 판정 범위 (docs/06 §5.1, §9.4) — GPU 장치·하드웨어 센서·Tumblebug VM exporter 등록은
+     * 이 범위 안에 한 번이라도 수집 이력이 있으면 유지한다. 일시적 수집 실패만으로 기존 항목을 제거하지 않기 위한 값.
+     */
+    private Duration metricsPresenceWindow = Duration.ofHours(24);
+
     public Duration getMetricsCacheTtl() { return metricsCacheTtl; }
     public void setMetricsCacheTtl(Duration metricsCacheTtl) { this.metricsCacheTtl = metricsCacheTtl; }
 
     public Duration getTumblebugCacheTtl() { return tumblebugCacheTtl; }
     public void setTumblebugCacheTtl(Duration tumblebugCacheTtl) { this.tumblebugCacheTtl = tumblebugCacheTtl; }
+
+    public Duration getMetricsPresenceWindow() { return metricsPresenceWindow; }
+    public void setMetricsPresenceWindow(Duration metricsPresenceWindow) { this.metricsPresenceWindow = metricsPresenceWindow; }
 }

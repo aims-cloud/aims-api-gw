@@ -29,7 +29,7 @@ import org.springframework.stereotype.Service;
  * 자원 탐색기 역할 패널 조회 서비스.
  * 트리에서 역할 선택 시 KPI 카드, 노드/가상머신 상태 위젯, 자원 영역(MDC·Namespace) 목록을 제공한다.
  *
- * 경로의 roleId 가 현재 사용자 토큰에 부여된 역할이 아니면 404 를 반환한다 —
+ * 경로의 roleName 이 현재 사용자 토큰에 부여된 역할이 아니면 404 를 반환한다 —
  * 트리에 노출되지 않는 역할의 패널을 URL 로 직접 조회할 수 없다(트리·전체 자원 패널과 동일 스코프).
  * 자원 목록은 트리와 같은 원장을 쓰는 {@link ResourceScopeService} 에서 해당 역할만 조회한다.
  */
@@ -51,19 +51,19 @@ public class ResourceExplorerRoleService {
     // ── 공개 API ────────────────────────────────────────────────
 
     /** KPI 카드 — 멤버/MDC/Namespace/물리 호스트/가상머신 수, Running/Pending/Stop/Error(호스트+VM 합산) */
-    public RoleSummaryResponse getRoleSummary(String roleId) {
-        Scope scope = accessibleScope(roleId);
-        List<ScopedHost> hosts = scope.hostsOf(roleId);
-        List<ScopedVm> vms = scope.vmsOf(roleId);
+    public RoleSummaryResponse getRoleSummary(String roleName) {
+        Scope scope = accessibleScope(roleName);
+        List<ScopedHost> hosts = scope.hostsOf(roleName);
+        List<ScopedVm> vms = scope.vmsOf(roleName);
 
         List<ResourceStatus> statuses = new ArrayList<>();
         hosts.forEach(h -> statuses.add(h.status()));
         vms.forEach(v -> statuses.add(v.status()));
 
         return new RoleSummaryResponse(
-                userRepository.countByRoles_Name(roleId),
+                userRepository.countByRoles_Name(roleName),
                 hosts.stream().map(ScopedHost::mdcId).distinct().count(),
-                scope.namespacesOf(roleId).size(),
+                scope.namespacesOf(roleName).size(),
                 hosts.size(),
                 vms.size(),
                 count(statuses, ResourceStatus.RUNNING),
@@ -73,29 +73,29 @@ public class ResourceExplorerRoleService {
     }
 
     /** 노드 상태 위젯 — 상태별 분포 도넛 (전체 자원 패널과 동일 구조) */
-    public ResourceStatusDistributionResponse getNodeStatus(String roleId) {
-        List<ResourceStatus> statuses = accessibleScope(roleId).hostsOf(roleId).stream()
+    public ResourceStatusDistributionResponse getNodeStatus(String roleName) {
+        List<ResourceStatus> statuses = accessibleScope(roleName).hostsOf(roleName).stream()
                 .map(ScopedHost::status)
                 .toList();
         return distribution("NODE", statuses);
     }
 
     /** 가상머신 상태 위젯 — 상태별 분포 도넛 (1세부 가상자원 + Tumblebug VM) */
-    public ResourceStatusDistributionResponse getVmStatus(String roleId) {
-        List<ResourceStatus> statuses = accessibleScope(roleId).vmsOf(roleId).stream()
+    public ResourceStatusDistributionResponse getVmStatus(String roleName) {
+        List<ResourceStatus> statuses = accessibleScope(roleName).vmsOf(roleName).stream()
                 .map(ScopedVm::status)
                 .toList();
         return distribution("VM", statuses);
     }
 
     /** 자원 영역 섹션 — MDC 행(물리 호스트+1세부 VM)과 Namespace 행(Tumblebug VM), 키워드 검색·컬럼 정렬·페이징(1부터) */
-    public PageResponse<RoleAreaListItemResponse> getRoleAreas(String roleId, String keyword, int page, int size, String sort) {
+    public PageResponse<RoleAreaListItemResponse> getRoleAreas(String roleName, String keyword, int page, int size, String sort) {
         Comparator<RoleAreaListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
-        Scope scope = accessibleScope(roleId);
+        Scope scope = accessibleScope(roleName);
 
         List<RoleAreaListItemResponse> rows = new ArrayList<>();
-        rows.addAll(mdcRows(scope.hostsOf(roleId), scope.vmsOf(roleId)));
-        rows.addAll(namespaceRows(scope.namespacesOf(roleId), scope.vmsOf(roleId)));
+        rows.addAll(mdcRows(scope.hostsOf(roleName), scope.vmsOf(roleName)));
+        rows.addAll(namespaceRows(scope.namespacesOf(roleName), scope.vmsOf(roleName)));
 
         List<RoleAreaListItemResponse> filtered = rows.stream()
                 .filter(row -> matchesKeyword(row, keyword))
@@ -106,12 +106,12 @@ public class ResourceExplorerRoleService {
 
     // ── 역할 접근 검증 ──────────────────────────────────────────
 
-    /** roleId 가 현재 사용자 토큰에 부여된 역할일 때만 그 역할의 스코프를 조회한다. 아니면 404. */
-    private Scope accessibleScope(String roleId) {
-        if (!authService.currentUserRoleIds().contains(roleId)) {
-            throw new BusinessException(HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleId);
+    /** roleName 이 현재 사용자 토큰에 부여된 역할일 때만 그 역할의 스코프를 조회한다. 아니면 404. */
+    private Scope accessibleScope(String roleName) {
+        if (!authService.currentUserRoleIds().contains(roleName)) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleName);
         }
-        return scopeService.scopeOf(List.of(roleId));
+        return scopeService.scopeOf(List.of(roleName));
     }
 
     // ── 집계 내부 ───────────────────────────────────────────────

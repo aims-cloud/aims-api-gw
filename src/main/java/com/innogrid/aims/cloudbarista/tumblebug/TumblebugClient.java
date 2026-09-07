@@ -59,6 +59,11 @@ public class TumblebugClient {
         rest.delete().uri("/ns/{ns}/infra/{id}", nsId, infraId).retrieve().toBodilessEntity();
     }
 
+    /** Node(VM) 상세 — spec·image·IP·connection·cspResourceId 등 (자원 탐색기 VM 정보 표) */
+    public Map<String, Object> getNode(String nsId, String infraId, String nodeId) {
+        return rest.get().uri("/ns/{ns}/infra/{id}/node/{nodeId}", nsId, infraId, nodeId).retrieve().body(MAP_TYPE);
+    }
+
     public Map<String, Object> sendCommand(String nsId, String infraId, Map<String, Object> body) {
         return rest.post().uri("/ns/{ns}/cmd/infra/{id}", nsId, infraId)
                 .body(body).retrieve().body(MAP_TYPE);

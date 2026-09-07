@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -89,6 +90,41 @@ class HostMetricsQueryServiceTest {
         }).when(client).queryResults(anyString());
         Map<String, HostUtilization> result = service.utilizationByInstance(NodeMetricInterval.LAST_10M);
         assertThat(result).isEmpty();                                 // NaN 은 값으로 취급하지 않는다
+    }
+
+    @Test
+    void Tumblebug_VM_사용률은_tb_라벨로_묶어_ns_infra_node_키로_돌려준다() {
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            assertThat(q).contains("tb_node!=\"\"").doesNotContain("by (instance)");
+            if (!q.contains("MemAvailable")) {                        // 메모리 식은 벡터 나눗셈이라 by 절이 없다
+                assertThat(q).contains("by (tb_ns, tb_infra, tb_node)");
+            }
+            if (q.contains("node_cpu_seconds_total")) return List.of(tbVector("openstack", "openstack-infra-01", "openstack-nodegroup-01-1", "7.25"));
+            if (q.contains("MemAvailable")) return List.of(tbVector("openstack", "openstack-infra-01", "openstack-nodegroup-01-1", "41.0"));
+            return List.of();
+        });
+
+        Map<String, HostUtilization> result = service.utilizationByTumblebugNode(NodeMetricInterval.LAST_10M);
+
+        String key = HostMetricsQueryService.tumblebugKey("openstack", "openstack-infra-01", "openstack-nodegroup-01-1");
+        assertThat(key).isEqualTo("openstack/openstack-infra-01/openstack-nodegroup-01-1");
+        assertThat(result).containsOnlyKeys(key);
+        assertThat(result.get(key).cpuUtilization()).isEqualTo(7.3);
+        assertThat(result.get(key).memoryUtilization()).isEqualTo(41.0);
+        assertThat(result.get(key).fileSystemUtilization()).isNull();
+
+        // 물리 호스트 조회는 그대로 instance 기준이며 tb 필터가 없다
+        org.mockito.Mockito.clearInvocations(client);
+        org.mockito.Mockito.doReturn(List.of()).when(client).queryResults(anyString());   // 답변 스텁 뒤 재스텁은 doReturn 으로
+        service.utilizationByInstance(NodeMetricInterval.LAST_10M);
+        verify(client, times(4)).queryResults(anyString());
+        verify(client, never()).queryResults(org.mockito.ArgumentMatchers.contains("tb_"));
+    }
+
+    private static Map<String, Object> tbVector(String ns, String infra, String node, String value) {
+        return Map.of("metric", Map.of("tb_ns", ns, "tb_infra", infra, "tb_node", node),
+                "value", List.of(1_757_000_000, value));
     }
 
     private static Map<String, Object> vector(String instance, String value) {

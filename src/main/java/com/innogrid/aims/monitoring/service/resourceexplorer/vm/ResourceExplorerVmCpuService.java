@@ -1,48 +1,100 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetricTrendResponse.Series;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuDevice;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 자원 탐색기 VM CPU 카테고리 패널 조회 서비스.
  * 트리에서 VM 하위 CPU 항목 선택 시 개요(KPI 카드·CPU 목록)와 모니터링(mode 별 차트 9종) 탭 데이터를 제공한다.
+ *
+ * VM 은 nsId·infraId·nodeId 로 식별하고(스코프 밖·부재는 404), 지표는 VM 안 node_exporter 를
+ * {@code tb_ns/tb_infra/tb_node} 라벨로 좁혀 읽는다({@link MetricSelector#tumblebugNode}).
  * KPI 카드 4종은 노드 CPU 와 동일 구조라 CpuSummaryResponse 를 재사용한다.
  * VM 상세 패널은 ResourceExplorerVmService, 노드 CPU 는 ResourceExplorerNodeCpuService 가 담당한다.
  */
 @Service
 public class ResourceExplorerVmCpuService {
 
-    /** 개요 탭 KPI 카드 4종 — Used / I/O Wait / System / Steal (%) */
-    public CpuSummaryResponse getCpuSummary(String vmId) {
-        // TODO:: VM 내부 지표(VM 내 node_exporter node_cpu_seconds_total) mode 별 비율 계산으로 카드 구성
-        throw dataSourceNotImplemented();
+    private final TumblebugPanelSupport support;
+    private final HostCategoryMetricsQueryService metrics;
+
+    public ResourceExplorerVmCpuService(TumblebugPanelSupport support, HostCategoryMetricsQueryService metrics) {
+        this.support = support;
+        this.metrics = metrics;
     }
 
-    /** 개요 탭 CPU 목록 — 소켓/벤더/모델/코어·스레드/수집 상태, 페이징(1부터)·컬럼 정렬 */
-    public PageResponse<VmCpuListItemResponse> getCpuDevices(String vmId,
+    /** 개요 탭 KPI 카드 4종 — Used / I/O Wait / System / Steal (%). 미수집은 null */
+    public CpuSummaryResponse getCpuSummary(String roleName, String nsId, String infraId, String nodeId) {
+        return metrics.cpuSummary(selector(roleName, nsId, infraId, nodeId));
+    }
+
+    /**
+     * 개요 탭 CPU 목록 — 소켓/벤더/모델/코어·스레드/수집 상태, 페이징(1부터)·컬럼 정렬.
+     * 수집 상태는 CPU 지표가 Thanos 에 있으면 COLLECTING, 없으면 목록 자체가 빈다.
+     */
+    public PageResponse<VmCpuListItemResponse> getCpuDevices(String roleName, String nsId, String infraId, String nodeId,
                                                              int page, int size, String sort) {
-        // TODO:: VM 내부 node_cpu_info 레이블과 수집 메타를 병합해 목록 구성
-        throw dataSourceNotImplemented();
+        Comparator<VmCpuListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        List<VmCpuListItemResponse> rows = metrics.cpuDevices(selector(roleName, nsId, infraId, nodeId)).stream()
+                .map(ResourceExplorerVmCpuService::row)
+                .sorted(comparator)
+                .toList();
+        return PageResponse.of(rows, page, size);
     }
 
-    /** 모니터링 탭 차트 — CPU mode 별 시계열 9종 */
-    public VmCpuMetricTrendResponse getCpuMetricTrend(String vmId, VmCpuMetric metric,
-                                                      Instant from, Instant to, String step) {
-        // TODO:: Thanos range 쿼리로 mode 별 시계열 구성 (참고 설계 기준 — AIMS 화면 확정 시 지표 세트 조정)
-        throw dataSourceNotImplemented();
+    /** 모니터링 탭 차트 — CPU mode 별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
+    public VmCpuMetricTrendResponse getCpuMetricTrend(String roleName, String nsId, String infraId, String nodeId,
+                                                      VmCpuMetric metric, NodeMetricInterval interval) {
+        MetricSelector sel = selector(roleName, nsId, infraId, nodeId);
+        Instant to = Instant.now();
+        Instant from = to.minus(interval.window());
+        String step = interval.defaultStep();
+        var points = metrics.cpuTrend(metric, sel, from, to, step);
+        return new VmCpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
+                points.isEmpty() ? List.of() : List.of(new Series("cpu", points)));
     }
 
-    private ResponseStatusException dataSourceNotImplemented() {
-        return new ResponseStatusException(
-                HttpStatus.NOT_IMPLEMENTED,
-                "VM CPU 지표 데이터와 자원 탐색기 VM CPU 패널의 매핑 구현 전입니다.");
+    private MetricSelector selector(String roleName, String nsId, String infraId, String nodeId) {
+        support.accessibleNode(roleName, nsId, infraId, nodeId);
+        return MetricSelector.tumblebugNode(nsId, infraId, nodeId);
+    }
+
+    private static VmCpuListItemResponse row(CpuDevice d) {
+        return new VmCpuListItemResponse(d.socket(), d.vendor(), d.model(), d.coreCount(), d.threadCount(),
+                MonitoringStatus.COLLECTING.name());
+    }
+
+    /** sort 파라미터("{필드},{asc|desc}") — socket|vendor|model|coreCount|threadCount, 동률은 소켓순 */
+    private static Comparator<VmCpuListItemResponse> comparator(String sort) {
+        String[] parts = sort.split(",", 2);
+        String field = parts[0].trim();
+        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
+
+        Comparator<VmCpuListItemResponse> comparator = switch (field) {
+            case "socket" -> Comparator.comparingInt(VmCpuListItemResponse::socket);
+            case "vendor" -> Comparator.comparing(VmCpuListItemResponse::vendor, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "model" -> Comparator.comparing(VmCpuListItemResponse::model, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "coreCount" -> Comparator.comparingInt(VmCpuListItemResponse::coreCount);
+            case "threadCount" -> Comparator.comparingInt(VmCpuListItemResponse::threadCount);
+            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+        };
+        Comparator<VmCpuListItemResponse> stable = comparator.thenComparingInt(VmCpuListItemResponse::socket);
+        return desc ? stable.reversed() : stable;
     }
 }

@@ -98,11 +98,28 @@ public class PlacementService {
 
         history.setCandidateCount(context.nodes().size());
 
-        if (!result.candidateScores().isEmpty()) {
-            var best = result.candidateScores().get(0);
-            history.setScoreDetails(best.cpuScore(), best.memoryScore(),
-                    best.powerScore(), best.temperatureScore(), best.networkScore());
-        }
+        // 선택된 노드의 점수를 남긴다.
+        //
+        // 예전에는 candidateScores 의 첫 항목을 썼는데, 그 목록은 **제외된 노드까지 포함해** 총점순으로 정렬돼
+        // 있다(엔진 3종 공통). 승자는 제외되지 않은 노드 중에서 고르므로, 점수를 깎지 않는 제약(GPU·디스크·
+        // 링크 DOWN·MDC 예산)에 걸린 노드가 1위이면 **첫 항목이 승자가 아니다.**
+        //
+        // 그 결과 한 행 안에서 총점(finalScore)·사유·노드 상태는 승자 것인데 차원별 점수만 다른 노드 것이었다.
+        // 엔진이 만드는 사유 문자열에도 승자의 5차원 값이 그대로 찍히므로, 같은 행의 텍스트와 컬럼이 서로
+        // 다른 노드를 가리켰다.
+        //
+        // 찾는 키는 nodeId 하나다 — 바로 아래에서 노드 상태를 찾는 context.node(...) 와 같은 기준이어야
+        // 한 행의 점수와 사용률이 같은 노드에서 온다.
+        //
+        // 못 찾으면 0 으로 둔다. 배치에 실패한 결정이 그렇고(선택된 노드가 없다), 그 행은 이미 총점과
+        // 노드 상태를 0 으로 쓰고 있어 이 편이 행 전체와 일관된다. 점수 필드가 원시형이라 "모름"은 표현할
+        // 수 없고, 예전처럼 제외 노드 값을 남기면 그 숫자가 어느 노드 것인지 적을 자리가 없다.
+        result.candidateScores().stream()
+                .filter(score -> score.nodeId().equals(result.selectedNodeId()))
+                .findFirst()
+                .ifPresent(selected -> history.setScoreDetails(
+                        selected.cpuScore(), selected.memoryScore(),
+                        selected.powerScore(), selected.temperatureScore(), selected.networkScore()));
         context.node(result.selectedNodeId())
                 .ifPresent(n -> history.setNodeStatus(
                         n.getCpuUsagePercent(), n.getMemoryUsagePercent(),

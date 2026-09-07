@@ -1,0 +1,84 @@
+package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+import com.innogrid.aims.auth.service.AuthService;
+import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.infra.entity.RoleNamespace;
+import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusSummary;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugStatusMapper;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbInfra;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+
+/**
+ * Namespace·Infra 패널 공통 — Namespace 접근 검증과 Tumblebug 스냅샷 조회, VM 상태 집계.
+ *
+ * 접근 규칙은 트리와 같다: nsId 가 토큰 역할(roleName 지정 시 그 역할)의 role_namespaces 매핑에 있어야 하며,
+ * 아니면 404 다. 스냅샷은 요청 Namespace 1개만 조회한다({@link TumblebugTreeBuilder#snapshot}, 캐시 1분).
+ */
+@Component
+public class TumblebugPanelSupport {
+
+    private final AuthService authService;
+    private final RoleNamespaceRepository roleNamespaceRepository;
+    private final TumblebugTreeBuilder tumblebugTreeBuilder;
+
+    public TumblebugPanelSupport(AuthService authService,
+                                 RoleNamespaceRepository roleNamespaceRepository,
+                                 TumblebugTreeBuilder tumblebugTreeBuilder) {
+        this.authService = authService;
+        this.roleNamespaceRepository = roleNamespaceRepository;
+        this.tumblebugTreeBuilder = tumblebugTreeBuilder;
+    }
+
+    /** 스코프 검증을 통과한 Namespace 의 Tumblebug 스냅샷 — 매핑되지 않은 Namespace 면 404 */
+    public TbSnapshot accessibleNamespace(String roleName, String nsId) {
+        Set<String> userRoles = authService.currentUserRoleIds();
+        List<String> roles = roleName == null ? new ArrayList<>(userRoles)
+                : userRoles.contains(roleName) ? List.of(roleName) : List.of();
+        boolean mapped = !roles.isEmpty() && roleNamespaceRepository.findByRole_NameIn(roles).stream()
+                .map(RoleNamespace::getNsId)
+                .anyMatch(nsId::equals);
+        if (!mapped) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "Namespace 를 찾을 수 없습니다: " + nsId);
+        }
+        return tumblebugTreeBuilder.snapshot(Set.of(nsId));
+    }
+
+    /** 스냅샷에서 Infra 1개 — 없으면 404 */
+    public static TbInfra infraOf(TbSnapshot snapshot, String nsId, String infraId) {
+        return snapshot.infrasByNamespace().getOrDefault(nsId, List.of()).stream()
+                .filter(i -> i.id().equals(infraId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "Infra 를 찾을 수 없습니다: " + infraId));
+    }
+
+    /** Node(VM) 목록의 §6.1 상태 버킷 */
+    public static List<ResourceStatus> statusesOf(List<TbNode> nodes) {
+        return nodes.stream()
+                .map(n -> ResourceStatus.valueOf(TumblebugStatusMapper.bucket(n.status()).name()))
+                .toList();
+    }
+
+    /** Node(VM) 목록의 상태 스택바 */
+    public static ResourceStatusSummary summaryOf(List<TbNode> nodes) {
+        return ResourceStatusSummary.of(statusesOf(nodes));
+    }
+
+    public static long count(List<ResourceStatus> statuses, ResourceStatus status) {
+        return statuses.stream().filter(s -> s == status).count();
+    }
+
+    /** nodeGroupId 가 비어 있으면 미분류 */
+    public static boolean isUnclassified(TbNode node) {
+        return node.nodeGroupId() == null || node.nodeGroupId().isBlank();
+    }
+}

@@ -48,6 +48,8 @@ class HistoryPageEndpointTest {
     private final List<Long> seeded = new ArrayList<>();
     private static final long WORKLOAD_A = 9_900_001L;
     private static final long WORKLOAD_B = 9_900_002L;
+    /** 위 둘의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
+    private static final long WORKLOAD_C = 9_900_003L;
 
     @BeforeEach
     void seed() {
@@ -100,6 +102,51 @@ class HistoryPageEndpointTest {
                 .param("workloadId", String.valueOf(WORKLOAD_B))).get("totalElements").asInt(), "B 의 실패: 15,20");
         assertEquals(0, data(get(PAGE).param("size", "100").param("engineName", "power")
                 .param("workloadId", String.valueOf(WORKLOAD_A))).get("totalElements").asInt(), "A 는 전부 weighted");
+    }
+
+    /**
+     * {@code success} 가 NULL 인 행은 두 가지다 — 이 컬럼이 생기기 전에 쌓인 행, 그리고 단건 배치가 실행 연결 없이
+     * 만든 옛 행(지금은 둘 다 값을 남긴다). 실패한 결정은 언제나 명시적 false 로 저장되므로 <b>NULL 은 전부 성공</b>
+     * 인데, 조회 필터만 그 해석을 따르지 않아 성공한 결정이 통째로 빠졌다.
+     *
+     * <p>다른 시드(WORKLOAD_A·B, 엔진 weighted·power)를 건드리지 않도록 <b>제3의 워크로드 id 와 다른 엔진명</b>
+     * 으로 심는다 — 그러지 않으면 위의 건수 단언들이 함께 깨진다.</p>
+     */
+    @DisplayName("성공을 물으면 성공 여부가 비어 있는 행도 함께 나온다 — 실패를 물을 때는 아니다")
+    @Test
+    void success_filter_includes_null_rows() throws Exception {
+        SchedulingHistory unlinked = new SchedulingHistory(WORKLOAD_C, "hp-null", "mdc-01", "n1",
+                0.5, "r", "solo", "default");   // linkToRun 을 부르지 않는다 → success 가 NULL
+        Long id = repository.save(unlinked).getId();
+        try {
+            assertEquals(1, data(get(PAGE).param("size", "100").param("success", "true")
+                            .param("workloadId", String.valueOf(WORKLOAD_C))).get("totalElements").asInt(),
+                    "성공 여부가 비어 있는 행이 '성공' 필터에서 빠졌다");
+            assertEquals(0, data(get(PAGE).param("size", "100").param("success", "false")
+                            .param("workloadId", String.valueOf(WORKLOAD_C))).get("totalElements").asInt(),
+                    "비어 있는 행을 '실패' 로도 세면 없는 실패를 발명하는 것이다");
+        } finally {
+            repository.deleteById(id);
+        }
+    }
+
+    /**
+     * 필터가 최상위 OR 로 잘못 조립되면 다른 조건이 무력화된다 — 그러면 위 단언은 통과하면서
+     * {@code success=true} 에 {@code workloadId} 를 함께 준 결과가 전체 행으로 부풀어 오른다.
+     * 그래서 조합 필터의 건수와, 성공·실패 두 필터의 합이 전체와 같은지를 함께 본다.
+     */
+    @DisplayName("성공·실패 필터의 합이 전체와 같고, 다른 조건과 함께 걸어도 무너지지 않는다")
+    @Test
+    void success_filter_partitions_and_combines() throws Exception {
+        int total = data(get(PAGE).param("size", "1")).get("totalElements").asInt();
+        int ok = data(get(PAGE).param("size", "1").param("success", "true")).get("totalElements").asInt();
+        int failed = data(get(PAGE).param("size", "1").param("success", "false")).get("totalElements").asInt();
+
+        assertEquals(total, ok + failed, "성공(빈 값 포함)과 실패가 전체를 정확히 둘로 나눠야 한다");
+
+        assertEquals(9, data(get(PAGE).param("size", "100").param("success", "true")
+                        .param("workloadId", String.valueOf(WORKLOAD_A))).get("totalElements").asInt(),
+                "A 12건 중 실패 3건(0,5,10)을 뺀 나머지. 필터가 최상위 OR 이면 이 수가 부풀어 오른다");
     }
 
     @DisplayName("정렬은 허용 필드만 되고 나머지는 400")

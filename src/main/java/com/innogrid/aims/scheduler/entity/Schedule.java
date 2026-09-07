@@ -23,6 +23,18 @@ public class Schedule {
     /** 스케줄 ID 로 허용하는 형식. 화면에서 사용자가 직접 입력한다. */
     public static final String ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_.-]{0,49}$";
 
+    /**
+     * 문자열 컬럼의 길이 상한. 서비스가 이 값으로 400 을 만든다.
+     *
+     * <p>컬럼 정의가 이 상수를 직접 쓴다({@code @Column(length = NAME_MAX)}) — 한쪽만 바뀌는 일이 구조적으로 불가능하다.
+     * 같은 패키지의 다른 원장 엔티티와 같은 형태다. 검증이 없으면 INSERT 가 컬럼 길이에서 실패하고, 그 예외를 잡는
+     * 곳이 없어 클라이언트는 400 이 아니라 403(본문 없음)을 받는다.</p>
+     */
+    public static final int NAME_MAX = 100;
+    public static final int CRON_MAX = 120;
+    public static final int DESCRIPTION_MAX = 300;
+    public static final int ENGINE_MAX = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -31,7 +43,7 @@ public class Schedule {
     @Column(nullable = false, unique = true, length = 50)
     private String scheduleId;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = NAME_MAX)
     private String name;
 
     /** 배치 대상 리소스 종류. null 이면 VM 으로 해석한다. */
@@ -40,7 +52,7 @@ public class Schedule {
     private Workload.ResourceType resourceType;
 
     /** Quartz 표기 cron. 사용자가 입력한 원문 그대로 보관해 화면에 되돌려 준다. */
-    @Column(nullable = false, length = 120)
+    @Column(nullable = false, length = CRON_MAX)
     private String cronExpression;
 
     /** cron 에 따라 자동으로 실행할지. 꺼도 즉시 실행은 된다. */
@@ -51,12 +63,12 @@ public class Schedule {
     @Column(nullable = false)
     private boolean enabled = true;
 
-    @Column(length = 300)
+    @Column(length = DESCRIPTION_MAX)
     private String description;
 
     // ── 명세 확장 (화면에 없음, 전부 선택) ──────────────────────
     /** 사용할 엔진. null 이면 정책의 기본 엔진, 그것도 없으면 weighted. */
-    @Column(length = 30)
+    @Column(length = ENGINE_MAX)
     private String engine;
 
     /** 사용할 배치 정책. null 이면 리소스 종류별 활성 정책. */

@@ -252,7 +252,8 @@ public class SchedulerController {
     @Operation(summary = "스케줄링 이력 페이징 조회",
                description = "배열로 최근 " + HISTORY_MAX + "건까지만 주는 /history 와 달리, 여기는 상한 없이 페이지로 전량에 닿습니다"
                        + "(총건수도 잘리지 않습니다). page 는 1부터, size 최대 100, "
-                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName 필터는 선택입니다.")
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName 필터는 선택입니다. "
+                       + "success=true 는 성공 여부가 비어 있는 기존 행도 포함하고(비어 있으면 성공으로 봅니다), success=false 는 명시적 실패만 돌려줍니다.")
     @GetMapping("/history/page")
     public ApiResponse<PageResponse<SchedulingHistoryResponse>> getHistoryPage(
             @RequestParam(required = false) Long workloadId,

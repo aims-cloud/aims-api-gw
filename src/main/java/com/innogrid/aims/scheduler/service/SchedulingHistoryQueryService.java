@@ -58,7 +58,14 @@ public class SchedulingHistoryQueryService {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (workloadId != null) predicates.add(cb.equal(root.get("workloadId"), workloadId));
-            if (success != null) predicates.add(cb.equal(root.get("success"), success));
+            if (success != null) {
+                // NULL 은 옛 행이다 — 이 컬럼이 생기기 전에 쌓인 행, 그리고 단건 배치가 실행 연결 없이 만든 행.
+                // 실패는 언제나 명시적 false 로 저장되므로 NULL 은 전부 성공이고, 성공을 물을 때만 포함한다
+                // (실패에 끼우면 없는 실패를 발명하게 된다).
+                predicates.add(Boolean.TRUE.equals(success)
+                        ? cb.or(cb.equal(root.get("success"), Boolean.TRUE), cb.isNull(root.get("success")))
+                        : cb.equal(root.get("success"), Boolean.FALSE));
+            }
             if (engineName != null && !engineName.isBlank()) predicates.add(cb.equal(root.get("engineName"), engineName.trim()));
             return cb.and(predicates.toArray(new Predicate[0]));
         };

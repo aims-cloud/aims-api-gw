@@ -107,7 +107,7 @@ class ResourceScopeServiceTest {
             java.util.Collection<String> names = inv.getArgument(0);
             return names.stream().flatMap(n -> nsMappings.getOrDefault(n, List.of()).stream()).toList();
         });
-        when(tumblebugTreeBuilder.snapshot()).thenReturn(new TbSnapshot(Instant.now(),
+        when(tumblebugTreeBuilder.snapshot(anyCollection())).thenReturn(new TbSnapshot(Instant.now(),
                 Map.of("ns-a", "Namespace A"),
                 Map.of("ns-a", List.of(new TbInfra("infra-1", "infra-1", "Running-(3/3)", List.of(
                         new TbNode("vm-1", "vm-1", "Running", "g1", "aws"),

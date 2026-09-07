@@ -20,11 +20,16 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeRe
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +52,7 @@ class TumblebugTreeBuilderTest {
     MutableClock clock = new MutableClock(Instant.parse("2026-09-04T09:00:00Z"));
     ResourceExplorerProperties properties = new ResourceExplorerProperties();
     TumblebugTreeBuilder builder;
+    List<Long> waits = new java.util.ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -71,12 +77,15 @@ class TumblebugTreeBuilderTest {
 
         MonitoringCapabilityResolver resolver = new MonitoringCapabilityResolver(metricsClient, properties, clock);
         builder = new TumblebugTreeBuilder(tumblebugClient, roleNamespaceRepository, resolver, properties, clock);
+        builder.setSleeper(waits::add);                                 // 재시도 대기는 기록만
     }
 
     private void stubTumblebugHealthy() {
         when(tumblebugClient.listNamespaces()).thenReturn(Map.of("ns", List.of(
                 Map.of("id", "ns-a", "name", "Namespace A", "uid", "u-a"),
-                Map.of("id", "ns-b", "name", "Namespace B", "uid", "u-b"))));
+                Map.of("id", "ns-b", "name", "Namespace B", "uid", "u-b"),
+                Map.of("id", "default", "name", "default", "uid", "u-d"),      // 매핑되지 않은 Namespace
+                Map.of("id", "system", "name", "system", "uid", "u-s"))));
         when(tumblebugClient.listInfra("ns-a")).thenReturn(Map.of("infra", List.of(
                 Map.of("id", "infra-1", "name", "infra-1", "status", "Running-(3/3)", "node", List.of(
                         node("vm-2", "Terminated", "g1", "aws"),
@@ -179,6 +188,59 @@ class TumblebugTreeBuilderTest {
         // vm-3: 시계열 없음 → NOT_CONFIGURED, 항목 없음
         assertThat(vm3.monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);
         assertThat(vm3.leaf()).isTrue();
+    }
+
+    // ── 요청 범위·재시도·격리 ───────────────────────────────────
+
+    @Test
+    void 매핑된_Namespace만_Infra를_조회한다() {
+        builder.build(List.of("ADMIN"));
+        verify(tumblebugClient).listInfra("ns-a");
+        verify(tumblebugClient).listInfra("ns-b");
+        verify(tumblebugClient, never()).listInfra("default");         // Tumblebug rate limit 을 넘기지 않도록
+        verify(tumblebugClient, never()).listInfra("system");
+        verify(tumblebugClient, never()).listInfra("ns-x");            // Tumblebug 에 없는 매핑
+    }
+
+    @Test
+    void 응답이_429면_짧게_기다렸다가_재시도해_정상_조립한다() {
+        HttpClientErrorException tooMany = HttpClientErrorException.create(
+                HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", HttpHeaders.EMPTY, new byte[0], null);
+        Map<String, Object> ok = tumblebugClient.listInfra("ns-a");
+        org.mockito.Mockito.clearInvocations(tumblebugClient);          // 위 스텁 조회는 호출 수에서 제외
+        doAnswer(new org.mockito.stubbing.Answer<Object>() {
+            int calls = 0;
+            @Override public Object answer(org.mockito.invocation.InvocationOnMock inv) {
+                if (calls++ < 2) throw tooMany;                          // 두 번 429, 세 번째 성공
+                return ok;
+            }
+        }).when(tumblebugClient).listInfra("ns-a");
+
+        ResourceTreeNodeResponse vmRoot = builder.build(List.of("ADMIN")).get("ADMIN");
+
+        assertThat(vmRoot.status()).isNull();
+        assertThat(vmRoot.children().get(0).status()).isNull();
+        assertThat(vmRoot.children().get(0).children()).hasSize(2);      // infra-1, infra-2
+        verify(tumblebugClient, times(3)).listInfra("ns-a");
+        assertThat(waits).containsExactly(300L, 600L);
+    }
+
+    @Test
+    void Namespace_하나의_조회_실패는_그_Namespace만_조회_실패_상태로_격리한다() {
+        HttpClientErrorException tooMany = HttpClientErrorException.create(
+                HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", HttpHeaders.EMPTY, new byte[0], null);
+        when(tumblebugClient.listInfra("ns-b")).thenThrow(tooMany);      // 재시도 후에도 실패
+
+        ResourceTreeNodeResponse vmRoot = builder.build(List.of("ADMIN")).get("ADMIN");
+
+        assertThat(vmRoot.status()).isNull();                          // 루트는 정상
+        ResourceTreeNodeResponse nsA = vmRoot.children().get(0);
+        ResourceTreeNodeResponse nsB = vmRoot.children().get(1);
+        assertThat(nsA.status()).isNull();
+        assertThat(nsA.children()).hasSize(2);                         // ns-a 는 정상 조립
+        assertThat(nsB.status()).isEqualTo(TumblebugTreeBuilder.UNAVAILABLE_STATUS);
+        assertThat(nsB.children()).isEmpty();
+        verify(tumblebugClient, times(1 + TumblebugTreeBuilder.MAX_RETRIES)).listInfra("ns-b");
     }
 
     // ── 캐시·장애 ───────────────────────────────────────────────

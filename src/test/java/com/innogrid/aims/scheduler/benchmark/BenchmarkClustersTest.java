@@ -206,6 +206,19 @@ class BenchmarkClustersTest {
         }
     }
 
+    /**
+     * 세 판이 같은 주기를 쓴다. 한 주기를 훑는 계산은 이 값으로 창을 정하므로, 판마다 주기가
+     * 다르면 같은 시각 지점이 판마다 다른 위상을 가리켜 판 간 비교가 어긋난다.
+     */
+    @DisplayName("세 판의 파동 주기가 육십 분으로 같다")
+    @Test
+    void all_boards_share_the_same_period() {
+        for (String boardId : clusters.boardIds()) {
+            assertEquals(60, clusters.get(boardId).periodMinutes(),
+                    boardId + " 의 주기가 다르다 — 시각 스윕의 창이 판마다 달라진다");
+        }
+    }
+
     @DisplayName("다이제스트는 판마다 다르고 안정적이다")
     @Test
     void digest_is_stable_and_differs_per_board() {

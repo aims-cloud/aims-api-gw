@@ -61,6 +61,18 @@ public class TumblebugPanelSupport {
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "Infra 를 찾을 수 없습니다: " + infraId));
     }
 
+    /** 스코프 검증을 통과한 Namespace 의 스냅샷에서 Node(VM) 1개 — Namespace 미매핑·Infra/Node 부재면 404 */
+    public TbNode accessibleNode(String roleName, String nsId, String infraId, String nodeId) {
+        TbSnapshot snapshot = accessibleNamespace(roleName, nsId);
+        return snapshot.infrasByNamespace().getOrDefault(nsId, List.of()).stream()
+                .filter(i -> i.id().equals(infraId))
+                .map(TbInfra::nodes)
+                .flatMap(List::stream)
+                .filter(n -> n.id().equals(nodeId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + nodeId));
+    }
+
     /** Node(VM) 목록의 §6.1 상태 버킷 */
     public static List<ResourceStatus> statusesOf(List<TbNode> nodes) {
         return nodes.stream()

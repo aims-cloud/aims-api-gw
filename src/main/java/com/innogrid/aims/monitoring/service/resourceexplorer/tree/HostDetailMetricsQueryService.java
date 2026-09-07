@@ -30,7 +30,7 @@ public class HostDetailMetricsQueryService {
     private static final double MB_TO_GB = 1024.0;
     private static final String RATE_WINDOW = "5m";
     private static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
-    private static final String NET_FILTER = "device!~\"lo|veth.*|docker.*|br.*|virbr.*\"";
+    static final String NET_FILTER = "device!~\"lo|veth.*|docker.*|br.*|virbr.*\"";
 
     /** 주요 지표 카드용 현재값 — null 은 미수집 */
     public record HostSummaryMetrics(Double cpuPercent, Integer coreCount,
@@ -274,7 +274,7 @@ public class HostDetailMetricsQueryService {
     }
 
     /** range 결과 1개의 values → [timestamp(Number), value(Double)] 목록. 비수치 샘플은 건너뛴다. */
-    private static List<Object[]> values(Map<String, Object> result) {
+    static List<Object[]> values(Map<String, Object> result) {
         List<Object[]> out = new ArrayList<>();
         Object values = result.get("values");
         if (!(values instanceof List<?> list)) {
@@ -304,7 +304,7 @@ public class HostDetailMetricsQueryService {
         return null;
     }
 
-    private static Double parse(Object raw) {
+    static Double parse(Object raw) {
         if (raw == null) {
             return null;
         }
@@ -324,7 +324,7 @@ public class HostDetailMetricsQueryService {
         return bytes == null ? null : round1(bytes / GB);
     }
 
-    private static Double round1(Double value) {
+    static Double round1(Double value) {
         return value == null ? null : Math.round(value * 10) / 10.0;
     }
 }

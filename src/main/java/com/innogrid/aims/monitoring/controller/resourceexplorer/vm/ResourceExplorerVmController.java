@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   모니터링 탭 — 지표별 시계열 (개요 요약 차트와 metrics/trend 공용)
  * VM 은 트리 resourceId {@code TB:{ns}/{infra}/{node}} 를 쪼갠 nsId·infraId·nodeId 쿼리 파라미터로 식별한다
  * (Tumblebug ID 에 '/' 가 올 수 있어 경로 변수 대신 쿼리 파라미터를 쓴다).
- * 접근 권한은 nsId 가 토큰 역할의 role_namespaces 매핑에 있는지로 판정하며, 없으면 404 다.
+ * 접근 권한은 nsId 가 토큰 역할(roleName 지정 시 그 역할)의 role_namespaces 매핑에 있는지로 판정하며, 없으면 404 다.
  * VM 하위 카테고리(CPU/Disk/…/GPU)는 화면 확정 시 노드 카테고리 패턴으로 별도 추가한다.
  * NodeGroup 패널은 ResourceExplorerNodeGroupController 가 담당한다.
  */
@@ -44,10 +44,11 @@ public class ResourceExplorerVmController {
                     + "네트워크 수신·송신(bytes/sec, 단위 변환은 프론트), GPU 사용률(VRAM Free/Total GB 병기), "
                     + "최근 업데이트 시각을 조회합니다. 카드가 null 이면 미수집입니다.")
     @GetMapping("/summary")
-    public ApiResponse<VmSummaryResponse> getVmSummary(@RequestParam String nsId,
+    public ApiResponse<VmSummaryResponse> getVmSummary(@RequestParam(required = false) String roleName,
+                                                       @RequestParam String nsId,
                                                        @RequestParam String infraId,
                                                        @RequestParam String nodeId) {
-        return ApiResponse.ok(resourceExplorerVmService.getVmSummary(nsId, infraId, nodeId));
+        return ApiResponse.ok(resourceExplorerVmService.getVmSummary(roleName, nsId, infraId, nodeId));
     }
 
     @Operation(summary = "VM 모니터링 차트",
@@ -58,12 +59,13 @@ public class ResourceExplorerVmController {
                     + "버킷 간격은 기간별 기본값(30s/5m/15m/1h/1d/3d)입니다.")
     @GetMapping("/metrics/trend")
     public ApiResponse<List<NodeMetricTrendResponse>> getVmMetricTrend(
+            @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
             @RequestParam String nodeId,
             @RequestParam(required = false) NodeDetailMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
-        return ApiResponse.ok(resourceExplorerVmService.getVmMetricTrend(nsId, infraId, nodeId, metric, interval));
+        return ApiResponse.ok(resourceExplorerVmService.getVmMetricTrend(roleName, nsId, infraId, nodeId, metric, interval));
     }
 
     @Operation(summary = "VM 정보",
@@ -71,9 +73,10 @@ public class ResourceExplorerVmController {
                     + "프로바이더·connectionName/region·zone/CSP 자원 ID/IP(public, private)/사양(vCPU, 메모리, 루트 디스크)/"
                     + "OS/생성 시각을 조회합니다.")
     @GetMapping("/info")
-    public ApiResponse<VmInfoResponse> getVmInfo(@RequestParam String nsId,
+    public ApiResponse<VmInfoResponse> getVmInfo(@RequestParam(required = false) String roleName,
+                                                 @RequestParam String nsId,
                                                  @RequestParam String infraId,
                                                  @RequestParam String nodeId) {
-        return ApiResponse.ok(resourceExplorerVmService.getVmInfo(nsId, infraId, nodeId));
+        return ApiResponse.ok(resourceExplorerVmService.getVmInfo(roleName, nsId, infraId, nodeId));
     }
 }

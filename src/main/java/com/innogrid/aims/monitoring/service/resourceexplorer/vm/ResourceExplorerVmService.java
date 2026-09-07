@@ -6,13 +6,9 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.cloudbarista.tumblebug.TumblebugClient;
 import com.innogrid.aims.common.exception.BusinessException;
-import com.innogrid.aims.infra.entity.RoleNamespace;
-import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeMetricTrendResponse;
@@ -25,8 +21,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.VmSummaryResponse.Gp
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.HostSummaryMetrics;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
-import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
-import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbInfra;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +32,7 @@ import org.springframework.stereotype.Service;
  *
  * <ul>
  *   <li>식별: nsId·infraId·nodeId 세 값. 트리 resourceId {@code TB:{ns}/{infra}/{node}} 를 쪼갠 것이다.</li>
- *   <li>접근: nsId 가 토큰 역할의 role_namespaces 매핑에 있고, Tumblebug 스냅샷에 그 Node 가 있어야 한다. 아니면 404.</li>
+ *   <li>접근: nsId 가 토큰 역할(roleName 지정 시 그 역할)의 role_namespaces 매핑에 있고, Tumblebug 스냅샷에 그 Node 가 있어야 한다. 아니면 404.</li>
  *   <li>지표: Thanos 를 {@code tb_ns/tb_infra/tb_node} 라벨로 좁혀 읽는다({@link MetricSelector#tumblebugNode}).
  *       VM 안 node_exporter·dcgm_exporter 에 같은 라벨이 붙으므로 선택자 하나로 두 exporter 를 가리킨다.</li>
  *   <li>정보: Tumblebug {@code GET /ns/{ns}/infra/{infra}/node/{node}} 원문에서 spec·image·IP·connection·cspResourceId 를 읽는다.</li>
@@ -50,20 +44,14 @@ public class ResourceExplorerVmService {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceExplorerVmService.class);
 
-    private final AuthService authService;
-    private final RoleNamespaceRepository roleNamespaceRepository;
-    private final TumblebugTreeBuilder tumblebugTreeBuilder;
+    private final TumblebugPanelSupport support;
     private final TumblebugClient tumblebugClient;
     private final HostDetailMetricsQueryService detailMetrics;
 
-    public ResourceExplorerVmService(AuthService authService,
-                                     RoleNamespaceRepository roleNamespaceRepository,
-                                     TumblebugTreeBuilder tumblebugTreeBuilder,
+    public ResourceExplorerVmService(TumblebugPanelSupport support,
                                      TumblebugClient tumblebugClient,
                                      HostDetailMetricsQueryService detailMetrics) {
-        this.authService = authService;
-        this.roleNamespaceRepository = roleNamespaceRepository;
-        this.tumblebugTreeBuilder = tumblebugTreeBuilder;
+        this.support = support;
         this.tumblebugClient = tumblebugClient;
         this.detailMetrics = detailMetrics;
     }
@@ -78,8 +66,8 @@ public class ResourceExplorerVmService {
     // ── 공개 API ────────────────────────────────────────────────
 
     /** 개요 탭 주요 지표 카드 5종 — 미수집이거나 GPU 미탑재면 해당 카드가 null 로 내려간다 */
-    public VmSummaryResponse getVmSummary(String nsId, String infraId, String nodeId) {
-        VmContext ctx = accessibleVm(nsId, infraId, nodeId);
+    public VmSummaryResponse getVmSummary(String roleName, String nsId, String infraId, String nodeId) {
+        VmContext ctx = accessibleVm(roleName, nsId, infraId, nodeId);
         HostSummaryMetrics m = detailMetrics.summary(ctx.selector(), ctx.selector());
         return new VmSummaryResponse(
                 OffsetDateTime.now(ZoneId.systemDefault()),
@@ -93,9 +81,9 @@ public class ResourceExplorerVmService {
 
     /** 요약 차트 — 지표별 시계열 (NETWORK 는 수신/송신 2개 시리즈, 미수집이면 빈 시리즈).
      *  metric 미지정 시 6종 전부. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep. */
-    public List<NodeMetricTrendResponse> getVmMetricTrend(String nsId, String infraId, String nodeId,
+    public List<NodeMetricTrendResponse> getVmMetricTrend(String roleName, String nsId, String infraId, String nodeId,
                                                           NodeDetailMetric metric, NodeMetricInterval interval) {
-        VmContext ctx = accessibleVm(nsId, infraId, nodeId);
+        VmContext ctx = accessibleVm(roleName, nsId, infraId, nodeId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -108,8 +96,8 @@ public class ResourceExplorerVmService {
     }
 
     /** 개요 탭 VM 정보 표 — Tumblebug Node 상세 원문에서 구성 */
-    public VmInfoResponse getVmInfo(String nsId, String infraId, String nodeId) {
-        VmContext ctx = accessibleVm(nsId, infraId, nodeId);
+    public VmInfoResponse getVmInfo(String roleName, String nsId, String infraId, String nodeId) {
+        VmContext ctx = accessibleVm(roleName, nsId, infraId, nodeId);
         Map<String, Object> node;
         try {
             node = tumblebugClient.getNode(nsId, infraId, nodeId);
@@ -156,23 +144,9 @@ public class ResourceExplorerVmService {
 
     // ── 접근 검증 ───────────────────────────────────────────────
 
-    /** nsId 가 토큰 역할 스코프에 있고 Tumblebug 스냅샷에 Node 가 존재할 때만 컨텍스트를 만든다. 아니면 404. */
-    private VmContext accessibleVm(String nsId, String infraId, String nodeId) {
-        Set<String> roles = authService.currentUserRoleIds();
-        boolean mapped = !roles.isEmpty() && roleNamespaceRepository.findByRole_NameIn(roles).stream()
-                .map(RoleNamespace::getNsId)
-                .anyMatch(nsId::equals);
-        if (!mapped) {
-            throw notFound(nodeId);
-        }
-        TbNode node = tumblebugTreeBuilder.snapshot(Set.of(nsId)).infrasByNamespace()
-                .getOrDefault(nsId, List.of()).stream()
-                .filter(i -> i.id().equals(infraId))
-                .map(TbInfra::nodes)
-                .flatMap(List::stream)
-                .filter(n -> n.id().equals(nodeId))
-                .findFirst()
-                .orElseThrow(() -> notFound(nodeId));
+    /** nsId 가 토큰 역할(roleName 지정 시 그 역할) 스코프에 있고 Tumblebug 스냅샷에 Node 가 존재할 때만 컨텍스트를 만든다. 아니면 404. */
+    private VmContext accessibleVm(String roleName, String nsId, String infraId, String nodeId) {
+        TbNode node = support.accessibleNode(roleName, nsId, infraId, nodeId);
         return new VmContext(nsId, infraId, node, MetricSelector.tumblebugNode(nsId, infraId, nodeId));
     }
 

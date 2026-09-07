@@ -1,7 +1,9 @@
 package com.innogrid.aims.scheduler.engine;
 
 import java.time.Instant;
+import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 import com.innogrid.aims.scheduler.metrics.SyntheticMetricsGateway;
+import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
@@ -69,7 +72,18 @@ class TemperatureAwareSyntheticSweepTest {
 
     private static NodeScore score(SchedulingResult result, String nodeId) {
         return result.candidateScores().stream()
-                .filter(s -> s.nodeId().equals(nodeId)).findFirst().orElseThrow();
+                .filter(s -> s.nodeId().equals(nodeId)).findFirst()
+                .orElseThrow(() -> new AssertionError(nodeId + " 가 후보에 없다 — synthetic-cluster.yml 이 바뀌었는가"));
+    }
+
+    /** 스냅샷이 기대한 계측/미계측 구성인지 먼저 확인한다 — yml 이 바뀌면 여기서 정확히 실패한다. */
+    private void assertClusterShape(NodeResourceCollector.Snapshot snapshot, long t) {
+        Set<String> measured = snapshot.nodes().stream()
+                .filter(n -> n.getTemperatureCelsius() > 0).map(NodeResource::getNodeId).collect(Collectors.toSet());
+        Set<String> unmeasured = snapshot.nodes().stream()
+                .filter(n -> n.getTemperatureCelsius() <= 0).map(NodeResource::getNodeId).collect(Collectors.toSet());
+        assertEquals(MEASURED, measured, "t=" + t + " 계측 노드 구성이 바뀌었다 — synthetic-cluster.yml 을 확인하라");
+        assertEquals(UNMEASURED, unmeasured, "t=" + t + " 미계측 노드 구성이 바뀌었다 — synthetic-cluster.yml 을 확인하라");
     }
 
     @DisplayName("미계측 노드는 모든 시각에 열 점수 셋이 중립 0_5다")
@@ -77,6 +91,7 @@ class TemperatureAwareSyntheticSweepTest {
     void unmeasured_nodes_stay_neutral_at_every_moment() {
         for (long t = BASE_EPOCH; t < BASE_EPOCH + PERIOD_SECONDS; t += STEP_SECONDS) {
             NodeResourceCollector.Snapshot snapshot = collectAt(t);
+            assertClusterShape(snapshot, t);
             PlacementContext context = PlacementContext.of(snapshot.nodes(), policy());
             SchedulingResult result = scheduler.schedule(workload(), context);
 
@@ -95,9 +110,6 @@ class TemperatureAwareSyntheticSweepTest {
                 assertEquals(0.5, balance, 1e-9, "t=" + t + " node=" + nodeId + " 열적균형은 중립이어야 한다");
                 assertEquals(0.5, cooling, 1e-9, "t=" + t + " node=" + nodeId + " 냉각점수는 중립이어야 한다");
                 assertEquals(0.0, measured, 1e-9, "t=" + t + " node=" + nodeId + " 온도계측은 0이어야 한다");
-
-                double sum = headroom * 0.30 + balance * 0.25 + cooling * 0.20;
-                assertEquals(0.375, sum, 1e-9, "t=" + t + " node=" + nodeId + " 열 3항 가중합이 0.375여야 한다");
             }
         }
     }
@@ -107,6 +119,7 @@ class TemperatureAwareSyntheticSweepTest {
     void measured_nodes_flagged_at_every_moment() {
         for (long t = BASE_EPOCH; t < BASE_EPOCH + PERIOD_SECONDS; t += STEP_SECONDS) {
             NodeResourceCollector.Snapshot snapshot = collectAt(t);
+            assertClusterShape(snapshot, t);
             PlacementContext context = PlacementContext.of(snapshot.nodes(), policy());
             SchedulingResult result = scheduler.schedule(workload(), context);
 
@@ -123,6 +136,7 @@ class TemperatureAwareSyntheticSweepTest {
     void cluster_average_counts_measured_only_at_every_moment() {
         for (long t = BASE_EPOCH; t < BASE_EPOCH + PERIOD_SECONDS; t += STEP_SECONDS) {
             NodeResourceCollector.Snapshot snapshot = collectAt(t);
+            assertClusterShape(snapshot, t);
             PlacementContext context = PlacementContext.of(snapshot.nodes(), policy());
             SchedulingResult result = scheduler.schedule(workload(), context);
 
@@ -136,8 +150,12 @@ class TemperatureAwareSyntheticSweepTest {
                     .average().orElse(0);
 
             // 모든 후보 노드가 같은 details.클러스터평균온도C 를 담고 있어야 한다 — 대표로 첫 노드에서 읽는다.
-            double actual = score(result, snapshot.nodes().get(0).getNodeId()).details().get("클러스터평균온도C");
+            // 계측 노드가 0대이면 엔진은 이 값을 null 로 돌려준다 — 이 클러스터는 계측 5대라 항상 non-null 이어야
+            // 하지만, 언박싱 전에 그 사실을 먼저 확인해 NPE 대신 의미 있는 실패 메시지를 남긴다.
+            Double actual = score(result, snapshot.nodes().get(0).getNodeId()).details().get("클러스터평균온도C");
 
+            assertNotNull(actual, "t=" + t + " 클러스터평균온도C 가 null이다 — 계측 노드가 0대일 때만 null 이어야 하는데, "
+                    + "이 클러스터는 계측 5대이므로 non-null 이어야 한다");
             assertFalse(Double.isNaN(actual), "t=" + t + " 클러스터평균온도C 가 NaN");
             assertEquals(expectedMeasuredOnly, actual, 1e-4,
                     "t=" + t + " 엔진의 클러스터평균온도C(" + actual + ")가 계측 노드만의 평균(" + expectedMeasuredOnly + ")과 달라야 한다");
@@ -154,9 +172,11 @@ class TemperatureAwareSyntheticSweepTest {
     void selected_node_is_measured_at_every_moment() {
         double minMargin = Double.MAX_VALUE;
         String worstMessage = "표본이 없음";
+        int skippedNoEligibleUnmeasured = 0;
 
         for (long t = BASE_EPOCH; t < BASE_EPOCH + PERIOD_SECONDS; t += STEP_SECONDS) {
             NodeResourceCollector.Snapshot snapshot = collectAt(t);
+            assertClusterShape(snapshot, t);
             PlacementContext context = PlacementContext.of(snapshot.nodes(), policy());
             SchedulingResult result = scheduler.schedule(workload(), context);
 
@@ -166,11 +186,22 @@ class TemperatureAwareSyntheticSweepTest {
                     "t=" + t + " 선택 노드(" + result.selectedNodeId() + ")는 계측 5대 중 하나여야 한다");
 
             double selectedTotal = score(result, result.selectedNodeId()).totalScore();
-            double bestUnmeasuredTotal = UNMEASURED.stream()
-                    .mapToDouble(nodeId -> score(result, nodeId).totalScore())
-                    .max().orElseThrow();
-
             assertFalse(Double.isNaN(selectedTotal), "t=" + t + " 선택 노드 총점이 NaN");
+
+            // score() 는 eligible 을 보지 않는다 — 부적격(제외된) 노드까지 포함하면 "선택될 수 없는 노드와의
+            // 마진" 을 재게 된다. 적격 미계측 노드로 한정한다(현 픽스처는 전원 적격이라 지금은 무해하다).
+            OptionalDouble bestUnmeasuredTotalOpt = UNMEASURED.stream()
+                    .map(nodeId -> score(result, nodeId))
+                    .filter(NodeScore::eligible)
+                    .mapToDouble(NodeScore::totalScore)
+                    .max();
+
+            if (bestUnmeasuredTotalOpt.isEmpty()) {
+                // 적격 미계측 노드가 하나도 없는 시각 — 비교 대상이 없으므로 마진 비교를 건너뛴다.
+                skippedNoEligibleUnmeasured++;
+                continue;
+            }
+            double bestUnmeasuredTotal = bestUnmeasuredTotalOpt.getAsDouble();
             assertFalse(Double.isNaN(bestUnmeasuredTotal), "t=" + t + " 최고 미계측 노드 총점이 NaN");
 
             double margin = selectedTotal - bestUnmeasuredTotal;
@@ -184,6 +215,9 @@ class TemperatureAwareSyntheticSweepTest {
             }
         }
 
-        assertTrue(minMargin > 0.02, "여유가 충분해야 흔들리지 않는다. 최소 마진 표본: " + worstMessage);
+        // 0.02 는 프로덕션의 성질이 아니라 이 픽스처 스냅샷의 최소 마진이다 — 실패 시 회귀인지
+        // synthetic-cluster.yml 드리프트로 마진 자체가 바뀐 것인지는 최소 마진 표본 값을 보고 판단하라.
+        assertTrue(minMargin > 0.02, "여유가 충분해야 흔들리지 않는다(0.02 는 프로덕션 성질이 아니라 이 픽스처 스냅샷의 값이다). "
+                + "적격 미계측 노드가 없어 건너뛴 시각 수=" + skippedNoEligibleUnmeasured + ". 최소 마진 표본: " + worstMessage);
     }
 }

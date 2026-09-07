@@ -1,0 +1,17 @@
+# 배치 비교용 워크로드 분포 — 손으로 고른 목록이 아니라 선언된 분포에서 결정적으로 뽑는다.
+# 메모리는 코어 × memoryPerCore 로 정한다(대상 클러스터가 전 노드 4096MB/코어이므로, 이 값을 틀리면
+# 전력이 아니라 메모리 산술을 측정하게 된다). 디스크는 0 — C1 디스크 검사는 총량을 아는 노드에서만
+# 걸려 판이 노드 정의에 좌우된다.
+#
+# 이 분포는 문헌의 클러스터 트레이스 형태다 — 작은 워크로드가 다수, 큰 워크로드가 소수. weight 가
+# 이 형태를 만든다(소형 60 : 중형 25 : 대형 10 : GPU 5). 균일 분포(benchmark-workloads-uniform.yml)와
+# 짝을 이뤄 돌리고, 순위가 두 분포 사이에서 뒤집히면 그 사실 자체를 보고한다.
+name: heavytail-4class
+seed: 20260907
+memoryPerCore: 4096
+diskGb: 0
+classes:
+  - { name: 소형, weight: 60, cores: 1, gpus: 0, priority: NORMAL }
+  - { name: 중형, weight: 25, cores: 2, gpus: 0, priority: NORMAL }
+  - { name: 대형, weight: 10, cores: 4, gpus: 0, priority: HIGH }
+  - { name: GPU,  weight: 5,  cores: 4, gpus: 1, priority: NORMAL }

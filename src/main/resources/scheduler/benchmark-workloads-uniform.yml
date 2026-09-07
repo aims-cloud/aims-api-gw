@@ -1,0 +1,17 @@
+# 배치 비교용 워크로드 분포 — heavytail(benchmark-workloads-heavytail.yml)과 짝을 이루는 대조군.
+# 계층 구성(소형·중형·대형·GPU)과 자원 요구는 heavytail 과 똑같이 두고 weight 만 전부 25 로 맞춰,
+# "표본의 구성비가 결과를 얼마나 바꾸는가"를 분리해서 본다.
+#
+# 순위가 두 분포 사이에서 뒤집히면 그 사실 자체가 결과다 — heavytail 에서만 이겼다면 그 승리는
+# "작은 워크로드가 많은 세상"이라는 가정에 종속된 것이므로, 감추지 말고 그대로 보고한다.
+#
+# 메모리·디스크 규칙은 heavytail 과 같다(메모리 = 코어 × memoryPerCore, 디스크 0).
+name: uniform-4class
+seed: 20260907
+memoryPerCore: 4096
+diskGb: 0
+classes:
+  - { name: 소형, weight: 25, cores: 1, gpus: 0, priority: NORMAL }
+  - { name: 중형, weight: 25, cores: 2, gpus: 0, priority: NORMAL }
+  - { name: 대형, weight: 25, cores: 4, gpus: 0, priority: HIGH }
+  - { name: GPU,  weight: 25, cores: 4, gpus: 1, priority: NORMAL }

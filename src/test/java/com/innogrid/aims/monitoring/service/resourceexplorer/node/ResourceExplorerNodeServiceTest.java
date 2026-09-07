@@ -34,6 +34,7 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetr
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.HostSummaryMetrics;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +70,9 @@ class ResourceExplorerNodeServiceTest {
     ResourceExplorerNodeService service = new ResourceExplorerNodeService(
             scopeService, assetRepository, targetRepository, vmProvider, detailMetrics, hostMetrics);
 
+    static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
+    static final MetricSelector DCGM_SEL = MetricSelector.instance("10.0.0.1:9400");
+
     Asset node01;
     HostSummaryMetrics fullMetrics = new HostSummaryMetrics(
             32.5, 40,
@@ -97,7 +101,7 @@ class ResourceExplorerNodeServiceTest {
         nodeExporter.setAsset(node01);
         when(targetRepository.findByAsset_IdIn(anyCollection())).thenReturn(List.of(nodeExporter, dcgm));
 
-        when(detailMetrics.summary("10.0.0.1:9100", "10.0.0.1:9400")).thenReturn(fullMetrics);
+        when(detailMetrics.summary(NODE_SEL, DCGM_SEL)).thenReturn(fullMetrics);
         when(vmProvider.findByHost(node01)).thenReturn(List.of());
     }
 
@@ -133,7 +137,7 @@ class ResourceExplorerNodeServiceTest {
 
     @Test
     void 미수집_지표는_카드가_null_이다() {
-        when(detailMetrics.summary("10.0.0.1:9100", "10.0.0.1:9400")).thenReturn(new HostSummaryMetrics(
+        when(detailMetrics.summary(NODE_SEL, DCGM_SEL)).thenReturn(new HostSummaryMetrics(
                 32.5, 40, null, null, 128.0, 1024.0, 1_048_576.0, null, null, null, null, null, null));
         NodeSummaryResponse summary = service.getNodeSummary("11");
 
@@ -144,7 +148,7 @@ class ResourceExplorerNodeServiceTest {
         assertThat(summary.gpu()).isNull();                           // GPU 미탑재
         assertThat(summary.vram()).isNull();
 
-        when(detailMetrics.summary("10.0.0.1:9100", "10.0.0.1:9400")).thenReturn(HostSummaryMetrics.EMPTY);
+        when(detailMetrics.summary(NODE_SEL, DCGM_SEL)).thenReturn(HostSummaryMetrics.EMPTY);
         NodeSummaryResponse empty = service.getNodeSummary("11");
         assertThat(empty.cpu()).isNull();
         assertThat(empty.lastUpdatedAt()).isNotNull();
@@ -154,7 +158,7 @@ class ResourceExplorerNodeServiceTest {
 
     @Test
     void 요약_차트는_기간_선택에_맞는_구간과_버킷으로_Thanos를_조회한다() {
-        when(detailMetrics.trend(eq(NodeDetailMetric.CPU), eq("10.0.0.1:9100"), eq("10.0.0.1:9400"), any(), any(), eq("15m")))
+        when(detailMetrics.trend(eq(NodeDetailMetric.CPU), eq(NODE_SEL), eq(DCGM_SEL), any(), any(), eq("15m")))
                 .thenReturn(List.of(new Series("cpu", List.of(new DataPoint(1_757_000_000L, 30.0), new DataPoint(1_757_000_900L, 31.5)))));
         when(detailMetrics.trend(eq(NodeDetailMetric.NETWORK), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(new Series("receive", List.of()), new Series("transmit", List.of())));
@@ -242,7 +246,7 @@ class ResourceExplorerNodeServiceTest {
     void 자원_사용_현황은_일자별_일간_최대치를_반환하고_VM수는_오늘만_싣는다() {
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
         when(vmProvider.findByHost(node01)).thenReturn(List.of(new VirtualResource("uuid-1", "web-01", "RUNNING", null)));
-        when(detailMetrics.dailyMax(eq("10.0.0.1:9100"), eq(today.minusDays(1)), eq(today))).thenReturn(List.of(
+        when(detailMetrics.dailyMax(eq(NODE_SEL), eq(today.minusDays(1)), eq(today))).thenReturn(List.of(
                 new DailyMax(today.minusDays(1), 71.0, 60.2, null),
                 new DailyMax(today, 80.3, 66.1, 13.0)));
 

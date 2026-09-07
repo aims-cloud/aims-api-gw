@@ -29,6 +29,8 @@ class HostDetailMetricsQueryServiceTest {
     private static final double GB = 1024.0 * 1024 * 1024;
     private static final String NODE = "10.0.0.1:9100";
     private static final String DCGM = "10.0.0.1:9400";
+    private static final MetricSelector NODE_S = MetricSelector.instance(NODE);
+    private static final MetricSelector DCGM_S = MetricSelector.instance(DCGM);
 
     VictoriaMetricsClient client = mock(VictoriaMetricsClient.class);
     HostDetailMetricsQueryService service = new HostDetailMetricsQueryService(client);
@@ -54,7 +56,7 @@ class HostDetailMetricsQueryServiceTest {
             return List.of();
         });
 
-        HostSummaryMetrics m = service.summary(NODE, DCGM);
+        HostSummaryMetrics m = service.summary(NODE_S, DCGM_S);
 
         assertThat(m.cpuPercent()).isEqualTo(32.5);
         assertThat(m.coreCount()).isEqualTo(40);
@@ -74,7 +76,7 @@ class HostDetailMetricsQueryServiceTest {
     @Test
     void exporter가_없는_그룹은_조회하지_않고_결과가_없으면_미수집이다() {
         when(client.queryResults(anyString())).thenReturn(List.of());
-        HostSummaryMetrics m = service.summary(NODE, null);
+        HostSummaryMetrics m = service.summary(NODE_S, null);
 
         assertThat(m.cpuPercent()).isNull();
         assertThat(m.gpuPercent()).isNull();
@@ -97,16 +99,16 @@ class HostDetailMetricsQueryServiceTest {
             return List.of();
         });
 
-        List<Series> network = service.trend(NodeDetailMetric.NETWORK, NODE, DCGM, from, to, "30s");
+        List<Series> network = service.trend(NodeDetailMetric.NETWORK, NODE_S, DCGM_S, from, to, "30s");
         assertThat(network).extracting(Series::name).containsExactly("receive", "transmit");
         assertThat(network.get(0).dataPoints()).hasSize(2);           // NaN 샘플 제외
         assertThat(network.get(0).dataPoints().get(1).value()).isEqualTo(1200.3);
 
-        List<Series> cpu = service.trend(NodeDetailMetric.CPU, NODE, DCGM, from, to, "30s");
+        List<Series> cpu = service.trend(NodeDetailMetric.CPU, NODE_S, DCGM_S, from, to, "30s");
         assertThat(cpu.get(0).dataPoints().get(0).value()).isEqualTo(30.0);
 
-        assertThat(service.trend(NodeDetailMetric.GPU, NODE, null, from, to, "30s")).isEmpty();   // dcgm 없음
-        assertThat(service.trend(NodeDetailMetric.MEMORY, NODE, DCGM, from, to, "30s")).isEmpty(); // 결과 없음
+        assertThat(service.trend(NodeDetailMetric.GPU, NODE_S, null, from, to, "30s")).isEmpty();   // dcgm 없음
+        assertThat(service.trend(NodeDetailMetric.MEMORY, NODE_S, DCGM_S, from, to, "30s")).isEmpty(); // 결과 없음
         verify(client, never()).queryRangeResults(org.mockito.ArgumentMatchers.contains("DCGM"), any(), any(), any());
     }
 
@@ -126,7 +128,7 @@ class HostDetailMetricsQueryServiceTest {
             return List.of();                                            // 파일시스템은 미수집
         });
 
-        List<DailyMax> rows = service.dailyMax(NODE, d1, d2);
+        List<DailyMax> rows = service.dailyMax(NODE_S, d1, d2);
 
         assertThat(rows).extracting(DailyMax::date).containsExactly(d1, d2);
         assertThat(rows.get(0).cpuPercent()).isEqualTo(71.0);
@@ -143,9 +145,9 @@ class HostDetailMetricsQueryServiceTest {
         when(client.queryResults(any())).thenThrow(new IllegalStateException("thanos down"));
         when(client.queryRangeResults(any(), any(), any(), any())).thenThrow(new IllegalStateException("thanos down"));
 
-        assertThat(service.summary(NODE, DCGM)).isEqualTo(HostSummaryMetrics.EMPTY);
-        assertThat(service.trend(NodeDetailMetric.CPU, NODE, DCGM, Instant.now().minusSeconds(600), Instant.now(), "30s")).isEmpty();
-        List<DailyMax> rows = service.dailyMax(NODE, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 3));
+        assertThat(service.summary(NODE_S, DCGM_S)).isEqualTo(HostSummaryMetrics.EMPTY);
+        assertThat(service.trend(NodeDetailMetric.CPU, NODE_S, DCGM_S, Instant.now().minusSeconds(600), Instant.now(), "30s")).isEmpty();
+        List<DailyMax> rows = service.dailyMax(NODE_S, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 3));
         assertThat(rows).hasSize(2);
         assertThat(rows).allSatisfy(r -> assertThat(r.cpuPercent()).isNull());
     }
@@ -161,8 +163,38 @@ class HostDetailMetricsQueryServiceTest {
 
         Instant from = Instant.ofEpochSecond(1_757_000_000L);
         when(client.queryRangeResults(anyString(), any(), any(), eq("30s"))).thenReturn(List.of());
-        service.trend(NodeDetailMetric.CPU, NODE, DCGM, from, from.plusSeconds(600), "30s");
+        service.trend(NodeDetailMetric.CPU, NODE_S, DCGM_S, from, from.plusSeconds(600), "30s");
         verify(client).queryRangeResults(org.mockito.ArgumentMatchers.contains("[5m]"), eq(from), eq(from.plusSeconds(600)), eq("30s"));
+    }
+
+    @Test
+    void Tumblebug_선택자는_tb_라벨_세_개로_좁히고_dcgm도_같은_선택자를_쓴다() {
+        MetricSelector vm = MetricSelector.tumblebugNode("openstack", "openstack-infra-01", "openstack-nodegroup-01-1");
+        assertThat(vm.matchers()).isEqualTo(
+                "tb_ns=\"openstack\",tb_infra=\"openstack-infra-01\",tb_node=\"openstack-nodegroup-01-1\"");
+        assertThat(vm.braces("mode=\"idle\"")).isEqualTo(
+                "{mode=\"idle\",tb_ns=\"openstack\",tb_infra=\"openstack-infra-01\",tb_node=\"openstack-nodegroup-01-1\"}");
+        assertThat(MetricSelector.instance("10.0.0.1:9100").braces()).isEqualTo("{instance=\"10.0.0.1:9100\"}");
+        assertThat(MetricSelector.instance("a\"b").matchers()).isEqualTo("instance=\"a\\\"b\"");   // 따옴표 이스케이프
+
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            assertThat(q).contains("tb_node=\"openstack-nodegroup-01-1\"").doesNotContain("instance=");
+            if (q.startsWith("100 - ")) return vector("12.3");
+            if (q.startsWith("avg by (instance) (DCGM_FI_DEV_GPU_UTIL")) return vector("55.0");
+            return List.of();
+        });
+
+        HostSummaryMetrics m = service.summary(vm, vm);                  // node_exporter·dcgm 모두 같은 VM 라벨
+        assertThat(m.cpuPercent()).isEqualTo(12.3);
+        assertThat(m.gpuPercent()).isEqualTo(55.0);
+        assertThat(m.memoryTotalGb()).isNull();
+
+        Instant from = Instant.ofEpochSecond(1_757_000_000L);
+        when(client.queryRangeResults(anyString(), any(), any(), any())).thenReturn(List.of());
+        service.trend(NodeDetailMetric.CPU, vm, null, from, from.plusSeconds(600), "30s");
+        verify(client).queryRangeResults(org.mockito.ArgumentMatchers.contains("tb_infra=\"openstack-infra-01\""), any(), any(), eq("30s"));
+        assertThat(service.dailyMax(null, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 3))).isEmpty();
     }
 
     private static List<Map<String, Object>> vector(String value) {

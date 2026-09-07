@@ -117,7 +117,7 @@ public class SchedulingHistory {
     public Boolean getSuccess() { return success; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 
-    /** 스케줄 실행이 만든 결정임을 표시한다. */
+    /** 성공 여부를 남기고, 스케줄 실행이 만든 결정이면 그 실행에 연결한다({@code scheduleRunId} 가 null 이면 연결 없이 성공 여부만). */
     public void linkToRun(Long scheduleRunId, boolean success) {
         this.scheduleRunId = scheduleRunId;
         this.success = success;

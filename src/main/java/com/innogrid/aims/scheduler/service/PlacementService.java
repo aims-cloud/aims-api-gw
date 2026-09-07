@@ -69,12 +69,8 @@ public class PlacementService {
                     result.finalScore(), result.reason());
             context.reserve(result.selectedNodeId(), workload);
             SchedulingHistory history = toHistory(workload, context, result, engine);
-            // 성공 여부는 실행에 연결됐든 아니든 남긴다.
-            //
-            // 예전에는 스케줄 실행이 만든 이력에만 표시를 남겨, 단건 배치 API 가 만든 행은 success 가 NULL 이었다.
-            // "NULL 은 성공으로 본다"는 해석이 엔티티 주석·DDL·응답 DTO 세 곳에 적혀 있었지만, 조회 필터는 그
-            // 해석을 따르지 않아 성공한 결정이 목록에서 통째로 빠졌다. 읽는 쪽만 고치면 NULL 행은 계속 생기므로
-            // 쓰는 쪽에서 끊는다 — runId 가 없으면 연결만 비고 성공 여부는 그대로 기록된다.
+            // 성공 여부는 실행 연결과 무관하게 남긴다 — 예전엔 단건 배치 행이 NULL 로 남아 성공 필터에서 빠졌다.
+            // runId 가 없으면 연결만 비고 success 는 기록된다.
             history.linkToRun(scheduleRunId, true);
             historyRepository.save(history);
         } else {
@@ -94,6 +90,14 @@ public class PlacementService {
         return result;
     }
 
+    /**
+     * 결정 한 건을 이력 행으로 옮긴다.
+     *
+     * <p><b>차원별 점수는 선택된 노드 것이어야 한다.</b> 엔진이 돌려주는 후보 목록은 제외된 노드까지 포함해
+     * 총점순으로 정렬돼 있고(엔진 3종 공통), 승자는 제외되지 않은 노드 중에서 고른다. 그래서 점수를 깎지 않는
+     * 제약(GPU·디스크·링크 DOWN·MDC 예산)에 걸린 노드가 1위이면 목록의 첫 항목이 승자가 아니다. 예전엔 그 첫
+     * 항목을 저장해, 한 행 안에서 총점·사유·노드 상태는 승자 것인데 차원별 점수만 다른 노드 것이었다.</p>
+     */
     private SchedulingHistory toHistory(Workload workload, PlacementContext context,
                                         SchedulingResult result, SchedulingEngine engine) {
         SchedulingHistory history = new SchedulingHistory(
@@ -104,22 +108,8 @@ public class PlacementService {
 
         history.setCandidateCount(context.nodes().size());
 
-        // 선택된 노드의 점수를 남긴다.
-        //
-        // 예전에는 candidateScores 의 첫 항목을 썼는데, 그 목록은 **제외된 노드까지 포함해** 총점순으로 정렬돼
-        // 있다(엔진 3종 공통). 승자는 제외되지 않은 노드 중에서 고르므로, 점수를 깎지 않는 제약(GPU·디스크·
-        // 링크 DOWN·MDC 예산)에 걸린 노드가 1위이면 **첫 항목이 승자가 아니다.**
-        //
-        // 그 결과 한 행 안에서 총점(finalScore)·사유·노드 상태는 승자 것인데 차원별 점수만 다른 노드 것이었다.
-        // 엔진이 만드는 사유 문자열에도 승자의 5차원 값이 그대로 찍히므로, 같은 행의 텍스트와 컬럼이 서로
-        // 다른 노드를 가리켰다.
-        //
-        // 찾는 키는 nodeId 하나다 — 바로 아래에서 노드 상태를 찾는 context.node(...) 와 같은 기준이어야
-        // 한 행의 점수와 사용률이 같은 노드에서 온다.
-        //
-        // 못 찾으면 0 으로 둔다. 배치에 실패한 결정이 그렇고(선택된 노드가 없다), 그 행은 이미 총점과
-        // 노드 상태를 0 으로 쓰고 있어 이 편이 행 전체와 일관된다. 점수 필드가 원시형이라 "모름"은 표현할
-        // 수 없고, 예전처럼 제외 노드 값을 남기면 그 숫자가 어느 노드 것인지 적을 자리가 없다.
+        // 승자를 nodeId 로 찍어 쓴다 — 아래 context.node(...) 와 같은 키여야 점수와 사용률이 같은 노드에서 온다.
+        // 못 찾으면(배치 실패) 0 으로 둔다. 그 행은 총점·노드 상태도 0 이라 행 전체가 일관된다.
         result.candidateScores().stream()
                 .filter(score -> score.nodeId().equals(result.selectedNodeId()))
                 .findFirst()

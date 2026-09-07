@@ -314,8 +314,10 @@ public class ScheduleService {
     }
 
     private void validateEngine(String engine) {
-        if (engine != null && !engine.isBlank() && !engineRegistry.contains(engine)) {
-            throw badRequest("알 수 없는 스케줄링 엔진입니다: " + engine);
+        // 저장 직전에 trim 하므로 검증도 trim 한 값으로 — 그러지 않으면 "weighted " 가 알 수 없는 엔진으로 거부된다.
+        String trimmed = engine == null ? null : engine.trim();
+        if (trimmed != null && !trimmed.isEmpty() && !engineRegistry.contains(trimmed)) {
+            throw badRequest("알 수 없는 스케줄링 엔진입니다: " + trimmed);
         }
     }
 

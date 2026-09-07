@@ -12,7 +12,8 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
  *
  * <p>{@code cpuScore}~{@code networkScore} 는 엔진마다 담는 값의 의미가 다르다(temperature 엔진은
  * 균형 점수를 {@code networkScore} 자리에 넣는다). 기존 응답이 그랬으므로 그대로 두되, 해석은
- * {@code engineName} 을 보고 해야 한다. {@code success} 는 단건 스케줄링 API 가 만든 이력에서 null.</p>
+ * {@code engineName} 을 보고 해야 한다. {@code success} 는 성공 여부 컬럼이 생기기 전에 쌓인 기존 행에서만 null 이며
+ * 그 null 은 성공으로 해석한다(실패는 언제나 명시적 false 로 저장된다).</p>
  */
 public record SchedulingHistoryResponse(
         Long id,

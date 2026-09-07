@@ -36,6 +36,88 @@ class ScheduleServiceTest {
         scheduleRepository.deleteAll();
     }
 
+    // ── 컬럼 길이 (단계 24) ────────────────────────────────────
+
+    /**
+     * 컬럼 길이를 넘는 값이 <b>400 으로</b> 막히는지.
+     *
+     * <p>검증이 없으면 INSERT 가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 배포 환경에서는
+     * {@code /error} 재요청이 인증에 막혀 클라이언트가 <b>403(본문 없음)</b> 을 받는다(실측). 여기(H2)에서는
+     * {@code DataIntegrityViolationException} 이 그대로 튀어나오므로 <b>MockMvc 가 아니라 서비스 계층</b>에서
+     * 확인해야 한다 — MockMvc 는 {@code perform()} 자체가 던져 단언에 도달하지 못한다.</p>
+     */
+    @DisplayName("스케줄명이 컬럼 길이를 넘으면 400 이고 사유에 현재 길이가 있다")
+    @Test
+    void name_over_column_length_400() {
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> scheduleService.create(request("len-name", "가".repeat(Schedule.NAME_MAX + 1), null, null)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains(String.valueOf(Schedule.NAME_MAX)), e.getMessage());
+        assertTrue(e.getMessage().contains(String.valueOf(Schedule.NAME_MAX + 1)), e.getMessage());
+    }
+
+    @DisplayName("유효하지만 긴 cron 이 컬럼 길이를 넘으면 400 — 분을 전부 나열하면 179자가 된다")
+    @Test
+    void long_but_valid_cron_over_column_length_400() {
+        StringBuilder minutes = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            if (i > 0) minutes.append(',');
+            minutes.append(i);
+        }
+        String cron = "0 " + minutes + " * * * ?";
+        assertTrue(cron.length() > Schedule.CRON_MAX, "표현식이 상한을 넘어야 이 테스트가 의미를 갖는다");
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> scheduleService.create(request("len-cron", "이름", cron, null)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains(String.valueOf(Schedule.CRON_MAX)), e.getMessage());
+    }
+
+    @DisplayName("설명이 컬럼 길이를 넘으면 400 — 검증 없이 대입되던 자리다")
+    @Test
+    void description_over_column_length_400() {
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> scheduleService.create(
+                        request("len-desc", "이름", null, "설".repeat(Schedule.DESCRIPTION_MAX + 1))));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains(String.valueOf(Schedule.DESCRIPTION_MAX)), e.getMessage());
+    }
+
+    /**
+     * 공백만 있는 엔진 이름은 {@code validateEngine} 의 {@code isBlank()} 를 그대로 통과해 저장됐다.
+     * PostgreSQL 이 {@code varchar} 의 뒤쪽 공백을 잘라 받아 오류도 나지 않았다(실측: 200 으로 생성됨).
+     * 공백을 미지정(null)으로 정규화해 실행 시점의 "공백 = 미지정" 규약과 결과를 맞춘다.
+     */
+    @DisplayName("공백만 있는 엔진·설명은 미지정으로 정규화된다 — 공백이 그대로 저장되지 않는다")
+    @Test
+    void blank_engine_and_description_become_null() {
+        ScheduleResponse created = scheduleService.create(
+                new ScheduleRequest("len-blank", "이름", null, "0 0 2 * * ?",
+                        null, null, "   ", " ".repeat(40), null, null, null));
+
+        Schedule saved = scheduleRepository.findById(created.id()).orElseThrow();
+        assertNull(saved.getEngine(), "공백이 그대로 저장되면 컬럼 길이를 넘거나 뜻 없는 값이 남는다");
+        assertNull(saved.getDescription());
+    }
+
+    @DisplayName("수정 경로에도 같은 길이 상한이 걸린다")
+    @Test
+    void update_applies_same_limits() {
+        ScheduleResponse created = scheduleService.create(request("len-upd", "이름", null, null));
+
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(BusinessException.class,
+                () -> scheduleService.update(created.id(),
+                        request(null, "가".repeat(Schedule.NAME_MAX + 1), null, null))).getStatus());
+    }
+
+    private static ScheduleRequest request(String id, String name, String cron, String description) {
+        return new ScheduleRequest(id, name, null, cron == null ? "0 0 2 * * ?" : cron,
+                null, null, description, null, null, null, null);
+    }
+
     // ── 생성 ───────────────────────────────────────────────────
 
     @DisplayName("스케줄을 생성한다")

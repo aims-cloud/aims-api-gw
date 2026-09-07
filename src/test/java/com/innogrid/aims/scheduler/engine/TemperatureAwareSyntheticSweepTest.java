@@ -149,16 +149,26 @@ class TemperatureAwareSyntheticSweepTest {
                     .mapToDouble(thermalModel::effectiveTemperature)
                     .average().orElse(0);
 
-            // 모든 후보 노드가 같은 details.클러스터평균온도C 를 담고 있어야 한다 — 대표로 첫 노드에서 읽는다.
-            // 계측 노드가 0대이면 엔진은 이 값을 null 로 돌려준다 — 이 클러스터는 계측 5대라 항상 non-null 이어야
-            // 하지만, 언박싱 전에 그 사실을 먼저 확인해 NPE 대신 의미 있는 실패 메시지를 남긴다.
-            Double actual = score(result, snapshot.nodes().get(0).getNodeId()).details().get("클러스터평균온도C");
+            // 클러스터 평균은 노드별 값이 아니라 <b>실행 단위 값</b>이다 — 후보 여덟 대가 모두 같은 수를
+            // 담고 있어야 한다. 대표로 첫 노드 한 대만 읽으면 이 성질을 확인하지 못한다: 채움 조건을
+            // "클러스터에 계측 노드가 있는가" 에서 "이 노드가 계측인가" 로 바꾸는 변이는 미계측 3대의
+            // 칸만 null 로 만드는데, 첫 노드가 계측이면 그 변이가 그대로 통과한다.
+            assertEquals(snapshot.nodes().size(), result.candidateScores().size(),
+                    "t=" + t + " 후보 수가 스냅샷과 달라 순회가 헐거워졌다");
 
-            assertNotNull(actual, "t=" + t + " 클러스터평균온도C 가 null이다 — 계측 노드가 0대일 때만 null 이어야 하는데, "
-                    + "이 클러스터는 계측 5대이므로 non-null 이어야 한다");
-            assertFalse(Double.isNaN(actual), "t=" + t + " 클러스터평균온도C 가 NaN");
-            assertEquals(expectedMeasuredOnly, actual, 1e-4,
-                    "t=" + t + " 엔진의 클러스터평균온도C(" + actual + ")가 계측 노드만의 평균(" + expectedMeasuredOnly + ")과 달라야 한다");
+            for (NodeScore s : result.candidateScores()) {
+                Double actual = s.details().get("클러스터평균온도C");
+
+                // 계측 노드가 0대일 때만 null 이어야 한다 — 이 클러스터는 계측 5대라 미계측 노드의
+                // 칸에도 값이 있어야 한다. 언박싱 전에 확인해 NPE 대신 의미 있는 실패를 남긴다.
+                assertNotNull(actual, "t=" + t + " node=" + s.nodeId() + " 클러스터평균온도C 가 null이다 — "
+                        + "계측 노드가 0대일 때만 null 이어야 하는데, 이 클러스터는 계측 5대이므로 "
+                        + "미계측 노드의 칸에도 값이 있어야 한다");
+                assertFalse(Double.isNaN(actual), "t=" + t + " node=" + s.nodeId() + " 클러스터평균온도C 가 NaN");
+                assertEquals(expectedMeasuredOnly, actual, 1e-4,
+                        "t=" + t + " node=" + s.nodeId() + " 엔진의 클러스터평균온도C(" + actual
+                                + ")가 계측 노드만의 평균(" + expectedMeasuredOnly + ")과 같아야 한다");
+            }
 
             double diff = Math.abs(expectedMeasuredOnly - expectedAllEight);
             assertTrue(diff >= 10.0,

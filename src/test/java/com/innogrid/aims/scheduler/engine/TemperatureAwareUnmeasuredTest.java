@@ -69,10 +69,16 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class TemperatureAwareUnmeasuredTest {
 
+    /**
+     * 모든 단언이 쓰는 허용오차. 반복소수(0.4666…7, 0.6363…6)를 손으로 4자리 반올림한 기대값도
+     * <b>이 값으로</b> 비교한다 — 엔진이 {@code Math.round(v × 10000) / 10000} 으로 이미 4자리로
+     * 반올림해 내보내므로, 기대값을 같은 4자리로 적으면 정확히 같은 double 이 나온다.
+     *
+     * <p>예전에는 이런 기대값에만 {@code 1e-4} 를 따로 썼는데, 그 폭은 4자리 기대값에서
+     * <b>마지막 자리 1단위를 통째로 허용</b>한다 — 0.4667 자리에 0.4666 이나 0.4668 이 와도
+     * 통과하므로, 반올림 자리에서 갈리는 회귀를 걸러내지 못한다.</p>
+     */
     private static final double EPS = 1e-9;
-    /** 반복소수(0.4666…7, 0.6363…6)를 손으로 4자리 반올림한 기대값과 비교하는 단언용 —
-     *  엔진도 4자리로 반올림해 내보내므로 EPS 보다 넉넉히 잡는다. */
-    private static final double EPS_ROUNDED = 1e-4;
 
     private final TemperatureAwareScheduler scheduler = new TemperatureAwareScheduler();
 
@@ -125,9 +131,9 @@ class TemperatureAwareUnmeasuredTest {
 
         // 클러스터 평균은 계측 노드(M)만으로 낸다 → 평균 40.0, M 자신과 같아 균형은 정확히 0.5.
         // 여유 (75-40)/75 = 0.4667, 냉각 1-(40/75)^2 = 0.7156.
-        assertEquals(0.4667, m.temperatureScore(), EPS_ROUNDED);
-        assertEquals(0.5, m.networkScore(), EPS_ROUNDED);
-        assertEquals(0.7156, m.powerScore(), EPS_ROUNDED);
+        assertEquals(0.4667, m.temperatureScore(), EPS);
+        assertEquals(0.5, m.networkScore(), EPS);
+        assertEquals(0.7156, m.powerScore(), EPS);
     }
 
     @DisplayName("계측 노드가 충분히 시원하면 미계측 노드가 이기지 않는다")
@@ -149,8 +155,8 @@ class TemperatureAwareUnmeasuredTest {
         // M 총점 = 0.4667×0.30 + 0.5×0.25 + 0.7156×0.20 + 0.7×0.25 = 0.5831
         // U 총점 = 0.5×0.30   + 0.5×0.25 + 0.5×0.20    + 0.7×0.25 = 0.5500
         assertEquals("M", result.selectedNodeId(), "미계측 노드가 계측된 정상 노드를 이기면 안 된다");
-        assertEquals(0.5831, score(result, "M").totalScore(), EPS_ROUNDED);
-        assertEquals(0.5500, score(result, "U").totalScore(), EPS_ROUNDED);
+        assertEquals(0.5831, score(result, "M").totalScore(), EPS);
+        assertEquals(0.5500, score(result, "U").totalScore(), EPS);
 
         // 수정 전이었다면(겹1·겹2 모두 없음) 평균이 U 의 0°C 까지 섞여 (40+0)/2=20 으로 내려가고,
         // M 의 균형은 1-0.5×40/20=0 으로 잘린다. U 는 가드가 없어 헤드룸·냉각 만점(1.0)에
@@ -194,19 +200,79 @@ class TemperatureAwareUnmeasuredTest {
         assertEquals(0.55, u.totalScore(), EPS);
     }
 
+    @DisplayName("음수 온도는 미계측으로 다룬다")
+    @Test
+    void negative_temperature_treated_as_unmeasured() {
+        // 가드가 "0 인가" 가 아니라 "0 보다 큰가" 여야 하는 이유. 센서가 음수를 돌려주는 경우
+        // (오프셋 오류·부호 반전)도 판단 근거가 없기는 마찬가지다. 0 만 걸러내면 -5°C 가
+        // 계측값으로 들어가고, headroomScore 에는 상한 클램프가 없어 (75−(−5))/75 = 1.0667 로
+        // 1.0 을 넘는 점수가 나온다 — 만점보다 더한 만점이다.
+        SchedulingResult result = scheduler.schedule(new Workload("w", 1, 512),
+                List.of(node("N", -5)), policy());
+        NodeScore n = only(result);
+
+        assertEquals(0.5, n.temperatureScore(), EPS, "음수 온도의 열적여유는 중립이어야 한다");
+        assertEquals(0.5, n.networkScore(), EPS, "음수 온도의 열적균형은 중립이어야 한다");
+        assertEquals(0.5, n.powerScore(), EPS, "음수 온도의 냉각 점수는 중립이어야 한다");
+        assertEquals(0.0, n.details().get("온도계측"), EPS, "음수는 잰 값이 아니다");
+
+        assertTrue(n.details().containsKey("배치후예상온도C"));
+        assertNull(n.details().get("배치후예상온도C"),
+                "없는 값에 상승분을 얹으면 −5.09°C 같은 근거 없는 숫자가 된다");
+
+        // 가드가 없었다면 여유 1.0667·냉각 0.9956 을 받아 총점이 0.8191 로 치솟는다 —
+        // 온도를 못 잰(또는 잘못 잰) 노드가 이 클래스의 어떤 계측 노드보다도 높은 점수다.
+        assertTrue(n.totalScore() <= 1.0,
+                "가중치 합이 1 인 점수 체계에서 총점이 1 을 넘으면 어떤 항이 클램프를 벗어난 것이다: "
+                        + n.totalScore());
+        assertEquals(0.55, n.totalScore(), EPS, "미계측과 같은 총점이어야 한다(열 셋 중립 0.375 + 자원 0.175)");
+    }
+
     // ── 선택 사유 3분기 ─────────────────────────────────────────
 
     @DisplayName("계측된 노드가 이기면 근거에 평균 온도를 남긴다")
     @Test
     void measured_winner_keeps_average_in_reason() {
-        // 겹2(평균을 계측 노드만으로)를 점수가 아니라 사유 문구 쪽에서 한 번 더 고정한다.
-        // U 의 0°C 를 표본에 넣었다면 평균은 (40+0)/2 = 20 이 되어 "평균온도:20.0" 이 찍힌다.
+        // 겹2(평균을 계측 노드만으로)를 점수가 아니라 사유 쪽에서 한 번 더 고정한다.
+        //
+        // 오라클을 문자열 "평균온도:40.0" 으로 두면 안 된다 — 그 조각은 분기2(승자만 미계측)의
+        // "계측 노드 평균온도:%.1f°C" 에도 그대로 들어 있어 <b>두 분기를 구분하지 못한다</b>.
+        // 실제로 승자 판정(bestHasThermal)을 승자가 아니라 마지막 후보 기준으로 망가뜨려도
+        // 이 단언은 통과했다. 그래서 분기1에만 있는 표지 " (여유:" 로 분기를 고정하고,
+        // 평균값 자체는 문자열이 아니라 details 에서 확인한다(로케일 의존도 함께 사라진다).
         SchedulingResult result = scheduler.schedule(new Workload("w", 1, 512),
                 List.of(node("M", 40), node("U", 0)), policy());
 
         assertEquals("M", result.selectedNodeId());
-        assertTrue(result.reason().contains("평균온도:40.0"),
-                "계측 노드만의 평균(40.0)이 아니라 미계측을 섞은 평균(20.0)이 찍히면 안 된다: " + result.reason());
+        assertTrue(result.reason().contains(" (여유:"),
+                "계측 노드가 이겼으면 열 세 점수를 늘어놓는 분기1 문구여야 한다: " + result.reason());
+        assertFalse(result.reason().contains("선택 노드는 온도 미계측"),
+                "계측된 노드를 골라 놓고 미계측 분기 문구를 쓰면 안 된다: " + result.reason());
+
+        // U 의 0°C 를 표본에 넣었다면 (40+0)/2 = 20 이 된다.
+        assertEquals(40.0, score(result, "M").details().get("클러스터평균온도C"), EPS,
+                "평균은 계측 노드만으로 낸다 — 미계측을 섞으면 20.0 이 된다");
+    }
+
+    @DisplayName("근거는 마지막 후보가 아니라 승자를 따른다")
+    @Test
+    void reason_follows_winner_not_last_candidate() {
+        // 미계측 노드가 목록 끝에 와도 분기1이어야 한다 — 집합·마지막 후보 기준으로 바뀌면
+        // 여기서 잡힌다. 승자는 어느 순서에서나 M(0.5831 > U 0.5500)이고, 사유의 주어는
+        // 후보 집합의 마지막 원소가 아니라 그 승자다.
+        for (List<NodeResource> candidates : List.of(
+                List.of(node("M", 40), node("U", 0)),     // 미계측이 끝 — 마지막 후보 기준이면 분기2로 샌다
+                List.of(node("U", 0), node("M", 40)))) {  // 계측이 끝 — 마지막 후보 기준이어도 우연히 맞는다
+
+            SchedulingResult result = scheduler.schedule(new Workload("w", 1, 512), candidates, policy());
+            String order = candidates.stream().map(NodeResource::getNodeId).toList().toString();
+
+            assertEquals("M", result.selectedNodeId(), "후보 순서가 승자를 바꾸면 안 된다: " + order);
+            assertTrue(result.reason().contains(" (여유:"),
+                    "승자가 계측이면 순서와 무관하게 분기1이어야 한다: " + order + " → " + result.reason());
+            assertFalse(result.reason().contains("선택 노드는 온도 미계측"),
+                    "마지막 후보가 미계측이라고 승자를 미계측이라 적으면 안 된다: " + order + " → " + result.reason());
+        }
     }
 
     @DisplayName("계측 노드가 뜨거워 미계측이 이기면 근거가 그 사실을 밝힌다")
@@ -221,13 +287,32 @@ class TemperatureAwareUnmeasuredTest {
                 List.of(node("M", 70), node("U", 0)), policy());
 
         assertEquals("U", result.selectedNodeId());
-        assertEquals(0.3458, score(result, "M").totalScore(), EPS_ROUNDED);
-        assertEquals(0.5500, score(result, "U").totalScore(), EPS_ROUNDED);
+        assertEquals(0.3458, score(result, "M").totalScore(), EPS);
+        assertEquals(0.5500, score(result, "U").totalScore(), EPS);
+
+        // M 이 제약(온도 초과·배치 후 예상 온도)으로 빠지면 이 테스트의 의도가 사라진다 —
+        // "뜨거운 계측 노드가 점수로 진다" 가 아니라 "애초에 후보가 아니었다" 가 되기 때문이다.
+        // 70°C 는 임계 75°C 아래고 배치 후 예상도 71.3°C 라 적격이다.
+        assertTrue(score(result, "M").eligible(),
+                "M 이 제약으로 제외되면 미계측 승리가 점수 때문인지 제약 때문인지 알 수 없다: "
+                        + score(result, "M").exclusionReason());
 
         assertTrue(result.reason().contains("선택 노드는 온도 미계측"),
                 "사유의 주어는 후보 집합이 아니라 승자다: " + result.reason());
+        assertTrue(result.reason().contains("열 점수를 중립으로 뒀다"),
+                "승자가 이긴 이유는 열 3항이 중립 바닥에 고정됐기 때문이다: " + result.reason());
         assertFalse(result.reason().contains("여유:0.50 균형:0.50 냉각:0.50"),
                 "못 잰 값을 잰 것처럼 늘어놓으면 '재 봤더니 전부 평균 수준' 과 글자 그대로 구분되지 않는다: "
+                        + result.reason());
+
+        // 분기2 문구가 실어 나르는 숫자도 함께 고정한다 — 문구만 맞고 숫자가 비면
+        // "미계측이라 골랐다" 는 말이 검증 불가능한 주장으로 남는다.
+        assertTrue(result.reason().contains("계측 1/2대"),
+                "2대 중 1대만 쟀다는 대수가 사유에 있어야 한다: " + result.reason());
+        assertTrue(result.reason().contains("자원:0.70"),
+                "승자의 자원 여유(0.70)가 사유에 있어야 한다: " + result.reason());
+        assertTrue(result.reason().contains("평균온도:70.0"),
+                "계측 노드(M) 하나만의 평균 70.0 이어야 한다 — U 의 0°C 를 섞었다면 35.0 이다: "
                         + result.reason());
     }
 
@@ -271,14 +356,14 @@ class TemperatureAwareUnmeasuredTest {
 
         // 여유·냉각은 ThermalModel 이 maxTemperature<=0 에 중립을 돌려주므로 둘 다 0.5 다.
         // 갈리는 것은 균형뿐 — 평균 (40+70)/2 = 55 기준으로 0.5 ± 0.5×15/55 = 0.6364 / 0.3636.
-        assertEquals(0.6364, m1.networkScore(), EPS_ROUNDED);
-        assertEquals(0.3636, m2.networkScore(), EPS_ROUNDED);
+        assertEquals(0.6364, m1.networkScore(), EPS);
+        assertEquals(0.3636, m2.networkScore(), EPS);
         assertNotEquals(m1.networkScore(), m2.networkScore(),
                 "두 노드의 균형이 같아지면 임계 척도의 부재가 균형 항까지 죽인 것이다");
 
         // 총점 = 0.5×0.30 + 균형×0.25 + 0.5×0.20 + 0.7×0.25
-        assertEquals(0.5841, m1.totalScore(), EPS_ROUNDED);
-        assertEquals(0.5159, m2.totalScore(), EPS_ROUNDED);
+        assertEquals(0.5841, m1.totalScore(), EPS);
+        assertEquals(0.5159, m2.totalScore(), EPS);
         assertEquals("M1", result.selectedNodeId(), "임계가 없어도 시원한 쪽을 골라야 한다");
 
         assertTrue(result.reason().contains("평균온도:"), result.reason());
@@ -336,8 +421,8 @@ class TemperatureAwareUnmeasuredTest {
 
         // 0.6·0.4 는 클램프(0·1)에 닿지 않는 중간값이라 평균이 움직이면 그대로 따라 움직인다 —
         // 잘린 값(0 이나 1)을 고정하면 평균이 얼마든 같은 숫자가 나와 증명력이 없다.
-        assertEquals(0.6, m1.networkScore(), EPS_ROUNDED, "평균보다 시원한 쪽");
-        assertEquals(0.4, m2.networkScore(), EPS_ROUNDED, "평균보다 뜨거운 쪽");
+        assertEquals(0.6, m1.networkScore(), EPS, "평균보다 시원한 쪽");
+        assertEquals(0.4, m2.networkScore(), EPS, "평균보다 뜨거운 쪽");
     }
 
     // ── 픽스처 ──────────────────────────────────────────────────

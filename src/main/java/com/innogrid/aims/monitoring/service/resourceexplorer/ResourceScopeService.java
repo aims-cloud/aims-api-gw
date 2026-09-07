@@ -248,7 +248,9 @@ public class ResourceScopeService {
         if (namespacesByRole.isEmpty()) {
             return;
         }
-        TbSnapshot tb = tumblebugTreeBuilder.snapshot();
+        Set<String> wanted = new TreeSet<>();
+        namespacesByRole.values().forEach(wanted::addAll);
+        TbSnapshot tb = tumblebugTreeBuilder.snapshot(wanted);
         for (Map.Entry<String, Set<String>> entry : namespacesByRole.entrySet()) {
             String role = entry.getKey();
             for (String nsId : entry.getValue()) {

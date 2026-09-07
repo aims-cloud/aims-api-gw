@@ -110,10 +110,10 @@ class ResourceScopeServiceTest {
         when(tumblebugTreeBuilder.snapshot(anyCollection())).thenReturn(new TbSnapshot(Instant.now(),
                 Map.of("ns-a", "Namespace A"),
                 Map.of("ns-a", List.of(new TbInfra("infra-1", "infra-1", "Running-(3/3)", List.of(
-                        new TbNode("vm-1", "vm-1", "Running", "g1", "aws"),
-                        new TbNode("vm-2", "vm-2", "Terminated", "g1", "aws"),
-                        new TbNode("vm-3", "vm-3", "Creating", null, "openstack"),
-                        new TbNode("vm-4", "vm-4", "Failed", null, "openstack"))))),
+                        new TbNode("vm-1", "vm-1", "Running", "g1", "aws", null, null),
+                        new TbNode("vm-2", "vm-2", "Terminated", "g1", "aws", null, null),
+                        new TbNode("vm-3", "vm-3", "Creating", null, "openstack", null, null),
+                        new TbNode("vm-4", "vm-4", "Failed", null, "openstack", null, null))))),
                 false));
 
         when(vmProvider.findByHost(any())).thenReturn(List.of());

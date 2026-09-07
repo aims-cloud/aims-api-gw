@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.benchmark;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.SplittableRandom;
+import java.util.random.RandomGenerator;
 import java.util.stream.IntStream;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
@@ -55,6 +57,24 @@ public final class BenchmarkRules {
      */
     public static final List<Long> RANDOM_SEEDS =
             IntStream.rangeClosed(1, 31).mapToObj(Long::valueOf).toList();
+
+    /**
+     * 시드 하나로 난수원을 만든다 — <b>{@link java.util.Random} 을 쓰지 않는다.</b>
+     *
+     * <p>{@code java.util.Random} 은 시드를 {@code (seed ^ 0x5DEECE66D)} 로만 섞고 첫 난수에
+     * <b>상위 비트</b>를 쓴다. 작은 시드는 상위 비트가 거의 같아 <b>1~31 전부 첫 값이 한 값으로 뭉친다</b> —
+     * 실측하면 {@code nextInt(4)} 의 첫 값이 31개 시드 전부 {@code 2} 이고, {@code nextDouble()} 의 첫 값은
+     * 0.7298~0.7326 폭 0.003 안에 모인다. 그러면 <b>시드 31개를 돌려도 첫 뽑기의 표본은 1개</b>이고,
+     * 배치 건수가 적은 판에서는 "무작위 31회"가 사실상 1회가 된다.</p>
+     *
+     * <p>{@link SplittableRandom} 은 시드를 SplitMix64 로 섞으므로 같은 시드 목록이 실제로 서로 다른
+     * 열을 낸다(같은 실측에서 첫 값이 네 값에 9/3/12/7 로 흩어진다). 재현성은 그대로다 — 시드가 같으면
+     * 열도 같다. 이 선택을 여기 둔 이유는 {@link #RANDOM_SEEDS} 와 <b>같은 자리에서 읽히게</b> 하기
+     * 위해서다. 시드 목록만 보고 표본 수를 세면 틀린다.</p>
+     */
+    public static RandomGenerator randomFor(long seed) {
+        return new SplittableRandom(seed);
+    }
 
     /** 열 히스테리시스는 시계열 운영의 성질이라 단발 비교에 넣을 근거가 없다. */
     public static final int COOLDOWN_MINUTES_FOR_BENCHMARK = 0;

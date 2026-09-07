@@ -137,6 +137,39 @@ class BenchmarkRulesContractTest {
         assertEquals(1, seeds.size() % 2, "홀수라야 중앙값이 잘 정의된다");
     }
 
+    /**
+     * 시드 목록의 <b>길이가 곧 표본 수</b>라는 주장은 난수원이 시드를 제대로 섞을 때만 참이다.
+     *
+     * <p>{@code new java.util.Random(seed)} 로는 성립하지 않는다 — 실측하면 시드 1~31 의
+     * {@code nextInt(4)} 첫 값이 <b>전부 2</b> 이고 {@code nextDouble()} 첫 값이 0.7298~0.7326
+     * 폭 0.003 안에 뭉친다. 그 난수원으로는 "무작위 31회"가 배치 건수가 적은 판에서 사실상 1회다.</p>
+     */
+    @DisplayName("사전 등록된 시드가 실제로 서로 다른 난수열을 낸다")
+    @Test
+    void declared_seeds_actually_yield_distinct_streams() {
+        Set<Integer> firstOfFour = new java.util.LinkedHashSet<>();
+        Set<Long> firstBits = new java.util.LinkedHashSet<>();
+        for (long seed : BenchmarkRules.RANDOM_SEEDS) {
+            firstOfFour.add(BenchmarkRules.randomFor(seed).nextInt(4));
+            firstBits.add(BenchmarkRules.randomFor(seed).nextLong());
+        }
+
+        assertEquals(BenchmarkRules.RANDOM_SEEDS.size(), firstBits.size(),
+                "시드마다 난수열이 달라야 표본 수가 시드 수와 같다");
+        assertTrue(firstOfFour.size() >= 3,
+                "네 개 중 하나를 뽑는 첫 추첨이 " + firstOfFour + " 뿐이다 — "
+                        + "시드를 섞지 않는 난수원을 쓰면 시드 목록이 표본을 늘려 주지 못한다");
+    }
+
+    @DisplayName("같은 시드는 같은 난수열을 낸다")
+    @Test
+    void same_seed_yields_the_same_stream() {
+        long seed = BenchmarkRules.RANDOM_SEEDS.get(0);
+
+        assertEquals(BenchmarkRules.randomFor(seed).nextLong(), BenchmarkRules.randomFor(seed).nextLong(),
+                "재현성이 깨지면 커밋된 시드 목록이 아무것도 고정하지 못한다");
+    }
+
     @DisplayName("시각 스윕 지점이 둘 이상이다")
     @Test
     void sweep_has_more_than_one_point() {

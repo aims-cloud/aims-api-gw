@@ -14,7 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
  * 자원 탐색기 VM 상세 패널 조회 서비스.
  * 트리에서 가상머신 선택 시 개요(주요 지표 카드·모니터링 요약 차트·VM 정보 표)와 모니터링 탭 데이터를 제공한다.
  * 모니터링 차트 지표는 노드 상세와 동일 6종이라 NodeDetailMetric·NodeMetricTrendResponse 를 재사용한다.
- * 가상머신 그룹 패널은 ResourceExplorerVmGroupService 가 담당한다.
+ * NodeGroup 패널은 ResourceExplorerNodeGroupService 가 담당한다.
  */
 @Service
 public class ResourceExplorerVmService {

@@ -76,8 +76,9 @@ public class TumblebugTreeBuilder {
     static final int MAX_RETRIES = 2;
     static final long RETRY_BACKOFF_MS = 300;
 
-    /** Tumblebug NodeSummary 중 트리·패널에 필요한 필드 */
-    public record TbNode(String id, String name, String status, String nodeGroupId, String provider) {}
+    /** Tumblebug NodeSummary 중 트리·패널에 필요한 필드 (IP 는 패널 목록 표시용, 조인 키로 쓰지 않는다) */
+    public record TbNode(String id, String name, String status, String nodeGroupId, String provider,
+                         String publicIp, String privateIp) {}
 
     /** Tumblebug InfraInfoSummary 중 트리·패널에 필요한 필드 */
     public record TbInfra(String id, String name, String status, List<TbNode> nodes) {}
@@ -404,7 +405,8 @@ public class TumblebugTreeBuilder {
                 }
                 nodes.add(new TbNode(nodeId, str(node, "name") == null ? nodeId : str(node, "name"),
                         str(node, "status"), str(node, "nodeGroupId"),
-                        str(nested(node, "connectionConfig"), "providerName")));
+                        str(nested(node, "connectionConfig"), "providerName"),
+                        str(node, "publicIP"), str(node, "privateIP")));
             }
             list.add(new TbInfra(infraId, str(infra, "name") == null ? infraId : str(infra, "name"),
                     str(infra, "status"), nodes));

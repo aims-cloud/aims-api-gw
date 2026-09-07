@@ -56,7 +56,7 @@ class ResourceExplorerVmServiceTest {
     TumblebugClient tumblebugClient = mock(TumblebugClient.class);
     HostDetailMetricsQueryService detailMetrics = mock(HostDetailMetricsQueryService.class);
     ResourceExplorerVmService service = new ResourceExplorerVmService(
-            authService, roleNamespaceRepository, tumblebugTreeBuilder, tumblebugClient, detailMetrics);
+            new TumblebugPanelSupport(authService, roleNamespaceRepository, tumblebugTreeBuilder), tumblebugClient, detailMetrics);
 
     static final String NS = "openstack";
     static final String INFRA = "openstack-infra-01";
@@ -85,7 +85,7 @@ class ResourceExplorerVmServiceTest {
     void 역할에_매핑되지_않은_Namespace는_404() {
         when(authService.currentUserRoleIds()).thenReturn(new LinkedHashSet<>(List.of("USER")));
 
-        assertThatThrownBy(() -> service.getVmSummary(NS, INFRA, NODE))
+        assertThatThrownBy(() -> service.getVmSummary(null, NS, INFRA, NODE))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
         verify(tumblebugTreeBuilder, never()).snapshot(anyCollection());
@@ -94,17 +94,17 @@ class ResourceExplorerVmServiceTest {
 
     @Test
     void 스냅샷에_없는_Node는_404() {
-        assertThatThrownBy(() -> service.getVmInfo(NS, INFRA, "vm-999"))
+        assertThatThrownBy(() -> service.getVmInfo(null, NS, INFRA, "vm-999"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
-        assertThatThrownBy(() -> service.getVmInfo(NS, "other-infra", NODE))
+        assertThatThrownBy(() -> service.getVmInfo(null, NS, "other-infra", NODE))
                 .isInstanceOf(BusinessException.class);
         verify(tumblebugClient, never()).getNode(any(), any(), any());
     }
 
     @Test
     void 스냅샷은_요청_Namespace만_조회한다() {
-        service.getVmSummary(NS, INFRA, NODE);
+        service.getVmSummary(null, NS, INFRA, NODE);
 
         verify(tumblebugTreeBuilder).snapshot(argThat(c -> c.size() == 1 && c.contains(NS)));
     }
@@ -113,7 +113,7 @@ class ResourceExplorerVmServiceTest {
 
     @Test
     void 카드는_tb_라벨_선택자로_조회하고_미수집_카드는_null이다() {
-        VmSummaryResponse res = service.getVmSummary(NS, INFRA, NODE);
+        VmSummaryResponse res = service.getVmSummary(null, NS, INFRA, NODE);
 
         verify(detailMetrics).summary(eq(SEL), eq(SEL));
         assertThat(res.lastUpdatedAt()).isNotNull();
@@ -135,7 +135,7 @@ class ResourceExplorerVmServiceTest {
                 6.0, 16.0,
                 null));
 
-        VmSummaryResponse res = service.getVmSummary(NS, INFRA, NODE);
+        VmSummaryResponse res = service.getVmSummary(null, NS, INFRA, NODE);
 
         assertThat(res.cpu().utilizationPercent()).isEqualTo(45.2);
         assertThat(res.cpu().coreCount()).isEqualTo(2);
@@ -155,7 +155,7 @@ class ResourceExplorerVmServiceTest {
         when(detailMetrics.summary(any(), any())).thenReturn(new HostSummaryMetrics(
                 10.0, null, null, null, null, null, null, null, 30.0, null, null, null, null));
 
-        VmSummaryResponse res = service.getVmSummary(NS, INFRA, NODE);
+        VmSummaryResponse res = service.getVmSummary(null, NS, INFRA, NODE);
 
         assertThat(res.cpu().coreCount()).isZero();
         assertThat(res.gpu().vramFreeGb()).isZero();
@@ -169,7 +169,7 @@ class ResourceExplorerVmServiceTest {
         when(detailMetrics.trend(eq(NodeDetailMetric.CPU), eq(SEL), eq(SEL), any(), any(), eq("5m")))
                 .thenReturn(List.of(new Series("value", List.of(new DataPoint(1L, 12.5)))));
 
-        List<NodeMetricTrendResponse> res = service.getVmMetricTrend(NS, INFRA, NODE,
+        List<NodeMetricTrendResponse> res = service.getVmMetricTrend(null, NS, INFRA, NODE,
                 NodeDetailMetric.CPU, NodeMetricInterval.LAST_1H);
 
         assertThat(res).hasSize(1);
@@ -186,7 +186,7 @@ class ResourceExplorerVmServiceTest {
     void metric_미지정이면_6종_전부_반환한다() {
         when(detailMetrics.trend(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
 
-        List<NodeMetricTrendResponse> res = service.getVmMetricTrend(NS, INFRA, NODE,
+        List<NodeMetricTrendResponse> res = service.getVmMetricTrend(null, NS, INFRA, NODE,
                 null, NodeMetricInterval.LAST_10M);
 
         assertThat(res).extracting(NodeMetricTrendResponse::metric)
@@ -215,7 +215,7 @@ class ResourceExplorerVmServiceTest {
                 Map.entry("rootDiskType", "default"),
                 Map.entry("createdTime", "2026-09-05T02:11:00Z")));
 
-        VmInfoResponse info = service.getVmInfo(NS, INFRA, NODE);
+        VmInfoResponse info = service.getVmInfo(null, NS, INFRA, NODE);
 
         assertThat(info.vmId()).isEqualTo("TB:openstack/openstack-infra-01/vm-1");
         assertThat(info.name()).isEqualTo("openstack-nodegroup-01-1");
@@ -243,7 +243,7 @@ class ResourceExplorerVmServiceTest {
         when(tumblebugClient.getNode(NS, INFRA, NODE)).thenReturn(Map.of(
                 "id", NODE, "name", "", "publicIP", "", "status", "Creating"));
 
-        VmInfoResponse info = service.getVmInfo(NS, INFRA, NODE);
+        VmInfoResponse info = service.getVmInfo(null, NS, INFRA, NODE);
 
         assertThat(info.name()).isEqualTo(NODE);
         assertThat(info.nodeGroupId()).isNull();
@@ -257,7 +257,7 @@ class ResourceExplorerVmServiceTest {
     void Tumblebug_상세_조회_실패는_503이다() {
         when(tumblebugClient.getNode(NS, INFRA, NODE)).thenThrow(new RuntimeException("connection refused"));
 
-        assertThatThrownBy(() -> service.getVmInfo(NS, INFRA, NODE))
+        assertThatThrownBy(() -> service.getVmInfo(null, NS, INFRA, NODE))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getStatus())
                         .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));

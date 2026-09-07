@@ -24,7 +24,7 @@ public record ResourceTreeNodeResponse(
         String name,
         ResourceTreeNodeType type,
         String resourceId,
-        String roleId,
+        String roleName,
         String mdcId,
         String provider,
         String status,
@@ -43,12 +43,12 @@ public record ResourceTreeNodeResponse(
                                               String name,
                                               ResourceTreeNodeType type,
                                               String resourceId,
-                                              String roleId,
+                                              String roleName,
                                               String mdcId,
                                               String status,
                                               MonitoringStatus monitoringStatus,
                                               List<ResourceTreeNodeResponse> children) {
-        return of(id, parentId, name, type, resourceId, roleId, mdcId, null, status, monitoringStatus, children);
+        return of(id, parentId, name, type, resourceId, roleName, mdcId, null, status, monitoringStatus, children);
     }
 
     /** children 으로 leaf/childCount 를 계산해 생성한다. */
@@ -57,27 +57,27 @@ public record ResourceTreeNodeResponse(
                                               String name,
                                               ResourceTreeNodeType type,
                                               String resourceId,
-                                              String roleId,
+                                              String roleName,
                                               String mdcId,
                                               String provider,
                                               String status,
                                               MonitoringStatus monitoringStatus,
                                               List<ResourceTreeNodeResponse> children) {
         List<ResourceTreeNodeResponse> safe = children == null ? List.of() : children;
-        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleId, mdcId, provider,
+        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleName, mdcId, provider,
                 status, monitoringStatus, safe.isEmpty(), safe.size(), safe);
     }
 
     /** 하위 목록을 교체한 사본 — leaf/childCount 를 다시 계산한다. */
     public ResourceTreeNodeResponse withChildren(List<ResourceTreeNodeResponse> newChildren) {
         List<ResourceTreeNodeResponse> safe = newChildren == null ? List.of() : newChildren;
-        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleId, mdcId, provider,
+        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleName, mdcId, provider,
                 status, monitoringStatus, safe.isEmpty(), safe.size(), safe);
     }
 
     /** Lazy Loading 응답용 — 하위 목록을 제외하고 leaf/childCount 는 유지한다. */
     public ResourceTreeNodeResponse withoutChildren() {
-        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleId, mdcId, provider,
+        return new ResourceTreeNodeResponse(id, parentId, name, type, resourceId, roleName, mdcId, provider,
                 status, monitoringStatus, leaf, childCount, null);
     }
 }

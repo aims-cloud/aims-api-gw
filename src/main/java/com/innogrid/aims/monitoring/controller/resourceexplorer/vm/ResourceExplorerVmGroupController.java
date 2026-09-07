@@ -42,9 +42,9 @@ public class ResourceExplorerVmGroupController {
             description = "선택한 가상머신 그룹(역할·배포영역)의 가상머신 수, Running, Stop, Error 카드 값을 조회합니다.")
     @GetMapping("/summary")
     public ApiResponse<VmGroupSummaryResponse> getVmGroupSummary(
-            @RequestParam(required = false) String roleId,
+            @RequestParam(required = false) String roleName,
             @RequestParam(required = false) String deploymentId) {
-        return ApiResponse.ok(resourceExplorerVmGroupService.getVmGroupSummary(roleId, deploymentId));
+        return ApiResponse.ok(resourceExplorerVmGroupService.getVmGroupSummary(roleName, deploymentId));
     }
 
     @Operation(summary = "가상머신 그룹 VM Top-N",
@@ -52,11 +52,11 @@ public class ResourceExplorerVmGroupController {
                     + "행마다 세 지표를 모두 담아 토글 시 재조회가 필요 없습니다.")
     @GetMapping("/top")
     public ApiResponse<List<VmTopResponse>> getVmGroupTop(
-            @RequestParam(required = false) String roleId,
+            @RequestParam(required = false) String roleName,
             @RequestParam(required = false) String deploymentId,
             @RequestParam(defaultValue = "CPU") NodeMetric metric,
             @RequestParam(defaultValue = "5") @Min(1) @Max(20) int limit) {
-        return ApiResponse.ok(resourceExplorerVmGroupService.getVmGroupTop(roleId, deploymentId, metric, limit));
+        return ApiResponse.ok(resourceExplorerVmGroupService.getVmGroupTop(roleName, deploymentId, metric, limit));
     }
 
     @Operation(summary = "가상머신 그룹 VM 목록",
@@ -65,7 +65,7 @@ public class ResourceExplorerVmGroupController {
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
     @GetMapping("/vms")
     public ApiResponse<PageResponse<VmListItemResponse>> getVmGroupVms(
-            @RequestParam(required = false) String roleId,
+            @RequestParam(required = false) String roleName,
             @RequestParam(required = false) String deploymentId,
             @RequestParam(required = false) NodeStatus status,
             @RequestParam(required = false) String keyword,
@@ -73,6 +73,6 @@ public class ResourceExplorerVmGroupController {
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "name,asc") String sort) {
         return ApiResponse.ok(resourceExplorerVmGroupService.getVmGroupVms(
-                roleId, deploymentId, status, keyword, page, size, sort));
+                roleName, deploymentId, status, keyword, page, size, sort));
     }
 }

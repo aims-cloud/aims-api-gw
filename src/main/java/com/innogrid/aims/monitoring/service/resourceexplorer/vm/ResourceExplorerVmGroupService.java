@@ -22,20 +22,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class ResourceExplorerVmGroupService {
 
     /** 가상머신 그룹 KPI 카드 — 가상머신 수 / Running / Stop / Error */
-    public VmGroupSummaryResponse getVmGroupSummary(String roleId, String deploymentId) {
+    public VmGroupSummaryResponse getVmGroupSummary(String roleName, String deploymentId) {
         // TODO:: VM 원장(OpenStack Nova 연동) 확정 후 상태별 집계 구현
         throw dataSourceNotImplemented();
     }
 
     /** 가상머신 그룹 내 VM Top-N — 요청 지표 내림차순, CPU/MEM/FS 보조 지표 동봉 */
-    public List<VmTopResponse> getVmGroupTop(String roleId, String deploymentId,
+    public List<VmTopResponse> getVmGroupTop(String roleName, String deploymentId,
                                              NodeMetric metric, int limit) {
         // TODO:: VM 내부 지표(VM 내 node_exporter) 수집 체계 확정 후 metric 기준 상위 N개 집계 구현
         throw dataSourceNotImplemented();
     }
 
     /** 가상머신 그룹 내 VM 목록 — 상태·키워드 필터, 컬럼 정렬, 페이징(1부터) */
-    public PageResponse<VmListItemResponse> getVmGroupVms(String roleId, String deploymentId,
+    public PageResponse<VmListItemResponse> getVmGroupVms(String roleName, String deploymentId,
                                                           NodeStatus status, String keyword,
                                                           int page, int size, String sort) {
         // TODO:: VM 원장과 VM 내부 지표를 병합해 목록 구성 (sort: "{필드},{asc|desc}")

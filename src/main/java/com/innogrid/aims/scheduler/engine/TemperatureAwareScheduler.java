@@ -203,8 +203,11 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
                     bestScore.totalScore(), bestScore.temperatureScore(), bestScore.networkScore(),
                     bestScore.powerScore(), bestScore.cpuScore(), avgTemperature, candidates.size());
         } else if (measuredCount > 0) {
+            // "자원 여유로 선택" 이라고 쓰지 않는다 — 승자가 이긴 이유는 열 3항이 중립 바닥(0.375)으로
+            // 고정됐기 때문이지 자원이 더 낫기 때문이 아니다. 실제로 자원이 <b>더 적은</b> 미계측 노드가
+            // 뜨거운 계측 노드를 이기는 구성이 존재한다. 사유는 일어난 일만 적는다.
             reason = String.format(
-                    "[온도최적화] 점수 %.4f — 선택 노드는 온도 미계측이라 열 점수를 중립으로 두고 자원 여유로 선택 "
+                    "[온도최적화] 점수 %.4f — 선택 노드는 온도 미계측이라 열 점수를 중립으로 뒀다 "
                             + "(자원:%.2f, 계측 %d/%d대, 계측 노드 평균온도:%.1f°C)",
                     bestScore.totalScore(), bestScore.cpuScore(),
                     measuredCount, candidates.size(), avgTemperature);

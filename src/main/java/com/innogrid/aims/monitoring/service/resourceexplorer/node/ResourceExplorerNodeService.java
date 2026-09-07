@@ -36,6 +36,7 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetr
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.HostSummaryMetrics;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
 import org.springframework.http.HttpStatus;
@@ -77,15 +78,15 @@ public class ResourceExplorerNodeService {
         this.hostMetrics = hostMetrics;
     }
 
-    /** 접근 검증을 통과한 노드 — 자산, 스코프 호스트, exporter instance */
-    record NodeContext(Asset asset, ScopedHost host, String nodeInstance, String dcgmInstance) {}
+    /** 접근 검증을 통과한 노드 — 자산, 스코프 호스트, exporter 선택자(instance 기준, 없으면 null) */
+    record NodeContext(Asset asset, ScopedHost host, MetricSelector node, MetricSelector dcgm) {}
 
     // ── 공개 API ────────────────────────────────────────────────
 
     /** 개요 탭 주요 지표 카드 6종 — 미수집이거나 GPU 미탑재면 해당 카드가 null 로 내려간다 */
     public NodeSummaryResponse getNodeSummary(String nodeId) {
         NodeContext ctx = accessibleNode(nodeId);
-        HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
+        HostSummaryMetrics m = detailMetrics.summary(ctx.node(), ctx.dcgm());
         return new NodeSummaryResponse(
                 now(),
                 m.cpuPercent() == null ? null : new CpuCard(m.cpuPercent(), zeroIfNull(m.coreCount())),
@@ -110,7 +111,7 @@ public class ResourceExplorerNodeService {
         List<NodeDetailMetric> metrics = metric == null ? List.of(NodeDetailMetric.values()) : List.of(metric);
         return metrics.stream()
                 .map(m -> new NodeMetricTrendResponse(m, m.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
-                        detailMetrics.trend(m, ctx.nodeInstance(), ctx.dcgmInstance(), from, to, step)))
+                        detailMetrics.trend(m, ctx.node(), ctx.dcgm(), from, to, step)))
                 .toList();
     }
 
@@ -120,7 +121,7 @@ public class ResourceExplorerNodeService {
      */
     public NodeInfoResponse getNodeInfo(String nodeId) {
         NodeContext ctx = accessibleNode(nodeId);
-        HostSummaryMetrics m = detailMetrics.summary(ctx.nodeInstance(), ctx.dcgmInstance());
+        HostSummaryMetrics m = detailMetrics.summary(ctx.node(), ctx.dcgm());
         int vmCount = virtualResourceProvider.findByHost(ctx.asset()).size();
         return new NodeInfoResponse(
                 nodeId,
@@ -168,7 +169,7 @@ public class ResourceExplorerNodeService {
         LocalDate from = today.minusDays(Math.max(0, interval.window().toDays()));
         long vmCount = virtualResourceProvider.findByHost(ctx.asset()).size();
 
-        List<NodeDailyUsageResponse> rows = detailMetrics.dailyMax(ctx.nodeInstance(), from, today).stream()
+        List<NodeDailyUsageResponse> rows = detailMetrics.dailyMax(ctx.node(), from, today).stream()
                 .map(d -> new NodeDailyUsageResponse(d.date(), d.cpuPercent(), d.memoryPercent(), d.fileSystemPercent(),
                         d.date().equals(today) ? vmCount : null))
                 .sorted(comparator)
@@ -196,7 +197,11 @@ public class ResourceExplorerNodeService {
                 .map(MonitoringTarget::getScrapeEndpoint)
                 .findFirst()
                 .orElse(null);
-        return new NodeContext(asset, host, host.instance(), dcgmInstance);
+        return new NodeContext(asset, host, selector(host.instance()), selector(dcgmInstance));
+    }
+
+    private static MetricSelector selector(String instance) {
+        return instance == null ? null : MetricSelector.instance(instance);
     }
 
     private static BusinessException notFound(String nodeId) {

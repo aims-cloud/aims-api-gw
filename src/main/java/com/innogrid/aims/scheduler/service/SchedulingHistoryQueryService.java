@@ -58,7 +58,15 @@ public class SchedulingHistoryQueryService {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (workloadId != null) predicates.add(cb.equal(root.get("workloadId"), workloadId));
-            if (success != null) predicates.add(cb.equal(root.get("success"), success));
+            if (success != null) {
+                // 이 컬럼은 표보다 나중에 생겨서, 그 전에 쌓인 행과 단건 배치 API 가 만든 행은 NULL 이다.
+                // 실패한 결정은 언제나 명시적 false 로 저장되므로 **NULL 은 전부 성공**이고, 엔티티 주석·DDL·
+                // 응답 DTO 도 그렇게 못박고 있다. 그래서 성공을 물으면 NULL 도 함께 준다(비대칭이 맞다 —
+                // 실패를 물을 때 NULL 을 끼우면 없는 실패를 발명하게 된다).
+                predicates.add(Boolean.TRUE.equals(success)
+                        ? cb.or(cb.equal(root.get("success"), Boolean.TRUE), cb.isNull(root.get("success")))
+                        : cb.equal(root.get("success"), Boolean.FALSE));
+            }
             if (engineName != null && !engineName.isBlank()) predicates.add(cb.equal(root.get("engineName"), engineName.trim()));
             return cb.and(predicates.toArray(new Predicate[0]));
         };

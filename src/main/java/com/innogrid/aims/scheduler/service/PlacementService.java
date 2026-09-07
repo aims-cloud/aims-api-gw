@@ -69,7 +69,13 @@ public class PlacementService {
                     result.finalScore(), result.reason());
             context.reserve(result.selectedNodeId(), workload);
             SchedulingHistory history = toHistory(workload, context, result, engine);
-            if (scheduleRunId != null) history.linkToRun(scheduleRunId, true);
+            // 성공 여부는 실행에 연결됐든 아니든 남긴다.
+            //
+            // 예전에는 스케줄 실행이 만든 이력에만 표시를 남겨, 단건 배치 API 가 만든 행은 success 가 NULL 이었다.
+            // "NULL 은 성공으로 본다"는 해석이 엔티티 주석·DDL·응답 DTO 세 곳에 적혀 있었지만, 조회 필터는 그
+            // 해석을 따르지 않아 성공한 결정이 목록에서 통째로 빠졌다. 읽는 쪽만 고치면 NULL 행은 계속 생기므로
+            // 쓰는 쪽에서 끊는다 — runId 가 없으면 연결만 비고 성공 여부는 그대로 기록된다.
+            history.linkToRun(scheduleRunId, true);
             historyRepository.save(history);
         } else {
             workload.markFailed(result.reason());

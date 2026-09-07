@@ -139,8 +139,8 @@ public class ScheduleService {
             throw new BusinessException(HttpStatus.CONFLICT, "이미 있는 스케줄 ID 입니다: " + scheduleId);
         }
 
-        String name = requireText(request.name(), "스케줄명");
-        String cron = requireText(request.cronExpression(), "실행 주기");
+        String name = requireText(request.name(), "스케줄명", Schedule.NAME_MAX);
+        String cron = requireText(request.cronExpression(), "실행 주기", Schedule.CRON_MAX);
         cronSupport.validate(cron);
         validateEngine(request.engine());
 
@@ -168,10 +168,10 @@ public class ScheduleService {
             throw badRequest("스케줄 ID 는 변경할 수 없습니다");
         }
         if (request.name() != null) {
-            schedule.setName(requireText(request.name(), "스케줄명"));
+            schedule.setName(requireText(request.name(), "스케줄명", Schedule.NAME_MAX));
         }
         if (request.cronExpression() != null) {
-            String cron = requireText(request.cronExpression(), "실행 주기");
+            String cron = requireText(request.cronExpression(), "실행 주기", Schedule.CRON_MAX);
             cronSupport.validate(cron);
             schedule.setCronExpression(cron);
         }
@@ -287,8 +287,12 @@ public class ScheduleService {
 
     private void apply(Schedule schedule, ScheduleRequest request) {
         if (request.resourceType() != null) schedule.setResourceType(request.resourceType());
-        if (request.description() != null) schedule.setDescription(request.description());
-        if (request.engine() != null) schedule.setEngine(request.engine());
+        if (request.description() != null) {
+            schedule.setDescription(optionalText(request.description(), "설명", Schedule.DESCRIPTION_MAX));
+        }
+        if (request.engine() != null) {
+            schedule.setEngine(optionalText(request.engine(), "엔진", Schedule.ENGINE_MAX));
+        }
         if (request.policyId() != null) schedule.setPolicyId(request.policyId());
         if (request.maxPowerBudgetWatts() != null) {
             schedule.setMaxPowerBudgetWatts(request.maxPowerBudgetWatts());
@@ -315,11 +319,53 @@ public class ScheduleService {
         }
     }
 
+    /**
+     * 길이 상한이 <b>다른 곳에서 이미 강제되는</b> 값 전용 — 지금은 스케줄 ID 하나뿐이다.
+     *
+     * <p>{@link Schedule#ID_PATTERN} 이 50자를 강제하므로 여기서 또 재면 중복이고, 먼저 걸리면
+     * "영문·숫자로 시작하고…" 라는 기존 사유가 길이 사유로 바뀐다. 그 외의 값에는 길이를 받는 쪽을 쓴다.</p>
+     */
     private String requireText(String value, String label) {
         if (value == null || value.isBlank()) {
             throw badRequest(label + "은(는) 필수입니다");
         }
         return value.trim();
+    }
+
+    private String requireText(String value, String label, int max) {
+        if (value == null || value.isBlank()) {
+            throw badRequest(label + "은(는) 필수입니다");
+        }
+        return limit(value.trim(), label, max);
+    }
+
+    /**
+     * 컬럼 길이를 넘는 값을 400 으로 막는다.
+     *
+     * <p>없으면 INSERT 가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 스프링 기본 처리가 {@code /error} 를
+     * 다시 태우고 그 재요청이 인증에 막혀 <b>클라이언트는 400 이 아니라 403(본문 없음)</b> 을 받는다.
+     * 같은 패키지의 다른 원장 서비스 다섯은 이미 이 형태를 쓴다.</p>
+     *
+     * <p><b>스케줄 ID 에는 쓰지 않는다</b> — {@link Schedule#ID_PATTERN} 이 이미 50자를 강제하고 있어
+     * 중복 검증이 되고, 여기서 먼저 걸리면 기존 사유 문구가 바뀐다.</p>
+     */
+    private String limit(String value, String label, int max) {
+        if (value.length() > max) {
+            throw badRequest(String.format("%s은(는) %d자 이내여야 합니다 (현재 %d자)", label, max, value.length()));
+        }
+        return value;
+    }
+
+    /**
+     * 선택 입력의 앞뒤 공백을 떼고, 비면 미지정(null)으로 본다.
+     *
+     * <p>공백만 있는 엔진 이름은 {@code validateEngine} 의 {@code isBlank()} 를 그대로 통과해 저장됐다.
+     * PostgreSQL 이 {@code varchar} 의 뒤쪽 공백은 잘라 받으므로 오류도 나지 않고 값만 이상하게 남는다(실측).
+     * 공백을 null 로 정규화하면 {@code ScheduleExecutionService} 가 이미 쓰는 "공백 = 미지정" 규약과 결과가 같아진다.</p>
+     */
+    private String optionalText(String value, String label, int max) {
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : limit(trimmed, label, max);
     }
 
     /**

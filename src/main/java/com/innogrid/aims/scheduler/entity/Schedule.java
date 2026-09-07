@@ -23,6 +23,17 @@ public class Schedule {
     /** 스케줄 ID 로 허용하는 형식. 화면에서 사용자가 직접 입력한다. */
     public static final String ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_.-]{0,49}$";
 
+    /**
+     * 문자열 컬럼의 길이 상한. 서비스가 이 값으로 400 을 만든다.
+     *
+     * <p>컬럼 정의({@code @Column(length)}) 바로 옆에 두어 한쪽만 바뀌는 일을 줄인다. 검증이 없으면 INSERT 가
+     * 컬럼 길이에서 실패하고, 그 예외를 잡는 곳이 없어 클라이언트는 400 이 아니라 403(본문 없음)을 받는다.</p>
+     */
+    public static final int NAME_MAX = 100;
+    public static final int CRON_MAX = 120;
+    public static final int DESCRIPTION_MAX = 300;
+    public static final int ENGINE_MAX = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

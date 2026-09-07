@@ -49,7 +49,12 @@ public class PowerOptimizationController {
 
     @Operation(summary = "전력 최적화 진단",
                description = "클러스터 전력 현황과 개선 항목(유휴 노드·전력 낭비·여유 부족). "
-                       + "전력 메트릭이 없으면 measured=false 와 사유를 돌려주고 findings 는 빈다.")
+                       + "전력 메트릭이 없으면 measured=false 와 사유를 돌려주고 findings 는 빈다. "
+                       + "**mdcs** 는 MDC 별 현황(식별자 오름차순)이다 — 전력을 두 값으로 준다: totalPowerWatts 는 실측 합"
+                       + "(클러스터 합계와 같은 기준이라 MDC 별 합을 더하면 클러스터 합계가 된다), effectivePowerWatts 는 "
+                       + "예약분까지 반영한 합으로 **배치 판정(C6)이 예산과 비교하는 기준선**이다. 둘의 차이가 배정됐지만 아직 "
+                       + "메트릭에 잡히지 않은 부하다. remainingWatts·overBudget 은 실효 기준이라 진단과 실제 배치가 어긋나지 않는다. "
+                       + "예산을 등록하지 않은 MDC 는 budgetWatts·remainingWatts 가 null 이다.")
     @GetMapping("/power")
     public ApiResponse<?> getPowerOptimization() {
         return ApiResponse.ok(optimizationService.diagnoseCurrent());

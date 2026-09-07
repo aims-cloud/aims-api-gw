@@ -73,10 +73,26 @@ public class ScheduleRun {
     }
 
     /** 실행 결과를 확정한다. */
+    /** 실행 결과 메시지의 컬럼 길이. */
+    public static final int MESSAGE_MAX = 500;
+
+    /**
+     * 실행을 마무리한다.
+     *
+     * <p>메시지를 <b>여기서 자른다.</b> 실패 사유에는 제외 노드 목록·첫 실패 사유가 붙어 500자를 넘길 수 있는데,
+     * 그대로 저장하면 이 행 저장이 통째로 실패한다. 그러면 <b>성공한 실행이 실패로 뒤바뀌어 기록</b>되고,
+     * 실패 경로에서는 실행 권한 해제까지 위태로워진다. 모든 마무리 경로가 이 메서드를 지나므로 여기가 길목이다.</p>
+     */
     public void finish(RunStatus status, String message) {
         this.status = status;
-        this.message = message;
+        this.message = trim(message);
         this.finishedAt = OffsetDateTime.now();
+    }
+
+    /** 컬럼 길이에 맞춰 자른다. 잘렸다는 것이 보이도록 끝에 말줄임을 남긴다. */
+    public static String trim(String message) {
+        if (message == null || message.length() <= MESSAGE_MAX) return message;
+        return message.substring(0, MESSAGE_MAX - 3) + "...";
     }
 
     public void recordCounts(int targetCount, int successCount, int failedCount, boolean truncated) {

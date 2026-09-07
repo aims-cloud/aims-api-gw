@@ -3,7 +3,9 @@
 # 값은 시각의 함수다: 기준 사용률 ± swing(%p) 사인 곡선(주기 periodMinutes), 노드별 위상은 nodeId 해시 + seed 로 고정.
 # 전력 = idleWatts + (capacityWatts - idleWatts) × CPU 사용률 · 온도 = baseTemperature + 0.3 × CPU 사용률.
 # ipmi: false 인 노드는 전력·온도 메트릭이 없다(실환경의 미계측 노드). gpus 가 0 이면 DCGM 시리즈가 없다.
-# capacityWatts 는 예약 필드 — 배치 엔진의 정격은 아직 설정 capacityByNode 에서 온다(로드맵 #6).
+# capacityWatts 는 전력값 생성에만 쓰인다 — 배치 엔진의 정격은 전력 사양 원장(/scheduler/node-power-specs) → 설정 capacityByNode → 기본값 순으로 온다.
+# 여기 값과 엔진의 정격을 맞추려면 시연 전에 원장에 같은 값을 넣는다(자동 주입하지 않는다 — 모의 데이터가 실데이터와 섞이면 안 되므로).
+# MDC 총량 상한은 MDC 전력 예산 원장(/scheduler/mdc-power-budgets)이 담당한다 — mdcId 를 키로 쓴다.
 #
 # 노드별 swing 을 적으면 그 노드만 진폭이 다르다(유휴 노드는 swing 을 작게 — 가동 판정 5% 아래에 머물게).
 # 담긴 상황: IPMI 있음 5 / 없음 3, GPU 노드 2, 뜨거운 노드 1(seoul-03: 경고 구간), 전력 비효율·유휴 노드 1(busan-02: CPU 5% 미만인데 고전력),

@@ -8,12 +8,10 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
-import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,14 +32,12 @@ class SchedulingServiceReservationTest {
     private final NodeResourceCollector nodeCollector = mock(NodeResourceCollector.class);
     private final SchedulerProperties properties = new SchedulerProperties();
 
-    private final SchedulingService service = new SchedulingService(
-            workloadRepository,
-            mock(SchedulingPolicyRepository.class),
-            nodeCollector,
-            mock(PlacementService.class),
-            mock(EngineRegistry.class),
-            ConstraintEvaluator.withDefaults(),
-            properties);
+    private final SchedulingService service = SchedulingServiceBuilder.aSchedulingService()
+            .workloads(workloadRepository)
+            .collector(nodeCollector)
+            .engines(mock(EngineRegistry.class))
+            .properties(properties)
+            .build();
 
     @DisplayName("배치 대기중인 워크로드는 예약으로 잡는다")
     @Test

@@ -11,7 +11,7 @@ import java.util.List;
  * 데도 쓴다.</p>
  */
 public record ConstraintDescriptionResponse(
-        String code,            // C0 ~ C5
+        String code,            // C0 ~ C6
         String name,
         String description,
         String source,          // 임계값의 출처 (정책 필드 / 워크로드 필드 / 설정)
@@ -49,6 +49,13 @@ public record ConstraintDescriptionResponse(
                                 + "링크(MDC 링크 원장)가 DOWN 이면 제외한다. 같은 MDC·미등록 쌍은 통과하고, UP·DEGRADED 의 "
                                 + "지연·손실은 제약이 아니라 weighted 엔진의 네트워크 점수에 반영된다.",
                         "정책의 affinityEnabled, 워크로드의 dataMdcId, MDC 링크 원장(/scheduler/mdc-links)의 status",
-                        true));
+                        true),
+                new ConstraintDescriptionResponse("C6", "MDC 전력 예산",
+                        "노드가 속한 MDC 의 전력 합계가 예산을 넘으면 제외한다. 합계는 실측이 아니라 예약분을 반영한 "
+                                + "실효 전력이라 같은 실행에서 배치가 쌓일수록 올라간다. 예산이 등록되지 않은 MDC 와 전력을 "
+                                + "수집하지 못한 노드는 검사하지 않으며, 미계측 형제 노드는 합계에서 빼고 제외 사유에 대수를 적는다. "
+                                + "노드 한 대의 정격을 보는 C4 와 달리 MDC 한 곳의 총량을 본다.",
+                        "MDC 전력 예산 원장(/scheduler/mdc-power-budgets)의 budgetWatts",
+                        false));
     }
 }

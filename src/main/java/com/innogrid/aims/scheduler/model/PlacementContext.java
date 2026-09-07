@@ -39,6 +39,12 @@ public class PlacementContext {
      */
     private LinkMatrix linkMatrix = LinkMatrix.EMPTY;
 
+    /**
+     * 이번 실행이 보는 MDC 전력 예산 원장 스냅샷. 비어 있으면 C6 은 아무 노드도 막지 않는다 —
+     * 원장에 값을 넣기 전까지 배치 동작이 이 기능 이전과 완전히 같다.
+     */
+    private MdcPowerBudgets mdcBudgets = MdcPowerBudgets.EMPTY;
+
     private PlacementContext(List<NodeResource> nodes, SchedulingPolicy policy, ConstraintEvaluator evaluator) {
         this.nodes = nodes == null ? Collections.emptyList() : nodes;
         this.policy = policy;
@@ -82,6 +88,22 @@ public class PlacementContext {
     /** 이번 실행의 MDC 링크 스냅샷. 게이트가 꺼진 실행은 항상 비어 있다. */
     public LinkMatrix linkMatrix() {
         return linkMatrix;
+    }
+
+    /**
+     * MDC 전력 예산 스냅샷을 싣는다. null 이면 빈 원장.
+     *
+     * <p>이름을 {@code withPowerBudget} 과 구분한 이유: 그쪽은 <b>노드 한 대</b>의 전력을 비교하는
+     * 실행 단위 상한이고(12장 T10 의 이름 문제), 이쪽은 <b>MDC 한 곳</b>의 합계 상한이다.</p>
+     */
+    public PlacementContext withMdcBudgets(MdcPowerBudgets budgets) {
+        this.mdcBudgets = budgets == null ? MdcPowerBudgets.EMPTY : budgets;
+        return this;
+    }
+
+    /** 이번 실행의 MDC 전력 예산 스냅샷. 원장이 비어 있으면 빈 값이다. */
+    public MdcPowerBudgets mdcBudgets() {
+        return mdcBudgets;
     }
 
     /**

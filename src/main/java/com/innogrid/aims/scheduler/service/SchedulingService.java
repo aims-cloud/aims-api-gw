@@ -21,10 +21,12 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
+import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
+import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -57,6 +59,17 @@ public class SchedulingService {
     /** 실행 계층 연동. null 이면(직접 조립한 테스트 경로) 결정만 하고 넘기지 않는다. */
     private final PlacementDispatchService dispatchService;
 
+    /** MDC 전력 예산 원장. null 이면(직접 조립한 테스트 경로) MDC 총량 제약이 걸리지 않는다. */
+    private final MdcPowerBudgetRepository budgetRepository;
+
+    /**
+     * 유일한 생성자다. 선택 원장(링크·디스패치·예산)은 {@code null} 이면 그 기능이 꺼진다.
+     *
+     * <p>예전에는 "옛 인자 수" 생성자를 하나씩 남겨 7·8·9·10인자 4단이었다. 테스트가 위치 인자로 직접
+     * 조립하고 있어 인자를 늘릴 때마다 테스트가 깨졌기 때문인데, 인자 열 개가 대부분 리포지토리·서비스
+     * 타입이라 <b>순서를 바꿔 넣어도 컴파일되는 조합</b>이 생기는 것이 더 큰 위험이었다. 조립은 테스트
+     * 소스의 {@code SchedulingServiceBuilder} 한 곳으로 모았다.</p>
+     */
     @Autowired
     public SchedulingService(WorkloadRepository workloadRepository,
                              SchedulingPolicyRepository policyRepository,
@@ -66,7 +79,8 @@ public class SchedulingService {
                              ConstraintEvaluator constraintEvaluator,
                              SchedulerProperties properties,
                              MdcLinkRepository linkRepository,
-                             PlacementDispatchService dispatchService) {
+                             PlacementDispatchService dispatchService,
+                             MdcPowerBudgetRepository budgetRepository) {
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.nodeCollector = nodeCollector;
@@ -76,31 +90,7 @@ public class SchedulingService {
         this.properties = properties;
         this.linkRepository = linkRepository;
         this.dispatchService = dispatchService;
-    }
-
-    /** 실행 계층 연동 없이 조립하는 형태 — 링크 원장은 있으나 디스패치는 하지 않는다(기존 테스트 경로). */
-    public SchedulingService(WorkloadRepository workloadRepository,
-                             SchedulingPolicyRepository policyRepository,
-                             NodeResourceCollector nodeCollector,
-                             PlacementService placementService,
-                             EngineRegistry engineRegistry,
-                             ConstraintEvaluator constraintEvaluator,
-                             SchedulerProperties properties,
-                             MdcLinkRepository linkRepository) {
-        this(workloadRepository, policyRepository, nodeCollector, placementService, engineRegistry,
-             constraintEvaluator, properties, linkRepository, null);
-    }
-
-    /** 링크 원장 없이 조립하는 형태 — 기존 단위 테스트 경로. 링크 스냅샷은 항상 {@link LinkMatrix#EMPTY}. */
-    public SchedulingService(WorkloadRepository workloadRepository,
-                             SchedulingPolicyRepository policyRepository,
-                             NodeResourceCollector nodeCollector,
-                             PlacementService placementService,
-                             EngineRegistry engineRegistry,
-                             ConstraintEvaluator constraintEvaluator,
-                             SchedulerProperties properties) {
-        this(workloadRepository, policyRepository, nodeCollector, placementService, engineRegistry,
-             constraintEvaluator, properties, null);
+        this.budgetRepository = budgetRepository;
     }
 
     /**
@@ -161,7 +151,8 @@ public class SchedulingService {
         PlacementContext context =
                 PlacementContext.of(snapshot.nodes(), policy, constraintEvaluator)
                         .withExcluded(snapshot.excluded())
-                        .withLinkMatrix(loadLinkMatrix(policy));
+                        .withLinkMatrix(loadLinkMatrix(policy))
+                        .withMdcBudgets(loadMdcBudgets());
         applyReservations(context);
         return context;
     }
@@ -175,6 +166,15 @@ public class SchedulingService {
             return LinkMatrix.EMPTY;
         }
         return LinkMatrix.of(linkRepository.findAll());
+    }
+
+    /**
+     * MDC 전력 예산 원장을 <b>실행당 1회</b> 읽는다. 링크와 달리 정책 게이트가 없다 — 운영자가 원장에 직접
+     * 넣은 값이라 정책 설정과 무관하게 적용한다(워크로드·스케줄 전력 예산과 같은 관례). 원장이 비어 있으면
+     * 스냅샷도 비고 C6 은 아무 노드도 막지 않으므로, 배포 직후 배치 결과는 그대로다.
+     */
+    private MdcPowerBudgets loadMdcBudgets() {
+        return budgetRepository == null ? MdcPowerBudgets.EMPTY : MdcPowerBudgets.of(budgetRepository.findAll());
     }
 
     /**

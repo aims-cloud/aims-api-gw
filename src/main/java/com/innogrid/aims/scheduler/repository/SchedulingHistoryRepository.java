@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.repository;
 import java.util.Collection;
 import java.util.List;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
@@ -11,9 +12,14 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 public interface SchedulingHistoryRepository extends JpaRepository<SchedulingHistory, Long>,
         JpaSpecificationExecutor<SchedulingHistory> {
 
-    List<SchedulingHistory> findByWorkloadIdOrderByCreatedAtDesc(Long workloadId);
+    /**
+     * 워크로드별 이력. <b>반드시 상한을 받는다</b> — 이 표는 지워지지 않아 단조 증가하므로
+     * 상한 없는 조회를 남겨 두면 언젠가 응답 하나가 표 전체가 된다.
+     */
+    List<SchedulingHistory> findByWorkloadIdOrderByCreatedAtDesc(Long workloadId, Limit limit);
 
-    List<SchedulingHistory> findAllByOrderByCreatedAtDesc();
+    /** 전체 이력 최신순. 위와 같은 이유로 상한이 필수다. */
+    List<SchedulingHistory> findAllByOrderByCreatedAtDesc(Limit limit);
 
     /** 실행 1건이 만든 결정들. 실행 상세에서 쓴다. */
     List<SchedulingHistory> findByScheduleRunIdOrderByCreatedAtAsc(Long scheduleRunId);

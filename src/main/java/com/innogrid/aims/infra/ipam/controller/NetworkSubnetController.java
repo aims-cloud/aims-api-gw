@@ -23,7 +23,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 서브넷 API (IPAM).
  * 서브넷 CRUD + IP 이용률 + 행위이력. 독립 메뉴와 구역 하위 탭 공용.
  */
-@Tag(name = "서브넷", description = "IPAM 서브넷 관리 (IP 이용률 포함)")
+@Tag(name = "네트워크 > 서브넷", description = "IPAM 서브넷 관리 (IP 이용률 포함)")
 @RestController
 @RequestMapping("/api/v1/network/subnets")
 public class NetworkSubnetController {

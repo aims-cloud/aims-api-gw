@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 할당됨(OpenStack 동기화) + 예약됨(수동 생성) IP를 관리한다.
  * 독립 메뉴와 서브넷 하위 탭 공용.
  */
-@Tag(name = "IP 주소", description = "IPAM IP 주소 (예약/할당) 관리")
+@Tag(name = "네트워크 > IP 주소", description = "IPAM IP 주소 (예약/할당) 관리")
 @RestController
 @RequestMapping("/api/v1/network/ip-addresses")
 public class IpAddressController {

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
  * [요구사항 #32] 토폴로지 — 향후 구현
  * [요구사항 #33] SAN Switch SFP — VictoriaMetrics SNMP 연동 (향후)
  */
-@Tag(name = "네트워크", description = "VPC, 보안그룹, 키페어 (CB-Spider)")
+@Tag(name = "네트워크 > 토폴로지 관리", description = "VPC, 보안그룹, 키페어 (CB-Spider)")
 @RestController
 @RequestMapping("/api/v1/network")
 public class NetworkController {

@@ -32,7 +32,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 가상서버 그룹 API (통합 토폴로지 OpenStack 기준).
  * 그룹 CRUD + 가상서버 담기/빼기 + 네트워크 맵(서버 연결 관리) + 행위 이력.
  */
-@Tag(name = "가상서버 그룹", description = "OpenStack VM 논리 그룹·연결(네트워크 맵) 관리")
+@Tag(name = "토폴로지 > 가상서버 그룹", description = "OpenStack VM 논리 그룹·연결(네트워크 맵) 관리")
 @RestController
 @RequestMapping("/api/v1/vm-groups")
 public class VmGroupController {

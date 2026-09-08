@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 네트워크 구역 API (IPAM).
  * 구역 CRUD + 인터페이스 관리(OpenStack 네트워크 연결) + 행위이력.
  */
-@Tag(name = "네트워크 구역", description = "IPAM 네트워크 구역 관리")
+@Tag(name = "네트워크 > 네트워크 구역", description = "IPAM 네트워크 구역 관리")
 @RestController
 @RequestMapping("/api/v1/network/zones")
 public class NetworkZoneController {

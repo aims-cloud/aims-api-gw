@@ -108,6 +108,12 @@ public final class SyntheticCluster {
 
     public String name() { return name; }
     public String job() { return job; }
+
+    /**
+     * 파동의 주기(분). 한 주기를 훑는 계산은 이 값을 알아야 창을 정할 수 있다 —
+     * 60 분이라고 가정하면 파일이 바뀌는 순간 조용히 같은 위상만 반복해서 훑게 된다.
+     */
+    public int periodMinutes() { return periodMinutes; }
     public List<Node> nodes() { return nodes; }
     public int mdcCount() { return (int) nodes.stream().map(Node::mdcId).distinct().count(); }
     public Optional<Node> node(String nodeId) { return nodes.stream().filter(n -> n.nodeId().equals(nodeId)).findFirst(); }

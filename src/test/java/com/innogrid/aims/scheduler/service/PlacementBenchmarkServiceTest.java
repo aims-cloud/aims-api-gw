@@ -636,11 +636,11 @@ class PlacementBenchmarkServiceTest {
         Set<String> mayMove = Set.of(BenchmarkRules.GENERATOR_POWER, BenchmarkRules.ACTIVE_NODE_DELTA,
                 BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV, BenchmarkRules.UNMEASURED_SPREAD);
 
-        int moved = 0;
         int spreadMoved = 0;
         for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
-            Board full = service.compare(boardId, "heavytail").boards().get(0);
-            Board less = fewer.compare(boardId, "heavytail").boards().get(0);
+          for (String distribution : List.of(PlacementBenchmarkService.HEAVYTAIL, PlacementBenchmarkService.UNIFORM)) {
+            Board full = service.compare(boardId, distribution).boards().get(0);
+            Board less = fewer.compare(boardId, distribution).boards().get(0);
 
             for (Cell a : full.cells()) {
                 Cell b = cell(less, a.loadRatioPercent(), a.powerControl());
@@ -655,22 +655,21 @@ class PlacementBenchmarkServiceTest {
                                 + sb.strategyId() + " " + mb.key();
                         if (mayMove.contains(mb.key())) {
                             if (!Objects.equals(ma, mb)) {
-                                moved++;
                                 if (BenchmarkRules.UNMEASURED_SPREAD.equals(mb.key())) spreadMoved++;
                             }
                             continue;
                         }
                         // 레코드 전체 비교 — 중앙값만 보면 min·max·사유만 움직이는 누수가 초록불로 지나간다
-                        assertEquals(mb, ma, where + ": 대조군을 넣었다고 이 칸이 움직였다 — 전략 실행이 독립이 아니다");
+                        assertEquals(mb, ma, where + " " + distribution + ": 대조군을 넣었다고 이 칸이 움직였다 — 전략 실행이 독립이 아니다");
                     }
                 }
             }
+          }
         }
         // 주 결과판에서는 새 대조군이 어느 지점의 짝도 바꾸지 않을 수 있다(전 노드 계측·건수 동일). 그래서 판을 합쳐 본다 —
         // 계측 공백판의 미계측 격차는 전략 간 값이라 대조군 하나가 빠지면 반드시 움직인다. 그 키가 움직였는지를 따로 세어야
         // "무언가 움직였다"가 아니라 "움직여야 할 것이 움직였다"를 본다.
         assertTrue(spreadMoved > 0, "계측 공백판의 미계측 격차가 한 칸도 안 움직였다 — 대조군을 뺀 실행이 같은 실행이라는 뜻이라, 이 시험이 허용 목록을 시험하지 못했다");
-        assertTrue(moved >= spreadMoved);
     }
 
     /** 우리 엔진은 레지스트리가 밝히는 것을 전부 담는다 — 이름을 적어 두면 엔진이 늘 때 조용히 빠진다. */

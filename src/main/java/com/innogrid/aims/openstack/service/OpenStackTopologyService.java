@@ -117,12 +117,16 @@ public class OpenStackTopologyService {
         Set<String> routerConnectedNetworkIds = new HashSet<>();
         routerNetworkIds.values().forEach(routerConnectedNetworkIds::addAll);
 
-        // 프로젝트별 조립
+        // 프로젝트별 조립. 라우터는 외부 게이트웨이 유무로 배열을 나눈다
+        // (routers = 게이트웨이 있음, routersWithoutGateway = "외부 게이트웨이 없는 라우터" 그룹).
         Map<String, Map<String, Object>> projectNodes = new LinkedHashMap<>();
         for (Map<String, Object> router : routers) {
             Map<String, Object> projectNode = projectNode(projectNodes, projectIdOf(router), projectNames);
-            listOf(projectNode, "routers").add(
-                    toRouterNode(router, routerNetworkIds, networkNodesById, networkNameById));
+            Map<String, Object> routerNode =
+                    toRouterNode(router, routerNetworkIds, networkNodesById, networkNameById);
+            String bucket = routerNode.get("externalGateway") == null
+                    ? "routersWithoutGateway" : "routers";
+            listOf(projectNode, bucket).add(routerNode);
         }
         for (Map<String, Object> network : networks) {
             String networkId = string(network.get("id"));
@@ -403,6 +407,7 @@ public class OpenStackTopologyService {
             node.put("name", projectNames.getOrDefault(id,
                     id.isEmpty() ? props.getProjectName() : id));
             node.put("routers", new ArrayList<Map<String, Object>>());
+            node.put("routersWithoutGateway", new ArrayList<Map<String, Object>>());
             node.put("unconnectedNetworks", new ArrayList<Map<String, Object>>());
             node.put("externalNetworks", new ArrayList<Map<String, Object>>());
             return node;

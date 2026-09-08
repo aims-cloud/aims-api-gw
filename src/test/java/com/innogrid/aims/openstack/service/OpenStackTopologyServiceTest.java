@@ -140,15 +140,21 @@ class OpenStackTopologyServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void router_without_gateway_has_null_external_gateway() {
+    void router_without_gateway_goes_to_separate_array() {
         stubBaseData();
 
         Map<String, Object> admin = adminProject(service.getTopology());
-        List<Map<String, Object>> routers = (List<Map<String, Object>>) admin.get("routers");
-        Map<String, Object> plainRouter = routers.stream()
-                .filter(r -> "0808-1".equals(r.get("name"))).findFirst().orElseThrow();
 
-        assertThat(plainRouter.get("externalGateway")).isNull();
+        // 게이트웨이 있는 라우터는 routers[], 없는 라우터는 routersWithoutGateway[]
+        List<Map<String, Object>> routers = (List<Map<String, Object>>) admin.get("routers");
+        assertThat(routers).extracting(r -> r.get("name")).containsExactly("nat-router");
+
+        List<Map<String, Object>> withoutGateway =
+                (List<Map<String, Object>>) admin.get("routersWithoutGateway");
+        assertThat(withoutGateway).hasSize(1);
+        assertThat(withoutGateway.get(0))
+                .containsEntry("name", "0808-1");
+        assertThat(withoutGateway.get(0).get("externalGateway")).isNull();
     }
 
     @Test

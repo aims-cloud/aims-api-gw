@@ -41,7 +41,9 @@ public class TopologyController {
     }
 
     @Operation(summary = "통합 토폴로지 트리",
-            description = "프로젝트 → 네트워크(MTU/공유/상태) → 서브넷(CIDR) → VM(이름/상태/IP). "
+            description = "networkLayer(프로젝트→라우터→네트워크→서브넷→포트) + computeLayer(가용영역→노드→프로젝트→VM). "
+                    + "그룹 3종은 배열로 분리 제공: routersWithoutGateway(외부 게이트웨이 없는 라우터), "
+                    + "unconnectedNetworks(라우터 미연결 네트워크), projectsWithoutVm(VM 없는 프로젝트). "
                     + "deployZone 파라미터는 다중 연결 확장 대비용으로 현재는 무시됨")
     @GetMapping
     public ApiResponse<Map<String, Object>> getTopology(

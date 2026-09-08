@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.innogrid.aims.monitoring.AlarmProperties;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
@@ -44,7 +46,8 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
  *
  * <ul>
  *   <li>평가 단위는 정책이 아니라 <b>메트릭</b>이다. 활성 정책을 {@link AlarmMetric} 별로 묶어 메트릭당 Thanos 쿼리 한 번으로
- *       전체 자원 벡터를 받고, 메모리에서 정책별 대상·임계값에 대조한다. 주기당 쿼리 수 = 메트릭 종류 수로 정책 수와 무관하다.</li>
+ *       전체 자원 벡터를 받고, 메모리에서 정책별 대상·임계값에 대조한다. 주기당 쿼리 수 = 메트릭 종류 수로 정책 수와 무관하다.
+ *       주기·rate 창은 {@link AlarmProperties}({@code aims.alarm.evaluation.*}, 기본 60초·5분).</li>
  *   <li>정책의 대상 자원은 {@link AlarmPolicyTargets} 로 역할 스코프에서 전개한다(주기마다 역할 전체를 한 번 읽음).
  *       표본은 호스트면 node_exporter instance 라벨, VM 이면 {@code TB:{ns}/{infra}/{node}} 로 대상에 대조하고,
  *       대상이 아닌 표본은 건너뛴다. 이력의 자원 id 는 자원 탐색기와 같은 값({@code assets.id} / TB id)이다.</li>
@@ -68,8 +71,6 @@ public class AlarmEvaluationService {
 
     /** 전체 자원 벡터를 자원 하나 단위로 집계하는 라벨 — 물리 호스트(instance, mdc_id) + Tumblebug VM(tb_*) */
     static final String GROUP_BY = "instance, mdc_id, tb_ns, tb_infra, tb_node";
-    /** rate 창 — 1분 주기 평가에서 스크레이프 누락에 견디는 최소 창(자원 탐색기 rateWindow 하한과 동일) */
-    static final String RATE_WINDOW = "5m";
 
     private final AlarmPolicyRepository policyRepository;
     private final AlarmHistoryRepository historyRepository;
@@ -77,6 +78,7 @@ public class AlarmEvaluationService {
     private final ResourceScopeService resourceScopeService;
     private final ApplicationEventPublisher eventPublisher;
     private final AlarmEvaluationHealth health;
+    private final AlarmProperties.Evaluation settings;
 
     /** 지속 시간 대기 — 지문 → 처음 초과를 본 시각. 초과가 풀리거나 발생시키면 지운다 */
     private final Map<String, Instant> pendingSince = new ConcurrentHashMap<>();
@@ -86,16 +88,19 @@ public class AlarmEvaluationService {
                                   VictoriaMetricsClient vmClient,
                                   ResourceScopeService resourceScopeService,
                                   ApplicationEventPublisher eventPublisher,
-                                  AlarmEvaluationHealth health) {
+                                  AlarmEvaluationHealth health,
+                                  AlarmProperties properties) {
         this.policyRepository = policyRepository;
         this.historyRepository = historyRepository;
         this.vmClient = vmClient;
         this.resourceScopeService = resourceScopeService;
         this.eventPublisher = eventPublisher;
         this.health = health;
+        this.settings = properties.getEvaluation();
     }
 
-    @Scheduled(fixedRate = 60_000)
+    /** 평가 주기 — aims.alarm.evaluation.interval-seconds(기본 60). 기동 시 고정 */
+    @Scheduled(fixedRateString = "${aims.alarm.evaluation.interval-seconds:60}", timeUnit = TimeUnit.SECONDS)
     @Transactional
     public void evaluatePolicies() {
         List<AlarmPolicy> policies = policyRepository.findByEnabledTrueAndType(AlarmPolicyType.METRIC);
@@ -198,7 +203,7 @@ public class AlarmEvaluationService {
 
     /** 메트릭 하나의 전체 자원 현재값 — Prometheus 즉시 쿼리 응답(data.result[].metric/value)을 Sample 로 */
     private List<Sample> querySamples(AlarmMetric metric) {
-        Map<String, Object> response = vmClient.query(metric.promql(GROUP_BY, null, RATE_WINDOW));
+        Map<String, Object> response = vmClient.query(metric.promql(GROUP_BY, null, settings.rateWindowPromql()));
         if (response == null) return List.of();
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) response.get("data");

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.innogrid.aims.monitoring.AlarmProperties;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
@@ -69,6 +70,7 @@ class AlarmEvaluationServiceTest {
     @Mock AlarmEvaluationHealth health;
 
     AlarmEvaluationService service;
+    AlarmProperties properties = new AlarmProperties();
 
     static final Scope SCOPE = new Scope(Set.of("ADMIN", "USER"),
             List.of(new ScopedHost("ADMIN", 1L, "node-01", "n1", "mdc-01", null, "10.0.0.1:9100", List.of()),
@@ -80,7 +82,7 @@ class AlarmEvaluationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AlarmEvaluationService(policyRepository, historyRepository, vmClient, resourceScopeService, eventPublisher, health);
+        service = new AlarmEvaluationService(policyRepository, historyRepository, vmClient, resourceScopeService, eventPublisher, health, properties);
         when(resourceScopeService.scopeOf(anyCollection())).thenReturn(SCOPE);
         when(historyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -113,8 +115,8 @@ class AlarmEvaluationServiceTest {
 
         ArgumentCaptor<String> promql = ArgumentCaptor.forClass(String.class);
         verify(vmClient, times(1)).query(promql.capture());
-        assertThat(promql.getValue()).isEqualTo(AlarmMetric.CPU_USED_PERCENT.promql(
-                AlarmEvaluationService.GROUP_BY, null, AlarmEvaluationService.RATE_WINDOW));
+        assertThat(promql.getValue()).isEqualTo(AlarmMetric.CPU_USED_PERCENT.promql(AlarmEvaluationService.GROUP_BY, null, "5m"));
+        assertThat(promql.getValue()).contains("[5m]");                                   // 기본 rate 창
 
         // 92.4(asset 1) → 두 정책, 85(asset 2) → cpu-80 만 = 3건. asset 3·미등록 instance 는 없음
         ArgumentCaptor<AlarmHistory> saved = ArgumentCaptor.forClass(AlarmHistory.class);
@@ -316,6 +318,21 @@ class AlarmEvaluationServiceTest {
         assertThat(saved.getValue().getMetric()).isEqualTo("GPU_TEMP");
         assertThat(saved.getValue().getResourceType()).isEqualTo("gpu");
         assertThat(saved.getValue().getCriterion()).isEqualTo("GPU Temperature > 85°C");
+    }
+
+    @Test
+    void rate_창_설정은_PromQL_범위에_반영된다() {
+        properties.getEvaluation().setRateWindow(java.time.Duration.ofSeconds(90));
+        when(policyRepository.findByEnabledTrueAndType(AlarmPolicyType.METRIC)).thenReturn(List.of(nodeAll("cpu", AlarmMetric.CPU_USED_PERCENT, 80)));
+        when(vmClient.query(anyString())).thenReturn(vector());
+
+        service.evaluatePolicies();
+
+        ArgumentCaptor<String> promql = ArgumentCaptor.forClass(String.class);
+        verify(vmClient).query(promql.capture());
+        assertThat(promql.getValue()).contains("[90s]");
+        assertThat(new AlarmProperties().getEvaluation().rateWindowPromql()).isEqualTo("5m");
+        assertThat(new AlarmProperties().getEvaluation().getIntervalSeconds()).isEqualTo(60);
     }
 
     @Test

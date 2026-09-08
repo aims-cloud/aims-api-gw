@@ -7,7 +7,7 @@ public record AlarmPolicyListItemResponse(
         Long policyId,
         String policyName,
         String roleName,
-        String deploymentId,
+        String areaId,
         String resourceType,
         long targetResourceCount,       // 대상 자원 수
         String criterion,               // 기준 (예: Memory Used > 80%)

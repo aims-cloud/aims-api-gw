@@ -27,7 +27,7 @@ public class AlarmPolicyService {
     /** 정책 목록 — 역할·배포영역·자원 유형·특정 자원·레벨·키워드 필터, 컬럼 정렬, 페이징(1부터).
      *  resourceId 는 자원 탐색기의 알람 탭에서 해당 자원이 대상에 포함된 정책만 조회할 때 사용한다. */
     public PageResponse<AlarmPolicyListItemResponse> getPolicies(
-            String roleId, String deploymentId, String resourceType, String resourceId,
+            String roleName, String areaId, String resourceType, String resourceId,
             AlarmLevel level, String keyword, int page, int size, String sort) {
         // TODO:: 정책 원장(AlarmRule 확장 또는 신규 엔티티 — 유형/범위/전송 설정 포함) 확정 후 구현
         throw dataSourceNotImplemented();

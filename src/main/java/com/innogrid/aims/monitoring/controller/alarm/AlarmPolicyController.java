@@ -54,8 +54,8 @@ public class AlarmPolicyController {
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
     @GetMapping
     public ApiResponse<PageResponse<AlarmPolicyListItemResponse>> getPolicies(
-            @RequestParam(required = false) String roleId,
-            @RequestParam(required = false) String deploymentId,
+            @RequestParam(required = false) String roleName,
+            @RequestParam(required = false) String areaId,
             @RequestParam(required = false) String resourceType,
             @RequestParam(required = false) String resourceId,
             @RequestParam(required = false) AlarmLevel level,
@@ -63,7 +63,7 @@ public class AlarmPolicyController {
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        return ApiResponse.ok(alarmPolicyService.getPolicies(roleId, deploymentId, resourceType, resourceId, level, keyword, page, size, sort));
+        return ApiResponse.ok(alarmPolicyService.getPolicies(roleName, areaId, resourceType, resourceId, level, keyword, page, size, sort));
     }
 
     @Operation(summary = "알람 정책 상세",

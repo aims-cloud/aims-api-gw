@@ -8,9 +8,8 @@ public record AlarmPolicyDetailResponse(
         Long policyId,
         AlarmPolicyType alarmType,
         String policyName,
-        String roleId,
         String roleName,
-        String deploymentId,
+        String areaId,
         String resourceType,
         AlarmTargetScope targetScope,
         String criterion,               // 기준 (예: CPU Used > 80%)

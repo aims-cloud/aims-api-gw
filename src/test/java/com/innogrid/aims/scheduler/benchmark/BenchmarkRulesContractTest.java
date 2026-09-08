@@ -87,6 +87,51 @@ class BenchmarkRulesContractTest {
         }
     }
 
+    /**
+     * 열 계열 두 지표는 <b>헤드라인이 아니다</b>. 대조군은 열을 점수에 넣지 않으므로 이 값의 차이는
+     * 알고리즘의 열 판단이 아니라 CPU 를 어디에 몰았는가의 부산물이고, 제약 개입 횟수는 게이트가
+     * 몇 번 걸렸는지이지 좋고 나쁨이 아니다. "열 모델이 없어 비교 불가"라고 적지 않는다 — 대조군도
+     * 온도 제약은 똑같이 받는다({@code every_baseline_scores_all_candidates} 가 그 사실을 증명한다).
+     */
+    @DisplayName("열 계열 두 지표는 헤드라인이 아니고 개입 횟수에는 좋은 방향이 없다")
+    @Test
+    void the_thermal_metrics_are_not_headline_numbers() {
+        BenchmarkMetric warn = metric(BenchmarkRules.WARN_ZONE_NODES);
+        BenchmarkMetric interventions = metric(BenchmarkRules.C3_INTERVENTIONS);
+
+        assertEquals(Role.SECONDARY, warn.role(), "주 지표로 두면 이 판의 결론이 열에 실린다");
+        assertEquals(Direction.LOWER_IS_BETTER, warn.direction(), "적은 쪽이 실제로 덜 뜨거운 것은 맞다");
+
+        assertEquals(Role.SECONDARY, interventions.role());
+        assertEquals(Direction.CONTEXT_ONLY, interventions.direction(),
+                "덜 막힌 쪽이 낫다고 두면 열을 아예 보지 않는 전략이 상을 받는다");
+
+        for (BenchmarkMetric m : List.of(warn, interventions)) {
+            assertTrue(m.validity().contains("점수에 넣지 않"),
+                    m.key() + ": 대조군이 열을 점수에 넣지 않는다는 사실이 유효성 조건에 있어야 한다");
+            assertFalse(m.validity().contains("열 모델이 없"),
+                    m.key() + ": 대조군도 온도 제약은 받는다 — 코드가 증명하는 사실과 어긋나는 문구다");
+        }
+    }
+
+    /**
+     * 주 지표가 어떤 것들인지 목록으로 못 박는다 — 조용히 늘거나 줄면 결론의 근거가 바뀐 것이다.
+     * 온도 축이 여기 없는 것은 의도다: 대조군이 열을 점수에 넣지 않아 온도 축에 참가자가 우리뿐이고,
+     * 그 사실은 {@link BenchmarkRules#LIMITATION} 이 밝힌다.
+     */
+    @DisplayName("주 지표는 성공률과 전력·가동 계열뿐이고 온도 축에는 없다")
+    @Test
+    void the_primary_metrics_are_the_placement_rate_and_the_power_family() {
+        Set<String> primary = BenchmarkRules.METRICS.stream()
+                .filter(m -> m.role() == Role.PRIMARY)
+                .map(BenchmarkMetric::key).collect(Collectors.toCollection(TreeSet::new));
+
+        assertEquals(new TreeSet<>(Set.of(BenchmarkRules.PLACEMENT_RATE, BenchmarkRules.GENERATOR_POWER,
+                BenchmarkRules.PER_WORKLOAD_POWER, BenchmarkRules.ACTIVE_NODE_DELTA)), primary);
+        assertTrue(BenchmarkRules.LIMITATION.contains("온도 축에는 결론을 지지하는 지표가 없다"),
+                "주 지표에서 온도를 내렸으면 응답이 그 사실을 스스로 말해야 한다 — 아니면 조용한 강등이다");
+    }
+
     @DisplayName("정직성 측정치는 방향이 없다 — 판정이 아니라 숫자다")
     @Test
     void honesty_metrics_have_no_direction() {

@@ -131,12 +131,16 @@ public final class BenchmarkRules {
                     "유휴 노드가 충분히 많은 판에서만 판별력이 있다. 유휴가 한 대뿐이면 0/1 이진값이 된다"),
 
             new BenchmarkMetric(WARN_ZONE_NODES, "경고 구간 노드 수", "대",
-                    Direction.LOWER_IS_BETTER, Role.PRIMARY,
-                    "계측 노드가 있을 때만. 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다"),
+                    Direction.LOWER_IS_BETTER, Role.SECONDARY,
+                    "계측 노드가 있을 때만. 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다. "
+                            + "대조군은 열을 점수에 넣지 않으므로 이 값의 차이는 알고리즘의 열 판단이 아니라 "
+                            + "CPU 를 어디에 몰았는가의 부산물이다 — 헤드라인으로 쓰지 않는다"),
 
             new BenchmarkMetric(C3_INTERVENTIONS, "온도 제약 개입 횟수", "건",
-                    Direction.LOWER_IS_BETTER, Role.PRIMARY,
-                    "온도 제약이 꺼진 전략에서는 0 이 나오므로 그 전략과는 비교하지 않는다"),
+                    Direction.CONTEXT_ONLY, Role.SECONDARY,
+                    "제약이 몇 번 막았는지이지 전략의 열 성능이 아니다. 대조군은 열을 점수에 넣지 않아 "
+                            + "뜨거운 노드를 피하지 못하고 그만큼 더 막히므로, 값이 큰 쪽이 나쁜 것도 작은 쪽이 "
+                            + "좋은 것도 아니다. 온도 제약이 꺼진 전략에서는 항상 0 이라 그 전략과는 비교하지 않는다"),
 
             new BenchmarkMetric(TEMP_STDDEV, "계측 온도 표준편차", "℃",
                     Direction.LOWER_IS_BETTER, Role.SECONDARY,

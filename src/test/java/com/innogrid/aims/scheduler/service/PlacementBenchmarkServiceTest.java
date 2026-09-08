@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -283,6 +284,10 @@ class PlacementBenchmarkServiceTest {
 
         StrategyResult a = strategy(base, "resource-only-ungated");
         StrategyResult b = strategy(moved, "resource-only-ungated");
+        // 표본 지점 집합이 같아야 중앙값 비교가 성질을 본다 — 노브가 다른 전략의 배치를 바꿔 짝 지점이 달라지면
+        // 지표가 노브를 안 봐도 중앙값이 움직인다. 그 경우는 이 시험의 전제가 깨진 것이라 따로 말한다.
+        assertEquals(metric(a, BenchmarkRules.TEMP_STDDEV).samples(), metric(b, BenchmarkRules.TEMP_STDDEV).samples(),
+                "두 실행의 짝 지점 수가 다르다 — 중앙값이 달라도 측정이 노브를 따른 것이 아니라 표본이 달라진 것이다");
         assertEquals(median(a, BenchmarkRules.TEMP_STDDEV), median(b, BenchmarkRules.TEMP_STDDEV),
                 "열관성 계수가 온도 표준편차를 움직인다 — 평가 기준이 엔진의 가정이라는 뜻이다");
         assertEquals(median(a, BenchmarkRules.WARN_ZONE_NODES), median(b, BenchmarkRules.WARN_ZONE_NODES),
@@ -584,11 +589,87 @@ class PlacementBenchmarkServiceTest {
         List<String> baselines = board.cells().get(0).strategies().stream()
                 .filter(s -> "BASELINE".equals(s.kind())).map(StrategyResult::strategyId).toList();
 
-        assertEquals(5, baselines.size(), "대조군은 다섯 종이다: " + baselines);
+        assertEquals(PlacementBenchmarkService.BASELINE_ORDER, baselines,
+                "응답의 대조군 열이 순서 목록과 같아야 한다 — 개수가 아니라 id 와 순서로 본다: " + baselines);
         for (String id : baselines) {
             assertFalse(registry.contains(id),
                     id + " 가 엔진으로 등록됐다 — 스케줄이 이 전략으로 실배치할 수 있다");
         }
+    }
+
+    /**
+     * 순서 목록과 구현 맵은 서로를 모른다. 목록에만 있는 id 는 {@code null} 이 담겨 한참 뒤 NPE 로 죽고, 맵에만 있는
+     * 구현은 열이 <b>조용히</b> 빠진 채 응답이 정상이다. 둘 다 전략 목록을 만드는 자리에서 크게 실패해야 한다 —
+     * 대조군을 늘리는 PR 이 바로 그 자리를 건드린다.
+     */
+    @DisplayName("대조군 순서 목록에 구현이 없는 id 가 있으면 조용히 빠지지 않고 즉시 실패한다")
+    @Test
+    void a_baseline_id_without_an_implementation_fails_loudly() {
+        SchedulerProperties props = new SchedulerProperties();
+        PlacementBenchmarkService broken = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler())), props, new BenchmarkClusters(),
+                new PowerModel(props), new ThermalModel(props),
+                List.of("ffd-size", "no-such-baseline"));
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> broken.compare("main", "heavytail"));
+        assertTrue(e.getMessage().contains("no-such-baseline"), e.getMessage());
+        assertTrue(e.getMessage().contains("ffd-size"), "구현 목록도 함께 밝혀야 어느 쪽이 틀렸는지 보인다: " + e.getMessage());
+    }
+
+    /**
+     * 대조군 하나를 넣고 빼면 기존 열의 <b>어느 숫자가 움직여도 되는가</b>를 못 박는다. 전략 실행은 서로 독립이라
+     * 성공률·건당 전력·엔진이 믿은 비용·개입 횟수·미계측 비율은 비트 단위로 같아야 한다. 움직여도 되는 것은 셀 집계에서
+     * <b>전 전략을 함께 보는</b> 것들뿐이다 — 짝 지점(총전력·가동 증감·온도 분포 둘)과 전략 간 미계측 격차.
+     * 이 목록 밖의 키가 하나라도 움직이면 대조군이 다른 전략의 실행에 새어 들어간 것이다.
+     */
+    @DisplayName("대조군을 하나 빼고 돌려도 기존 열은 셀 단위로 집계되는 키 밖에서는 한 칸도 움직이지 않는다")
+    @Test
+    void adding_a_baseline_moves_only_the_cell_level_keys_of_the_other_columns() {
+        SchedulerProperties props = new SchedulerProperties();
+        List<String> without = PlacementBenchmarkService.BASELINE_ORDER.stream()
+                .filter(id -> !id.equals("coolest-first")).toList();
+        PlacementBenchmarkService fewer = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                        new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props), without);
+
+        Set<String> mayMove = Set.of(BenchmarkRules.GENERATOR_POWER, BenchmarkRules.ACTIVE_NODE_DELTA,
+                BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV, BenchmarkRules.UNMEASURED_SPREAD);
+
+        int spreadMoved = 0;
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+          for (String distribution : List.of(PlacementBenchmarkService.HEAVYTAIL, PlacementBenchmarkService.UNIFORM)) {
+            Board full = service.compare(boardId, distribution).boards().get(0);
+            Board less = fewer.compare(boardId, distribution).boards().get(0);
+
+            for (Cell a : full.cells()) {
+                Cell b = cell(less, a.loadRatioPercent(), a.powerControl());
+                assertTrue(a.strategies().stream().anyMatch(s -> s.strategyId().equals("coolest-first")), boardId);
+                assertFalse(b.strategies().stream().anyMatch(s -> s.strategyId().equals("coolest-first")), boardId);
+
+                for (StrategyResult sb : b.strategies()) {
+                    StrategyResult sa = strategy(a, sb.strategyId());
+                    for (MetricValue mb : sb.metrics()) {
+                        MetricValue ma = metric(sa, mb.key());
+                        String where = boardId + " " + a.loadRatioPercent() + "% " + a.powerControl() + " "
+                                + sb.strategyId() + " " + mb.key();
+                        if (mayMove.contains(mb.key())) {
+                            if (!Objects.equals(ma, mb)) {
+                                if (BenchmarkRules.UNMEASURED_SPREAD.equals(mb.key())) spreadMoved++;
+                            }
+                            continue;
+                        }
+                        // 레코드 전체 비교 — 중앙값만 보면 min·max·사유만 움직이는 누수가 초록불로 지나간다
+                        assertEquals(mb, ma, where + " " + distribution + ": 대조군을 넣었다고 이 칸이 움직였다 — 전략 실행이 독립이 아니다");
+                    }
+                }
+            }
+          }
+        }
+        // 주 결과판에서는 새 대조군이 어느 지점의 짝도 바꾸지 않을 수 있다(전 노드 계측·건수 동일). 그래서 판을 합쳐 본다 —
+        // 계측 공백판의 미계측 격차는 전략 간 값이라 대조군 하나가 빠지면 반드시 움직인다. 그 키가 움직였는지를 따로 세어야
+        // "무언가 움직였다"가 아니라 "움직여야 할 것이 움직였다"를 본다.
+        assertTrue(spreadMoved > 0, "계측 공백판의 미계측 격차가 한 칸도 안 움직였다 — 대조군을 뺀 실행이 같은 실행이라는 뜻이라, 이 시험이 허용 목록을 시험하지 못했다");
     }
 
     /** 우리 엔진은 레지스트리가 밝히는 것을 전부 담는다 — 이름을 적어 두면 엔진이 늘 때 조용히 빠진다. */
@@ -925,9 +1006,9 @@ class PlacementBenchmarkServiceTest {
                 }
             }
         }
-        // 짝 지점이 0 인 셀은 판의 성질이라 강제하지 않는다. 다만 하나도 없으면 위 단언이 아무것도 안 봤다는 뜻이므로
-        // 그 사실을 남긴다 — 통과가 아니라 "확인 대상 없음" 으로 읽어야 한다.
-        System.out.println("[gate] 짝 지점 0 인 전략·셀 수: " + checked);
+        // 수용 불가 부하(110%)는 판정 규칙이 일부러 넣은 지점이라 세 판 모두 짝 지점 0 인 셀이 있어야 한다. 하나도 없으면
+        // 위 단언이 아무것도 안 본 것이므로 통과가 아니라 실패다 — 로그로 남기면 초록불이 "확인함"으로 읽힌다.
+        assertTrue(checked > 0, "짝 지점 0 인 셀이 세 판 어디에도 없다 — 110% 부하가 전략을 구분하지 못한다는 뜻이고, 이 시험이 아무것도 보지 않았다");
     }
 
     /** 시각 지점을 훑었으므로 최솟값 ≤ 중앙값 ≤ 최댓값 이고, 폭이 0 이 아닌 지표가 있어야 한다. */

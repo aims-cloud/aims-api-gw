@@ -19,7 +19,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 /**
  * 대조군 배치 규칙 — 우리 엔진과 <b>비교할 상대</b>.
  *
- * <p>다섯 종 모두 {@link PlacementStrategy} 를 돌려주고 {@code SchedulingEngine} 을 구현하지 않는다.
+ * <p>전부 {@link PlacementStrategy} 를 돌려주고 {@code SchedulingEngine} 을 구현하지 않는다.
  * 이유는 {@link PlacementStrategy} 클래스 주석에 있다(레지스트리 자동 수집 · cron 실배치).
  * 이 클래스에는 스프링 애너테이션이 하나도 없고, 인스턴스로 만들 수도 없다.</p>
  *
@@ -28,10 +28,11 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * ffd-priority-size  우선순위→크기, nodeId 순 첫 적격 노드        점수 1/(1+순번)
  * pabfd              argmin marginalPower (고전 선형)            점수 1 − min(1, ΔP/정격)
  * bfd                잔여 용량 최소 (전력 무지)                  점수 1 − 잔여CPU/총CPU
+ * coolest-first      실측 온도 최저 (미계측 후순위, 재평가 없음)   점수 1 − 온도/100
  * random             적격 목록에서 균일 추출                     점수 0
  * </pre>
  *
- * <p><b>세 가지를 다섯 종 모두가 똑같이 한다.</b></p>
+ * <p><b>세 가지를 전부가 똑같이 한다.</b></p>
  * <ol>
  *   <li><b>제약 파이프라인</b>: {@code context.exclusionReason} 을 후보 <b>전원</b>에 적용한다.
  *       대조군이 우리 엔진보다 나쁘게 나오는 것이 "제약을 덜 받았기 때문"이면 비교가 아니라 반칙이다.</li>
@@ -47,10 +48,11 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 첫 줄이 선택된 노드인 것처럼 읽힌다. 주사 순서 그대로 두는 편이 오해가 없다.</p>
  *
  * <p><b>{@code powerScore}·{@code temperatureScore}·{@code networkScore} 칸은 0 이다.</b> 대조군은
- * 그 세 차원을 계산하지 않는다. {@code NodeScore} 의 칸이 원시 {@code double} 이라 "모른다"를 넣을
- * 수 없으므로, 0 이 "포화"나 "최악"으로 읽히지 않게 {@code details} 에 {@link #UNSCORED_DIMENSIONS}
- * 표시를 함께 싣는다. {@code cpuScore}·{@code memoryScore} 는 실효 여유를 그대로 담는다 — 다섯 종
- * 전부가 실제로 이 값에 의존한다(적격 판정이 여기서 나온다).</p>
+ * 그 세 차원을 우리 엔진의 점수식으로 계산하지 않는다 — 최저 온도 우선도 실측 온도를 {@code details} 에
+ * 남길 뿐 그 칸에 우리 열 점수를 채우지 않는다. {@code NodeScore} 의 칸이 원시 {@code double} 이라 "모른다"를
+ * 넣을 수 없으므로, 0 이 "포화"나 "최악"으로 읽히지 않게 {@code details} 에 {@link #UNSCORED_DIMENSIONS}
+ * 표시를 함께 싣는다. {@code cpuScore}·{@code memoryScore} 는 실효 여유를 그대로 담는다 — 전부가
+ * 실제로 이 값에 의존한다(적격 판정이 여기서 나온다).</p>
  */
 public final class BaselinePlacers {
 
@@ -96,10 +98,12 @@ public final class BaselinePlacers {
     private static final String FREE_CPU = "잔여CPU";
     private static final String TOTAL_CPU = "총CPU";
     private static final String ELIGIBLE_COUNT = "적격수";
+    private static final String TEMPERATURE_C = "온도C";
+    private static final String TEMPERATURE_MEASURED = "온도계측";
 
     private static final String NO_CANDIDATES = "후보 노드가 없습니다";
 
-    // ── 전략 다섯 종 ──────────────────────────────────────────
+    // ── 전략 ─────────────────────────────────────────────────
 
     /** 선착순(크기 내림차순) — 점수를 보지 않고 nodeId 순 첫 적격 노드를 집는다. */
     public static PlacementStrategy ffdBySize() {
@@ -161,6 +165,32 @@ public final class BaselinePlacers {
         RandomGenerator random = BenchmarkRules.randomFor(seed);
         return new PlacementStrategy("random", label, Kind.BASELINE, PolicyVariant.BASE,
                 null, (workload, context) -> placeRandom(workload, context, random, seed, label));
+    }
+
+    /**
+     * 최저 온도 우선(재평가 없음) — <b>문헌 열 대조군</b>. 큰 작업부터, 적격 후보 중 실측 온도가 가장 낮은 노드에 놓는다.
+     *
+     * <p>Wang·von Laszewski 등의 TASA(2009) 계열이다 — "가장 뜨거운 작업을 가장 시원한 노드에". 발열의 대리로
+     * 요구 코어를 쓰므로 워크로드 순서는 {@link #BY_SIZE_DESC} 다. 문헌의 TASA 는 배치마다 자기 열 모델로 노드 온도를
+     * 다시 추정하지만, 이 대조군에는 그 단계가 <b>없다</b>. 우리에게 엔진 모델 아닌 열 모델이 없기 때문이다 —
+     * {@code ThermalModel} 을 쓰면 {@link #pabfd} 가 {@code realMarginalPower} 를 쓰는 것과 같아져 대조군이 우리 모델을
+     * 조금 바꾼 것이 되고, 생성식(오라클)을 쓰면 평가자의 식이 전략에 새는 것이다. 그래서 <b>엔진이 보는 것만</b>
+     * 본다: {@code NodeResource} 의 실측 온도. 예약은 실측 온도를 바꾸지 않으므로 한 시각 지점 안에서 선택 순서는
+     * 상수이고, 가장 시원한 노드에 제약이 막을 때까지 <b>쌓인다</b>(비교 판들에서는 배치 후 예상 온도 제약이 시원한
+     * 노드에 닿지 않아 실제로 막는 것은 CPU 상한 C2 다). 이것은 "초기 온도로 정렬한 통합"이며 기제가
+     * {@link #bfd} 와 같다 — 그 열과의 차이가 곧 정렬 기준에 온도를 넣은 효과의 전부다. 이 사실은 판정 규칙의
+     * 한계 문구가 밝힌다.</p>
+     *
+     * <p><b>미계측 노드(0℃)는 후순위다.</b> 문헌은 전수 계측을 전제한다. 미계측을 "가장 시원하다"로 읽으면 우리가
+     * 엔진에서 제거한 편향(미계측 만점)을 대조군에 심는 것이고, 클러스터 중앙값을 대입하면 대조군이 우리 엔진의
+     * 중립 규칙을 베끼는 것이라 미계측 처리라는 우리 설계 선택의 효과를 대조로 잴 수 없게 된다. 후보 집합은 좁히지
+     * 않는다 — 계측 노드가 전부 부적격이면 미계측 노드가 선택된다. 계측 공백판에서 이 전략의 미계측 배치 비율이
+     * 다른 전략과 벌어져 셀의 미계측 격차 경고가 켜지는 것은 결함이 아니라 그 판이 재려던 값이다.</p>
+     */
+    public static PlacementStrategy coolestFirst() {
+        String label = "최저 온도 우선(문헌 기준선 · 재평가 없음)";
+        return new PlacementStrategy("coolest-first", label, Kind.BASELINE, PolicyVariant.BASE,
+                BY_SIZE_DESC, (workload, context) -> placeCoolestFirst(workload, context, label));
     }
 
     // ── 배치 규칙 ─────────────────────────────────────────────
@@ -255,6 +285,56 @@ public final class BaselinePlacers {
         int byCpu = Double.compare(candidate.availableCpu(), incumbent.availableCpu());
         if (byCpu != 0) return byCpu < 0;
         return candidate.availableMemoryMb() < incumbent.availableMemoryMb();
+    }
+
+    /**
+     * 계측 노드 먼저(계측 0 → 미계측 1), 그 안에서 실측 온도 오름차순. 선택은 strict 비교로 하므로 동률이면
+     * 앞선 후보 — 목록이 nodeId 순이라 nodeId 순 — 가 남는다.
+     */
+    private static final Comparator<NodeResource> COOLEST_FIRST =
+            Comparator.comparingInt((NodeResource n) -> measured(n) ? 0 : 1)
+                    .thenComparingDouble(NodeResource::getTemperatureCelsius);
+
+    private static SchedulingResult placeCoolestFirst(Workload workload, PlacementContext context, String label) {
+        List<Candidate> candidates = screen(workload, context);
+        if (candidates.isEmpty()) return SchedulingResult.failure(NO_CANDIDATES);
+
+        Candidate chosen = null;
+        for (Candidate c : candidates) {
+            if (!c.eligible()) continue;
+            // 실측 온도만 본다 — ThermalModel(엔진 노브)도 생성식(평가자)도 여기 들어오면 대조군이 아니다.
+            if (chosen == null || COOLEST_FIRST.compare(c.node(), chosen.node()) < 0) chosen = c;
+        }
+        if (chosen == null) return noEligible(label, candidates);
+
+        boolean anyMeasured = candidates.stream().anyMatch(c -> measured(c.node()));
+        String reason;
+        if (measured(chosen.node())) {
+            reason = String.format("[%s] 실측 온도 최저 %s (%.1f°C) — 열 모델 없이 지금 온도만 보고 고른다 (후보 %d개, 적격 %d개)",
+                    label, chosen.node().getNodeId(), chosen.node().getTemperatureCelsius(),
+                    candidates.size(), eligibleCount(candidates));
+        } else if (anyMeasured) {
+            reason = String.format("[%s] 계측 노드가 전부 부적격이라 미계측 %s 를 고른다 (후보 %d개, 적격 %d개)",
+                    label, chosen.node().getNodeId(), candidates.size(), eligibleCount(candidates));
+        } else {
+            // 계측 노드가 하나도 없는 판이면 "전부 부적격"은 거짓이다 — 온도 정보가 없어 nodeId 순 첫 적격 노드가 남았을 뿐이다.
+            reason = String.format("[%s] 계측 노드가 없어 온도로 고를 수 없다 — nodeId 순 첫 적격 노드 %s (후보 %d개, 적격 %d개)",
+                    label, chosen.node().getNodeId(), candidates.size(), eligibleCount(candidates));
+        }
+
+        // 총점은 다른 대조군처럼 0~1 로 두되, 근거는 details 의 온도다 — 표에서 "왜 이 노드였나"를 온도로 되짚을 수
+        // 있어야 한다. 미계측은 온도 0 이 아니라 계측 표시 0 으로 구분한다(NodeScore 의 열 칸은 여전히 0 + 미계산 표시).
+        return assemble(candidates, chosen, reason, c -> {
+            NodeResource n = c.node();
+            boolean m = measured(n);
+            double score = m ? clamp01(1.0 - n.getTemperatureCelsius() / 100.0) : 0.0;
+            return new Scored(score, details(TEMPERATURE_C, m ? n.getTemperatureCelsius() : 0.0, TEMPERATURE_MEASURED, m ? 1.0 : 0.0));
+        });
+    }
+
+    /** 온도를 수집한 노드인가 — 엔진들과 같은 판정(0℃ 이하 = 미계측). */
+    private static boolean measured(NodeResource node) {
+        return node.getTemperatureCelsius() > 0;
     }
 
     private static SchedulingResult placeRandom(Workload workload, PlacementContext context,

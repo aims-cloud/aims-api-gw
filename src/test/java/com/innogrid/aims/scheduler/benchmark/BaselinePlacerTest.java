@@ -33,10 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 대조군 다섯 종이 <b>서로 다른 답</b>을 낸다는 것을 픽스처로 고정한다.
+ * 대조군들이 <b>서로 다른 답</b>을 낸다는 것을 픽스처로 고정한다.
  *
- * <p>대조군이 실제로 다른 규칙인지 확인하지 않으면, 표에 다섯 열을 늘어놓고 "다섯 전략과 비교했다"고
- * 말하면서 실은 같은 배치를 다섯 번 적은 것일 수 있다. 그래서 단언은 <b>선택된 nodeId</b> 로 한다 —
+ * <p>대조군이 실제로 다른 규칙인지 확인하지 않으면, 표에 열을 늘어놓고 "여러 전략과 비교했다"고
+ * 말하면서 실은 같은 배치를 여러 번 적은 것일 수 있다. 그래서 단언은 <b>선택된 nodeId</b> 로 한다 —
  * 와트 총합은 정격이 같은 노드끼리는 잘 겹쳐서 구분자로 약하다.</p>
  *
  * <p>모든 픽스처는 손으로 검산할 수 있게 잡았다. 유휴 비율 0.3 이므로 정격 500W 노드의 동적 범위는
@@ -135,7 +135,7 @@ class BaselinePlacerTest {
         assertNotEquals(bySize, byPriority);
     }
 
-    // ── 다섯 종이 갈린다 ───────────────────────────────────────
+    // ── 대조군이 갈린다 ────────────────────────────────────────
 
     /**
      * 같은 판·같은 워크로드에서 네 가지 노드 선택 규칙이 <b>서로 다른 노드</b>를 고른다.
@@ -156,12 +156,18 @@ class BaselinePlacerTest {
         SchedulingResult bfd = place(BaselinePlacers.bfd(), workload, disagreeNodes());
         SchedulingResult pabfd = place(BaselinePlacers.pabfd(powerModel), workload, disagreeNodes());
         SchedulingResult random = place(BaselinePlacers.random(3L), workload, disagreeNodes());
+        SchedulingResult coolest = place(BaselinePlacers.coolestFirst(), workload, disagreeNodes());
 
         assertEquals("n1", ffd.selectedNodeId(), "nodeId 순 첫 적격 노드");
         assertEquals("n2", bfd.selectedNodeId(), "잔여 CPU 3.2코어로 가장 빡빡하다");
         assertEquals("n4", pabfd.selectedNodeId(), "한계전력 52.5W 로 가장 적다");
         assertEquals("n3", random.selectedNodeId(),
                 "시드 3 의 첫 추첨이 인덱스 2 → 적격 목록의 세 번째 노드");
+        // 무작위와 같은 노드지만 이유가 다르다 — 35℃ 로 가장 시원하다. 우연의 일치라 아래 구분 집합에는 넣지 않는다.
+        assertEquals("n3", coolest.selectedNodeId(), "실측 온도 35℃ 로 가장 시원하다");
+        assertEquals(0.65, coolest.finalScore(), 1e-9, "1 − 35/100");
+        assertEquals(35.0, detail(coolest, "n3", "온도C"), 1e-9);
+        assertEquals(1.0, detail(coolest, "n3", "온도계측"), 1e-9);
 
         // Set.of 는 중복이면 예외를 던져 실패 메시지를 가린다 — 겹쳤을 때 무엇이 겹쳤는지 보이게 한다
         List<String> picks = List.of(ffd.selectedNodeId(), bfd.selectedNodeId(),
@@ -286,13 +292,130 @@ class BaselinePlacerTest {
                         + " 뿐이다 — 난수원이 시드를 섞지 않으면 시드를 늘려도 표본이 늘지 않는다");
     }
 
-    // ── 다섯 종의 공통 계약 ────────────────────────────────────
+    // ── 최저 온도 우선 ────────────────────────────────────────
+
+    /**
+     * 실측 온도가 가장 낮은 적격 노드를 고른다. 자원 여유·전력·nodeId 순서가 어떻든 온도만 본다 —
+     * 이 픽스처는 가장 시원한 노드가 <b>nodeId 순 마지막이고 정격도 가장 크게</b> 잡아 선착순·PABFD 와
+     * 다른 답이 나오게 했다(최밀집과는 겹친다 — 그 둘의 기제가 같다는 사실은 한계 문구가 밝힌다).
+     */
+    @DisplayName("최저 온도 우선은 실측 온도가 가장 낮은 적격 노드를 고른다")
+    @Test
+    void coolest_first_picks_the_lowest_measured_temperature() {
+        Workload workload = workload("w", 2, 8192);
+        SchedulingResult result = place(BaselinePlacers.coolestFirst(), workload, thermalNodes());
+
+        assertEquals("c4", result.selectedNodeId(), "31℃ 가 가장 낮다 — nodeId 마지막·정격 최대라도");
+        assertTrue(result.reason().contains("31.0°C"), result.reason());
+        assertEquals(0.69, result.finalScore(), 1e-9, "1 − 31/100");
+    }
+
+    /** 온도가 같으면 nodeId 순 앞 노드가 남는다 — pabfd·bfd 와 같은 strict 비교 관용구다. */
+    @DisplayName("최저 온도 우선의 동률은 nodeId 순으로 풀린다")
+    @Test
+    void coolest_first_breaks_ties_by_node_id() {
+        Workload workload = workload("w", 2, 8192);
+        List<NodeResource> nodes = List.of(
+                node("e-b", 8, 65536, 50, 50, 250, 500, 42),
+                node("e-a", 16, 65536, 10, 10, 200, 800, 42));
+
+        assertEquals("e-a", place(BaselinePlacers.coolestFirst(), workload, nodes).selectedNodeId(),
+                "목록 순서가 아니라 nodeId 순 앞이어야 한다");
+    }
+
+    /**
+     * 미계측(0℃) 노드는 <b>가장 시원한 노드가 아니라 후순위</b>다. 문헌은 전수 계측을 전제하고, 0 을 온도로 읽으면
+     * 우리가 엔진에서 제거한 편향(미계측 만점)을 대조군에 심게 된다. 후보 집합은 좁히지 않는다 — 계측 노드가
+     * 전부 부적격일 때는 미계측 노드가 선택되고, 그 사유가 그렇게 적힌다.
+     */
+    @DisplayName("미계측 노드는 후순위지만 후보에서 빠지지는 않는다")
+    @Test
+    void coolest_first_puts_unmeasured_nodes_last_but_keeps_them_eligible() {
+        Workload small = workload("w", 2, 8192);
+        List<NodeResource> nodes = List.of(
+                node("u1", 32, 131072, 5, 5, 0, 1300, 0),      // 미계측 — 자원은 가장 넉넉하다
+                node("u2", 8, 32768, 60, 60, 300, 500, 58));    // 계측 — 뜨겁지만 유일한 계측 노드
+
+        SchedulingResult withMeasured = place(BaselinePlacers.coolestFirst(), small, nodes);
+        assertEquals("u2", withMeasured.selectedNodeId(), "0℃ 를 가장 시원하다고 읽으면 미계측이 이긴다");
+        assertEquals(0.0, detail(withMeasured, "u1", "온도계측"), 1e-9, "미계측 표시가 있어야 온도 0 이 측정값으로 읽히지 않는다");
+        assertEquals(0.0, detail(withMeasured, "u1", "온도C"), 1e-9);
+        assertEquals(0.0, score(withMeasured, "u1").totalScore(), 1e-9, "미계측에는 '시원하다'는 근거가 없다");
+
+        Workload big = workload("w", 6, 24576);                  // u2 는 8코어 중 3.2 코어가 남아 6코어를 못 받는다
+        SchedulingResult onlyUnmeasuredFits = place(BaselinePlacers.coolestFirst(), big, nodes);
+        assertEquals("u1", onlyUnmeasuredFits.selectedNodeId(), "계측 노드가 전부 부적격이면 미계측으로 간다 — 후보에서 빼지 않는다");
+        assertTrue(onlyUnmeasuredFits.reason().contains("전부 부적격"), onlyUnmeasuredFits.reason());
+
+        // 계측 노드가 하나도 없는 판에서는 "전부 부적격"이 거짓이다 — 사유가 그 사실을 그대로 적어야 한다
+        List<NodeResource> noneMeasured = List.of(
+                node("v2", 16, 65536, 10, 10, 0, 800, 0),
+                node("v1", 16, 65536, 10, 10, 0, 800, 0));
+        SchedulingResult blind = place(BaselinePlacers.coolestFirst(), small, noneMeasured);
+        assertEquals("v1", blind.selectedNodeId(), "온도 정보가 없으면 nodeId 순 첫 적격 노드가 남는다");
+        assertTrue(blind.reason().contains("계측 노드가 없어"), blind.reason());
+        assertFalse(blind.reason().contains("전부 부적격"), "계측 노드가 없는데 부적격이라고 쓰면 거짓이다: " + blind.reason());
+    }
+
+    /**
+     * 예약은 실측 온도를 바꾸지 않으므로 여유가 있는 한 <b>같은 노드에 쌓인다</b> — 문헌 TASA 의 재평가 단계가
+     * 없다는 성질이다. 이것을 고정하는 이유는 이 대조군이 열을 분산시키는 전략으로 오독되지 않게 하기 위해서다.
+     * 분산은 우리 엔진의 기여이고, 대조군이 조용히 그것을 얻으면 비교가 아니다.
+     */
+    @DisplayName("최저 온도 우선은 재평가가 없어 여유가 있는 한 같은 노드에 쌓인다")
+    @Test
+    void coolest_first_stacks_on_the_coolest_node_without_re_evaluation() {
+        List<Workload> workloads = List.of(workload("w1", 2, 8192), workload("w2", 2, 8192));
+        Map<String, String> placed = run(BaselinePlacers.coolestFirst(), workloads, thermalNodes());
+
+        assertEquals(Set.of("c4"), new HashSet<>(placed.values()),
+                "두 건이 전부 가장 시원한 노드에 쌓여야 한다 — 흩어졌다면 어딘가에서 재평가를 하고 있다: " + placed);
+    }
+
+    /**
+     * TASA 의 "가장 뜨거운 작업 먼저"다 — 발열의 대리로 요구 코어를 쓰므로 큰 작업이 먼저 가장 시원한 노드를 받는다.
+     * 도착 순서로 바꾸면 작은 작업이 시원한 노드를 선점하고 큰 작업이 밀려난다 — 픽스처의 c4 는 4코어분만 남아 있어
+     * 두 순서가 정확히 반대 배치를 낸다.
+     */
+    @DisplayName("최저 온도 우선은 큰 작업부터 놓는다 — 도착 순서가 아니다")
+    @Test
+    void coolest_first_places_the_largest_workload_first() {
+        List<Workload> arrivedSmallFirst = List.of(workload("small", 2, 8192), workload("big", 4, 16384));
+        Map<String, String> placed = run(BaselinePlacers.coolestFirst(), arrivedSmallFirst, thermalNodes());
+
+        assertEquals("c4", placed.get("big"), "큰 작업이 가장 시원한 노드를 받아야 한다: " + placed);
+        assertEquals("c2", placed.get("small"), "작은 작업은 그 다음 시원한 노드로 밀려야 한다: " + placed);
+        assertFalse(BaselinePlacers.coolestFirst().usesArrivalOrder(), "도착 순서면 순서 효과가 온도 효과에 섞인다");
+    }
+
+    /**
+     * 선택 기준은 <b>실측 온도</b>지 예약을 반영한 실효 온도가 아니다. 실효 온도({@code T × (1 + k·r)})는 엔진의 열관성
+     * 가정이라 그것으로 고르면 대조군이 우리 모델을 조금 바꾼 것이 된다. 픽스처는 첫 배치로 x1 의 예약비가 0.5 가
+     * 되어 실효 온도(40 × 1.075 = 43℃)가 x2(41℃)를 넘게 잡았다 — 실효 온도로 고르면 두 번째 건이 x2 로 가고,
+     * 실측 온도로 고르면 x1 에 남는다.
+     */
+    @DisplayName("최저 온도 우선은 예약이 쌓여도 실측 온도로 고른다 — 엔진의 실효 온도가 아니다")
+    @Test
+    void coolest_first_reads_measured_temperature_not_the_engine_effective_temperature() {
+        List<NodeResource> nodes = List.of(
+                node("x1", 8, 65536, 10, 10, 200, 500, 40),
+                node("x2", 64, 262144, 10, 10, 400, 900, 41));
+        List<Workload> workloads = List.of(workload("w1", 4, 8192), workload("w2", 2, 8192));
+
+        Map<String, String> placed = run(BaselinePlacers.coolestFirst(), workloads, nodes);
+
+        assertEquals("x1", placed.get("w1"));
+        assertEquals("x1", placed.get("w2"),
+                "예약이 실측 온도를 바꾸지 않으므로 두 번째 건도 x1 이어야 한다 — x2 로 갔다면 실효 온도(엔진 모델)로 고른 것이다: " + placed);
+    }
+
+    // ── 공통 계약 ────────────────────────────────────────────
 
     /**
      * 후보 전원에 제약 파이프라인을 적용하고 전원의 점수를 싣는다. 게다가 <b>제외 사유 맵이 전략마다
      * 같아야</b> 한다 — 대조군이 나쁘게 나온 이유가 "제약을 덜 받았기 때문"이면 비교가 아니라 반칙이다.
      */
-    @DisplayName("다섯 종 모두 후보 전원을 채점하고 같은 제외 사유를 남긴다")
+    @DisplayName("대조군 전부가 후보 전원을 채점하고 같은 제외 사유를 남긴다")
     @Test
     void every_baseline_scores_all_candidates() {
         Workload workload = workload("w", 2, 8192);
@@ -394,6 +517,7 @@ class BaselinePlacerTest {
                 BaselinePlacers.ffdByPriorityThenSize(),
                 BaselinePlacers.pabfd(powerModel),
                 BaselinePlacers.bfd(),
+                BaselinePlacers.coolestFirst(),
                 BaselinePlacers.random(1L));
     }
 
@@ -445,6 +569,20 @@ class BaselinePlacerTest {
                 node("n2", 8, 32768, 60, 60, 300, 500, 50),
                 node("n3", 32, 131072, 5, 5, 250, 1300, 35),
                 node("n4", 8, 32768, 20, 20, 150, 300, 40));
+    }
+
+    /**
+     * 가장 시원한 c4(31℃)가 nodeId 순 마지막이고 정격도 가장 크다 — 선착순(c1)·PABFD 와 다른 답이 나온다.
+     * 잔여는 c4 가 최소(4코어)라 최밀집과는 겹치므로 갈림 시험이 아니라 온도 선택·쌓임 시험에만 쓴다.
+     * 2코어 두 건을 쌓으면 c4 는 50% → 75% → 100% 가 되고, 두 번째 배치 시점의 실효 사용률 75% 는 상한 80% 안이라
+     * 적격이다(세 번째는 100% 라 막혀 다음 시원한 노드로 간다 — 그래서 쌓임 시험은 두 건이다).
+     */
+    private static List<NodeResource> thermalNodes() {
+        return List.of(
+                node("c1", 16, 65536, 10, 10, 200, 600, 45),
+                node("c2", 16, 65536, 20, 20, 220, 600, 38),
+                node("c3", 32, 131072, 5, 5, 250, 900, 40),
+                node("c4", 8, 32768, 50, 50, 400, 1000, 31));
     }
 
     /** 잔여 CPU 가 정확히 4.0 코어로 같고 메모리만 다르다. */

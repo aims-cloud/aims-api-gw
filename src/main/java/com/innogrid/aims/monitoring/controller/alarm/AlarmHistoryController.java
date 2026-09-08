@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 발생 이력 목록(필터·정렬·페이징), 행 확장 전송 이력, 메시지 상세 모달,
  * 알람 확인(쓰기)·확인 내역 모달을 제공한다 (docs/09 알람 설계).
  * 목록은 alarm_history 원장(구현 완료), 나머지는 전송 원장·확인 처리 구현 시 채운다.
- * 기존 AlarmController 의 GET /history(명세서 §18)는 이 컨트롤러의 /histories 로 대체되며 프론트 전환 후 삭제한다.
+ * 구 AlarmController 의 GET /history(명세서 §18)는 이 컨트롤러의 /histories 로 대체되어 제거됐다.
  */
 @Tag(name = "관측 > 알람 (발생 이력)", description = "알람 발생 이력 목록, 전송 이력, 메시지 상세, 알람 확인")
 @RestController

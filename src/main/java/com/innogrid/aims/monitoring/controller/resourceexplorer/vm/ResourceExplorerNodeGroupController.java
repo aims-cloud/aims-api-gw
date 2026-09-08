@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  * KPI 카드(VM 수/Running/Pending/Stop/Error), VM Top-N, VM 목록을 제공한다.
  * nsId·infraId 는 필수, nodeGroupId 는 생략하면 Infra 전체, {@code @unclassified} 면 그룹 없는 VM 만이다.
  * 조회 대상은 현재 사용자 토큰의 역할에 매핑된 Namespace 로 제한된다(트리와 동일) — 스코프 밖이면 빈 결과다.
- * MDC 패널(ResourceExplorerMdcController)과 동형 구조이며, 알람 탭은 AlarmController 를 자원 스코프 필터로 재사용한다.
+ * MDC 패널(ResourceExplorerMdcController)과 동형 구조이며, 알람 탭은 AlarmHistoryController(/histories?resourceId=)를 재사용한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (NodeGroup)", description = "Tumblebug NodeGroup 개요 KPI, VM Top-N, VM 목록 조회")
 @RestController

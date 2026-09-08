@@ -21,7 +21,7 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector
  *       표준식과 같은 식이다. 화면 수치와 알람 판정이 같은 식에서 나오도록 여기 식을 바꾸면 패널 식도 같이 본다.</li>
  *   <li>{@link #promql(String, String, String)} 은 그룹 라벨·라벨 매처·rate 창을 받아 한 자원({@code instance="…"})이든
  *       전체 자원(매처 없이 {@code instance, mdc_id} 로 집계)이든 같은 템플릿으로 만든다.</li>
- *   <li>초안 규칙 이름 4종({@code cpu_usage} 등)은 별칭으로 받아 기존 {@code alarm_rules} 데이터를 그대로 평가할 수 있게 한다.</li>
+ *   <li>초안 규칙 이름 4종({@code cpu_usage} 등)은 별칭으로 받는다(구 alarm_rules 이관·외부 요청 호환용).</li>
  * </ul>
  */
 public enum AlarmMetric {

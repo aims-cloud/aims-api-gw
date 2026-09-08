@@ -129,13 +129,13 @@ class BenchmarkClustersTest {
     void adversarial_board_inverts_capacity_efficiency() {
         List<Node> nodes = clusters.get(BenchmarkClusters.ADVERSARIAL).nodes();
         double r = correlation(nodes.stream().mapToDouble(Node::capacityWatts).toArray(),
-                nodes.stream().mapToDouble(BenchmarkClustersTest::groundTruthWattsPerCore).toArray());
-        assertTrue(r <= -0.5, "정격과 코어당 지상진실 W 의 상관이 " + fmt(r)
+                nodes.stream().mapToDouble(BenchmarkClustersTest::generatorWattsPerCore).toArray());
+        assertTrue(r <= -0.5, "정격과 코어당 생성식 W 의 상관이 " + fmt(r)
                 + " — 음의 상관이어야 큰 노드를 피하는 판단이 곧 손해가 된다");
         // 주 결과판은 반대다: 양방향으로 섞어 두어 상관이 0 근처다(그 판에서는 이 편향이 결과를 만들지 않는다).
         List<Node> main = clusters.get(BenchmarkClusters.MAIN).nodes();
         double mainR = correlation(main.stream().mapToDouble(Node::capacityWatts).toArray(),
-                main.stream().mapToDouble(BenchmarkClustersTest::groundTruthWattsPerCore).toArray());
+                main.stream().mapToDouble(BenchmarkClustersTest::generatorWattsPerCore).toArray());
         assertTrue(Math.abs(mainR) < 0.5, "주 결과판의 같은 상관은 " + fmt(mainR) + " — 0 근처여야 양방향이다");
     }
 
@@ -264,8 +264,8 @@ class BenchmarkClustersTest {
         return node.baseTemperature() + 0.3 * peakCpu(node);
     }
 
-    /** 코어당 지상진실 전력 — 정격에서 유휴를 뺀 동적 전력을 코어로 나눈 값. 낮을수록 실제로 좋은 노드다. */
-    private static double groundTruthWattsPerCore(Node node) {
+    /** 코어당 생성식 전력 — 정격에서 유휴를 뺀 동적 전력을 코어로 나눈 값. 생성식 기준으로 낮을수록 좋은 노드다. */
+    private static double generatorWattsPerCore(Node node) {
         return (node.capacityWatts() - node.idleWatts()) / node.cores();
     }
 

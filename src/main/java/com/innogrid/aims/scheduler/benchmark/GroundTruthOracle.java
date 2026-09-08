@@ -9,7 +9,9 @@ import java.util.Set;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 /**
- * 지상진실 오라클 — 합성 클러스터 <b>생성식의 진짜 물리</b>로 전력·온도를 계산하는 평가자 전용 계산기.
+ * 생성식 오라클 — 합성 클러스터 <b>생성식</b>으로 전력·온도를 계산하는 평가자 전용 계산기.
+ * 클래스 이름의 "지상진실"은 <b>엔진 모델의 반대편</b>이라는 뜻이지 실측이라는 뜻이 아니다 —
+ * 생성식의 계수는 실데이터 없이 정한 가정이다.
  *
  * <p><b>왜 전력 모델을 쓰지 않는가 — 순환 논증이기 때문이다.</b> 배치 비교의 주 지표로 엔진의
  * 한계 전력({@code PowerModel.realMarginalPower})을 쓰면, 그것은 <b>우리 전력 엔진 총점의 한 항을
@@ -17,11 +19,12 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  * realMarginalPower / pMax}). 그 지표에서 우리 전략이 1등인 것은 발견이 아니라 <b>정의</b>다.
  * 목적 함수를 그대로 평가 함수로 쓰면 어떤 전략을 넣어도 그 목적 함수를 최대화한 전략이 이긴다.</p>
  *
- * <p><b>그래서 평가자만 다른 물리를 본다.</b> 합성 클러스터 파일에는 노드별 <b>실제 유휴 전력</b>
- * ({@code idleWatts})이 적혀 있다. 엔진은 그 값을 모른다 — 엔진의 유휴 전력은 {@code 정격 × idleRatio}
- * (기본 0.3)라는 <b>가정</b>이고, 실제와 얼마나 벌어져 있는지는 {@link #idleAssumptionGaps(double)} 가
- * 노드별로 돌려준다. 이 클래스는 그 실제 값으로만 계산하고, <b>엔진에게는 아무것도 주지 않는다.</b>
- * 평가 기준이 엔진의 입력이 아니므로 순환이 아니다.</p>
+ * <p><b>그래서 평가자만 다른 식을 본다.</b> 합성 클러스터 파일에는 노드별 <b>유휴 전력</b>
+ * ({@code idleWatts})이 선언되어 있다. 엔진은 그 값을 모른다 — 엔진의 유휴 전력은 {@code 정격 × idleRatio}
+ * (기본 0.3)라는 <b>가정</b>이고, 파일 선언값과 얼마나 벌어져 있는지는 {@link #idleAssumptionGaps(double)} 가
+ * 노드별로 돌려준다. 이 클래스는 그 선언값으로만 계산하고, <b>엔진에게는 아무것도 주지 않는다.</b>
+ * 평가 기준이 엔진의 입력이 아니라는 것은 두 계산이 <b>독립</b>이라는 뜻일 뿐, 결과가 실물에서
+ * 성립한다는 뜻은 아니다 — 생성식도 우리가 정한 가정이다.</p>
  *
  * <p>계산식은 클러스터 파일 머리말에 적힌 생성식 그대로다.</p>
  * <ul>
@@ -135,14 +138,14 @@ public final class GroundTruthOracle {
     // ── 배치 1건의 증분 ───────────────────────────────────────
 
     /**
-     * 지상진실 기준 배치 1건의 증분 전력(W) — 동적분 + (전원 제어가 있고 빈 노드였으면) <b>실제</b> {@code idleWatts}.
+     * 생성식 기준 배치 1건의 증분 전력(W) — 동적분 + (전원 제어가 있고 빈 노드였으면) 파일에 선언된 {@code idleWatts}.
      *
      * <p>동적분 = {@code (capacityWatts − idleWatts) × requiredCpu/cores}. 생성식이 선형이므로 현재 부하와
      * 무관하다 — 엔진의 볼록 곡선({@code curveAlpha})은 엔진의 모델링 선택이고, 생성식의 물리가 아니다.</p>
      *
      * <p>깨우는 비용은 {@code AVAILABLE} 판에서만 든다. {@code UNAVAILABLE} 판에서는 그 노드가 이미 통전되어
-     * 유휴 전력을 먹고 있으므로 <b>새로 드는 유휴 전력이 없다</b>. 엔진은 이 자리에서 실제 유휴 대신
-     * {@code 정격 × 0.3} 을 쓴다 — 그 격차가 모델 오사양의 크기다.</p>
+     * 유휴 전력을 먹고 있으므로 <b>새로 드는 유휴 전력이 없다</b>. 엔진은 이 자리에서 파일 선언값 대신
+     * {@code 정격 × 0.3} 을 쓴다 — 그 격차가 엔진 가정과 생성식의 차이다.</p>
      */
     public double marginalPowerWatts(String nodeId, int requiredCpu, boolean nodeWasIdle, PowerControl mode) {
         if (mode == null) {
@@ -158,11 +161,12 @@ public final class GroundTruthOracle {
     // ── 엔진 가정과의 격차 ───────────────────────────────────
 
     /**
-     * 엔진 가정({@code 정격 × engineIdleRatio})과 실제 {@code idleWatts} 의 노드별 격차. 응답의 전제 블록에 그대로 싣는다.
+     * 엔진 가정({@code 정격 × engineIdleRatio})과 파일 선언값 {@code idleWatts} 의 노드별 격차. 응답의 전제 블록에 그대로 싣는다.
      *
-     * <p>이 목록이 <b>순환이 아님을 보이는 증거</b>다. 엔진이 쓰는 유휴 전력은 정격의 상수배이고, 오라클이 쓰는
-     * 유휴 전력은 파일에 적힌 실제값이다. 두 값이 노드마다 얼마나 다른지 밝혀 두면, 지상진실 전력이 엔진 점수의
-     * 재탕이 아니라는 것이 표에서 바로 보인다.</p>
+     * <p>이 목록이 <b>엔진의 가정과 생성식이 어디서 갈리는지</b>를 보이는 표다. 엔진이 쓰는 유휴 전력은 정격의
+     * 상수배이고, 오라클이 쓰는 유휴 전력은 파일에 선언된 값이다. 두 값이 노드마다 얼마나 다른지 밝혀 두면,
+     * 생성식 기준 전력이 엔진 점수의 재탕이 아니라는 것이 표에서 바로 보인다 — 다만 그것은 두 계산이
+     * 독립이라는 뜻이고, 어느 쪽이 실물에 가까운지는 이 표가 말하지 않는다.</p>
      *
      * <p>정렬은 {@link #nodeIds()} 와 같다(노드 id 오름차순) — 표의 행 순서가 실행마다 바뀌지 않게.</p>
      */
@@ -182,24 +186,24 @@ public final class GroundTruthOracle {
     }
 
     /**
-     * 노드 한 대의 유휴 전력 가정 대 실제.
+     * 노드 한 대의 유휴 전력 — 엔진 가정 대 파일 선언값.
      *
      * @param nodeId                 노드 id
      * @param capacityWatts          정격 전력(W) — 생성식이 쓰는 값
-     * @param actualIdleWatts        파일에 적힌 실제 유휴 전력(W). 엔진은 이 값을 <b>모른다</b>
+     * @param declaredIdleWatts      파일에 선언된 유휴 전력(W). 엔진은 이 값을 <b>모른다</b>. 실측이 아니다
      * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = 정격 × idleRatio
-     * @param actualIdleRatio        실제 유휴 비율 = 실제 유휴 / 정격. 엔진의 idleRatio 와 견줄 수 있는 형태
-     * @param groundTruthWattsPerCore 코어당 동적 전력(W/코어) = (정격 − 실제 유휴) / 코어.
+     * @param declaredIdleRatio      선언 유휴 비율 = 선언 유휴 / 정격. 엔진의 idleRatio 와 견줄 수 있는 형태
+     * @param generatorWattsPerCore  코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어.
      *                               유휴 전력은 뺀 값이다 — 빈 노드를 깨우는 비용은
      *                               {@link GroundTruthOracle#marginalPowerWatts} 가 따로 센다
      */
     public record IdleGap(String nodeId, double capacityWatts,
-                          double actualIdleWatts, double engineAssumedIdleWatts,
-                          double actualIdleRatio, double groundTruthWattsPerCore) {
+                          double declaredIdleWatts, double engineAssumedIdleWatts,
+                          double declaredIdleRatio, double generatorWattsPerCore) {
 
-        /** 가정과 실제의 절대 격차(W). 부호는 노드마다 다르므로 크기 비교에는 이 값을 쓴다. */
+        /** 가정과 선언값의 절대 격차(W). 부호는 노드마다 다르므로 크기 비교에는 이 값을 쓴다. */
         public double absoluteGapWatts() {
-            return Math.abs(actualIdleWatts - engineAssumedIdleWatts);
+            return Math.abs(declaredIdleWatts - engineAssumedIdleWatts);
         }
     }
 

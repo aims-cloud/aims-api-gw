@@ -24,7 +24,7 @@ class BenchmarkRulesContractTest {
 
     /** 사전 등록된 지표 키 — 이 집합이 바뀌면 규칙이 바뀐 것이다. */
     private static final Set<String> DECLARED_KEYS = new TreeSet<>(Set.of(
-            "placementRatePercent", "groundTruthPowerW", "perWorkloadPowerW",
+            "placementRatePercent", "generatorPowerW", "perWorkloadPowerW",
             "engineBelievedCostW", "activeNodeDelta", "warnZoneNodeCount",
             "c3InterventionCount", "measuredTempStdDev",
             "unmeasuredPlacementRate", "unmeasuredRateSpreadPercentPoints"));
@@ -67,13 +67,24 @@ class BenchmarkRulesContractTest {
         assertEquals(Role.SECONDARY, m.role(), "헤드라인이 될 수 없다");
     }
 
-    @DisplayName("총전력의 주 지표는 지상진실이다")
+    /**
+     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가
+     * 사실로 굳는다 — 이름·라벨 어디에도 그 단어가 없어야 한다.
+     */
+    @DisplayName("총전력의 주 지표는 엔진 점수가 아니라 생성식 기준값이고, 실측을 암시하는 이름을 쓰지 않는다")
     @Test
-    void ground_truth_power_is_primary() {
-        BenchmarkMetric m = metric(BenchmarkRules.GROUND_TRUTH_POWER);
+    void generator_power_is_primary_and_not_named_ground_truth() {
+        BenchmarkMetric m = metric(BenchmarkRules.GENERATOR_POWER);
 
         assertEquals(Role.PRIMARY, m.role());
         assertEquals(Direction.LOWER_IS_BETTER, m.direction());
+        assertFalse(m.key().toLowerCase().contains("groundtruth"), m.key());
+        for (BenchmarkMetric each : BenchmarkRules.METRICS) {
+            assertFalse(each.label().contains("지상진실"),
+                    each.key() + ": 평가자도 생성식을 쓰므로 '지상진실'은 실측을 암시한다 — " + each.label());
+            assertFalse(each.label().contains("실제"),
+                    each.key() + ": '실제'도 같은 암시다 — " + each.label());
+        }
     }
 
     @DisplayName("정직성 측정치는 방향이 없다 — 판정이 아니라 숫자다")
@@ -214,14 +225,20 @@ class BenchmarkRulesContractTest {
         assertTrue(s.contains("센서"), "왜 문제인지가 문장에 있어야 각주 없이 읽힌다: " + s);
     }
 
-    @DisplayName("한계 문구가 실측이 아님과 노드 한 대를 밝힌다")
+    @DisplayName("한계 문구가 실측이 아님과 노드 한 대와 무엇을 증명하지 않는지를 밝힌다")
     @Test
-    void limitation_states_the_two_hard_limits() {
+    void limitation_states_the_hard_limits_and_what_is_not_proven() {
         String l = BenchmarkRules.LIMITATION;
 
         assertTrue(l.contains("실측이 아니"), l);
-        assertTrue(l.contains("생성식"), "지상진실도 우리가 만든 식이라는 사실이 있어야 한다: " + l);
+        assertTrue(l.contains("생성식"), "평가자도 우리가 만든 식을 쓴다는 사실이 있어야 한다: " + l);
         assertTrue(l.contains("한 대"), "배포 환경에서 비교가 성립하지 않음이 있어야 한다: " + l);
+        assertTrue(l.contains("엔진의 모델 가정과 생성식이 얼마나 다른가"),
+                "무엇을 확인하고 무엇을 확인하지 못하는지가 한 문장으로 있어야 인용될 때 떨어져 나가지 않는다: " + l);
+        assertTrue(l.contains("결론 수준으로 증명하지 않는다"),
+                "온도 축에 결론 지표가 없고 전력 이득이 반사실 판에서만 보인다는 사실을 응답이 스스로 말해야 한다 — "
+                        + "말하지 않으면 불리한 지표를 조용히 내린 것으로 읽힌다: " + l);
+        assertFalse(l.contains("지상진실"), "한계 문구 자체가 실측을 암시하면 안 된다: " + l);
     }
 
     @DisplayName("부하율 분모 정의가 총 코어가 아니라 정책 상한까지의 여유다")

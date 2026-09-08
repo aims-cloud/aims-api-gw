@@ -16,7 +16,7 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 지상진실 오라클이 <b>생성식의 진짜 물리</b>를 계산하는지 고정한다.
+ * 생성식 오라클이 <b>클러스터 파일의 생성식 그대로</b> 계산하는지 고정한다.
  *
  * <p>합성 클러스터 파일을 그대로 읽어 쓴다 — 손으로 계산할 수 있는 값들이라 기대값을 식과 함께 적어 둔다.
  * 여기가 빨간불이면 벤치마크의 주 지표가 다른 물리를 재고 있다는 뜻이다.</p>
@@ -97,10 +97,10 @@ class GroundTruthOracleTest {
         IdleGap worst = gaps.stream().max(Comparator.comparingDouble(IdleGap::absoluteGapWatts)).orElseThrow();
         assertEquals("busan-02:9100", worst.nodeId(),
                 "|실제 − 가정| 최대는 busan-02 — 실제 380W 대 가정 500×0.3 = 150W, 격차 230W");
-        assertEquals(380.0, worst.actualIdleWatts(), EPS, "파일에 적힌 실제 유휴 380W");
+        assertEquals(380.0, worst.declaredIdleWatts(), EPS, "파일에 적힌 실제 유휴 380W");
         assertEquals(150.0, worst.engineAssumedIdleWatts(), EPS, "엔진 가정 = 정격 500 × 0.3 = 150W");
         assertEquals(230.0, worst.absoluteGapWatts(), EPS, "격차 380 − 150 = 230W");
-        assertEquals(0.76, worst.actualIdleRatio(), EPS,
+        assertEquals(0.76, worst.declaredIdleRatio(), EPS,
                 "실제 유휴 비율 380/500 = 0.76 — 엔진이 믿는 0.30 의 2.5배");
     }
 
@@ -109,36 +109,36 @@ class GroundTruthOracleTest {
     void four_of_eight_nodes_match_the_engine_assumption() {
         List<IdleGap> gaps = oracle.idleAssumptionGaps(ENGINE_IDLE_RATIO);
 
-        long within01 = gaps.stream().filter(g -> Math.abs(g.actualIdleRatio() - 0.30) <= 0.01).count();
+        long within01 = gaps.stream().filter(g -> Math.abs(g.declaredIdleRatio() - 0.30) <= 0.01).count();
         assertEquals(4, within01,
                 "유휴 비율이 0.30±0.01 인 노드는 seoul-03·busan-03·daejeon-01·daejeon-02 4대 — "
                         + "150/500 = 0.30, 120/400 = 0.30 으로 정확히 엔진 가정과 같다");
 
-        long within02 = gaps.stream().filter(g -> Math.abs(g.actualIdleRatio() - 0.30) <= 0.02).count();
+        long within02 = gaps.stream().filter(g -> Math.abs(g.declaredIdleRatio() - 0.30) <= 0.02).count();
         assertEquals(5, within02,
                 "범위를 0.02 로 넓히면 busan-01(140/500 = 0.28)이 더해져 5대 — 합성 데이터의 다수가 "
                         + "엔진 모델(정격×0.3)로 생성됐다는 증거이고, 오라클이 엔진과 다른 값을 내는 노드는 소수다");
 
         assertEquals(0.28, gaps.stream().filter(g -> g.nodeId().equals("busan-01:9100")).findFirst()
-                .orElseThrow().actualIdleRatio(), EPS, "busan-01 은 140/500 = 0.28 로 0.30 에서 0.02 떨어져 있다");
-        assertEquals(3, gaps.stream().filter(g -> Math.abs(g.actualIdleRatio() - 0.30) > 0.02).count(),
+                .orElseThrow().declaredIdleRatio(), EPS, "busan-01 은 140/500 = 0.28 로 0.30 에서 0.02 떨어져 있다");
+        assertEquals(3, gaps.stream().filter(g -> Math.abs(g.declaredIdleRatio() - 0.30) > 0.02).count(),
                 "가정에서 0.02 넘게 벗어난 노드는 seoul-01(0.2667)·seoul-02(0.2444)·busan-02(0.76) 3대다");
     }
 
-    @DisplayName("우리가 심은 노드가 코어당 지상진실 비용이 가장 싸다")
+    @DisplayName("우리가 심은 노드가 코어당 생성식 비용이 가장 싸다")
     @Test
     void planted_node_is_the_cheapest_per_core() {
         List<IdleGap> gaps = oracle.idleAssumptionGaps(ENGINE_IDLE_RATIO);
         List<IdleGap> byCost = gaps.stream()
-                .sorted(Comparator.comparingDouble(IdleGap::groundTruthWattsPerCore)).toList();
+                .sorted(Comparator.comparingDouble(IdleGap::generatorWattsPerCore)).toList();
 
         assertEquals("busan-02:9100", byCost.get(0).nodeId(),
                 "코어당 동적 전력 최소는 busan-02 — (500−380)/24 = 5.0 W/코어");
-        assertEquals(5.0, byCost.get(0).groundTruthWattsPerCore(), EPS, "(정격 500 − 유휴 380) / 24코어 = 5.0");
+        assertEquals(5.0, byCost.get(0).generatorWattsPerCore(), EPS, "(정격 500 − 유휴 380) / 24코어 = 5.0");
         assertEquals("seoul-01:9100", byCost.get(1).nodeId(), "2위는 seoul-01 — (600−160)/32 = 13.75 W/코어");
-        assertEquals(13.75, byCost.get(1).groundTruthWattsPerCore(), EPS, "(정격 600 − 유휴 160) / 32코어 = 13.75");
+        assertEquals(13.75, byCost.get(1).generatorWattsPerCore(), EPS, "(정격 600 − 유휴 160) / 32코어 = 13.75");
 
-        assertTrue(byCost.get(0).groundTruthWattsPerCore() < byCost.get(1).groundTruthWattsPerCore(),
+        assertTrue(byCost.get(0).generatorWattsPerCore() < byCost.get(1).generatorWattsPerCore(),
                 "동적분만 보면 busan-02 가 가장 싸다 — 그런데 유휴 380W 를 얹으면 가장 비싼 노드가 된다. "
                         + "이 역전이 전원 제어 두 판을 따로 계산해야 하는 이유다");
     }

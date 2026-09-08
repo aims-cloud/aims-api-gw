@@ -85,7 +85,11 @@ public final class BenchmarkRules {
     // ── 지표 ─────────────────────────────────────────────────
 
     public static final String PLACEMENT_RATE = "placementRatePercent";
-    public static final String GROUND_TRUTH_POWER = "groundTruthPowerW";
+    /**
+     * 클러스터 파일 <b>생성식</b>으로 계산한 총전력. "지상진실"이라 부르지 않는다 — 평가자도 그 생성식을 쓰므로
+     * 이 값은 실측이 아니고, 확인되는 것은 "엔진 가정과 생성식이 얼마나 다른가"뿐이다.
+     */
+    public static final String GENERATOR_POWER = "generatorPowerW";
     public static final String PER_WORKLOAD_POWER = "perWorkloadPowerW";
     public static final String ENGINE_BELIEVED_COST = "engineBelievedCostW";
     public static final String ACTIVE_NODE_DELTA = "activeNodeDelta";
@@ -108,18 +112,19 @@ public final class BenchmarkRules {
                     Direction.HIGHER_IS_BETTER, Role.PRIMARY,
                     "항상 유효. 단 분모(요구 총량)가 전략과 무관하게 고정되어야 한다"),
 
-            new BenchmarkMetric(GROUND_TRUTH_POWER, "총전력(지상진실)", "W",
+            new BenchmarkMetric(GENERATOR_POWER, "총전력(생성식 기준)", "W",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
-                    "전 전략의 배치 건수가 같을 때만 총량을 비교한다. 건수가 다르면 건당 값을 쓴다"),
+                    "전 전략의 배치 건수가 같을 때만 총량을 비교한다. 건수가 다르면 건당 값을 쓴다. "
+                            + "클러스터 파일 생성식으로 계산한 값이라 실측 서버의 전력이 아니다"),
 
-            new BenchmarkMetric(PER_WORKLOAD_POWER, "건당 전력(지상진실)", "W/건",
+            new BenchmarkMetric(PER_WORKLOAD_POWER, "건당 전력(생성식 기준)", "W/건",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
                     "배치 건수가 다를 때의 대체 지표. 배치 0건이면 null"),
 
             new BenchmarkMetric(ENGINE_BELIEVED_COST, "엔진이 믿은 비용", "W",
                     Direction.CONTEXT_ONLY, Role.SECONDARY,
                     "전력 엔진 총점의 한 항을 그대로 합한 값이라 순위 근거로 쓸 수 없다. "
-                            + "지상진실과의 차가 모델 오사양의 크기다"),
+                            + "생성식 기준값과의 차가 엔진 가정과 생성식의 격차다"),
 
             new BenchmarkMetric(ACTIVE_NODE_DELTA, "가동 노드 증감", "대",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
@@ -182,9 +187,20 @@ public final class BenchmarkRules {
                 spreadPercentPoints, highest, lowest);
     }
 
-    /** 응답이 스스로 밝히는 한계. */
+    /**
+     * 응답이 스스로 밝히는 한계.
+     *
+     * <p>세 조각을 반드시 담는다 — "실측이 아니", "생성식", "한 대". 계약 테스트가 이 세 조각을 강제하므로
+     * 문장을 다시 써도 이 사실들은 빠질 수 없다. 그리고 이 API 가 <b>무엇을 증명하지 않는지</b>를 한 문장으로
+     * 적는다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.</p>
+     */
     public static final String LIMITATION =
-            "가상 클러스터에서 계산한 결과이며 실측이 아니다. 전력·온도는 클러스터 파일의 생성식으로 만든 값이고, "
-                    + "지상진실 오라클도 그 생성식을 기준으로 삼으므로 실측 검증이 아니다. "
-                    + "배포 환경은 노드가 한 대뿐이라 이 비교가 성립하지 않는다.";
+            "이 비교의 전력·온도 값은 실측이 아니다 — 합성 클러스터 생성식의 출력이며, 그 계수(노드별 유휴 전력·정격·"
+                    + "온도 계수 0.3)는 실데이터 없이 정한 가정이다. 평가자도 같은 생성식을 쓰므로 확인되는 것은 "
+                    + "'엔진의 모델 가정과 생성식이 얼마나 다른가'이지 '생성식이 실제 서버와 같은가'가 아니다. "
+                    + "전원 제어가 없는 현 시스템(UNAVAILABLE)에서 통합으로 아낄 전력은 정의상 0 이고, 아낄 수 있는 "
+                    + "판(AVAILABLE)은 존재하지 않는 전원 제어를 가정한다. 온도 축에는 결론을 지지하는 지표가 없다 — "
+                    + "대조군은 열을 점수에 넣지 않아 열 지표는 우리 전략 내부의 자기 기술이다. 따라서 이 API 는 "
+                    + "전력 기반 배치·온도 제어의 효과를 결론 수준으로 증명하지 않는다. "
+                    + "배포 환경은 실존 노드가 한 대라 실환경 비교는 성립하지 않는다.";
 }

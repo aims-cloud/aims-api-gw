@@ -11,6 +11,9 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
+import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
+
+import io.swagger.v3.oas.annotations.Operation;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -477,6 +480,24 @@ class BenchmarkRulesContractTest {
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {
             assertFreeOfBannedClaims(m.validity(), m.key() + " 유효성 조건");
         }
+    }
+
+    /**
+     * Swagger 설명은 한계 문구의 <b>사본</b>이다 — 상수에서 지운 문장이 사본에 남아 있으면 문서를 읽는
+     * 사람에게는 그 문장이 여전히 살아 있다. 실제로 열 대조군이 생긴 뒤에도 옛 문구가 이 자리에 남아 있었다.
+     *
+     * <p>스프링을 띄우지 않고 애노테이션만 반사로 읽는다 — 이 검사는 요청 처리와 무관하고,
+     * 컨텍스트를 띄우면 사본이 갈라졌는지를 훨씬 비싼 시험이 뒤늦게 알려 주게 된다.</p>
+     */
+    @DisplayName("배치 비교 설명에도 금지 문장 조각이 없다")
+    @Test
+    void the_swagger_description_is_free_of_banned_claims() throws Exception {
+        Operation operation = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class);
+
+        assertNotNull(operation, "배치 비교 엔드포인트에 @Operation 설명이 없으면 사본이 갈라졌는지 볼 자리가 없다");
+        assertFreeOfBannedClaims(operation.description(), "배치 비교 Swagger 설명");
     }
 
     /** 금지 조각이 어디에도 없는지 — 검사할 조각의 출처를 시험마다 다시 적지 않는다. */

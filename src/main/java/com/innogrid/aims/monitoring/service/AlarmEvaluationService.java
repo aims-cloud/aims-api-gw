@@ -31,6 +31,7 @@ import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmPolicyRepository;
+import com.innogrid.aims.monitoring.service.alarm.AlarmEvaluationHealth;
 import com.innogrid.aims.monitoring.service.alarm.AlarmMetric;
 import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyTargets;
 import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyTargets.Target;
@@ -56,6 +57,8 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
  *   <li>이력에는 정책 id·이름, 역할, 영역, 카탈로그 코드·단위, 기준 문자열({@code CPU Used > 80%})을 스냅샷으로 남긴다.</li>
  *   <li>발생·해소 전이는 {@link AlarmStateChangedEvent} 로 발행한다(docs/09 B.4.6). 대외 이벤트 원장({@code events}) 적재·전송·
  *       조치 훅은 구독자가 평가 트랜잭션 커밋 뒤에 처리하므로 평가기는 원장 두 개를 직접 쓰지 않는다.</li>
+ *   <li>역할 스코프·Thanos 조회 실패는 {@link AlarmEvaluationHealth} 가 상태 전이(정상↔실패)에서만 포털 로그 SYSTEM 으로 남긴다.
+ *       실패한 단위는 그 주기만 건너뛰고 나머지 메트릭은 계속 평가한다.</li>
  * </ul>
  */
 @Service
@@ -73,6 +76,7 @@ public class AlarmEvaluationService {
     private final VictoriaMetricsClient vmClient;
     private final ResourceScopeService resourceScopeService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AlarmEvaluationHealth health;
 
     /** 지속 시간 대기 — 지문 → 처음 초과를 본 시각. 초과가 풀리거나 발생시키면 지운다 */
     private final Map<String, Instant> pendingSince = new ConcurrentHashMap<>();
@@ -81,12 +85,14 @@ public class AlarmEvaluationService {
                                   AlarmHistoryRepository historyRepository,
                                   VictoriaMetricsClient vmClient,
                                   ResourceScopeService resourceScopeService,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  AlarmEvaluationHealth health) {
         this.policyRepository = policyRepository;
         this.historyRepository = historyRepository;
         this.vmClient = vmClient;
         this.resourceScopeService = resourceScopeService;
         this.eventPublisher = eventPublisher;
+        this.health = health;
     }
 
     @Scheduled(fixedRate = 60_000)
@@ -100,9 +106,10 @@ public class AlarmEvaluationService {
         Scope scope;
         try {
             scope = resourceScopeService.scopeOf(roles);
+            health.recovered(AlarmEvaluationHealth.SCOPE_KEY, SCOPE_WHAT);
         } catch (RuntimeException e) {
-            log.warn("알람 평가 스킵 — 역할 스코프 조회 실패: roles={}, error={}", roles, e.getMessage());
-            return;
+            health.failed(AlarmEvaluationHealth.SCOPE_KEY, SCOPE_WHAT, e);
+            return;                                                  // 대상을 알 수 없으면 이 주기는 전부 건너뛴다
         }
         Map<AlarmPolicy, PolicyTargets> targets = new LinkedHashMap<>();
         for (AlarmPolicy p : policies) targets.put(p, PolicyTargets.of(AlarmPolicyTargets.resolve(p, scope)));
@@ -113,9 +120,10 @@ public class AlarmEvaluationService {
             List<Sample> samples;
             try {
                 samples = querySamples(metric);
+                health.recovered(AlarmEvaluationHealth.metricKey(metric), thanosWhat(metric));
             } catch (Exception e) {
-                log.debug("알람 평가 스킵: metric={}, policies={}, error={}", metric, group.getValue().size(), e.getMessage());
-                continue;
+                health.failed(AlarmEvaluationHealth.metricKey(metric), thanosWhat(metric), e);
+                continue;                                            // 이 메트릭만 건너뛰고 다음 메트릭은 평가
             }
             Map<String, AlarmHistory> active = activeByFingerprint(metric);
             for (Sample sample : samples) {
@@ -141,6 +149,12 @@ public class AlarmEvaluationService {
                 }
             }
         }
+    }
+
+    static final String SCOPE_WHAT = "역할 스코프 조회";
+
+    static String thanosWhat(AlarmMetric metric) {
+        return "Thanos 조회(" + metric.name() + ")";
     }
 
     /** durationSeconds 가 0 이면 즉시. 아니면 처음 초과 시각부터 지속 시간이 지났을 때만 true */

@@ -20,6 +20,7 @@ import com.innogrid.aims.monitoring.entity.AlarmPolicy;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy.RecipientRef;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmPolicyRepository;
+import com.innogrid.aims.monitoring.service.alarm.AlarmEvaluationHealth;
 import com.innogrid.aims.monitoring.service.alarm.AlarmMetric;
 import com.innogrid.aims.monitoring.service.alarm.AlarmStateChangedEvent;
 import com.innogrid.aims.monitoring.service.alarm.AlarmStateChangedEvent.Transition;
@@ -42,6 +43,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -50,7 +52,7 @@ import static org.mockito.Mockito.when;
 /**
  * 평가기 — 메트릭 단위 묶음 쿼리(정책 수와 무관), 정책 대상(역할 스코프·영역·개별 대상)으로 표본 필터, 호스트는 instance,
  * VM 은 TB id 로 매칭, 이력 스냅샷(정책·역할·영역·코드·단위·기준·fingerprint), 지속 시간, 중복 억제·해소,
- * 발생·해소 전이 이벤트 발행, 스코프 조회 실패·Thanos 장애·비정상 값 처리.
+ * 발생·해소 전이 이벤트 발행, 스코프 조회 실패·Thanos 장애(장애 추적기 통지)·비정상 값 처리.
  *
  * 대역 스코프: ADMIN 역할에 호스트 asset 1(node-01, mdc-01, 10.0.0.1:9100)·asset 2(node-02, mdc-02, 10.0.0.2:9100),
  *              Namespace openstack 의 VM TB:openstack/infra-01/vm-1. USER 역할에는 asset 3(node-03, mdc-01, 10.0.0.3:9100).
@@ -64,6 +66,7 @@ class AlarmEvaluationServiceTest {
     @Mock VictoriaMetricsClient vmClient;
     @Mock ResourceScopeService resourceScopeService;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock AlarmEvaluationHealth health;
 
     AlarmEvaluationService service;
 
@@ -77,7 +80,7 @@ class AlarmEvaluationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AlarmEvaluationService(policyRepository, historyRepository, vmClient, resourceScopeService, eventPublisher);
+        service = new AlarmEvaluationService(policyRepository, historyRepository, vmClient, resourceScopeService, eventPublisher, health);
         when(resourceScopeService.scopeOf(anyCollection())).thenReturn(SCOPE);
         when(historyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -286,6 +289,8 @@ class AlarmEvaluationServiceTest {
         when(resourceScopeService.scopeOf(anyCollection())).thenThrow(new IllegalStateException("tumblebug down"));
         service.evaluatePolicies();
         verify(vmClient, times(1)).query(anyString());                  // 두 번째 주기는 쿼리하지 않음
+        verify(health, times(1)).recovered(eq(AlarmEvaluationHealth.SCOPE_KEY), eq("역할 스코프 조회"));      // 첫 주기 성공
+        verify(health, times(1)).failed(eq(AlarmEvaluationHealth.SCOPE_KEY), eq("역할 스코프 조회"), any(IllegalStateException.class));
     }
 
     @Test
@@ -304,6 +309,8 @@ class AlarmEvaluationServiceTest {
         service.evaluatePolicies();
 
         verify(vmClient, times(2)).query(anyString());
+        verify(health).failed(eq("metric:CPU_USED_PERCENT"), eq("Thanos 조회(CPU_USED_PERCENT)"), any(IllegalStateException.class));
+        verify(health).recovered(eq("metric:GPU_TEMP"), eq("Thanos 조회(GPU_TEMP)"));
         ArgumentCaptor<AlarmHistory> saved = ArgumentCaptor.forClass(AlarmHistory.class);
         verify(historyRepository, times(1)).save(saved.capture());
         assertThat(saved.getValue().getMetric()).isEqualTo("GPU_TEMP");

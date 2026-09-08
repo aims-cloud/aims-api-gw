@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmRule;
 import com.innogrid.aims.monitoring.entity.Event;
@@ -82,8 +84,15 @@ public class AlarmEvaluationService {
                     String mdcId = labels.getOrDefault("mdc_id", "unknown");
 
                     if (isThresholdExceeded(rule.getCondition(), metricValue, rule.getThreshold())) {
-                        AlarmHistory alarm = new AlarmHistory(rule, mdcId, instance,
-                                metricValue, rule.getSeverity());
+                        // 재정의된 alarm_history 원장에 정책(규칙) 스냅샷으로 기록 — docs/09 C.1
+                        AlarmHistory alarm = AlarmHistory.builder(AlarmSource.POLICY, levelOf(rule.getSeverity()),
+                                        rule.getName() + " " + rule.getCondition() + " " + rule.getThreshold())
+                                .policy(rule.getId(), rule.getName())
+                                .resource("node", instance, instance)
+                                .mdc("unknown".equals(mdcId) ? null : mdcId)
+                                .metric(rule.getMetricName())
+                                .observed(metricValue, unitOf(rule.getMetricName()))
+                                .build();
                         historyRepository.save(alarm);
 
                         Event event = new Event(mdcId, rule.getSeverity(), instance,
@@ -98,6 +107,21 @@ public class AlarmEvaluationService {
                 log.debug("알람 평가 스킵: rule={}, error={}", rule.getName(), e.getMessage());
             }
         }
+    }
+
+    /** 초안 규칙의 severity 문자열(INFO/WARNING/CRITICAL, 대소문자 무관) → AlarmLevel. 알 수 없으면 WARNING */
+    static AlarmLevel levelOf(String severity) {
+        if (severity == null) return AlarmLevel.WARNING;
+        try {
+            return AlarmLevel.valueOf(severity.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return AlarmLevel.WARNING;
+        }
+    }
+
+    /** 초안 메트릭 이름 4종의 단위 */
+    static String unitOf(String metricName) {
+        return "gpu_temperature".equals(metricName) ? "°C" : "%";
     }
 
     private boolean isThresholdExceeded(String condition, double value, double threshold) {

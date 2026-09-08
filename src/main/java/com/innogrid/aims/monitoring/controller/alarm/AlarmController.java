@@ -3,9 +3,7 @@ package com.innogrid.aims.monitoring.controller.alarm;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRuleRequest;
-import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmRule;
-import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmRuleRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,12 +17,9 @@ import org.springframework.web.bind.annotation.*;
 public class AlarmController {
 
     private final AlarmRuleRepository ruleRepository;
-    private final AlarmHistoryRepository historyRepository;
 
-    public AlarmController(AlarmRuleRepository ruleRepository,
-                           AlarmHistoryRepository historyRepository) {
+    public AlarmController(AlarmRuleRepository ruleRepository) {
         this.ruleRepository = ruleRepository;
-        this.historyRepository = historyRepository;
     }
 
     @Operation(summary = "알람 규칙 목록")
@@ -63,28 +58,5 @@ public class AlarmController {
         return ApiResponse.ok(null);
     }
 
-    @Operation(summary = "알람 이력 조회")
-    @GetMapping("/history")
-    public ApiResponse<?> listAlarmHistory(@RequestParam(required = false) String mdcId,
-                                           @RequestParam(required = false) String status) {
-        if (mdcId != null) {
-            return ApiResponse.ok(historyRepository.findByMdcIdOrderByTriggeredAtDesc(mdcId));
-        }
-        if (status != null) {
-            return ApiResponse.ok(historyRepository.findByStatusOrderByTriggeredAtDesc(
-                    AlarmHistory.AlarmStatus.valueOf(status.toUpperCase())));
-        }
-        return ApiResponse.ok(historyRepository.findAllByOrderByTriggeredAtDesc());
-    }
 
-    @Operation(summary = "알람 상태 변경 (확인/해결)")
-    @PatchMapping("/history/{alarmId}/status")
-    public ApiResponse<Void> updateAlarmStatus(@PathVariable Long alarmId,
-                                               @RequestParam String status) {
-        AlarmHistory alarm = historyRepository.findById(alarmId)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "알람을 찾을 수 없습니다"));
-        alarm.setStatus(AlarmHistory.AlarmStatus.valueOf(status.toUpperCase()));
-        historyRepository.save(alarm);
-        return ApiResponse.ok(null);
-    }
 }

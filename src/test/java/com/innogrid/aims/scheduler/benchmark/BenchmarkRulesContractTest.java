@@ -115,6 +115,26 @@ class BenchmarkRulesContractTest {
     }
 
     /**
+     * 온도 분포 두 지표는 총량과 같은 조건에서만 유효하다 — 덜 배치한 전략은 CPU 를 덜 얹어 생성식 온도가
+     * 낮으므로, 건수가 다른 지점을 그냥 세면 열이 아니라 배치량을 재게 된다. 개입 횟수는 <b>시도당</b> 계수라
+     * (전 전략이 같은 워크로드를 한 번씩 시도한다) 배치량에 비례하지 않으므로 이 조건을 받지 않는다.
+     */
+    @DisplayName("온도 분포 두 지표는 배치 건수가 같은 지점에서만 유효하고 개입 횟수는 그 조건을 받지 않는다")
+    @Test
+    void the_temperature_distribution_metrics_share_the_pairing_condition_of_the_totals() {
+        String pairing = "전 전략의 배치 건수가 같은 시각 지점에서만";
+
+        for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
+            assertTrue(metric(key).validity().contains(pairing),
+                    key + ": 총량 지표와 같은 짝짓기 조건이 유효성 문구에 있어야 한다 — 없으면 덜 배치한 전략이 열에서 이긴다");
+        }
+        assertFalse(metric(BenchmarkRules.C3_INTERVENTIONS).validity().contains(pairing),
+                "개입 횟수는 시도당 계수라 배치량에 비례하지 않는다 — 같은 조건을 걸면 없는 결함을 고치는 것이다");
+        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같을 때만"),
+                "총량 쪽 조건이 사라졌다면 '같은 조건' 이라는 위 문구의 기준이 없어진다");
+    }
+
+    /**
      * 주 지표가 어떤 것들인지 목록으로 못 박는다 — 조용히 늘거나 줄면 결론의 근거가 바뀐 것이다.
      * 온도 축이 여기 없는 것은 의도다: 대조군이 열을 점수에 넣지 않아 온도 축에 참가자가 우리뿐이고,
      * 그 사실은 {@link BenchmarkRules#LIMITATION} 이 밝힌다.

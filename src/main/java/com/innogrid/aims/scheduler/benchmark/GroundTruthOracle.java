@@ -84,7 +84,7 @@ public final class GroundTruthOracle {
     // ── 노드 단위 물리량 ──────────────────────────────────────
 
     /**
-     * 노드 한 대의 실제 소비 전력(W). {@code cpuPercent} 는 0~100.
+     * 노드 한 대의 생성식 기준 소비 전력(W). {@code cpuPercent} 는 0~100. 실측이 아니다.
      *
      * <p>생성식 그대로: {@code idleWatts + (capacityWatts − idleWatts) × cpuPercent/100}. 사용률은 물리적으로
      * 0~100 을 벗어날 수 없으므로 범위를 벗어난 값은 잘라 쓴다 — 정격을 넘는 전력을 만들어내지 않는다.</p>
@@ -95,10 +95,11 @@ public final class GroundTruthOracle {
     }
 
     /**
-     * 노드 한 대의 실제 온도(℃).
+     * 노드 한 대의 생성식 기준 온도(℃). 실측이 아니다.
      *
-     * <p>생성식 그대로: {@code baseTemperature + 0.3 × cpuPercent}. 전력과 달리 <b>계측 여부를 보지 않는다</b> —
-     * {@code ipmi: false} 인 노드도 물리적으로는 뜨거워지고, 엔진이 그것을 못 볼 뿐이다. 미계측 노드를
+     * <p>생성식 그대로: {@code baseTemperature + 0.3 × cpuPercent}. 전력과 마찬가지로 <b>계측 여부를 보지 않는다</b> —
+     * 이 클래스에는 {@code ipmi} 를 읽는 자리가 한 곳도 없다. {@code ipmi: false} 인 노드도 물리적으로는
+     * 뜨거워지고, 엔진이 그것을 못 볼 뿐이다. 미계측 노드를
      * 지표에서 뺄지는 판정 규칙({@link BenchmarkRules#WARN_ZONE_NODES})의 일이고, 오라클의 일이 아니다.</p>
      */
     public double nodeTemperatureC(String nodeId, double cpuPercent) {

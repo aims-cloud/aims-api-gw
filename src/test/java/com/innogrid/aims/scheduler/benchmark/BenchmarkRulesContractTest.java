@@ -251,6 +251,49 @@ class BenchmarkRulesContractTest {
                 "이 값을 바꾸면 같은 배치 결정의 가동 노드 회계가 달라진다 — 결과를 보고 바꿀 수 없게 여기서 고정한다");
     }
 
+    /**
+     * <b>좋은 방향</b>은 표를 읽는 사람이 승패를 정하는 축이다. 결과를 보고 이것을 뒤집으면 사전 등록이
+     * 아무것도 고정하지 못하므로, 열 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
+     * 셋(성공률·건당 전력·가동 노드 증감)의 방향이 뚫려 있었다.
+     */
+    @DisplayName("지표 열 개의 좋은 방향이 전부 고정된다")
+    @Test
+    void every_metric_direction_is_pinned() {
+        Map<String, Direction> expected = Map.ofEntries(
+                Map.entry(BenchmarkRules.PLACEMENT_RATE, Direction.HIGHER_IS_BETTER),
+                Map.entry(BenchmarkRules.GENERATOR_POWER, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.PER_WORKLOAD_POWER, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.ENGINE_BELIEVED_COST, Direction.CONTEXT_ONLY),
+                Map.entry(BenchmarkRules.ACTIVE_NODE_DELTA, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.WARN_ZONE_NODES, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.C3_INTERVENTIONS, Direction.CONTEXT_ONLY),
+                Map.entry(BenchmarkRules.TEMP_STDDEV, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.UNMEASURED_RATE, Direction.CONTEXT_ONLY),
+                Map.entry(BenchmarkRules.UNMEASURED_SPREAD, Direction.CONTEXT_ONLY));
+
+        for (BenchmarkMetric m : BenchmarkRules.METRICS) {
+            assertEquals(expected.get(m.key()), m.direction(),
+                    m.key() + ": 좋은 방향을 바꾸려면 이 시험을 먼저 고쳐야 한다");
+        }
+        assertEquals(expected.size(), BenchmarkRules.METRICS.size());
+    }
+
+    /**
+     * 제약을 끈 변종은 막히는 자리가 없어 성공률이 정의상 최고가 된다. 개입 횟수에만 가드를 걸고
+     * 성공률에 안 걸면 <b>반칙으로 나빠 보이는 칸만 가리고 좋아 보이는 칸은 그대로 두는</b> 셈이라,
+     * 사전 등록 문구가 그 비대칭을 먼저 막는다.
+     */
+    @DisplayName("성공률은 '항상 유효'가 아니다 — 제약을 끈 변종은 비교 대상이 아님을 밝힌다")
+    @Test
+    void the_placement_rate_declares_that_ungated_variants_are_not_competitors() {
+        String validity = metric(BenchmarkRules.PLACEMENT_RATE).validity();
+
+        assertFalse(validity.contains("항상 유효"),
+                "제약을 끈 변종이 정의상 1위가 되는데 '항상 유효'라고 적으면 그 열이 헤드라인이 된다: " + validity);
+        assertTrue(validity.contains("천장"),
+                "제약 해제 변종의 열이 경쟁자가 아니라 천장이라는 사실이 문구에 있어야 한다: " + validity);
+    }
+
     @DisplayName("배치 건수가 같을 때만 총량을 비교한다")
     @Test
     void totals_comparable_only_when_placed_counts_match() {

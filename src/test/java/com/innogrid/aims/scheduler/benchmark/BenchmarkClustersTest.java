@@ -58,6 +58,7 @@ class BenchmarkClustersTest {
     @Test
     void main_board_has_five_idle_nodes() {
         double activeCpu = BenchmarkRules.POWERED_ON_CPU_PERCENT;   // 하네스의 회계 문턱 — 엔진 노브가 아니다
+        // 아래는 기준 사용률만 본다. 진폭을 더한 실효 하한은 the_powered_on_threshold_separates_idle_from_busy 가 본다.
         List<Node> nodes = clusters.get(BenchmarkClusters.MAIN).nodes();
         List<Node> idle = nodes.stream().filter(n -> peakCpu(n) <= activeCpu).toList();
         assertEquals(5, idle.size(), "유휴 5대 · 가동 9대 — 통합의 이득을 잴 빈 노드가 있어야 한다");
@@ -72,6 +73,34 @@ class BenchmarkClustersTest {
                 assertTrue(n.cpuUsage() >= 20 && n.cpuUsage() <= 70,
                         n.nodeId() + " 가동 노드의 기준 사용률은 20~70% 로 둔다: " + n.cpuUsage());
             }
+        }
+    }
+
+    /**
+     * 통전 문턱이 유휴와 가동을 <b>진폭까지 더한 실효값</b>으로 가른다.
+     *
+     * <p>{@link BenchmarkRules#POWERED_ON_CPU_PERCENT} javadoc 이 "이 문턱이 두 무리 사이에 있다"고
+     * 주장하는데, 그 주장이 참인 구간은 <b>유휴 상한 &lt; 문턱 ≤ 가동 하한</b> 뿐이다. 판 파일의
+     * {@code swing} 을 한 칸만 키우면 가동 하한이 문턱 아래로 내려가 그 문단이 조용히 거짓이 된다 —
+     * 그때 여기가 빨간불이 되어야 한다. 주 결과판의 실제 여유는 3.0~5.0% 로 <b>문턱이 상단 경계에 붙어 있다.</b></p>
+     */
+    @DisplayName("통전 문턱이 유휴 상한과 가동 하한 사이에 있다 — 진폭까지 더한 실효값으로")
+    @Test
+    void the_powered_on_threshold_separates_idle_from_busy() {
+        double threshold = BenchmarkRules.POWERED_ON_CPU_PERCENT;
+
+        for (String boardId : clusters.boardIds()) {
+            List<Node> nodes = clusters.get(boardId).nodes();
+            double idleCeiling = nodes.stream().filter(n -> peakCpu(n) <= threshold)
+                    .mapToDouble(BenchmarkClustersTest::peakCpu).max().orElseThrow();
+            double busyFloor = nodes.stream().filter(n -> peakCpu(n) > threshold)
+                    .mapToDouble(BenchmarkClustersTest::troughCpu).min().orElseThrow();
+
+            assertTrue(idleCeiling < threshold, boardId + ": 유휴 노드 최고 " + fmt(idleCeiling)
+                    + "% 가 문턱 " + threshold + "% 이상이라 유휴가 가동으로 셈해지는 시각이 있다");
+            assertTrue(threshold <= busyFloor, boardId + ": 가동 노드 최저 " + fmt(busyFloor)
+                    + "% 가 문턱 " + threshold + "% 아래라, 가동 노드가 유휴로 빠지는 시각이 있다 — "
+                    + "판 파일의 swing 을 줄이거나 기준 사용률을 올려야 한다");
         }
     }
 
@@ -257,6 +286,12 @@ class BenchmarkClustersTest {
     private static double peakCpu(Node node) {
         assertNotNull(node.swing(), "노드마다 swing 을 파일에 적어 둔다 — 계약이 파일만 보고 상한을 계산한다: " + node.nodeId());
         return Math.min(100.0, node.cpuUsage() + node.swing());
+    }
+
+    /** 사용률 하한 = 기준 − 진폭. {@link #peakCpu} 의 대칭이다 — 통전 문턱이 두 무리 사이에 있는지 잴 때 쓴다. */
+    private static double troughCpu(Node node) {
+        assertNotNull(node.swing(), "노드마다 swing 을 파일에 적어 둔다: " + node.nodeId());
+        return Math.max(0.0, node.cpuUsage() - node.swing());
     }
 
     /** 최고 온도 = 기준 온도 + 0.3 × 최고 사용률 ({@code SyntheticCluster.temperature} 와 같은 식). */

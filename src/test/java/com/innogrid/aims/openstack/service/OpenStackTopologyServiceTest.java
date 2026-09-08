@@ -11,6 +11,14 @@ import com.innogrid.aims.openstack.KeystoneClient;
 import com.innogrid.aims.openstack.NeutronClient;
 import com.innogrid.aims.openstack.NovaClient;
 import com.innogrid.aims.openstack.OpenStackProperties;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ComputeZone;
+import com.innogrid.aims.openstack.dto.TopologyDtos.DeployZone;
+import com.innogrid.aims.openstack.dto.TopologyDtos.NetworkNode;
+import com.innogrid.aims.openstack.dto.TopologyDtos.NetworkProject;
+import com.innogrid.aims.openstack.dto.TopologyDtos.PortRow;
+import com.innogrid.aims.openstack.dto.TopologyDtos.RouterNode;
+import com.innogrid.aims.openstack.dto.TopologyDtos.SubnetNode;
+import com.innogrid.aims.openstack.dto.TopologyDtos.TopologyTree;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -35,13 +43,6 @@ class OpenStackTopologyServiceTest {
         service = new OpenStackTopologyService(props, keystone, neutron, nova);
     }
 
-    /**
-     * 탭클라우드잇 캡처 기준 시나리오:
-     * - admin 프로젝트: 외부 게이트웨이 있는 라우터(nat-router) → nat 네트워크(서브넷+VM 포트),
-     *   게이트웨이 없는 라우터(0808-1), 라우터 미연결 네트워크(internal_only), 외부 네트워크(external)
-     * - VM: com-1 호스트(nova 가용영역)에서 admin 프로젝트로 1대
-     * - empty-project: VM 없는 프로젝트 그룹
-     */
     private void stubBaseData() {
         when(keystone.listProjects()).thenReturn(Map.of("projects", List.of(
                 Map.of("id", "p-admin", "name", "admin"),
@@ -81,16 +82,13 @@ class OpenStackTopologyServiceTest {
                 List.of(routerWithGateway, routerNoGateway)));
 
         when(neutron.listPorts()).thenReturn(Map.of("ports", List.of(
-                // 라우터 인터페이스: r-nat ↔ net-nat
                 Map.of("id", "port-rif", "device_owner", "network:router_interface",
                         "device_id", "r-nat", "network_id", "net-nat",
                         "fixed_ips", List.of(Map.of("subnet_id", "sub-nat", "ip_address", "172.16.0.1"))),
-                // VM 포트
                 Map.of("id", "port-vm", "device_owner", "compute:nova", "device_id", "srv-1",
                         "status", "ACTIVE", "network_id", "net-nat",
                         "mac_address", "fa:16:3e:aa:bb:cc",
                         "fixed_ips", List.of(Map.of("subnet_id", "sub-nat", "ip_address", "172.16.0.47"))),
-                // DHCP 포트 — VM 행에서 제외
                 Map.of("id", "port-dhcp", "device_owner", "network:dhcp", "device_id", "dhcp-1",
                         "network_id", "net-nat",
                         "fixed_ips", List.of(Map.of("subnet_id", "sub-nat", "ip_address", "172.16.0.2"))))));
@@ -110,137 +108,92 @@ class OpenStackTopologyServiceTest {
                 Map.of("hypervisor_hostname", "com-1", "state", "up", "status", "enabled"))));
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> adminProject(Map<String, Object> topology) {
-        Map<String, Object> networkLayer = (Map<String, Object>) topology.get("networkLayer");
-        List<Map<String, Object>> projects = (List<Map<String, Object>>) networkLayer.get("projects");
-        return projects.stream().filter(p -> "admin".equals(p.get("name"))).findFirst().orElseThrow();
+    private static NetworkProject adminProject(TopologyTree tree) {
+        return tree.networkLayer().projects().stream()
+                .filter(p -> "admin".equals(p.name())).findFirst().orElseThrow();
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void router_with_gateway_carries_ip_and_connected_networks() {
         stubBaseData();
 
-        Map<String, Object> admin = adminProject(service.getTopology());
-        List<Map<String, Object>> routers = (List<Map<String, Object>>) admin.get("routers");
-        Map<String, Object> natRouter = routers.stream()
-                .filter(r -> "nat-router".equals(r.get("name"))).findFirst().orElseThrow();
+        NetworkProject admin = adminProject(service.getTopology());
+        RouterNode natRouter = admin.routers().stream()
+                .filter(r -> "nat-router".equals(r.name())).findFirst().orElseThrow();
 
-        assertThat(natRouter).containsEntry("staticRouteCount", 1);
-        Map<String, Object> gateway = (Map<String, Object>) natRouter.get("externalGateway");
-        assertThat(gateway)
-                .containsEntry("networkName", "external")
-                .containsEntry("ipAddress", "192.168.110.235");
-
-        List<Map<String, Object>> networks = (List<Map<String, Object>>) natRouter.get("networks");
-        assertThat(networks).hasSize(1);
-        assertThat(networks.get(0)).containsEntry("name", "nat");
+        assertThat(natRouter.staticRouteCount()).isEqualTo(1);
+        assertThat(natRouter.externalGateway().networkName()).isEqualTo("external");
+        assertThat(natRouter.externalGateway().ipAddress()).isEqualTo("192.168.110.235");
+        assertThat(natRouter.networks()).hasSize(1);
+        assertThat(natRouter.networks().get(0).name()).isEqualTo("nat");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void router_without_gateway_goes_to_separate_array() {
         stubBaseData();
 
-        Map<String, Object> admin = adminProject(service.getTopology());
-
-        // 게이트웨이 있는 라우터는 routers[], 없는 라우터는 routersWithoutGateway[]
-        List<Map<String, Object>> routers = (List<Map<String, Object>>) admin.get("routers");
-        assertThat(routers).extracting(r -> r.get("name")).containsExactly("nat-router");
-
-        List<Map<String, Object>> withoutGateway =
-                (List<Map<String, Object>>) admin.get("routersWithoutGateway");
-        assertThat(withoutGateway).hasSize(1);
-        assertThat(withoutGateway.get(0))
-                .containsEntry("name", "0808-1");
-        assertThat(withoutGateway.get(0).get("externalGateway")).isNull();
+        NetworkProject admin = adminProject(service.getTopology());
+        assertThat(admin.routers()).extracting(RouterNode::name).containsExactly("nat-router");
+        assertThat(admin.routersWithoutGateway()).hasSize(1);
+        RouterNode without = admin.routersWithoutGateway().get(0);
+        assertThat(without.name()).isEqualTo("0808-1");
+        assertThat(without.externalGateway()).isNull();
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void groups_unconnected_and_external_networks_separately() {
         stubBaseData();
 
-        Map<String, Object> admin = adminProject(service.getTopology());
-
-        List<Map<String, Object>> unconnected =
-                (List<Map<String, Object>>) admin.get("unconnectedNetworks");
-        assertThat(unconnected).hasSize(1);
-        assertThat(unconnected.get(0)).containsEntry("name", "internal_only");
-
-        List<Map<String, Object>> external =
-                (List<Map<String, Object>>) admin.get("externalNetworks");
-        assertThat(external).hasSize(1);
-        assertThat(external.get(0))
-                .containsEntry("name", "external")
-                .containsEntry("mtu", 1500);
+        NetworkProject admin = adminProject(service.getTopology());
+        assertThat(admin.unconnectedNetworks()).extracting(NetworkNode::name).containsExactly("internal_only");
+        assertThat(admin.externalNetworks()).hasSize(1);
+        assertThat(admin.externalNetworks().get(0).name()).isEqualTo("external");
+        assertThat(admin.externalNetworks().get(0).mtu()).isEqualTo(1500);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void subnet_port_rows_have_vm_name_ip_mac_and_exclude_dhcp() {
         stubBaseData();
 
-        Map<String, Object> admin = adminProject(service.getTopology());
-        List<Map<String, Object>> routers = (List<Map<String, Object>>) admin.get("routers");
-        Map<String, Object> natRouter = routers.stream()
-                .filter(r -> "nat-router".equals(r.get("name"))).findFirst().orElseThrow();
-        List<Map<String, Object>> networks = (List<Map<String, Object>>) natRouter.get("networks");
-        List<Map<String, Object>> subnets = (List<Map<String, Object>>) networks.get(0).get("subnets");
-        List<Map<String, Object>> ports = (List<Map<String, Object>>) subnets.get(0).get("ports");
+        NetworkProject admin = adminProject(service.getTopology());
+        RouterNode natRouter = admin.routers().stream()
+                .filter(r -> "nat-router".equals(r.name())).findFirst().orElseThrow();
+        List<SubnetNode> subnets = natRouter.networks().get(0).subnets();
+        List<PortRow> ports = subnets.get(0).ports();
 
-        assertThat(ports).hasSize(1); // DHCP·라우터 인터페이스 포트 제외
-        assertThat(ports.get(0))
-                .containsEntry("vmName", "amphora-42a05c88")
-                .containsEntry("ipAddress", "172.16.0.47")
-                .containsEntry("macAddress", "fa:16:3e:aa:bb:cc");
+        assertThat(ports).hasSize(1);
+        assertThat(ports.get(0).vmName()).isEqualTo("amphora-42a05c88");
+        assertThat(ports.get(0).ipAddress()).isEqualTo("172.16.0.47");
+        assertThat(ports.get(0).macAddress()).isEqualTo("fa:16:3e:aa:bb:cc");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void compute_layer_builds_zone_host_project_vm_chain() {
         stubBaseData();
 
-        Map<String, Object> computeLayer =
-                (Map<String, Object>) service.getTopology().get("computeLayer");
-        List<Map<String, Object>> zones = (List<Map<String, Object>>) computeLayer.get("zones");
+        ComputeZone zone = service.getTopology().computeLayer().zones().stream()
+                .filter(z -> "nova".equals(z.name())).findFirst().orElseThrow();
+        assertThat(zone.available()).isTrue();
 
-        assertThat(zones).hasSize(1);
-        assertThat(zones.get(0))
-                .containsEntry("name", "nova")
-                .containsEntry("available", true);
+        var host = zone.hosts().get(0);
+        assertThat(host.name()).isEqualTo("com-1");
+        assertThat(host.state()).isEqualTo("up");
 
-        List<Map<String, Object>> hosts = (List<Map<String, Object>>) zones.get(0).get("hosts");
-        assertThat(hosts.get(0))
-                .containsEntry("name", "com-1")
-                .containsEntry("state", "up");
-
-        List<Map<String, Object>> projects = (List<Map<String, Object>>) hosts.get(0).get("projects");
-        assertThat(projects.get(0)).containsEntry("name", "admin");
-
-        List<Map<String, Object>> vms = (List<Map<String, Object>>) projects.get(0).get("vms");
-        assertThat(vms.get(0))
-                .containsEntry("name", "amphora-42a05c88")
-                .containsEntry("status", "ACTIVE");
+        var project = host.projects().get(0);
+        assertThat(project.name()).isEqualTo("admin");
+        assertThat(project.vms().get(0).name()).isEqualTo("amphora-42a05c88");
+        assertThat(project.vms().get(0).status()).isEqualTo("ACTIVE");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void projects_without_vm_are_grouped() {
         stubBaseData();
 
-        Map<String, Object> computeLayer =
-                (Map<String, Object>) service.getTopology().get("computeLayer");
-        List<Map<String, Object>> withoutVm =
-                (List<Map<String, Object>>) computeLayer.get("projectsWithoutVm");
-
-        assertThat(withoutVm).hasSize(1);
-        assertThat(withoutVm.get(0)).containsEntry("name", "empty-project");
+        var withoutVm = service.getTopology().computeLayer().projectsWithoutVm();
+        assertThat(withoutVm).extracting(p -> p.name()).containsExactly("empty-project");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void admin_api_failures_degrade_gracefully() {
         stubBaseData();
         when(nova.listServersAllTenants()).thenThrow(new RuntimeException("403"));
@@ -249,27 +202,20 @@ class OpenStackTopologyServiceTest {
         when(nova.listAvailabilityZones()).thenThrow(new RuntimeException("down"));
         when(keystone.listProjects()).thenThrow(new RuntimeException("403"));
 
-        Map<String, Object> topology = service.getTopology();
+        TopologyTree tree = service.getTopology();
 
-        // 네트워크 레이어는 유지되고, VM 이름은 device_id로 대체
-        Map<String, Object> networkLayer = (Map<String, Object>) topology.get("networkLayer");
-        List<Map<String, Object>> projects = (List<Map<String, Object>>) networkLayer.get("projects");
-        assertThat(projects).isNotEmpty();
-        assertThat(projects.get(0)).containsEntry("name", "p-admin"); // 프로젝트명 대신 id
-
-        // 컴퓨트 레이어는 비어 있지만 구조는 유지
-        Map<String, Object> computeLayer = (Map<String, Object>) topology.get("computeLayer");
-        assertThat((List<?>) computeLayer.get("zones")).isEmpty();
+        assertThat(tree.networkLayer().projects()).isNotEmpty();
+        assertThat(tree.networkLayer().projects().get(0).name()).isEqualTo("p-admin");
+        assertThat(tree.computeLayer().zones()).isEmpty();
     }
 
     @Test
     void deploy_zones_returns_single_configured_connection() {
-        List<Map<String, Object>> zones = service.listDeployZones();
+        List<DeployZone> zones = service.listDeployZones();
 
         assertThat(zones).hasSize(1);
-        assertThat(zones.get(0))
-                .containsEntry("name", "openstack-lab")
-                .containsEntry("provider", "openstack")
-                .containsEntry("configured", false);
+        assertThat(zones.get(0).name()).isEqualTo("openstack-lab");
+        assertThat(zones.get(0).provider()).isEqualTo("openstack");
+        assertThat(zones.get(0).configured()).isFalse();
     }
 }

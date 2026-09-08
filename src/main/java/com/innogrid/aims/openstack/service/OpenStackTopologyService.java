@@ -18,6 +18,21 @@ import com.innogrid.aims.openstack.KeystoneClient;
 import com.innogrid.aims.openstack.NeutronClient;
 import com.innogrid.aims.openstack.NovaClient;
 import com.innogrid.aims.openstack.OpenStackProperties;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ComputeHost;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ComputeLayer;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ComputeProject;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ComputeZone;
+import com.innogrid.aims.openstack.dto.TopologyDtos.DeployZone;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ExternalGatewayRef;
+import com.innogrid.aims.openstack.dto.TopologyDtos.NetworkLayer;
+import com.innogrid.aims.openstack.dto.TopologyDtos.NetworkNode;
+import com.innogrid.aims.openstack.dto.TopologyDtos.NetworkProject;
+import com.innogrid.aims.openstack.dto.TopologyDtos.PortRow;
+import com.innogrid.aims.openstack.dto.TopologyDtos.ProjectRef;
+import com.innogrid.aims.openstack.dto.TopologyDtos.RouterNode;
+import com.innogrid.aims.openstack.dto.TopologyDtos.SubnetNode;
+import com.innogrid.aims.openstack.dto.TopologyDtos.TopologyTree;
+import com.innogrid.aims.openstack.dto.TopologyDtos.VmSummary;
 
 import static com.innogrid.aims.openstack.service.NeutronMappers.castList;
 import static com.innogrid.aims.openstack.service.NeutronMappers.extractList;
@@ -35,6 +50,7 @@ import static com.innogrid.aims.openstack.service.NeutronMappers.extractList;
  *
  * 관리자 전용 API(하이퍼바이저, all_tenants)는 실패해도 트리를 유지하고 해당 정보만 생략한다.
  * 현재는 단일 OpenStack 연결(자체 구축) 기준. 1세부 정보 수신 후 다중 연결로 확장.
+ * 노드 클릭 시 상세는 {@link OpenStackTopologyDetailService} 가 담당한다.
  */
 @Service
 public class OpenStackTopologyService {
@@ -55,40 +71,30 @@ public class OpenStackTopologyService {
     }
 
     /** 배포영역 드롭다운 목록. 다중 연결 확장 전까지는 설정된 연결 1개. */
-    public List<Map<String, Object>> listDeployZones() {
-        Map<String, Object> zone = new LinkedHashMap<>();
-        zone.put("name", props.getZoneName());
-        zone.put("provider", "openstack");
-        zone.put("configured", props.isConfigured());
-        return List.of(zone);
+    public List<DeployZone> listDeployZones() {
+        return List.of(new DeployZone(props.getZoneName(), "openstack", props.isConfigured()));
     }
 
     /** 통합 토폴로지 — 네트워크 레이어 + 컴퓨트 레이어. */
-    public Map<String, Object> getTopology() {
+    public TopologyTree getTopology() {
         Map<String, String> projectNames = loadProjectNames();
         List<Map<String, Object>> servers = loadServers();
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deployZone", props.getZoneName());
-        result.put("provider", "openstack");
-        result.put("networkLayer", buildNetworkLayer(projectNames, servers));
-        result.put("computeLayer", buildComputeLayer(projectNames, servers));
-        return result;
+        return new TopologyTree(props.getZoneName(), "openstack",
+                buildNetworkLayer(projectNames, servers),
+                buildComputeLayer(projectNames, servers));
     }
 
     // ══ 네트워크 레이어 ═════════════════════════════════════════
 
-    private Map<String, Object> buildNetworkLayer(Map<String, String> projectNames,
-                                                  List<Map<String, Object>> servers) {
+    private NetworkLayer buildNetworkLayer(Map<String, String> projectNames,
+                                           List<Map<String, Object>> servers) {
         List<Map<String, Object>> networks = extractList(neutron.listNetworks(), "networks");
         List<Map<String, Object>> subnets = extractList(neutron.listSubnets(), "subnets");
         List<Map<String, Object>> ports = extractList(neutron.listPorts(), "ports");
         List<Map<String, Object>> routers = extractList(neutron.listRouters(), "routers");
 
-        Map<String, Map<String, Object>> serversById = new HashMap<>();
-        for (Map<String, Object> server : servers) {
-            serversById.put(string(server.get("id")), server);
-        }
+        Map<String, Map<String, Object>> serversById = indexById(servers);
 
         Map<String, String> networkNameById = new HashMap<>();
         for (Map<String, Object> network : networks) {
@@ -106,10 +112,10 @@ public class OpenStackTopologyService {
             }
         }
 
-        Map<String, List<Map<String, Object>>> portRowsBySubnet = groupPortRowsBySubnet(ports, serversById);
-        Map<String, List<Map<String, Object>>> subnetsByNetwork = groupSubnetsByNetwork(subnets, portRowsBySubnet);
+        Map<String, List<PortRow>> portRowsBySubnet = groupPortRowsBySubnet(ports, serversById);
+        Map<String, List<SubnetNode>> subnetsByNetwork = groupSubnetsByNetwork(subnets, portRowsBySubnet);
 
-        Map<String, Map<String, Object>> networkNodesById = new LinkedHashMap<>();
+        Map<String, NetworkNode> networkNodesById = new LinkedHashMap<>();
         for (Map<String, Object> network : networks) {
             networkNodesById.put(string(network.get("id")), toNetworkNode(network, subnetsByNetwork));
         }
@@ -117,64 +123,62 @@ public class OpenStackTopologyService {
         Set<String> routerConnectedNetworkIds = new HashSet<>();
         routerNetworkIds.values().forEach(routerConnectedNetworkIds::addAll);
 
-        // 프로젝트별 조립. 라우터는 외부 게이트웨이 유무로 배열을 나눈다
-        // (routers = 게이트웨이 있음, routersWithoutGateway = "외부 게이트웨이 없는 라우터" 그룹).
-        Map<String, Map<String, Object>> projectNodes = new LinkedHashMap<>();
+        // 프로젝트별 조립용 누적 버킷
+        Map<String, ProjectAccumulator> byProject = new LinkedHashMap<>();
+
         for (Map<String, Object> router : routers) {
-            Map<String, Object> projectNode = projectNode(projectNodes, projectIdOf(router), projectNames);
-            Map<String, Object> routerNode =
-                    toRouterNode(router, routerNetworkIds, networkNodesById, networkNameById);
-            String bucket = routerNode.get("externalGateway") == null
-                    ? "routersWithoutGateway" : "routers";
-            listOf(projectNode, bucket).add(routerNode);
+            ProjectAccumulator acc = accumulator(byProject, projectIdOf(router), projectNames);
+            RouterNode routerNode = toRouterNode(router, routerNetworkIds, networkNodesById, networkNameById);
+            if (routerNode.externalGateway() == null) {
+                acc.routersWithoutGateway.add(routerNode);
+            } else {
+                acc.routers.add(routerNode);
+            }
         }
         for (Map<String, Object> network : networks) {
             String networkId = string(network.get("id"));
-            Map<String, Object> projectNode = projectNode(projectNodes, projectIdOf(network), projectNames);
+            ProjectAccumulator acc = accumulator(byProject, projectIdOf(network), projectNames);
             if (Boolean.TRUE.equals(network.get("router:external"))) {
-                listOf(projectNode, "externalNetworks").add(networkNodesById.get(networkId));
+                acc.externalNetworks.add(networkNodesById.get(networkId));
             } else if (!routerConnectedNetworkIds.contains(networkId)) {
-                listOf(projectNode, "unconnectedNetworks").add(networkNodesById.get(networkId));
+                acc.unconnectedNetworks.add(networkNodesById.get(networkId));
             }
         }
 
-        List<Map<String, Object>> projects = new ArrayList<>(projectNodes.values());
-        projects.sort(Comparator.comparing(p -> String.valueOf(p.get("name"))));
-
-        Map<String, Object> layer = new LinkedHashMap<>();
-        layer.put("projects", projects);
-        return layer;
+        List<NetworkProject> projects = new ArrayList<>();
+        for (ProjectAccumulator acc : byProject.values()) {
+            projects.add(new NetworkProject(acc.id, acc.name,
+                    acc.routers, acc.routersWithoutGateway,
+                    acc.unconnectedNetworks, acc.externalNetworks));
+        }
+        projects.sort(Comparator.comparing(NetworkProject::name, Comparator.nullsLast(Comparator.naturalOrder())));
+        return new NetworkLayer(projects);
     }
 
-    private Map<String, Object> toRouterNode(Map<String, Object> router,
-                                             Map<String, Set<String>> routerNetworkIds,
-                                             Map<String, Map<String, Object>> networkNodesById,
-                                             Map<String, String> networkNameById) {
-        Map<String, Object> node = new LinkedHashMap<>();
+    private RouterNode toRouterNode(Map<String, Object> router,
+                                    Map<String, Set<String>> routerNetworkIds,
+                                    Map<String, NetworkNode> networkNodesById,
+                                    Map<String, String> networkNameById) {
         String routerId = string(router.get("id"));
-        node.put("id", routerId);
-        node.put("name", router.get("name"));
-        node.put("status", router.get("status"));
-        node.put("adminStateUp", router.get("admin_state_up"));
-        node.put("staticRouteCount", castList(router.get("routes")).size());
-        node.put("externalGateway", toExternalGateway(router, networkNameById));
 
-        List<Map<String, Object>> connected = new ArrayList<>();
+        List<NetworkNode> connected = new ArrayList<>();
         for (String networkId : routerNetworkIds.getOrDefault(routerId, Set.of())) {
-            Map<String, Object> networkNode = networkNodesById.get(networkId);
+            NetworkNode networkNode = networkNodesById.get(networkId);
             if (networkNode != null) {
                 connected.add(networkNode);
             }
         }
-        connected.sort(Comparator.comparing(n -> String.valueOf(n.get("name"))));
-        node.put("networks", connected);
-        return node;
+        connected.sort(Comparator.comparing(NetworkNode::name, Comparator.nullsLast(Comparator.naturalOrder())));
+
+        return new RouterNode(routerId, string(router.get("name")), string(router.get("status")),
+                asBoolean(router.get("admin_state_up")), castList(router.get("routes")).size(),
+                toExternalGateway(router, networkNameById), connected);
     }
 
-    /** 라우터의 외부 게이트웨이 (없으면 null → 프론트가 '외부 게이트웨이 없는 라우터' 그룹으로 묶음). */
+    /** 라우터의 외부 게이트웨이 (없으면 null → '외부 게이트웨이 없는 라우터' 그룹). */
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> toExternalGateway(Map<String, Object> router,
-                                                         Map<String, String> networkNameById) {
+    private static ExternalGatewayRef toExternalGateway(Map<String, Object> router,
+                                                        Map<String, String> networkNameById) {
         Object info = router.get("external_gateway_info");
         if (!(info instanceof Map<?, ?> gateway)) return null;
 
@@ -186,71 +190,53 @@ public class OpenStackTopologyService {
         if (!fixedIps.isEmpty() && fixedIps.get(0) instanceof Map<?, ?> first) {
             ipAddress = string(((Map<String, Object>) first).get("ip_address"));
         }
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("networkId", networkId);
-        result.put("networkName", networkNameById.get(networkId));
-        result.put("ipAddress", ipAddress);
-        return result;
+        return new ExternalGatewayRef(networkId, networkNameById.get(networkId), ipAddress);
     }
 
-    private Map<String, Object> toNetworkNode(Map<String, Object> network,
-                                              Map<String, List<Map<String, Object>>> subnetsByNetwork) {
-        Map<String, Object> node = new LinkedHashMap<>();
-        node.put("id", network.get("id"));
-        node.put("name", network.get("name"));
-        node.put("status", network.get("status"));
-        node.put("adminStateUp", network.get("admin_state_up"));
-        node.put("mtu", network.get("mtu"));
-        node.put("shared", network.get("shared"));
-        node.put("external", network.get("router:external"));
-        node.put("subnets", subnetsByNetwork.getOrDefault(string(network.get("id")), List.of()));
-        return node;
+    private NetworkNode toNetworkNode(Map<String, Object> network,
+                                      Map<String, List<SubnetNode>> subnetsByNetwork) {
+        return new NetworkNode(
+                string(network.get("id")), string(network.get("name")), string(network.get("status")),
+                asBoolean(network.get("admin_state_up")), asInteger(network.get("mtu")),
+                asBoolean(network.get("shared")), asBoolean(network.get("router:external")),
+                subnetsByNetwork.getOrDefault(string(network.get("id")), List.of()));
     }
 
-    private Map<String, List<Map<String, Object>>> groupSubnetsByNetwork(
-            List<Map<String, Object>> subnets,
-            Map<String, List<Map<String, Object>>> portRowsBySubnet) {
-        Map<String, List<Map<String, Object>>> byNetwork = new HashMap<>();
+    private Map<String, List<SubnetNode>> groupSubnetsByNetwork(
+            List<Map<String, Object>> subnets, Map<String, List<PortRow>> portRowsBySubnet) {
+        Map<String, List<SubnetNode>> byNetwork = new HashMap<>();
         for (Map<String, Object> subnet : subnets) {
             String subnetId = string(subnet.get("id"));
-            Map<String, Object> node = new LinkedHashMap<>();
-            node.put("id", subnetId);
-            node.put("name", subnet.get("name"));
-            node.put("cidr", subnet.get("cidr"));
-            node.put("gatewayIp", subnet.get("gateway_ip"));
-            node.put("ports", portRowsBySubnet.getOrDefault(subnetId, List.of()));
-            byNetwork.computeIfAbsent(string(subnet.get("network_id")), k -> new ArrayList<>())
-                    .add(node);
+            SubnetNode node = new SubnetNode(subnetId, string(subnet.get("name")),
+                    string(subnet.get("cidr")), string(subnet.get("gateway_ip")),
+                    portRowsBySubnet.getOrDefault(subnetId, List.of()));
+            byNetwork.computeIfAbsent(string(subnet.get("network_id")), k -> new ArrayList<>()).add(node);
         }
         return byNetwork;
     }
 
     /** compute 포트를 서브넷별 행(VM명/IP/MAC)으로 변환. VM 이름은 Nova, 실패 시 device_id. */
-    private Map<String, List<Map<String, Object>>> groupPortRowsBySubnet(
+    private Map<String, List<PortRow>> groupPortRowsBySubnet(
             List<Map<String, Object>> ports, Map<String, Map<String, Object>> serversById) {
-        Map<String, List<Map<String, Object>>> bySubnet = new HashMap<>();
+        Map<String, List<PortRow>> bySubnet = new HashMap<>();
         for (Map<String, Object> port : ports) {
             String owner = string(port.get("device_owner"));
             if (owner == null || !owner.startsWith("compute")) continue;
 
             String serverId = string(port.get("device_id"));
             Map<String, Object> server = serversById.get(serverId);
+            String vmName = server != null ? string(server.get("name")) : serverId;
+            String status = server != null ? string(server.get("status")) : string(port.get("status"));
 
             for (Object entry : castList(port.get("fixed_ips"))) {
                 if (!(entry instanceof Map<?, ?> fixedIp)) continue;
                 @SuppressWarnings("unchecked")
                 Map<String, Object> fixedIpMap = (Map<String, Object>) fixedIp;
 
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("vmId", serverId);
-                row.put("vmName", server != null ? server.get("name") : serverId);
-                row.put("status", server != null ? server.get("status") : port.get("status"));
-                row.put("ipAddress", fixedIpMap.get("ip_address"));
-                row.put("macAddress", port.get("mac_address"));
-                row.put("portId", port.get("id"));
-                bySubnet.computeIfAbsent(string(fixedIpMap.get("subnet_id")), k -> new ArrayList<>())
-                        .add(row);
+                PortRow row = new PortRow(serverId, vmName, status,
+                        string(fixedIpMap.get("ip_address")), string(port.get("mac_address")),
+                        string(port.get("id")));
+                bySubnet.computeIfAbsent(string(fixedIpMap.get("subnet_id")), k -> new ArrayList<>()).add(row);
             }
         }
         return bySubnet;
@@ -258,83 +244,61 @@ public class OpenStackTopologyService {
 
     // ══ 컴퓨트 레이어 ═══════════════════════════════════════════
 
-    private Map<String, Object> buildComputeLayer(Map<String, String> projectNames,
-                                                  List<Map<String, Object>> servers) {
+    private ComputeLayer buildComputeLayer(Map<String, String> projectNames,
+                                           List<Map<String, Object>> servers) {
         Map<String, Object> zoneAvailability = loadZoneAvailability();
         Map<String, Map<String, Object>> hypervisors = loadHypervisors();
 
         // 가용영역 → 물리노드(하이퍼바이저) → 프로젝트 → VM
-        Map<String, Map<String, Map<String, List<Map<String, Object>>>>> tree = new LinkedHashMap<>();
+        Map<String, Map<String, Map<String, List<VmSummary>>>> tree = new LinkedHashMap<>();
         Set<String> projectsWithVm = new HashSet<>();
         for (Map<String, Object> server : servers) {
             String zone = stringOrDefault(server.get("OS-EXT-AZ:availability_zone"), "unknown");
             String host = stringOrDefault(server.get("OS-EXT-SRV-ATTR:hypervisor_hostname"), "unknown");
-            String projectId = stringOrDefault(
-                    server.getOrDefault("tenant_id", server.get("project_id")), "");
+            String projectId = stringOrDefault(server.getOrDefault("tenant_id", server.get("project_id")), "");
             projectsWithVm.add(projectId);
 
-            Map<String, Object> vm = new LinkedHashMap<>();
-            vm.put("id", server.get("id"));
-            vm.put("name", server.get("name"));
-            vm.put("status", server.get("status"));
-
+            VmSummary vm = new VmSummary(string(server.get("id")), string(server.get("name")),
+                    string(server.get("status")));
             tree.computeIfAbsent(zone, k -> new LinkedHashMap<>())
                     .computeIfAbsent(host, k -> new LinkedHashMap<>())
                     .computeIfAbsent(projectId, k -> new ArrayList<>())
                     .add(vm);
         }
 
-        List<Map<String, Object>> zones = new ArrayList<>();
-        for (Map.Entry<String, Map<String, Map<String, List<Map<String, Object>>>>> zoneEntry : tree.entrySet()) {
-            List<Map<String, Object>> hosts = new ArrayList<>();
-            for (Map.Entry<String, Map<String, List<Map<String, Object>>>> hostEntry
-                    : zoneEntry.getValue().entrySet()) {
-                List<Map<String, Object>> projects = new ArrayList<>();
-                for (Map.Entry<String, List<Map<String, Object>>> projectEntry
-                        : hostEntry.getValue().entrySet()) {
-                    Map<String, Object> project = new LinkedHashMap<>();
-                    project.put("id", projectEntry.getKey());
-                    project.put("name", projectNames.getOrDefault(
-                            projectEntry.getKey(), projectEntry.getKey()));
-                    project.put("vms", projectEntry.getValue());
-                    projects.add(project);
+        List<ComputeZone> zones = new ArrayList<>();
+        for (var zoneEntry : tree.entrySet()) {
+            List<ComputeHost> hosts = new ArrayList<>();
+            for (var hostEntry : zoneEntry.getValue().entrySet()) {
+                List<ComputeProject> projects = new ArrayList<>();
+                for (var projectEntry : hostEntry.getValue().entrySet()) {
+                    projects.add(new ComputeProject(projectEntry.getKey(),
+                            projectNames.getOrDefault(projectEntry.getKey(), projectEntry.getKey()),
+                            projectEntry.getValue()));
                 }
-                projects.sort(Comparator.comparing(p -> String.valueOf(p.get("name"))));
+                projects.sort(Comparator.comparing(ComputeProject::name, Comparator.nullsLast(Comparator.naturalOrder())));
 
                 Map<String, Object> hypervisor = hypervisors.get(hostEntry.getKey());
-                Map<String, Object> host = new LinkedHashMap<>();
-                host.put("name", hostEntry.getKey());
-                host.put("state", hypervisor == null ? null : hypervisor.get("state"));
-                host.put("status", hypervisor == null ? null : hypervisor.get("status"));
-                host.put("projects", projects);
-                hosts.add(host);
+                hosts.add(new ComputeHost(hostEntry.getKey(),
+                        hypervisor == null ? null : string(hypervisor.get("state")),
+                        hypervisor == null ? null : string(hypervisor.get("status")),
+                        projects));
             }
-            hosts.sort(Comparator.comparing(h -> String.valueOf(h.get("name"))));
-
-            Map<String, Object> zone = new LinkedHashMap<>();
-            zone.put("name", zoneEntry.getKey());
-            zone.put("available", zoneAvailability.get(zoneEntry.getKey()));
-            zone.put("hosts", hosts);
-            zones.add(zone);
+            hosts.sort(Comparator.comparing(ComputeHost::name, Comparator.nullsLast(Comparator.naturalOrder())));
+            zones.add(new ComputeZone(zoneEntry.getKey(), asBoolean(zoneAvailability.get(zoneEntry.getKey())), hosts));
         }
-        zones.sort(Comparator.comparing(z -> String.valueOf(z.get("name"))));
+        zones.sort(Comparator.comparing(ComputeZone::name, Comparator.nullsLast(Comparator.naturalOrder())));
 
         // 그룹: VM 없는 프로젝트
-        List<Map<String, Object>> projectsWithoutVm = new ArrayList<>();
+        List<ProjectRef> projectsWithoutVm = new ArrayList<>();
         for (String projectId : new TreeSet<>(projectNames.keySet())) {
             if (!projectsWithVm.contains(projectId)) {
-                Map<String, Object> project = new LinkedHashMap<>();
-                project.put("id", projectId);
-                project.put("name", projectNames.get(projectId));
-                projectsWithoutVm.add(project);
+                projectsWithoutVm.add(new ProjectRef(projectId, projectNames.get(projectId)));
             }
         }
-        projectsWithoutVm.sort(Comparator.comparing(p -> String.valueOf(p.get("name"))));
+        projectsWithoutVm.sort(Comparator.comparing(ProjectRef::name, Comparator.nullsLast(Comparator.naturalOrder())));
 
-        Map<String, Object> layer = new LinkedHashMap<>();
-        layer.put("zones", zones);
-        layer.put("projectsWithoutVm", projectsWithoutVm);
-        return layer;
+        return new ComputeLayer(zones, projectsWithoutVm);
     }
 
     // ══ 부가 데이터 (실패해도 트리 유지) ════════════════════════
@@ -369,11 +333,9 @@ public class OpenStackTopologyService {
     private Map<String, Object> loadZoneAvailability() {
         try {
             Map<String, Object> byZone = new HashMap<>();
-            for (Map<String, Object> zone
-                    : extractList(nova.listAvailabilityZones(), "availabilityZoneInfo")) {
+            for (Map<String, Object> zone : extractList(nova.listAvailabilityZones(), "availabilityZoneInfo")) {
                 Object state = zone.get("zoneState");
-                Object available = state instanceof Map<?, ?> stateMap
-                        ? ((Map<?, ?>) stateMap).get("available") : null;
+                Object available = state instanceof Map<?, ?> stateMap ? ((Map<?, ?>) stateMap).get("available") : null;
                 byZone.put(string(zone.get("zoneName")), available);
             }
             return byZone;
@@ -386,8 +348,7 @@ public class OpenStackTopologyService {
     private Map<String, Map<String, Object>> loadHypervisors() {
         try {
             Map<String, Map<String, Object>> byHostname = new HashMap<>();
-            for (Map<String, Object> hypervisor
-                    : extractList(nova.listHypervisors(), "hypervisors")) {
+            for (Map<String, Object> hypervisor : extractList(nova.listHypervisors(), "hypervisors")) {
                 byHostname.put(string(hypervisor.get("hypervisor_hostname")), hypervisor);
             }
             return byHostname;
@@ -399,24 +360,31 @@ public class OpenStackTopologyService {
 
     // ══ 공통 ════════════════════════════════════════════════════
 
-    private Map<String, Object> projectNode(Map<String, Map<String, Object>> nodes,
-                                            String projectId, Map<String, String> projectNames) {
-        return nodes.computeIfAbsent(projectId == null ? "" : projectId, id -> {
-            Map<String, Object> node = new LinkedHashMap<>();
-            node.put("id", id);
-            node.put("name", projectNames.getOrDefault(id,
-                    id.isEmpty() ? props.getProjectName() : id));
-            node.put("routers", new ArrayList<Map<String, Object>>());
-            node.put("routersWithoutGateway", new ArrayList<Map<String, Object>>());
-            node.put("unconnectedNetworks", new ArrayList<Map<String, Object>>());
-            node.put("externalNetworks", new ArrayList<Map<String, Object>>());
-            return node;
-        });
+    /** 네트워크 레이어 프로젝트별 누적 버킷 (record 생성 전 임시 컨테이너). */
+    private static final class ProjectAccumulator {
+        final String id;
+        final String name;
+        final List<RouterNode> routers = new ArrayList<>();
+        final List<RouterNode> routersWithoutGateway = new ArrayList<>();
+        final List<NetworkNode> unconnectedNetworks = new ArrayList<>();
+        final List<NetworkNode> externalNetworks = new ArrayList<>();
+        ProjectAccumulator(String id, String name) { this.id = id; this.name = name; }
     }
 
-    @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> listOf(Map<String, Object> node, String key) {
-        return (List<Map<String, Object>>) node.get(key);
+    private ProjectAccumulator accumulator(Map<String, ProjectAccumulator> nodes,
+                                           String projectId, Map<String, String> projectNames) {
+        String key = projectId == null ? "" : projectId;
+        return nodes.computeIfAbsent(key, id ->
+                new ProjectAccumulator(id, projectNames.getOrDefault(id,
+                        id.isEmpty() ? props.getProjectName() : id)));
+    }
+
+    private static Map<String, Map<String, Object>> indexById(List<Map<String, Object>> servers) {
+        Map<String, Map<String, Object>> byId = new HashMap<>();
+        for (Map<String, Object> server : servers) {
+            byId.put(string(server.get("id")), server);
+        }
+        return byId;
     }
 
     private static String projectIdOf(Map<String, Object> resource) {
@@ -431,5 +399,21 @@ public class OpenStackTopologyService {
     private static String stringOrDefault(Object value, String fallback) {
         String s = string(value);
         return s == null || s.isBlank() ? fallback : s;
+    }
+
+    private static Boolean asBoolean(Object value) {
+        if (value instanceof Boolean b) return b;
+        if (value == null) return null;
+        return Boolean.parseBoolean(value.toString());
+    }
+
+    private static Integer asInteger(Object value) {
+        if (value instanceof Number n) return n.intValue();
+        if (value == null) return null;
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

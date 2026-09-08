@@ -82,6 +82,15 @@ public class KeystoneClient {
                 .body(MAP_TYPE);
     }
 
+    /** 프로젝트 상세 (도메인/상태/생성일) — 프로젝트 노드 상세에 사용. */
+    public Map<String, Object> getProject(String projectId) {
+        return rest.get()
+                .uri("/projects/{id}", projectId)
+                .header("X-Auth-Token", getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
     private boolean isTokenValid() {
         return cachedToken != null
                 && Instant.now().isBefore(tokenExpiresAt.minus(REFRESH_MARGIN));

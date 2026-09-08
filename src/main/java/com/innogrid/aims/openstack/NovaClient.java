@@ -86,6 +86,26 @@ public class NovaClient {
                 .body(MAP_TYPE);
     }
 
+    /** 가용영역 상세 (호스트 목록 포함) — 물리노드의 소속 가용영역 매핑용. */
+    public Map<String, Object> listAvailabilityZonesDetail() {
+        requireConfigured();
+        return rest.get()
+                .uri("/os-availability-zone/detail")
+                .header("X-Auth-Token", keystone.getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
+    /** flavor 상세 — 서버 상세에 flavor 세부가 임베드되지 않은 경우 보조 조회. */
+    public Map<String, Object> getFlavor(String flavorId) {
+        requireConfigured();
+        return rest.get()
+                .uri("/flavors/{id}", flavorId)
+                .header("X-Auth-Token", keystone.getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
     private void requireConfigured() {
         if (props.getComputeUrl() == null || props.getComputeUrl().isBlank()) {
             throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE,

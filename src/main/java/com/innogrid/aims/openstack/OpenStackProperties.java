@@ -30,6 +30,7 @@ public class OpenStackProperties {
     private String authUrl;
     private String networkUrl;
     private String computeUrl;
+    private String imageUrl;
     private String username;
     private String password;
     private String projectName;
@@ -55,6 +56,8 @@ public class OpenStackProperties {
     public void setNetworkUrl(String networkUrl) { this.networkUrl = networkUrl; }
     public String getComputeUrl() { return computeUrl; }
     public void setComputeUrl(String computeUrl) { this.computeUrl = computeUrl; }
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
     public String getPassword() { return password; }

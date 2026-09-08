@@ -58,6 +58,7 @@ openstack:
   auth-url: ${OPENSTACK_AUTH_URL:}
   network-url: ${OPENSTACK_NETWORK_URL:}
   compute-url: ${OPENSTACK_COMPUTE_URL:}
+  image-url: ${OPENSTACK_IMAGE_URL:}
   username: ${OPENSTACK_USERNAME:}
   password: ${OPENSTACK_PASSWORD:}
   project-name: ${OPENSTACK_PROJECT:}

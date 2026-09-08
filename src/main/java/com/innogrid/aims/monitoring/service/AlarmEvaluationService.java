@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,13 +29,12 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyType;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy;
-import com.innogrid.aims.monitoring.entity.Event;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmPolicyRepository;
-import com.innogrid.aims.monitoring.repository.EventRepository;
 import com.innogrid.aims.monitoring.service.alarm.AlarmMetric;
 import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyTargets;
 import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyTargets.Target;
+import com.innogrid.aims.monitoring.service.alarm.AlarmStateChangedEvent;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 
@@ -54,6 +54,8 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
  *       행을 찾아, 계속 초과면 새 행을 만들지 않고, 임계값 안으로 돌아오면 그 행을 RESOLVED 로 닫고 해소 이벤트를 발행한다.
  *       표본이 사라진 자원(exporter 다운 등)은 판정하지 않고 열어 둔다 — 수집 중단은 시스템 규칙(데드맨)의 몫이다.</li>
  *   <li>이력에는 정책 id·이름, 역할, 영역, 카탈로그 코드·단위, 기준 문자열({@code CPU Used > 80%})을 스냅샷으로 남긴다.</li>
+ *   <li>발생·해소 전이는 {@link AlarmStateChangedEvent} 로 발행한다(docs/09 B.4.6). 대외 이벤트 원장({@code events}) 적재·전송·
+ *       조치 훅은 구독자가 평가 트랜잭션 커밋 뒤에 처리하므로 평가기는 원장 두 개를 직접 쓰지 않는다.</li>
  * </ul>
  */
 @Service
@@ -68,23 +70,23 @@ public class AlarmEvaluationService {
 
     private final AlarmPolicyRepository policyRepository;
     private final AlarmHistoryRepository historyRepository;
-    private final EventRepository eventRepository;
     private final VictoriaMetricsClient vmClient;
     private final ResourceScopeService resourceScopeService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 지속 시간 대기 — 지문 → 처음 초과를 본 시각. 초과가 풀리거나 발생시키면 지운다 */
     private final Map<String, Instant> pendingSince = new ConcurrentHashMap<>();
 
     public AlarmEvaluationService(AlarmPolicyRepository policyRepository,
                                   AlarmHistoryRepository historyRepository,
-                                  EventRepository eventRepository,
                                   VictoriaMetricsClient vmClient,
-                                  ResourceScopeService resourceScopeService) {
+                                  ResourceScopeService resourceScopeService,
+                                  ApplicationEventPublisher eventPublisher) {
         this.policyRepository = policyRepository;
         this.historyRepository = historyRepository;
-        this.eventRepository = eventRepository;
         this.vmClient = vmClient;
         this.resourceScopeService = resourceScopeService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Scheduled(fixedRate = 60_000)
@@ -131,7 +133,7 @@ public class AlarmEvaluationService {
                     } else if (!exceeded) {
                         pendingSince.remove(fingerprint);
                         if (open != null) {
-                            resolve(open, policy, metric, sample);
+                            resolve(open, policy, sample);
                             active.remove(fingerprint);
                         }
                     }
@@ -210,7 +212,7 @@ public class AlarmEvaluationService {
         return samples;
     }
 
-    /** alarm_history 원장에 정책 스냅샷으로 기록하고 events 원장에도 발행 — docs/09 C.1 */
+    /** alarm_history 원장에 정책 스냅샷으로 기록하고 발생 이벤트를 발행 — docs/09 C.1·B.4.6 */
     private AlarmHistory record(AlarmPolicy policy, AlarmMetric metric, Target target, Sample sample, String fingerprint) {
         String criterion = policy.criterion();
         AlarmHistory.Builder builder = AlarmHistory.builder(AlarmSource.POLICY, policy.getLevel(), criterion)
@@ -223,26 +225,17 @@ public class AlarmEvaluationService {
         if (target.nsId() != null) builder.namespace(target.nsId());
         else builder.mdc(target.mdcId());
         AlarmHistory alarm = historyRepository.save(builder.build());
-
-        String mdcId = target.mdcId() != null ? target.mdcId() : sample.label("mdc_id");
-        Event event = new Event(mdcId == null ? "unknown" : mdcId, policy.getLevel().name(), alarm.getResourceName(),
-                String.format("%s: %s (관측값 %.1f%s)", policy.getName(), criterion, sample.value(), metric.unit()));
-        eventRepository.save(event);
+        eventPublisher.publishEvent(AlarmStateChangedEvent.firing(alarm, sample.value()));
 
         log.info("알람 발생: policy={}, resource={}, value={}", policy.getName(), alarm.getResourceId(), sample.value());
         return alarm;
     }
 
     /** 임계값 안으로 돌아온 미해소 행을 RESOLVED 로 닫고 해소 이벤트를 발행 */
-    private void resolve(AlarmHistory open, AlarmPolicy policy, AlarmMetric metric, Sample sample) {
+    private void resolve(AlarmHistory open, AlarmPolicy policy, Sample sample) {
         open.resolve(OffsetDateTime.now());
-        historyRepository.save(open);
-
-        String mdcId = open.getAreaId() != null && open.getAreaKind() != null && !open.getAreaId().startsWith("TB:")
-                ? open.getAreaId() : sample.label("mdc_id");
-        Event event = new Event(mdcId == null ? "unknown" : mdcId, "INFO", open.getResourceName(),
-                String.format("%s 해소: %s (관측값 %.1f%s)", policy.getName(), open.getCriterion(), sample.value(), metric.unit()));
-        eventRepository.save(event);
+        AlarmHistory saved = historyRepository.save(open);
+        eventPublisher.publishEvent(AlarmStateChangedEvent.resolved(saved, sample.value()));
 
         log.info("알람 해소: policy={}, resource={}, value={}", policy.getName(), open.getResourceId(), sample.value());
     }

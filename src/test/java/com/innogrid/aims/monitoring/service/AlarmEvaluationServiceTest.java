@@ -18,11 +18,11 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleAreaListItemRe
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy.RecipientRef;
-import com.innogrid.aims.monitoring.entity.Event;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmPolicyRepository;
-import com.innogrid.aims.monitoring.repository.EventRepository;
 import com.innogrid.aims.monitoring.service.alarm.AlarmMetric;
+import com.innogrid.aims.monitoring.service.alarm.AlarmStateChangedEvent;
+import com.innogrid.aims.monitoring.service.alarm.AlarmStateChangedEvent.Transition;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -35,6 +35,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -49,7 +50,7 @@ import static org.mockito.Mockito.when;
 /**
  * 평가기 — 메트릭 단위 묶음 쿼리(정책 수와 무관), 정책 대상(역할 스코프·영역·개별 대상)으로 표본 필터, 호스트는 instance,
  * VM 은 TB id 로 매칭, 이력 스냅샷(정책·역할·영역·코드·단위·기준·fingerprint), 지속 시간, 중복 억제·해소,
- * 스코프 조회 실패·Thanos 장애·비정상 값 처리.
+ * 발생·해소 전이 이벤트 발행, 스코프 조회 실패·Thanos 장애·비정상 값 처리.
  *
  * 대역 스코프: ADMIN 역할에 호스트 asset 1(node-01, mdc-01, 10.0.0.1:9100)·asset 2(node-02, mdc-02, 10.0.0.2:9100),
  *              Namespace openstack 의 VM TB:openstack/infra-01/vm-1. USER 역할에는 asset 3(node-03, mdc-01, 10.0.0.3:9100).
@@ -60,9 +61,9 @@ class AlarmEvaluationServiceTest {
 
     @Mock AlarmPolicyRepository policyRepository;
     @Mock AlarmHistoryRepository historyRepository;
-    @Mock EventRepository eventRepository;
     @Mock VictoriaMetricsClient vmClient;
     @Mock ResourceScopeService resourceScopeService;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     AlarmEvaluationService service;
 
@@ -76,7 +77,7 @@ class AlarmEvaluationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AlarmEvaluationService(policyRepository, historyRepository, eventRepository, vmClient, resourceScopeService);
+        service = new AlarmEvaluationService(policyRepository, historyRepository, vmClient, resourceScopeService, eventPublisher);
         when(resourceScopeService.scopeOf(anyCollection())).thenReturn(SCOPE);
         when(historyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -115,7 +116,7 @@ class AlarmEvaluationServiceTest {
         // 92.4(asset 1) → 두 정책, 85(asset 2) → cpu-80 만 = 3건. asset 3·미등록 instance 는 없음
         ArgumentCaptor<AlarmHistory> saved = ArgumentCaptor.forClass(AlarmHistory.class);
         verify(historyRepository, times(3)).save(saved.capture());
-        verify(eventRepository, times(3)).save(any(Event.class));
+        verify(eventPublisher, times(3)).publishEvent(any(AlarmStateChangedEvent.class));
         assertThat(saved.getAllValues()).extracting(AlarmHistory::getPolicyName, AlarmHistory::getResourceId, AlarmHistory::getResourceName)
                 .containsExactlyInAnyOrder(tuple("cpu-80", "1", "node-01"), tuple("cpu-90", "1", "node-01"), tuple("cpu-80", "2", "node-02"));
     }
@@ -148,6 +149,25 @@ class AlarmEvaluationServiceTest {
         assertThat(a.getAreaId()).isEqualTo("mdc-01");
         assertThat(a.getAreaKind()).isEqualTo(AreaKind.MDC);
         assertThat(a.getFingerprint()).hasSize(64);
+
+        ArgumentCaptor<AlarmStateChangedEvent> event = ArgumentCaptor.forClass(AlarmStateChangedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        AlarmStateChangedEvent firing = event.getValue();
+        assertThat(firing.transition()).isEqualTo(Transition.FIRING);
+        assertThat(firing.isFiring()).isTrue();
+        assertThat(firing.source()).isEqualTo(AlarmSource.POLICY);
+        assertThat(firing.level()).isEqualTo(AlarmLevel.CRITICAL);
+        assertThat(firing.policyName()).isEqualTo("mem-high");
+        assertThat(firing.roleName()).isEqualTo("ADMIN");
+        assertThat(firing.resourceType()).isEqualTo("node");
+        assertThat(firing.resourceId()).isEqualTo("1");
+        assertThat(firing.resourceName()).isEqualTo("node-01");
+        assertThat(firing.areaId()).isEqualTo("mdc-01");
+        assertThat(firing.mdcId()).isEqualTo("mdc-01");
+        assertThat(firing.metric()).isEqualTo("MEMORY_USED_PERCENT");
+        assertThat(firing.criterion()).isEqualTo("Memory Used > 80%");
+        assertThat(firing.observedValue()).isEqualTo(91.25);
+        assertThat(firing.occurredAt()).isEqualTo(a.getOccurredAt());
     }
 
     @Test
@@ -193,7 +213,7 @@ class AlarmEvaluationServiceTest {
                 .thenReturn(List.of(first));
         service.evaluatePolicies();
         verify(historyRepository, times(1)).save(any());
-        verify(eventRepository, times(1)).save(any(Event.class));
+        verify(eventPublisher, times(1)).publishEvent(any(AlarmStateChangedEvent.class));
         assertThat(first.getStatus()).isEqualTo(AlarmHistoryStatus.OPEN);
     }
 
@@ -221,10 +241,17 @@ class AlarmEvaluationServiceTest {
         assertThat(acked.getResolvedAt()).isNotNull();
         assertThat(acked.getAcknowledgedBy()).isEqualTo("admin@innogrid.com");
         verify(historyRepository, times(1)).save(acked);
-        ArgumentCaptor<Event> event = ArgumentCaptor.forClass(Event.class);
-        verify(eventRepository, times(1)).save(event.capture());
-        assertThat(event.getValue().getSeverity()).isEqualTo("INFO");
-        assertThat(event.getValue().getMessage()).contains("mem-80 해소").contains("Memory Used > 80%").contains("62.5%");
+        ArgumentCaptor<AlarmStateChangedEvent> event = ArgumentCaptor.forClass(AlarmStateChangedEvent.class);
+        verify(eventPublisher, times(1)).publishEvent(event.capture());
+        AlarmStateChangedEvent resolved = event.getValue();
+        assertThat(resolved.transition()).isEqualTo(Transition.RESOLVED);
+        assertThat(resolved.policyName()).isEqualTo("mem-80");
+        assertThat(resolved.criterion()).isEqualTo("Memory Used > 80%");
+        assertThat(resolved.observedValue()).isEqualTo(62.5);
+        assertThat(resolved.unit()).isEqualTo("%");
+        assertThat(resolved.resourceId()).isEqualTo("1");
+        assertThat(resolved.mdcId()).isEqualTo("mdc-01");
+        assertThat(resolved.occurredAt()).isEqualTo(acked.getResolvedAt());
     }
 
     @Test
@@ -238,7 +265,7 @@ class AlarmEvaluationServiceTest {
         service.evaluatePolicies();                                     // 5분이 지나지 않음
 
         verify(historyRepository, never()).save(any());
-        verify(eventRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

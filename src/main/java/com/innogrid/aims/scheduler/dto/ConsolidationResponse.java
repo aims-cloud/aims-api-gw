@@ -36,7 +36,8 @@ public record ConsolidationResponse(
      * @param skipReason          평가하지 못한 사유
      * @param reclaimable         워크로드를 전부 옮길 수 있고 순절감이 양수인가
      * @param basis               판정 근거. {@code NET_SAVING}(순절감) · {@code ALREADY_EMPTY}(워크로드 0건)
-     * @param idlePowerWatts      이 노드를 반납해 아끼는 유휴 전력
+     * @param idlePowerWatts      이 노드를 반납해 아끼는 유휴 전력 — 계측된 유휴 노드는 실측에서 역산한 값, 그 외 정격 × idleRatio.
+     *                            전력 효율 평가 API 의 같은 이름 필드는 가정값(정격 × idleRatio)이라 두 화면의 값이 다를 수 있다
      * @param relocationCostWatts 워크로드를 옮기는 데 드는 전력 합
      * @param netSavingWatts      {@code idlePowerWatts − relocationCostWatts}
      * @param powerRatioToIdle    실측 전력 ÷ 유휴 전력. 1 에 가까울수록 실제로 놀고 있다.

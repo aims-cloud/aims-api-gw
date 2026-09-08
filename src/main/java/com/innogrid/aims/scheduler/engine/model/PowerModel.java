@@ -80,18 +80,23 @@ public class PowerModel {
      * 무너진다. 그래서 역산은 깨우기 비용 전용인 이 메서드에만 둔다.</p>
      *
      * <p><b>미계측 가드</b> — 정격을 모르거나(override 없음) IPMI 가 없어 전력을 못 읽는 노드는
-     * 역산할 분자·분모가 없다. 배포 VM 이 정확히 이 경로다. 대체값으로 빠지는 것이 운영
+     * 역산할 분자·분모가 없다. 전력 메트릭이 없는 환경(IPMI 미구성)이 이 경로다 — 지금의 배포 환경이
+     * 여기 해당하며, IPMI 가 붙으면 그 순간부터 역산 경로를 탄다. 대체값으로 빠지는 것이 운영
      * 안전핀이고, {@link SchedulerProperties.Power#isIdleFromMeasurement()} 로 이 전체 경로를
      * 끄고 대체값 고정으로 되돌릴 수 있다.</p>
+     *
+     * <p><b>가드 둘은 짝이다</b> — 전력 0 가드({@code P <= 0})와 추정 하한 가드({@code estimate <= 0})는 서로를
+     * 덮는다(P=0 이면 추정이 0 이하). 하나를 {@code <} 로 바꾸면 다른 하나가 막아 주지만 둘을 함께 바꾸면
+     * 0W 유휴가 유효값으로 나간다. 등호를 둘 다 유지한다.</p>
      */
     public double wakeupPower(NodeResource node) {
         double pMax = node.getPowerCapacityWatts();
         double fallback = pMax * props.getIdleRatio();
         if (!props.isIdleFromMeasurement()) return fallback;
-        if (pMax <= 0 || node.getPowerWatts() <= 0) return fallback;   // 정격 미상·미계측(IPMI 없음) — 배포 VM 이 이 경로
+        if (pMax <= 0 || node.getPowerWatts() <= 0) return fallback;   // 정격 미상·미계측(전력 메트릭 없음)
         if (isActive(node)) return fallback;                            // 가동 노드는 역산 불가(동적분이 섞임)
         double u = Math.min(1.0, Math.max(0.0, node.getCpuUsagePercent() / 100.0));   // 실측 CPU — 역산은 같은 순간의 (P, u)
-        if (u >= 1.0) return fallback;
+        if (u >= 1.0) return fallback;                                  // 기본 설정에선 isActive 가 먼저 막는다 — 가동 문턱 100% 설정 방어
         double estimate = (node.getPowerWatts() - pMax * u) / (1.0 - u);
         return (estimate <= 0 || estimate > pMax) ? fallback : estimate;   // 범위 밖은 계측 잡음으로 보고 대체값
     }
@@ -192,12 +197,17 @@ public class PowerModel {
      *
      * <p>클러스터 총 전력은 "가동 중인 노드의 유휴 전력 + 동적 전력"의 합이다. 이미 도는
      * 노드에 얹으면 동적 증가분만 들지만, 비어 있는 노드에 처음 얹으면 그 노드의 <b>유휴
-     * 전력이 통째로 새로 든다.</b>(그 값은 {@link #wakeupPower}) 500W 용량 · 유휴 비율 0.3 인
-     * 노드에 2코어(전체 8코어)를 얹을 때 가동 중이면 87.5W, 비어 있으면 237.5W 로 <b>2.7배</b>
-     * 차이가 난다.</p>
+     * 전력이 통째로 새로 든다.</b> 그 값은 {@link #wakeupPower} — 계측된 유휴 노드는 실측에서 역산한
+     * 값이고, 미계측이면 대체값(정격 × 0.3)이다. 500W 용량 노드에 2코어(전체 8코어)를 얹을 때 가동 중이면
+     * 87.5W, 비어 있고 미계측이면 87.5 + 150 = 237.5W(<b>2.7배</b>), 비어 있고 108W 로 계측되면
+     * 87.5 + 100 = 187.5W 다.</p>
      *
      * <p>이 한 줄이 전력 통합을 "CPU 가 10% 넘으면 보너스" 같은 임의 규칙이 아니라 물리량으로
      * 만든다. 별도의 통합 항이 필요 없어진다.</p>
+     *
+     * <p><b>한 숫자 안에 기준선이 둘이다 — 의도된 절충.</b> 동적항은 {@link #idlePower}(선언 기준선, 진단 지표와
+     * 볼록 곡선을 보호), 깨우기항만 {@link #wakeupPower}(실측 역산)다. 이 비일관은 비교 판에서 측정된 효과가 있다
+     * (균일 분포 판에서 깨운 노드에 얼마나 얹을지가 달라진다) — 볼록 생성식 판이 생기면 재판단한다.</p>
      */
     public double realMarginalPower(NodeResource node, int requiredCpu) {
         double dynamic = marginalPowerOnCurve(node, requiredCpu);
@@ -207,6 +217,13 @@ public class PowerModel {
     /**
      * 실질 한계 전력 점수 (0~1). 배치로 전력이 적게 느는 노드일수록 높다.
      * 용량 대비로 정규화한다 — 깨우는 비용까지 더하면 동적 범위를 넘을 수 있기 때문이다.
+     *
+     * <p><b>알려진 한계 — 분모가 상대화라 깨우기 벌점이 유휴비로 고정된다.</b> 빈 노드의 벌점은
+     * {@code wakeupPower / pMax} 인데, 깨우기 비용이 대체값(정격 × 0.3)일 때 이 값은 전 노드 0.3 으로 같아
+     * <b>일률적 통합 편향</b>으로 작동했다. 실측 역산으로 바뀐 뒤에는 선언 유휴비가 낮은 노드(0.06~0.25)의 벌점이
+     * 그만큼 줄어 엔진이 빈 노드를 더 자주 깨운다 — 비교 판에서 PABFD 대비 총전력 격차가 <b>벌어진</b> 주원인이다.
+     * 또 역산 유휴가 큰 노드는 {@code realMarginalPower > pMax} 가 되어 점수가 0 으로 포화해 노드를 구별하지
+     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화(분모 교체)는 볼록 생성식 판에서 검정할 후속 과제다.</p>
      */
     public double marginalScore(NodeResource node, int requiredCpu) {
         double pMax = node.getPowerCapacityWatts();

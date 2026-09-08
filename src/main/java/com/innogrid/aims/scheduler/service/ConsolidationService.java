@@ -125,9 +125,8 @@ public class ConsolidationService {
         // 반납분(idle)은 wakeupPower — 계측된 유휴 노드는 실측에서 역산해 통일한다(같은 화면, 같은 모델).
         // 비율(ratio)의 분모는 idlePower(가정값) 그대로 둔다 — 비율은 "가정 대비 실측"이 취지라, 분모에도
         // 실측 역산값(wakeup)을 넣으면 유휴 노드에서 분자·분모가 같은 값이 되어 ratio ≈ 1/(1−u) 로 항등이 된다.
-        double wakeup = powerModel.wakeupPower(node);
-        double idleAssumed = powerModel.idlePower(node);
-        double idle = wakeup;
+        double idle = powerModel.wakeupPower(node);          // 반납분 — 아래 blocked/reclaimable 에 그대로 실린다
+        double idleAssumed = powerModel.idlePower(node);     // 비율의 분모 — 가정값
         Double ratio = powerModel.isActive(node) || node.getPowerWatts() <= 0 || idleAssumed <= 0
                 ? null : PowerOptimizationService.round(node.getPowerWatts() / idleAssumed);
 

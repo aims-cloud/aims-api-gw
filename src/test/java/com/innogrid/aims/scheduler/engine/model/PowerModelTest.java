@@ -244,6 +244,31 @@ class PowerModelTest {
         assertEquals(150.0, model.wakeupPower(node(4, 520, 500)), 1e-9, "역산이 정격을 넘음");
     }
 
+    /** 추정이 정확히 0 인 경계 — 0W 유휴는 물리적으로 없으므로 유효값이 아니라 대체값이어야 한다. */
+    @DisplayName("역산이 정확히 0 이면 유효값이 아니라 대체값이다")
+    @Test
+    void a_zero_estimate_is_not_a_valid_idle_power() {
+        // (10 − 500×0.02) / 0.98 = 0 정확히 — 하한 가드가 <= 0 이어야 한다(< 0 이면 0W 유휴가 나간다)
+        assertEquals(150.0, model.wakeupPower(node(2, 10, 500)), 1e-9, "0W 유휴 전력은 없다");
+    }
+
+    /**
+     * 역산 입력은 <b>실측</b> CPU 다. 예약분을 섞으면 "같은 순간의 (P, u) 쌍"이 아니게 되어 식이 어긋난다.
+     * 64코어 노드에 1코어를 예약하면 실효 CPU 는 1% → 2.56% 로 움직이지만(여전히 유휴), 실측 전력 104W 는 그대로다 —
+     * 실측 u 로 역산하면 (104 − 500×0.01)/0.99 = 100, 실효 u 로 역산하면 93.6 이 나온다.
+     */
+    @DisplayName("역산은 예약분이 아니라 실측 CPU 로 한다")
+    @Test
+    void wakeup_power_reads_measured_cpu_not_effective_cpu() {
+        NodeResource wide = new NodeResource("mdc-01", "wide", 64, 262144, 0,
+                1, 30, 30, 104, 500, 50, 1000, 500);
+        wide.reserve(1, 4096, 0);
+        assertTrue(wide.effectiveCpuUsagePercent() > wide.getCpuUsagePercent(), "예약이 실효 CPU 를 올려야 시험이 성립한다");
+        assertTrue(wide.effectiveCpuUsagePercent() <= 5.0, "여전히 유휴여야 역산 경로를 탄다");
+        assertEquals(100.0, model.wakeupPower(wide), 1e-9,
+                "실효 CPU 로 역산하면 93.6 — 예약은 그 순간의 실측 전력을 만든 부하가 아니다");
+    }
+
     @DisplayName("플래그를 끄면 유휴 역산도 대체값으로 돌아간다")
     @Test
     void wakeup_power_is_off_by_the_flag() {

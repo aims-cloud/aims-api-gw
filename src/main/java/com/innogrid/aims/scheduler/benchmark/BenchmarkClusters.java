@@ -95,13 +95,27 @@ public class BenchmarkClusters {
         return boardId;
     }
 
+    /**
+     * 임의의 정규화 문자열의 SHA-256 앞 12자. 클러스터 파일과 <b>같은 규칙</b>으로 계산한다 — 응답에 실린
+     * 두 다이제스트(입력 파일 · 엔진 설정)를 사람이 같은 자로 대조할 수 있어야 한다.
+     */
+    public static String digestOf(String canonical) {
+        return prefixOf(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     private static String sha256Prefix(String location) {
         Resource resource = new DefaultResourceLoader().getResource(location);
         try (InputStream in = resource.getInputStream()) {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(in.readAllBytes());
-            return HexFormat.of().formatHex(hash).substring(0, DIGEST_LENGTH);
+            return prefixOf(in.readAllBytes());
         } catch (IOException e) {
             throw new IllegalArgumentException("비교판 파일을 읽을 수 없습니다: " + location, e);
+        }
+    }
+
+    private static String prefixOf(byte[] bytes) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(bytes);
+            return HexFormat.of().formatHex(hash).substring(0, DIGEST_LENGTH);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 을 쓸 수 없습니다", e);   // JDK 가 늘 제공한다
         }

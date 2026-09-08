@@ -79,12 +79,16 @@ public record PlacementBenchmarkResponse(
      *                                     "엔진이 믿은 비용"과 "가동 노드 증감"이 서로 다른 문턱 위에 서 있다는
      *                                     뜻이고, 그 사실이 여기서 보여야 한다
      * @param capacityByNode               노드별 정격 원장(설정). 비어 있으면 전 노드가 {@code defaultCapacityWatts}
+     * @param idleFromMeasurement          계측된 유휴 노드의 깨우기 비용을 실측에서 역산하는가. 모델 <b>형태</b>를 바꾸는
+     *                                     노브라 다이제스트에 들어간다 — 이 값이 다르면 표 두 장은 다른 엔진의 표다.
+     *                                     {@code idleRatio} 는 진단 지표·동적 범위의 기준선으로 그대로 남고, 미계측
+     *                                     노드의 깨우기 비용 대체값이기도 하다
      */
     public record PowerKnobs(
             double idleRatio, double activeCpuPercent, double benchmarkPoweredOnCpuPercent,
             double curveAlpha, double peiWeight, double wasteWeight, double marginalWeight,
             double peiNormalizer, double resourceShare, double defaultCapacityWatts,
-            Map<String, Double> capacityByNode
+            Map<String, Double> capacityByNode, boolean idleFromMeasurement
     ) {
         public PowerKnobs {
             capacityByNode = capacityByNode == null ? Map.of() : Map.copyOf(capacityByNode);
@@ -161,7 +165,11 @@ public record PlacementBenchmarkResponse(
          */
         public static final String GENERATOR_FORMULA =
                 "전력(W) = idleWatts + (capacityWatts − idleWatts) × CPU%/100 · 온도(℃) = baseTemperature + 0.3 × CPU% — "
-                        + "노드별 idleWatts·capacityWatts·baseTemperature 는 클러스터 파일에 선언한 값이고 실측이 아니다";
+                        + "노드별 idleWatts·capacityWatts·baseTemperature 는 클러스터 파일에 선언한 값이고 실측이 아니다. "
+                        + "엔진은 idleWatts 를 모른다 — 계측된 유휴 노드의 깨우기 비용은 실측 전력에서 (P − Pmax×u)/(1−u) 로 역산하고, "
+                        + "그 외(미계측·가동)는 정격 × idleRatio 를 쓴다. idleAssumptionGaps.engineAssumedIdleWatts 는 이 대체값 기준이다. "
+                        + "생성식이 선형이고 판의 정격이 엔진 정격과 같으므로 역산은 선언값을 정확히 복원한다 — 그래서 이 판에서의 격차 축소는 "
+                        + "상한이며 알고리즘 개선의 증거가 아니다";
 
         /**
           * 정책의 출처. <b>배포된 활성 정책을 읽지 않는다</b> — 활성 정책 조회 경로는 정책이 없으면

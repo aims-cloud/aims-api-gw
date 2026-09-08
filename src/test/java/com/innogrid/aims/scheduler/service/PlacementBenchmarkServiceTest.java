@@ -177,6 +177,24 @@ class PlacementBenchmarkServiceTest {
                 "판·분포는 설정이 아니다 — 다르면 다이제스트가 입력까지 섞어 지목하는 것이다");
     }
 
+    /**
+     * 모델 <b>형태</b>를 바꾸는 노브도 다이제스트에 들어가야 한다. 노브 값만 정규화하면 유휴 전력을 실측 역산으로
+     * 바꿔도 다이제스트가 같아, 어제 표(대체값)와 오늘 표(역산)가 같은 설정의 표로 보인다 — 사전 등록을 사후 검증할 수 없다.
+     */
+    @DisplayName("유휴 역산 플래그가 다르면 다이제스트가 다르고 설정 스냅샷이 그 값을 밝힌다")
+    @Test
+    void the_idle_estimation_flag_is_part_of_the_digest() {
+        SchedulerProperties off = new SchedulerProperties();
+        off.getPower().setIdleFromMeasurement(false);
+        EngineConfigSnapshot mine = service.compare("main", "heavytail").engineConfig();
+        EngineConfigSnapshot other = serviceWith(off).compare("main", "heavytail").engineConfig();
+
+        assertTrue(mine.power().idleFromMeasurement(), "기본값은 켜짐이어야 한다 — 판이 평가한 엔진이 출하되는 엔진이다");
+        assertFalse(other.power().idleFromMeasurement());
+        assertNotEquals(mine.configDigest(), other.configDigest(),
+                "모델 형태가 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");
+    }
+
     private static PolicySnapshot variant(EngineConfigSnapshot config, String name) {
         return config.policies().stream().filter(p -> p.variant().equals(name)).findFirst()
                 .orElseThrow(() -> new AssertionError(name + " 변종이 스냅샷에 없다"));

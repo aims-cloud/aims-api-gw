@@ -408,17 +408,22 @@ public class PlacementBenchmarkService {
                         p.requested() == 0 ? null : round(100.0 * p.placed() / p.requested()));
                 add(into, BenchmarkRules.PER_WORKLOAD_POWER, perWorkload(oracle, point, p, mode));
                 add(into, BenchmarkRules.ENGINE_BELIEVED_COST, round(p.engineBelievedCostW()));
-                add(into, BenchmarkRules.WARN_ZONE_NODES, (double) p.warnZoneNodes());
+                // 개입 횟수는 시도당 계수다 — 전 전략이 같은 워크로드를 한 번씩 시도하므로 배치 건수와
+                // 무관하게 지점마다 센다. 아래 짝짓기 조건을 여기에 걸면 없는 결함을 고치는 것이다.
                 add(into, BenchmarkRules.C3_INTERVENTIONS, (double) p.thermalExclusions());
-                add(into, BenchmarkRules.TEMP_STDDEV,
-                        point.measuredNodeCount() < 2 ? null : round(p.measuredTempStdDev()));
 
-                // 총량 계열은 건수가 짝지어진 지점에서만 표본에 넣는다. 적게 배치하고 전력을 덜 쓰는
-                // 것은 승리가 아니므로, 짝이 아닌 지점의 값은 아예 세지 않는다.
+                // 총량 계열과 온도 분포 계열은 건수가 짝지어진 지점에서만 표본에 넣는다. 적게 배치하고 전력을
+                // 덜 쓰는 것이 승리가 아닌 것처럼, 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것도 열 성능이
+                // 아니다 — 생성식 온도는 CPU 의 함수라 배치량이 다르면 열이 아니라 배치량을 재게 된다.
+                // 짝이 아닌 지점의 값은 아예 세지 않는다.
                 add(into, BenchmarkRules.GENERATOR_POWER,
                         pointComparable ? power(oracle, point, p, mode) : null);
                 add(into, BenchmarkRules.ACTIVE_NODE_DELTA, pointComparable
                         ? (double) (p.activeCountAfter() - point.activeCountBefore()) : null);
+                add(into, BenchmarkRules.WARN_ZONE_NODES,
+                        pointComparable ? (double) p.warnZoneNodes() : null);
+                add(into, BenchmarkRules.TEMP_STDDEV,
+                        pointComparable && point.measuredNodeCount() >= 2 ? round(p.measuredTempStdDev()) : null);
 
                 Double rate = p.placed() == 0 ? null : round(100.0 * p.unmeasuredPlacements() / p.placed());
                 add(into, BenchmarkRules.UNMEASURED_RATE, rate);
@@ -460,11 +465,11 @@ public class PlacementBenchmarkService {
      */
     private static String pairingNote(int usable, int total, Map<String, Integer> mismatchExample) {
         if (usable == 0) {
-            return "전 전략의 배치 건수가 같은 시각 지점이 없어 총량을 비교할 수 없다 — "
+            return "전 전략의 배치 건수가 같은 시각 지점이 없어 총량과 온도 분포를 비교할 수 없다 — "
                     + BenchmarkRules.totalsIncomparableReason(mismatchExample);
         }
         return String.format(
-                "시각 지점 %d곳 중 %d곳에서만 전 전략의 배치 건수가 같아 총량 지표는 그 %d곳으로 냈다 "
+                "시각 지점 %d곳 중 %d곳에서만 전 전략의 배치 건수가 같아 총량·온도 분포 지표는 그 %d곳으로 냈다 "
                         + "(짝이 아닌 지점의 예: %s)",
                 total, usable, usable, BenchmarkRules.totalsIncomparableReason(mismatchExample));
     }
@@ -518,6 +523,11 @@ public class PlacementBenchmarkService {
         if ((BenchmarkRules.GENERATOR_POWER.equals(key) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(key))
                 && usablePoints == 0) {
             return "전 전략의 배치 건수가 같은 시각 지점이 없다 — 적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다";
+        }
+        if ((BenchmarkRules.TEMP_STDDEV.equals(key) || BenchmarkRules.WARN_ZONE_NODES.equals(key))
+                && usablePoints == 0) {
+            return "전 전략의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 "
+                    + "열 성능이 아니다";
         }
         if (BenchmarkRules.PER_WORKLOAD_POWER.equals(key) && !placedAnywhere) {
             return "전 시각 지점에서 배치 0건이라 건당 값을 낼 수 없다";

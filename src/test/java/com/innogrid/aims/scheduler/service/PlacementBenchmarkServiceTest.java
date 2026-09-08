@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -584,11 +585,83 @@ class PlacementBenchmarkServiceTest {
         List<String> baselines = board.cells().get(0).strategies().stream()
                 .filter(s -> "BASELINE".equals(s.kind())).map(StrategyResult::strategyId).toList();
 
-        assertEquals(5, baselines.size(), "대조군은 다섯 종이다: " + baselines);
+        assertEquals(PlacementBenchmarkService.BASELINE_ORDER, baselines,
+                "응답의 대조군 열이 순서 목록과 같아야 한다 — 개수가 아니라 id 와 순서로 본다: " + baselines);
         for (String id : baselines) {
             assertFalse(registry.contains(id),
                     id + " 가 엔진으로 등록됐다 — 스케줄이 이 전략으로 실배치할 수 있다");
         }
+    }
+
+    /**
+     * 순서 목록과 구현 맵은 서로를 모른다. 목록에만 있는 id 는 {@code null} 이 담겨 한참 뒤 NPE 로 죽고, 맵에만 있는
+     * 구현은 열이 <b>조용히</b> 빠진 채 응답이 정상이다. 둘 다 전략 목록을 만드는 자리에서 크게 실패해야 한다 —
+     * 대조군을 늘리는 PR 이 바로 그 자리를 건드린다.
+     */
+    @DisplayName("대조군 순서 목록에 구현이 없는 id 가 있으면 조용히 빠지지 않고 즉시 실패한다")
+    @Test
+    void a_baseline_id_without_an_implementation_fails_loudly() {
+        SchedulerProperties props = new SchedulerProperties();
+        PlacementBenchmarkService broken = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler())), props, new BenchmarkClusters(),
+                new PowerModel(props), new ThermalModel(props),
+                List.of("ffd-size", "no-such-baseline"));
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> broken.compare("main", "heavytail"));
+        assertTrue(e.getMessage().contains("no-such-baseline"), e.getMessage());
+        assertTrue(e.getMessage().contains("ffd-size"), "구현 목록도 함께 밝혀야 어느 쪽이 틀렸는지 보인다: " + e.getMessage());
+    }
+
+    /**
+     * 대조군 하나를 넣고 빼면 기존 열의 <b>어느 숫자가 움직여도 되는가</b>를 못 박는다. 전략 실행은 서로 독립이라
+     * 성공률·건당 전력·엔진이 믿은 비용·개입 횟수·미계측 비율은 비트 단위로 같아야 한다. 움직여도 되는 것은 셀 집계에서
+     * <b>전 전략을 함께 보는</b> 것들뿐이다 — 짝 지점(총전력·가동 증감·온도 분포 둘)과 전략 간 미계측 격차.
+     * 이 목록 밖의 키가 하나라도 움직이면 대조군이 다른 전략의 실행에 새어 들어간 것이다.
+     */
+    @DisplayName("대조군을 하나 빼고 돌려도 기존 열은 셀 단위로 집계되는 키 밖에서는 한 칸도 움직이지 않는다")
+    @Test
+    void adding_a_baseline_moves_only_the_cell_level_keys_of_the_other_columns() {
+        SchedulerProperties props = new SchedulerProperties();
+        List<String> without = PlacementBenchmarkService.BASELINE_ORDER.stream()
+                .filter(id -> !id.equals("coolest-first")).toList();
+        PlacementBenchmarkService fewer = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                        new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props), without);
+
+        Set<String> mayMove = Set.of(BenchmarkRules.GENERATOR_POWER, BenchmarkRules.ACTIVE_NODE_DELTA,
+                BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV, BenchmarkRules.UNMEASURED_SPREAD);
+
+        int moved = 0;
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.SPARSE)) {
+            Board full = service.compare(boardId, "heavytail").boards().get(0);
+            Board less = fewer.compare(boardId, "heavytail").boards().get(0);
+
+            for (Cell a : full.cells()) {
+                Cell b = cell(less, a.loadRatioPercent(), a.powerControl());
+                assertTrue(a.strategies().stream().anyMatch(s -> s.strategyId().equals("coolest-first")), boardId);
+                assertFalse(b.strategies().stream().anyMatch(s -> s.strategyId().equals("coolest-first")), boardId);
+
+                for (StrategyResult sb : b.strategies()) {
+                    StrategyResult sa = strategy(a, sb.strategyId());
+                    for (MetricValue mb : sb.metrics()) {
+                        MetricValue ma = metric(sa, mb.key());
+                        String where = boardId + " " + a.loadRatioPercent() + "% " + a.powerControl() + " "
+                                + sb.strategyId() + " " + mb.key();
+                        if (mayMove.contains(mb.key())) {
+                            if (!Objects.equals(ma.median(), mb.median()) || ma.samples() != mb.samples()) moved++;
+                            continue;
+                        }
+                        assertEquals(mb.median(), ma.median(), where + ": 대조군을 넣었다고 이 값이 움직였다 — 전략 실행이 독립이 아니다");
+                        assertEquals(mb.samples(), ma.samples(), where);
+                        assertEquals(mb.valid(), ma.valid(), where);
+                    }
+                }
+            }
+        }
+        // 주 결과판에서는 새 대조군이 어느 지점의 짝도 바꾸지 않을 수 있다(전 노드 계측·건수 동일). 그래서 판을 합쳐 본다 —
+        // 계측 공백판의 미계측 격차는 전략 간 값이라 대조군 하나가 빠지면 반드시 움직인다.
+        assertTrue(moved > 0, "두 판 어디서도 셀 단위 키가 움직이지 않았다 — 이 시험이 허용 목록을 실제로 시험하지 못했다");
     }
 
     /** 우리 엔진은 레지스트리가 밝히는 것을 전부 담는다 — 이름을 적어 두면 엔진이 늘 때 조용히 빠진다. */

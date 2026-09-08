@@ -101,15 +101,15 @@ class PlacementBenchmarkApiTest {
                 "전력·온도가 실측이 아니라 식의 출력임을 전제 블록이 말해야 한다");
     }
 
-    @DisplayName("셀마다 전략 열 열 개가 사전 등록된 지표 전량을 싣는다")
+    @DisplayName("셀마다 전략 열 열한 개가 사전 등록된 지표 전량을 싣는다")
     @Test
-    void every_cell_carries_ten_strategies_with_every_declared_metric() throws Exception {
+    void every_cell_carries_eleven_strategies_with_every_declared_metric() throws Exception {
         Set<String> declared = BenchmarkRules.METRICS.stream()
                 .map(BenchmarkMetric::key).collect(Collectors.toCollection(TreeSet::new));
 
         for (JsonNode cell : body(URL).path("data").path("boards").path(0).path("cells")) {
             JsonNode strategies = cell.path("strategies");
-            assertEquals(10, strategies.size(), "엔진 3 + 자원전용 2 + 대조군 5 = 열 열이어야 한다");
+            assertEquals(11, strategies.size(), "엔진 3 + 자원전용 2 + 대조군 6 = 열한 열이어야 한다");
 
             for (JsonNode s : strategies) {
                 Set<String> keys = new TreeSet<>();

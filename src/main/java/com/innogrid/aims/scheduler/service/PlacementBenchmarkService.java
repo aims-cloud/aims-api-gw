@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -86,9 +87,15 @@ public class PlacementBenchmarkService {
             HEAVYTAIL, "classpath:scheduler/benchmark-workloads-heavytail.yml",
             UNIFORM, "classpath:scheduler/benchmark-workloads-uniform.yml");
 
-    /** 대조군 다섯 종의 순서. 응답 열 순서가 실행마다 바뀌면 표를 견줄 수 없다. */
-    private static final List<String> BASELINE_ORDER =
-            List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "random");
+    /**
+     * 대조군의 순서. 응답 열 순서가 실행마다 바뀌면 표를 견줄 수 없다.
+     *
+     * <p>{@link #strategies()} 가 이 목록과 구현 맵의 <b>키 집합이 같은지</b> 검사한다 — 목록에만 있으면 null 이
+     * 담겨 한참 뒤 NPE 로 죽고, 맵에만 있으면 열 하나가 <b>조용히</b> 사라진 채 응답은 정상이다. 둘 다 여기서
+     * 크게 실패하게 한다. 시험이 같은 패키지에서 이 목록을 읽는다.</p>
+     */
+    static final List<String> BASELINE_ORDER =
+            List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "coolest-first", "random");
 
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     private static final String RANDOM_ID = "random";
@@ -106,14 +113,32 @@ public class PlacementBenchmarkService {
      */
     private final ThermalModel thermalModel;
 
+    /** 이 실행이 비교에 넣는 대조군 순서. 운영은 항상 {@link #BASELINE_ORDER} 다. */
+    private final List<String> baselineOrder;
+
+    /** 스프링이 쓰는 생성자 — 생성자가 둘이라 어느 것인지 표시해야 한다. 대조군은 항상 {@link #BASELINE_ORDER} 전량. */
+    @Autowired
     public PlacementBenchmarkService(EngineRegistry engineRegistry, SchedulerProperties properties,
                                     BenchmarkClusters clusters,
                                     PowerModel powerModel, ThermalModel thermalModel) {
+        this(engineRegistry, properties, clusters, powerModel, thermalModel, BASELINE_ORDER);
+    }
+
+    /**
+     * 대조군 집합을 갈아 끼우는 이음매 — <b>시험 전용</b>이라 패키지 밖에서 보이지 않는다.
+     *
+     * <p>대조군 하나를 넣고 빼면서 "기존 열의 어느 숫자가 움직여도 되는가"를 고정하려면 같은 판을 두 집합으로
+     * 돌려야 한다. 스프링은 공개 생성자만 쓰므로 운영 경로가 이 인자를 볼 길은 없다.</p>
+     */
+    PlacementBenchmarkService(EngineRegistry engineRegistry, SchedulerProperties properties,
+                             BenchmarkClusters clusters, PowerModel powerModel, ThermalModel thermalModel,
+                             List<String> baselineOrder) {
         this.engineRegistry = engineRegistry;
         this.properties = properties;
         this.clusters = clusters;
         this.powerModel = powerModel;
         this.thermalModel = thermalModel;
+        this.baselineOrder = List.copyOf(baselineOrder);
     }
 
     // ── 진입점 ───────────────────────────────────────────────
@@ -695,7 +720,7 @@ public class PlacementBenchmarkService {
     // ── 전략과 정책 ──────────────────────────────────────────
 
     /**
-     * 비교할 전략 전부 — 운영 엔진 전량 + 자원전용 두 변종 + 대조군 다섯 종.
+     * 비교할 전략 전부 — 운영 엔진 전량 + 자원전용 두 변종 + 대조군({@link #BASELINE_ORDER}).
      *
      * <p>엔진은 레지스트리가 밝히는 목록에서 가져온다 — 여기에 이름을 적어 두면 엔진이 늘 때 조용히
      * 빠진다. 순서는 식별자로 정렬해 응답 열 순서를 빈 등록 순서에서 떼어 놓는다.</p>
@@ -724,8 +749,27 @@ public class PlacementBenchmarkService {
         baselines.put("ffd-priority-size", BaselinePlacers.ffdByPriorityThenSize());
         baselines.put("pabfd", BaselinePlacers.pabfd(powerModel));
         baselines.put("bfd", BaselinePlacers.bfd());
+        baselines.put("coolest-first", BaselinePlacers.coolestFirst());
         baselines.put(RANDOM_ID, BaselinePlacers.random(BenchmarkRules.RANDOM_SEEDS.get(0)));
-        for (String id : BASELINE_ORDER) all.add(baselines.get(id));
+
+        // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id 는 여기서 크게 실패해야 한다. 목록에만 있으면
+        // null 이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200 이다. 시험 전용 이음매로 부분 집합을
+        // 줄 수는 있으므로 검사는 "목록 ⊆ 맵" 과 "각 id 의 record id 일치" 다.
+        for (String id : baselineOrder) {
+            PlacementStrategy strategy = baselines.get(id);
+            if (strategy == null) {
+                throw new IllegalStateException("대조군 순서 목록에 구현이 없는 id 가 있다: " + id
+                        + " (구현: " + baselines.keySet() + ")");
+            }
+            if (!id.equals(strategy.id())) {
+                throw new IllegalStateException("대조군 맵의 키와 전략 id 가 다르다: " + id + " ≠ " + strategy.id());
+            }
+            all.add(strategy);
+        }
+        if (baselineOrder == BASELINE_ORDER && !baselines.keySet().equals(Set.copyOf(BASELINE_ORDER))) {
+            throw new IllegalStateException("구현은 있는데 순서 목록에 없는 대조군이 있다 — 열이 조용히 빠진다: "
+                    + baselines.keySet() + " vs " + BASELINE_ORDER);
+        }
 
         return all;
     }

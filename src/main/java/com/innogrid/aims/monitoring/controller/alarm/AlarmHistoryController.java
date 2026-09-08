@@ -93,8 +93,9 @@ public class AlarmHistoryController {
     }
 
     @Operation(summary = "알람 확인",
-            description = "미확인 알람을 확인 처리합니다 — 확인 내용(필수)을 저장하고 "
-                    + "확인자·확인 시각은 인증 사용자 기준으로 서버가 기록합니다.")
+            description = "미확인 알람을 확인 처리합니다 — 확인 내용(필수, 공백 불가)을 저장하고 "
+                    + "확인자·확인 시각은 인증 사용자 기준으로 서버가 기록합니다. 이미 확인된 알람은 409, "
+                    + "존재하지 않거나 역할 스코프 밖이면 404 입니다. 확인은 포털 로그(ALARM)에도 남습니다.")
     @PostMapping("/histories/{alarmId}/acknowledge")
     public ApiResponse<AlarmAcknowledgementResponse> acknowledge(
             @PathVariable Long alarmId,
@@ -103,7 +104,8 @@ public class AlarmHistoryController {
     }
 
     @Operation(summary = "알람 확인 내역",
-            description = "확인 완료된 알람의 확인 내역 모달 — 발생 정보와 확인 일시/확인자/확인 내용을 조회합니다.")
+            description = "확인 완료된 알람의 확인 내역 모달 — 발생 정보와 확인 일시/확인자/확인 내용을 조회합니다. "
+                    + "미확인 알람이거나 역할 스코프 밖이면 404 입니다.")
     @GetMapping("/histories/{alarmId}/acknowledgement")
     public ApiResponse<AlarmAcknowledgementResponse> getAcknowledgement(@PathVariable Long alarmId) {
         return ApiResponse.ok(alarmHistoryService.getAcknowledgement(alarmId));

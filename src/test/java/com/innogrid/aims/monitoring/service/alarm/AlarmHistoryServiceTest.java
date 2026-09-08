@@ -13,12 +13,18 @@ import java.util.List;
 import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgeRequest;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgementResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryListItemResponse;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistorySearchField;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleAreaListItemResponse.AreaKind;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
+import com.innogrid.aims.monitoring.log.PortalLogContext;
+import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
+import com.innogrid.aims.monitoring.log.PortalLogService;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
@@ -33,12 +39,17 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * 알람 발생 이력 목록 서비스 — 역할 스코프(토큰 역할 + 역할 없는 행), 스코프 밖 roleName 은 빈 결과, 관측값 표기,
- * 영역 표시명(MDC 는 id, Namespace 는 Tumblebug 표시명), 날짜 기간(KST 양끝 포함), 검색 대상, 정렬·페이징, 400.
- * 원장은 실제 H2, 인증·Tumblebug 은 대역.
+ * 영역 표시명(MDC 는 id, Namespace 는 Tumblebug 표시명), 날짜 기간(KST 양끝 포함), 검색 대상, 정렬·페이징, 400,
+ * 확인(acknowledge)·확인 내역(404·409·400·포털 로그 기록). 원장은 실제 H2, 인증·Tumblebug·포털 로그는 대역.
  */
 @SpringBootTest
 @Transactional
@@ -52,27 +63,37 @@ class AlarmHistoryServiceTest {
     AuthService authService;
     @MockitoBean
     TumblebugTreeBuilder tumblebugTreeBuilder;
+    @MockitoBean
+    PortalLogContextResolver contextResolver;
+    @MockitoBean
+    PortalLogService portalLogService;
     AlarmHistoryService service;
+    Long openId;
+    Long ackedId;
+    Long userScopedId;
 
     @BeforeEach
     void setUp() {
         repository.deleteAll();
-        service = new AlarmHistoryService(repository, authService, tumblebugTreeBuilder, ZoneId.of("Asia/Seoul"));
+        service = new AlarmHistoryService(repository, authService, tumblebugTreeBuilder, contextResolver, portalLogService,
+                ZoneId.of("Asia/Seoul"));
         when(authService.currentUserRoleIds()).thenReturn(new LinkedHashSet<>(List.of("ADMIN")));
+        when(contextResolver.resolve()).thenReturn(new PortalLogContext("admin@innogrid.com", "관리자", "10.0.0.9", "req-1", "POST", "/x"));
         when(tumblebugTreeBuilder.snapshot(anyCollection())).thenReturn(new TbSnapshot(Instant.now(),
                 Map.of("openstack", "OpenStack 테스트베드"), Map.of(), Set.of("openstack"), Set.of(), false));
-        repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.CRITICAL, "CPU Used > 80%")
+        openId = repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.CRITICAL, "CPU Used > 80%")
                 .policy(1L, "cpu-high").resource("node", "asset-1", "node-01").role("ADMIN").mdc("mdc-01")
-                .observed(92.0, "%").occurredAt(BASE).build());
-        repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.WARNING, "Memory Used > 70%")
+                .observed(92.0, "%").occurredAt(BASE).build()).getId();
+        userScopedId = repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.WARNING, "Memory Used > 70%")
                 .policy(2L, "mem-high").resource("vm", "TB:openstack/openstack-infra-01/vm-1", "vm-1").role("USER").namespace("openstack")
-                .observed(3.25, "GB").occurredAt(BASE.plusMinutes(30)).build());
+                .observed(3.25, "GB").occurredAt(BASE.plusMinutes(30)).build()).getId();
         repository.save(AlarmHistory.builder(AlarmSource.SYSTEM, AlarmLevel.WARNING, "up == 0")
                 .resource("node", "asset-2", "node-02").mdc("mdc-01").occurredAt(BASE.plusHours(1)).build());
         AlarmHistory acked = repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.CRITICAL, "GPU Temp > 85°C")
                 .policy(3L, "gpu-hot").resource("gpu", "asset-1/gpu-0", "node-01 GPU0").role("ADMIN").mdc("mdc-01")
                 .observed(88.0, "°C").occurredAt(BASE.plusHours(2)).inhibited(true).build());
         acked.acknowledge("admin@innogrid.com", "확인함", BASE.plusHours(2).plusMinutes(1));
+        ackedId = acked.getId();
     }
 
     @Test
@@ -169,6 +190,70 @@ class AlarmHistoryServiceTest {
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().get(0).areaName()).isEqualTo("openstack");
+    }
+
+    // ── 확인 ────────────────────────────────────────────────────
+
+    @Test
+    void 확인하면_확인자_시각_내용이_저장되고_상태가_바뀌고_포털_로그가_남는다() {
+        AlarmAcknowledgementResponse res = service.acknowledge(openId, new AlarmAcknowledgeRequest("  재기동 예정  "));
+
+        assertThat(res.acknowledgedBy()).isEqualTo("admin@innogrid.com");
+        assertThat(res.acknowledgedAt()).isNotNull();
+        assertThat(res.content()).isEqualTo("재기동 예정");
+        assertThat(res.criterion()).isEqualTo("CPU Used > 80%");
+        assertThat(res.observedValue()).isEqualTo("92%");
+        assertThat(res.resourceName()).isEqualTo("node-01");
+
+        AlarmHistory saved = repository.findById(openId).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(AlarmHistoryStatus.ACKNOWLEDGED);
+        assertThat(saved.isAcknowledged()).isTrue();
+        verify(portalLogService).alarm(eq("확인"), eq("CPU Used > 80% 확인: node-01"), eq(openId));
+
+        // 확인 내역 조회는 같은 값을 돌려준다
+        assertThat(service.getAcknowledgement(openId).content()).isEqualTo("재기동 예정");
+    }
+
+    @Test
+    void 빈_확인_내용은_400이고_저장하지_않는다() {
+        assertThatThrownBy(() -> service.acknowledge(openId, new AlarmAcknowledgeRequest("   ")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> service.acknowledge(openId, null)).isInstanceOf(BusinessException.class);
+
+        assertThat(repository.findById(openId).orElseThrow().isAcknowledged()).isFalse();
+        verify(portalLogService, never()).alarm(anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void 이미_확인된_알람은_409다() {
+        assertThatThrownBy(() -> service.acknowledge(ackedId, new AlarmAcknowledgeRequest("다시")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(repository.findById(ackedId).orElseThrow().getAckContent()).isEqualTo("확인함");
+    }
+
+    @Test
+    void 없는_알람과_스코프_밖_알람은_404이고_미확인_알람의_확인_내역도_404다() {
+        assertThatThrownBy(() -> service.acknowledge(999_999L, new AlarmAcknowledgeRequest("x")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> service.acknowledge(userScopedId, new AlarmAcknowledgeRequest("x")))   // USER 역할 행, 토큰은 ADMIN
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> service.getAcknowledgement(openId))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(portalLogService, never()).alarm(anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void 인증_사용자를_알_수_없으면_401이다() {
+        when(contextResolver.resolve()).thenReturn(PortalLogContext.EMPTY);
+
+        assertThatThrownBy(() -> service.acknowledge(openId, new AlarmAcknowledgeRequest("x")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED));
     }
 
     @Test

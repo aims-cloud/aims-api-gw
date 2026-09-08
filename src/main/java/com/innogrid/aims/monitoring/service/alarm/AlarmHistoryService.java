@@ -23,6 +23,8 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmChannel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleAreaListItemResponse.AreaKind;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
+import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
+import com.innogrid.aims.monitoring.log.PortalLogService;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmHistorySpecifications;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
@@ -47,7 +49,9 @@ import org.springframework.web.server.ResponseStatusException;
  *       Namespace 는 Tumblebug 스냅샷의 표시명이다(조회 실패 시 nsId).</li>
  *   <li>역할 스코프: 토큰 역할에 속한 행 + 역할이 없는 행(내장 시스템 규칙·외부 알람)만 보인다.
  *       {@code roleName} 을 지정했는데 토큰 역할에 없으면 빈 결과다(자원 탐색기 NodeGroup 패널과 같은 규칙).</li>
- *   <li>전송 이력·메시지 상세·확인은 전송 원장·확인 처리 구현 시 채운다(현재 501).</li>
+ *   <li>확인(acknowledge): 확인 내용 필수, 확인자·시각은 인증 사용자 기준으로 서버가 기록한다. 이미 확인된 알람은 409.
+ *       스코프 밖 알람은 존재를 드러내지 않기 위해 404. 확인 시 포털 로그 ALARM 행을 함께 남긴다(docs/08 §3.2).</li>
+ *   <li>전송 이력·메시지 상세는 전송 원장 구현 시 채운다(현재 501).</li>
  * </ul>
  */
 @Service
@@ -65,20 +69,26 @@ public class AlarmHistoryService {
     private final AlarmHistoryRepository repository;
     private final AuthService authService;
     private final TumblebugTreeBuilder tumblebugTreeBuilder;
+    private final PortalLogContextResolver contextResolver;
+    private final PortalLogService portalLogService;
     private final ZoneId zone;
 
     @Autowired
     public AlarmHistoryService(AlarmHistoryRepository repository, AuthService authService,
-                               TumblebugTreeBuilder tumblebugTreeBuilder) {
-        this(repository, authService, tumblebugTreeBuilder, ZoneId.systemDefault());
+                               TumblebugTreeBuilder tumblebugTreeBuilder,
+                               PortalLogContextResolver contextResolver, PortalLogService portalLogService) {
+        this(repository, authService, tumblebugTreeBuilder, contextResolver, portalLogService, ZoneId.systemDefault());
     }
 
     /** 테스트용 — 기간 변환 타임존 고정 */
     AlarmHistoryService(AlarmHistoryRepository repository, AuthService authService,
-                        TumblebugTreeBuilder tumblebugTreeBuilder, ZoneId zone) {
+                        TumblebugTreeBuilder tumblebugTreeBuilder,
+                        PortalLogContextResolver contextResolver, PortalLogService portalLogService, ZoneId zone) {
         this.repository = repository;
         this.authService = authService;
         this.tumblebugTreeBuilder = tumblebugTreeBuilder;
+        this.contextResolver = contextResolver;
+        this.portalLogService = portalLogService;
         this.zone = zone;
     }
 
@@ -157,16 +167,49 @@ public class AlarmHistoryService {
         throw dataSourceNotImplemented();
     }
 
-    /** 알람 확인 — 확인 내용 저장, 확인자·확인 시각은 인증 사용자 기준으로 서버가 기록 */
+    /** 알람 확인 — 확인 내용(필수) 저장, 확인자·확인 시각은 인증 사용자 기준으로 서버가 기록. 이미 확인됐으면 409 */
+    @Transactional
     public AlarmAcknowledgementResponse acknowledge(Long alarmId, AlarmAcknowledgeRequest request) {
-        // TODO:: AlarmHistory.acknowledge(userId, content, now) + 포털 로그 ALARM 기록 (다음 단계)
-        throw dataSourceNotImplemented();
+        String content = request == null ? null : request.content();
+        if (content == null || content.isBlank()) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "확인 내용을 입력해 주세요");
+        }
+        String userId = contextResolver.resolve().userId();
+        if (userId == null) {
+            throw new BusinessException(HttpStatus.UNAUTHORIZED, "확인자를 확인할 수 없습니다");
+        }
+        AlarmHistory alarm = accessibleAlarm(alarmId);
+        if (alarm.isAcknowledged()) {
+            throw new BusinessException(HttpStatus.CONFLICT, "이미 확인된 알람입니다: " + alarmId);
+        }
+        alarm.acknowledge(userId, content.trim(), OffsetDateTime.now());
+        portalLogService.alarm("확인", alarm.getCriterion() + " 확인: " + alarm.getResourceName(), alarm.getId());
+        return toAcknowledgement(alarm);
     }
 
-    /** 알람 확인 내역 모달 — 발생 정보 + 확인 일시/확인자/확인 내용 */
+    /** 알람 확인 내역 모달 — 발생 정보 + 확인 일시/확인자/확인 내용. 미확인 알람이면 404 */
     public AlarmAcknowledgementResponse getAcknowledgement(Long alarmId) {
-        // TODO:: 확인 처리와 함께 구현
-        throw dataSourceNotImplemented();
+        AlarmHistory alarm = accessibleAlarm(alarmId);
+        if (!alarm.isAcknowledged()) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "확인 내역이 없는 알람입니다: " + alarmId);
+        }
+        return toAcknowledgement(alarm);
+    }
+
+    /** 존재하고 토큰 역할 스코프 안(역할 없는 행 포함)인 알람 — 아니면 404 (스코프 밖 알람의 존재를 드러내지 않는다) */
+    private AlarmHistory accessibleAlarm(Long alarmId) {
+        AlarmHistory alarm = repository.findById(alarmId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "알람을 찾을 수 없습니다: " + alarmId));
+        if (alarm.getRoleName() != null && !authService.currentUserRoleIds().contains(alarm.getRoleName())) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "알람을 찾을 수 없습니다: " + alarmId);
+        }
+        return alarm;
+    }
+
+    private static AlarmAcknowledgementResponse toAcknowledgement(AlarmHistory a) {
+        return new AlarmAcknowledgementResponse(a.getOccurredAt(), a.getLevel(), a.getResourceType(), a.getResourceName(),
+                a.getCriterion(), AlarmHistoryListItemResponse.formatObserved(a.getObservedValue(), a.getUnit()),
+                a.getAcknowledgedAt(), a.getAcknowledgedBy(), a.getAckContent());
     }
 
     private ResponseStatusException dataSourceNotImplemented() {

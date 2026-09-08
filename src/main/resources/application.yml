@@ -54,8 +54,10 @@ cloud-barista:
 # 최종 연동 대상은 1세부 OpenStack. 구축 전까지 자체 구축 OpenStack 사용.
 # 환경변수만 바꾸면 전환되도록 코드에 기본값을 두지 않는다.
 openstack:
+  zone-name: ${OPENSTACK_ZONE_NAME:openstack-default}
   auth-url: ${OPENSTACK_AUTH_URL:}
   network-url: ${OPENSTACK_NETWORK_URL:}
+  compute-url: ${OPENSTACK_COMPUTE_URL:}
   username: ${OPENSTACK_USERNAME:}
   password: ${OPENSTACK_PASSWORD:}
   project-name: ${OPENSTACK_PROJECT:}

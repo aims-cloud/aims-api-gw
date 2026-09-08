@@ -62,10 +62,38 @@ public class PowerModel {
      * 빈 노드를 깨울 때 새로 드는 전력(W) — 깨우기 비용과 반납 가능 전력 계열 전용.
      * 진단 지표(비례성·비낭비)와 동적 범위 {@code (Pmax − Pidle)} 는 이 값을 쓰지 않는다 —
      * 그쪽 기준선에 실측을 넣으면 지표가 항등이 되고 전력 제약의 동적 범위가 무너진다.
-     * 지금은 대체값(정격 × idleRatio)과 같고, 실측 역산은 다음 커밋에서 이 메서드 본문만 바꾼다.
+     *
+     * <p><b>왜 유휴 노드에서만 역산하는가</b> — 선형 전력식 {@code P = P_idle + (P_max − P_idle)·u}
+     * 를 P_idle 에 대해 풀면 {@code P_idle = (P − P_max·u) / (1 − u)} 다. 가동 중인 노드는 이미
+     * 다른 워크로드의 동적분이 실측치에 섞여 있어 이 식이 그 노드의 "유휴" 전력을 돌려주지
+     * 않는다 — 그리고 조건수가 {@code 1/(1−u)} 라 u 가 1 에 가까울수록 계측 잡음이 그대로
+     * 증폭된다. 그래서 가동 노드·활용률 100% 는 역산을 포기하고 대체값으로 돌아간다.</p>
+     *
+     * <p><b>왜 실측 CPU 인가</b> — 역산은 "같은 순간에 관측한 (P, u) 쌍"이 전제다. 예약분까지
+     * 반영한 사용률을 쓰면 이 노드가 실제로 그 전력을 그리던 순간의 u 가 아니게 되어 역산식이
+     * 성립하지 않는다.</p>
+     *
+     * <p><b>왜 {@link #idlePower} 와 다른 메서드인가</b> — {@code idlePower} 는 진단 지표와 동적
+     * 범위의 기준선이다. 거기에 실측 역산을 넣으면 {@code P_ideal} 이 실측 {@code P} 를 그대로
+     * 따라가는 항등식이 되어 비례성·비낭비가 노드를 구별하지 못하게 되고, 동적 범위
+     * {@code (Pmax − Pidle)} 도 노드마다 흔들려, 현재 부하를 보지 않던 것을 고친 볼록 곡선이
+     * 무너진다. 그래서 역산은 깨우기 비용 전용인 이 메서드에만 둔다.</p>
+     *
+     * <p><b>미계측 가드</b> — 정격을 모르거나(override 없음) IPMI 가 없어 전력을 못 읽는 노드는
+     * 역산할 분자·분모가 없다. 배포 VM 이 정확히 이 경로다. 대체값으로 빠지는 것이 운영
+     * 안전핀이고, {@link SchedulerProperties.Power#isIdleFromMeasurement()} 로 이 전체 경로를
+     * 끄고 대체값 고정으로 되돌릴 수 있다.</p>
      */
     public double wakeupPower(NodeResource node) {
-        return idlePower(node);
+        double pMax = node.getPowerCapacityWatts();
+        double fallback = pMax * props.getIdleRatio();
+        if (!props.isIdleFromMeasurement()) return fallback;
+        if (pMax <= 0 || node.getPowerWatts() <= 0) return fallback;   // 정격 미상·미계측(IPMI 없음) — 배포 VM 이 이 경로
+        if (isActive(node)) return fallback;                            // 가동 노드는 역산 불가(동적분이 섞임)
+        double u = Math.min(1.0, Math.max(0.0, node.getCpuUsagePercent() / 100.0));   // 실측 CPU — 역산은 같은 순간의 (P, u)
+        if (u >= 1.0) return fallback;
+        double estimate = (node.getPowerWatts() - pMax * u) / (1.0 - u);
+        return (estimate <= 0 || estimate > pMax) ? fallback : estimate;   // 범위 밖은 계측 잡음으로 보고 대체값
     }
 
     /** 전력 여유율 점수 (0~1). */

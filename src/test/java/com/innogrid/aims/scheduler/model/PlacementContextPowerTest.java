@@ -63,8 +63,9 @@ class PlacementContextPowerTest {
                 node("empty-1", 1, 150, 500),
                 node("empty-2", 0, 150, 400));
 
-        // 500×0.3 + 400×0.3 = 150 + 120
-        assertEquals(270.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
+        // 계측된 유휴 노드는 실측에서 역산한다 — empty-1: (150 − 500×0.01)/0.99 = 146.5, empty-2: CPU 0% 라 실측 그대로 150.
+        // 대체값 기준(500×0.3 + 400×0.3 = 270)이 아니다.
+        assertEquals((150 - 500 * 0.01) / 0.99 + 150.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
     }
 
     @DisplayName("전부 가동 중이면 반납할 전력이 없다")

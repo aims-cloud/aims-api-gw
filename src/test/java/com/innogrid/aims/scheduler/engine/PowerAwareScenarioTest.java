@@ -136,10 +136,11 @@ class PowerAwareScenarioTest {
         SchedulingResult result = run("시나리오 4 — 전력 통합", nodes, workload(2), policy());
 
         assertEquals("가동중", result.selectedNodeId(),
-                "빈 노드를 깨우면 유휴 150W 가 새로 든다");
-        assertEquals(150.0,
+                "빈 노드를 깨우면 유휴 전력이 새로 든다");
+        // 빈 노드는 계측(150W)·유휴(1%)라 깨우기 비용을 실측에서 역산한다: (150 − 500×0.01)/(1−0.01) = 146.5W
+        assertEquals((150 - 500 * 0.01) / 0.99,
                 detail(result, "비어있음", "실질한계전력W") - detail(result, "가동중", "실질한계전력W"),
-                1.0, "차이가 곧 유휴 전력이다");
+                1.0, "차이가 곧 역산한 유휴 전력이다");
         assertTrue(detail(result, "가동중", "전력점수") > detail(result, "비어있음", "전력점수"),
                 "전력 판단은 가동 중인 노드를 선호한다");
     }

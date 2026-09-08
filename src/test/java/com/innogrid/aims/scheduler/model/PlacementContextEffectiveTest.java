@@ -35,7 +35,8 @@ class PlacementContextEffectiveTest {
     void woken_node_counts_active() {
         PlacementContext ctx = context(node("busy", 50, 45), node("empty", 1, 45));
         assertEquals(1, ctx.activeNodeCount(ACTIVE_CPU));
-        assertEquals(150.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
+        // empty 는 계측 200W·CPU 1% 라 반납 가능 전력을 실측에서 역산한다: (200 − 500×0.01)/(1−0.01) = 197.0W
+        assertEquals((200 - 500 * 0.01) / 0.99, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
 
         ctx.reserve("empty", new Workload("w", 1, 512));    // 1/8 코어 → 실효 13.5%
 

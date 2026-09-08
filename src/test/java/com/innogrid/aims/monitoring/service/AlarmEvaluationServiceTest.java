@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleAreaListItemResponse.AreaKind;
@@ -24,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,7 +33,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * 평가기 — 메트릭 단위 묶음 쿼리(규칙 수와 무관), 카탈로그 코드·초안 별칭 해석, 자원 탐색기 라벨로 호스트/VM 식별,
- * 이력 스냅샷(코드·단위·기준 문자열), 카탈로그에 없는 메트릭·Thanos 장애·비정상 값 처리.
+ * 이력 스냅샷(코드·단위·기준 문자열·fingerprint), 중복 억제(미해소 행 있으면 재생성 금지)·해소(RESOLVED + 해소 이벤트),
+ * 카탈로그에 없는 메트릭·Thanos 장애·비정상 값 처리.
  */
 @ExtendWith(MockitoExtension.class)
 class AlarmEvaluationServiceTest {
@@ -123,6 +126,91 @@ class AlarmEvaluationServiceTest {
         assertThat(a.getAreaId()).isEqualTo("TB:openstack");
         assertThat(a.getAreaKind()).isEqualTo(AreaKind.NAMESPACE);
         assertThat(a.getCriterion()).isEqualTo("FS Used >= 90%");
+    }
+
+    @Test
+    void 첫_발생은_규칙_자원_지문을_남기고_같은_지문의_미해소_행이_있으면_다시_만들지_않는다() {
+        AlarmRule rule = new AlarmRule("cpu-80", "CPU_USED_PERCENT", "gt", 80, "WARNING", null);
+        when(ruleRepository.findByEnabledTrue()).thenReturn(List.of(rule));
+        when(vmClient.query(anyString())).thenReturn(vector(
+                sample(Map.of("instance", "10.0.0.1:9100", "mdc_id", "mdc-01"), 92.0)));
+        when(historyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // 1회차: 미해소 행 없음 → 생성
+        service.evaluateRules();
+        ArgumentCaptor<AlarmHistory> saved = ArgumentCaptor.forClass(AlarmHistory.class);
+        verify(historyRepository, times(1)).save(saved.capture());
+        AlarmHistory first = saved.getValue();
+        String expected = AlarmEvaluationService.fingerprint(rule, AlarmMetric.CPU_USED_PERCENT, "10.0.0.1:9100");
+        assertThat(first.getFingerprint()).isEqualTo(expected).hasSize(64);
+
+        // 2회차: 같은 지문의 OPEN 행이 있음 → 계속 초과지만 재생성 금지
+        when(historyRepository.findBySourceAndMetricAndStatusNot(AlarmSource.POLICY, "CPU_USED_PERCENT", AlarmHistoryStatus.RESOLVED))
+                .thenReturn(List.of(first));
+        service.evaluateRules();
+        verify(historyRepository, times(1)).save(any());          // 추가 저장 없음
+        verify(eventRepository, times(1)).save(any(Event.class));
+        assertThat(first.getStatus()).isEqualTo(AlarmHistoryStatus.OPEN);
+    }
+
+    @Test
+    void 확인된_행도_미해소이므로_억제하고_임계값_안으로_돌아오면_해소하며_해소_이벤트를_발행한다() {
+        AlarmRule rule = new AlarmRule("mem-80", "mem_usage", "gt", 80, "CRITICAL", null);
+        when(ruleRepository.findByEnabledTrue()).thenReturn(List.of(rule));
+        String fp = AlarmEvaluationService.fingerprint(rule, AlarmMetric.MEMORY_USED_PERCENT, "10.0.0.1:9100");
+        AlarmHistory acked = AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.CRITICAL, "Memory Used > 80%")
+                .policy(null, "mem-80").resource("node", "10.0.0.1:9100", "10.0.0.1:9100").mdc("mdc-01")
+                .metric("MEMORY_USED_PERCENT").observed(91.0, "%").fingerprint(fp).build();
+        acked.acknowledge("admin@innogrid.com", "확인", java.time.OffsetDateTime.now());
+        when(historyRepository.findBySourceAndMetricAndStatusNot(AlarmSource.POLICY, "MEMORY_USED_PERCENT", AlarmHistoryStatus.RESOLVED))
+                .thenReturn(List.of(acked));
+        when(historyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // 계속 초과 — ACKNOWLEDGED 행이 있으니 재생성 없음
+        when(vmClient.query(anyString())).thenReturn(vector(
+                sample(Map.of("instance", "10.0.0.1:9100", "mdc_id", "mdc-01"), 93.0)));
+        service.evaluateRules();
+        verify(historyRepository, never()).save(any());
+        assertThat(acked.getStatus()).isEqualTo(AlarmHistoryStatus.ACKNOWLEDGED);
+
+        // 임계값 안으로 — RESOLVED 전이 + 해소 이벤트
+        when(vmClient.query(anyString())).thenReturn(vector(
+                sample(Map.of("instance", "10.0.0.1:9100", "mdc_id", "mdc-01"), 62.5)));
+        service.evaluateRules();
+
+        assertThat(acked.getStatus()).isEqualTo(AlarmHistoryStatus.RESOLVED);
+        assertThat(acked.getResolvedAt()).isNotNull();
+        assertThat(acked.getAcknowledgedBy()).isEqualTo("admin@innogrid.com");   // 확인 정보는 유지
+        verify(historyRepository, times(1)).save(acked);
+        ArgumentCaptor<Event> event = ArgumentCaptor.forClass(Event.class);
+        verify(eventRepository, times(1)).save(event.capture());
+        assertThat(event.getValue().getSeverity()).isEqualTo("INFO");
+        assertThat(event.getValue().getMessage()).contains("mem-80 해소").contains("Memory Used > 80%").contains("62.5%");
+    }
+
+    @Test
+    void 지문은_다른_규칙이나_다른_자원이면_달라지고_표본이_없는_자원은_열어_둔다() {
+        AlarmRule r1 = new AlarmRule("a", "CPU_USED_PERCENT", "gt", 80, "WARNING", null);
+        AlarmRule r2 = new AlarmRule("b", "CPU_USED_PERCENT", "gt", 80, "WARNING", null);
+        assertThat(AlarmEvaluationService.fingerprint(r1, AlarmMetric.CPU_USED_PERCENT, "x"))
+                .isNotEqualTo(AlarmEvaluationService.fingerprint(r2, AlarmMetric.CPU_USED_PERCENT, "x"))
+                .isNotEqualTo(AlarmEvaluationService.fingerprint(r1, AlarmMetric.CPU_USED_PERCENT, "y"))
+                .isNotEqualTo(AlarmEvaluationService.fingerprint(r1, AlarmMetric.MEMORY_USED_PERCENT, "x"));
+
+        // 미해소 행의 자원(10.0.0.9)이 이번 벡터에 없음 → 해소하지 않는다
+        when(ruleRepository.findByEnabledTrue()).thenReturn(List.of(r1));
+        AlarmHistory open = AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.WARNING, "CPU Used > 80%")
+                .policy(null, "a").resource("node", "10.0.0.9:9100", "10.0.0.9:9100").metric("CPU_USED_PERCENT")
+                .fingerprint(AlarmEvaluationService.fingerprint(r1, AlarmMetric.CPU_USED_PERCENT, "10.0.0.9:9100")).build();
+        when(historyRepository.findBySourceAndMetricAndStatusNot(eq(AlarmSource.POLICY), eq("CPU_USED_PERCENT"), eq(AlarmHistoryStatus.RESOLVED)))
+                .thenReturn(List.of(open));
+        when(vmClient.query(anyString())).thenReturn(vector(
+                sample(Map.of("instance", "10.0.0.1:9100", "mdc_id", "mdc-01"), 10.0)));
+
+        service.evaluateRules();
+
+        assertThat(open.getStatus()).isEqualTo(AlarmHistoryStatus.OPEN);
+        verify(historyRepository, never()).save(any());
     }
 
     @Test

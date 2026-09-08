@@ -127,4 +127,28 @@ class AlarmHistoryRepositoryTest {
         return AlarmHistorySpecifications.filter(levels, roleName, areaId, resourceType, resourceId, policyId,
                 AlarmHistorySearchField.ALL, keyword, from, to, visibleRoles);
     }
+
+    @Test
+    void 메트릭별_미해소_정책_알람_조회는_OPEN과_ACKNOWLEDGED만_돌려주고_RESOLVED와_다른_source는_뺀다() {
+        AlarmHistory open = repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.WARNING, "CPU Used > 80%")
+                .policy(1L, "cpu-high").resource("node", "asset-3", "node-03").metric("CPU_USED_PERCENT")
+                .fingerprint("fp-open").occurredAt(BASE.plusHours(4)).build());
+        AlarmHistory resolved = repository.save(AlarmHistory.builder(AlarmSource.POLICY, AlarmLevel.WARNING, "CPU Used > 80%")
+                .policy(1L, "cpu-high").resource("node", "asset-4", "node-04").metric("CPU_USED_PERCENT")
+                .fingerprint("fp-resolved").occurredAt(BASE.plusHours(4)).build());
+        resolved.resolve(BASE.plusHours(5));
+        repository.save(AlarmHistory.builder(AlarmSource.SYSTEM, AlarmLevel.WARNING, "CPU Used > 80%")
+                .resource("node", "asset-5", "node-05").metric("CPU_USED_PERCENT").occurredAt(BASE.plusHours(4)).build());
+
+        List<AlarmHistory> active = repository.findBySourceAndMetricAndStatusNot(
+                AlarmSource.POLICY, "CPU_USED_PERCENT", AlarmHistoryStatus.RESOLVED);
+
+        // 대역의 CPU_USED_PERCENT 정책 행 2건(OPEN 09:00, ACKNOWLEDGED 12:00) + 여기서 만든 OPEN 1건
+        assertThat(active).extracting(AlarmHistory::getResourceName)
+                .containsExactlyInAnyOrder("node-01", "node-01", "node-03");
+        assertThat(active).extracting(AlarmHistory::getStatus)
+                .containsOnly(AlarmHistoryStatus.OPEN, AlarmHistoryStatus.ACKNOWLEDGED);
+        assertThat(active).extracting(AlarmHistory::getId).doesNotContain(resolved.getId()).contains(open.getId());
+        assertThat(repository.findBySourceAndMetricAndStatusNot(AlarmSource.POLICY, "GPU_TEMP", AlarmHistoryStatus.RESOLVED)).isEmpty();
+    }
 }

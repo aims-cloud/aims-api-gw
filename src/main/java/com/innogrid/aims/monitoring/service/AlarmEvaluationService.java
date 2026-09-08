@@ -1,6 +1,12 @@
 package com.innogrid.aims.monitoring.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
@@ -35,8 +42,11 @@ import com.innogrid.aims.monitoring.service.alarm.AlarmMetric;
  *   <li>자원 식별은 자원 탐색기와 같은 라벨을 쓴다 — {@code tb_ns/tb_infra/tb_node} 가 있으면 Tumblebug VM(영역 = Namespace),
  *       없으면 물리 호스트 {@code instance}(영역 = {@code mdc_id}).</li>
  *   <li>이력에는 카탈로그 코드·단위와 기준 문자열({@code CPU Used > 80%})을 스냅샷으로 남긴다.</li>
+ *   <li><b>중복 억제·해소</b>: 규칙×자원 지문({@code fingerprint} = SHA-256(규칙 id|메트릭|자원 id))으로 미해소(OPEN·ACKNOWLEDGED)
+ *       행을 찾아, 계속 초과면 새 행을 만들지 않고, 임계값 안으로 돌아오면 그 행을 RESOLVED 로 닫고 해소 이벤트를 발행한다.
+ *       표본이 사라진 자원(exporter 다운 등)은 판정하지 않고 열어 둔다 — 수집 중단은 시스템 규칙(데드맨)의 몫이다.
+ *       상태 행은 전이(발생·해소)가 있을 때만 쓴다.</li>
  * </ul>
- * 중복 억제(같은 규칙×자원 OPEN 이면 재생성 금지)와 해소(RESOLVED)는 다음 단계.
  */
 @Service
 public class AlarmEvaluationService {
@@ -78,13 +88,43 @@ public class AlarmEvaluationService {
                 log.debug("알람 평가 스킵: metric={}, rules={}, error={}", metric, group.getValue().size(), e.getMessage());
                 continue;
             }
+            Map<String, AlarmHistory> active = activeByFingerprint(metric);
             for (Sample sample : samples) {
                 for (AlarmRule rule : group.getValue()) {
-                    if (isThresholdExceeded(rule.getCondition(), sample.value(), rule.getThreshold())) {
-                        record(rule, metric, sample);
+                    String fingerprint = fingerprint(rule, metric, sample.resourceId());
+                    AlarmHistory open = active.get(fingerprint);
+                    boolean exceeded = isThresholdExceeded(rule.getCondition(), sample.value(), rule.getThreshold());
+                    if (exceeded && open == null) {
+                        active.put(fingerprint, record(rule, metric, sample, fingerprint));
+                    } else if (!exceeded && open != null) {
+                        resolve(open, rule, metric, sample);
+                        active.remove(fingerprint);
                     }
+                    // exceeded && open != null: 계속 초과 — 기존 행 유지(중복 억제)
+                    // !exceeded && open == null: 정상 — 아무 것도 하지 않음
                 }
             }
+        }
+    }
+
+    /** 한 메트릭의 미해소 정책 알람을 fingerprint 로 색인. 지문 없는 옛 행(초안 평가기)은 대조 대상이 아니다 */
+    private Map<String, AlarmHistory> activeByFingerprint(AlarmMetric metric) {
+        Map<String, AlarmHistory> byFingerprint = new HashMap<>();
+        for (AlarmHistory h : historyRepository.findBySourceAndMetricAndStatusNot(
+                AlarmSource.POLICY, metric.name(), AlarmHistoryStatus.RESOLVED)) {
+            if (h.getFingerprint() != null) byFingerprint.putIfAbsent(h.getFingerprint(), h);
+        }
+        return byFingerprint;
+    }
+
+    /** 규칙×자원 지문 — SHA-256 hex(64자). 규칙 id 가 아직 없으면(미저장) 이름으로 대신한다 */
+    static String fingerprint(AlarmRule rule, AlarmMetric metric, String resourceId) {
+        String key = "POLICY|" + (rule.getId() != null ? rule.getId() : rule.getName()) + "|" + metric.name() + "|" + resourceId;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 을 사용할 수 없습니다", e);
         }
     }
 
@@ -133,21 +173,20 @@ public class AlarmEvaluationService {
     }
 
     /** 재정의된 alarm_history 원장에 규칙 스냅샷으로 기록하고 events 원장에도 발행 — docs/09 C.1 */
-    private void record(AlarmRule rule, AlarmMetric metric, Sample sample) {
+    private AlarmHistory record(AlarmRule rule, AlarmMetric metric, Sample sample, String fingerprint) {
         String criterion = metric.criterion(symbolOf(rule.getCondition()), rule.getThreshold());
         AlarmHistory.Builder builder = AlarmHistory.builder(AlarmSource.POLICY, levelOf(rule.getSeverity()), criterion)
                 .policy(rule.getId(), rule.getName())
                 .metric(metric.name())
-                .observed(sample.value(), metric.unit());
+                .observed(sample.value(), metric.unit())
+                .fingerprint(fingerprint);
 
         String nsId = sample.label("tb_ns");
-        String nodeId = sample.label("tb_node");
         String mdcId = sample.label("mdc_id");
-        if (nsId != null && nodeId != null) {
-            builder.resource("vm", "TB:" + nsId + "/" + sample.label("tb_infra") + "/" + nodeId, nodeId).namespace(nsId);
+        if (sample.isTumblebugVm()) {
+            builder.resource("vm", sample.resourceId(), sample.label("tb_node")).namespace(nsId);
         } else {
-            String instance = sample.labels().getOrDefault("instance", "unknown");
-            builder.resource("node", instance, instance).mdc(mdcId);
+            builder.resource("node", sample.resourceId(), sample.resourceId()).mdc(mdcId);
         }
         AlarmHistory alarm = historyRepository.save(builder.build());
 
@@ -156,6 +195,20 @@ public class AlarmEvaluationService {
         eventRepository.save(event);
 
         log.info("알람 발생: rule={}, resource={}, value={}", rule.getName(), alarm.getResourceId(), sample.value());
+        return alarm;
+    }
+
+    /** 임계값 안으로 돌아온 미해소 행을 RESOLVED 로 닫고 해소 이벤트를 발행 */
+    private void resolve(AlarmHistory open, AlarmRule rule, AlarmMetric metric, Sample sample) {
+        open.resolve(OffsetDateTime.now());
+        historyRepository.save(open);
+
+        String mdcId = sample.label("mdc_id");
+        Event event = new Event(mdcId == null ? "unknown" : mdcId, "INFO", open.getResourceName(),
+                String.format("%s 해소: %s (관측값 %.1f%s)", rule.getName(), open.getCriterion(), sample.value(), metric.unit()));
+        eventRepository.save(event);
+
+        log.info("알람 해소: rule={}, resource={}, value={}", rule.getName(), open.getResourceId(), sample.value());
     }
 
     /** 초안 규칙의 severity 문자열(INFO/WARNING/CRITICAL, 대소문자 무관) → AlarmLevel. 알 수 없으면 WARNING */
@@ -198,6 +251,19 @@ public class AlarmEvaluationService {
         String label(String name) {
             String v = labels.get(name);
             return v == null || v.isBlank() ? null : v;
+        }
+
+        /** tb_ns·tb_node 라벨이 있으면 Tumblebug VM, 없으면 물리 호스트 */
+        boolean isTumblebugVm() {
+            return label("tb_ns") != null && label("tb_node") != null;
+        }
+
+        /** 이력·지문에 쓰는 자원 id — VM 은 {@code TB:{ns}/{infra}/{node}}, 호스트는 instance(address:port) */
+        String resourceId() {
+            if (isTumblebugVm()) {
+                return "TB:" + label("tb_ns") + "/" + label("tb_infra") + "/" + label("tb_node");
+            }
+            return labels.getOrDefault("instance", "unknown");
         }
     }
 }

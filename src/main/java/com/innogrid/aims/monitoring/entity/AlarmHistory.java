@@ -27,7 +27,7 @@ import jakarta.persistence.Table;
  *   <li>{@code role_name} 은 역할 스코프, {@code area_id}·{@code area_kind} 는 트리의 자원 영역(MDC 는 {@code mdcId},
  *       Tumblebug Namespace 는 {@code TB:{nsId}}) — 역할 패널 자원 영역 표의 {@code areaId} 와 같은 값이다.
  *       내장 시스템 규칙(SYSTEM)은 역할이 null 이라 모든 사용자에게 보인다.</li>
- *   <li>{@code fingerprint} 는 외부(EXTERNAL) 알람 멱등 키, {@code inhibited} 는 상위(사이트·에이전트) 알람에 눌려
+ *   <li>{@code fingerprint} 는 외부(EXTERNAL) 알람 멱등 키이자 정책 알람의 규칙×자원 지문(평가기 중복 억제·해소 키), {@code inhibited} 는 상위(사이트·에이전트) 알람에 눌려
  *       전송이 억제된 행 표시다.</li>
  *   <li>초안의 {@code alarm_history}(rule_id FK·instance·metric_value) 를 같은 이름으로 재정의했다. 평가기와 구 API 는 이 엔티티를 쓴다.</li>
  * </ul>

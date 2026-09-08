@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
  * [요구사항 #36] 랙실장도 대시보드 — MDC별 랙 단위 장비 실장 현황 도식화
  * 랙/실장 데이터의 원본은 1세부 하드웨어 데이터 (자산 수신 시 동기화).
  */
-@Tag(name = "자산 관리 > 랙실장도", description = "랙 단위 장비 실장 현황 (2D/3D 뷰)")
+@Tag(name = "랙실장도", description = "랙 단위 장비 실장 현황 (2D/3D 뷰)")
 @RestController
 @RequestMapping("/api/v1/racks")
 public class RackController {

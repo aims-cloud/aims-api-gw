@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
  * [요구사항 #34] 물리/가상 자산 관리 — 사양·위치·상태 등 자산 정보 통합 등록·관리
  * 물리 자산은 1세부 하드웨어 데이터를 수신하여 표출한다 (POST /ingest).
  */
-@Tag(name = "자산 관리 > 물리·가상화 자산", description = "물리/가상 자산 관리 (물리 자산: 1세부 데이터 수신)")
+@Tag(name = "자산 관리", description = "물리/가상 자산 관리 (물리 자산: 1세부 데이터 수신)")
 @RestController
 @RequestMapping("/api/v1/assets")
 public class AssetController {

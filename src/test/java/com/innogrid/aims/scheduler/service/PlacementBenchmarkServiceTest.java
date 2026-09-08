@@ -284,6 +284,10 @@ class PlacementBenchmarkServiceTest {
 
         StrategyResult a = strategy(base, "resource-only-ungated");
         StrategyResult b = strategy(moved, "resource-only-ungated");
+        // 표본 지점 집합이 같아야 중앙값 비교가 성질을 본다 — 노브가 다른 전략의 배치를 바꿔 짝 지점이 달라지면
+        // 지표가 노브를 안 봐도 중앙값이 움직인다. 그 경우는 이 시험의 전제가 깨진 것이라 따로 말한다.
+        assertEquals(metric(a, BenchmarkRules.TEMP_STDDEV).samples(), metric(b, BenchmarkRules.TEMP_STDDEV).samples(),
+                "두 실행의 짝 지점 수가 다르다 — 중앙값이 달라도 측정이 노브를 따른 것이 아니라 표본이 달라진 것이다");
         assertEquals(median(a, BenchmarkRules.TEMP_STDDEV), median(b, BenchmarkRules.TEMP_STDDEV),
                 "열관성 계수가 온도 표준편차를 움직인다 — 평가 기준이 엔진의 가정이라는 뜻이다");
         assertEquals(median(a, BenchmarkRules.WARN_ZONE_NODES), median(b, BenchmarkRules.WARN_ZONE_NODES),
@@ -633,7 +637,8 @@ class PlacementBenchmarkServiceTest {
                 BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV, BenchmarkRules.UNMEASURED_SPREAD);
 
         int moved = 0;
-        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.SPARSE)) {
+        int spreadMoved = 0;
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
             Board full = service.compare(boardId, "heavytail").boards().get(0);
             Board less = fewer.compare(boardId, "heavytail").boards().get(0);
 
@@ -649,19 +654,23 @@ class PlacementBenchmarkServiceTest {
                         String where = boardId + " " + a.loadRatioPercent() + "% " + a.powerControl() + " "
                                 + sb.strategyId() + " " + mb.key();
                         if (mayMove.contains(mb.key())) {
-                            if (!Objects.equals(ma.median(), mb.median()) || ma.samples() != mb.samples()) moved++;
+                            if (!Objects.equals(ma, mb)) {
+                                moved++;
+                                if (BenchmarkRules.UNMEASURED_SPREAD.equals(mb.key())) spreadMoved++;
+                            }
                             continue;
                         }
-                        assertEquals(mb.median(), ma.median(), where + ": 대조군을 넣었다고 이 값이 움직였다 — 전략 실행이 독립이 아니다");
-                        assertEquals(mb.samples(), ma.samples(), where);
-                        assertEquals(mb.valid(), ma.valid(), where);
+                        // 레코드 전체 비교 — 중앙값만 보면 min·max·사유만 움직이는 누수가 초록불로 지나간다
+                        assertEquals(mb, ma, where + ": 대조군을 넣었다고 이 칸이 움직였다 — 전략 실행이 독립이 아니다");
                     }
                 }
             }
         }
         // 주 결과판에서는 새 대조군이 어느 지점의 짝도 바꾸지 않을 수 있다(전 노드 계측·건수 동일). 그래서 판을 합쳐 본다 —
-        // 계측 공백판의 미계측 격차는 전략 간 값이라 대조군 하나가 빠지면 반드시 움직인다.
-        assertTrue(moved > 0, "두 판 어디서도 셀 단위 키가 움직이지 않았다 — 이 시험이 허용 목록을 실제로 시험하지 못했다");
+        // 계측 공백판의 미계측 격차는 전략 간 값이라 대조군 하나가 빠지면 반드시 움직인다. 그 키가 움직였는지를 따로 세어야
+        // "무언가 움직였다"가 아니라 "움직여야 할 것이 움직였다"를 본다.
+        assertTrue(spreadMoved > 0, "계측 공백판의 미계측 격차가 한 칸도 안 움직였다 — 대조군을 뺀 실행이 같은 실행이라는 뜻이라, 이 시험이 허용 목록을 시험하지 못했다");
+        assertTrue(moved >= spreadMoved);
     }
 
     /** 우리 엔진은 레지스트리가 밝히는 것을 전부 담는다 — 이름을 적어 두면 엔진이 늘 때 조용히 빠진다. */
@@ -998,9 +1007,9 @@ class PlacementBenchmarkServiceTest {
                 }
             }
         }
-        // 짝 지점이 0 인 셀은 판의 성질이라 강제하지 않는다. 다만 하나도 없으면 위 단언이 아무것도 안 봤다는 뜻이므로
-        // 그 사실을 남긴다 — 통과가 아니라 "확인 대상 없음" 으로 읽어야 한다.
-        System.out.println("[gate] 짝 지점 0 인 전략·셀 수: " + checked);
+        // 수용 불가 부하(110%)는 판정 규칙이 일부러 넣은 지점이라 세 판 모두 짝 지점 0 인 셀이 있어야 한다. 하나도 없으면
+        // 위 단언이 아무것도 안 본 것이므로 통과가 아니라 실패다 — 로그로 남기면 초록불이 "확인함"으로 읽힌다.
+        assertTrue(checked > 0, "짝 지점 0 인 셀이 세 판 어디에도 없다 — 110% 부하가 전략을 구분하지 못한다는 뜻이고, 이 시험이 아무것도 보지 않았다");
     }
 
     /** 시각 지점을 훑었으므로 최솟값 ≤ 중앙값 ≤ 최댓값 이고, 폭이 0 이 아닌 지표가 있어야 한다. */

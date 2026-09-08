@@ -11,7 +11,7 @@ public enum PortalLogType {
     AUDIT,
     /** 인프라에 실제 영향을 주는 작업 — 진행중 상태가 있고 완료가 나중에 갱신된다 */
     ACTION,
-    /** 알람 발생·해소·확인 이벤트 — 원장은 alarm_histories, 여기엔 요약 행만 */
+    /** 알람 발생·해소·확인 이벤트 — 원장은 alarm_history, 여기엔 요약 행만 */
     ALARM,
     /** 백엔드 내부 동작·외부 연동 상태 — 상태 변화가 있을 때만 기록 */
     SYSTEM,

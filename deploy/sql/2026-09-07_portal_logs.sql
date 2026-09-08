@@ -1,7 +1,7 @@
 -- 포털 로그 테이블 (feat/log)
 -- 포털에서 일어난 일(사용자 조작·인증·인프라 작업·알람 이벤트·시스템 동작)을 한 테이블에 모으고 type 으로 구분한다
 -- (docs/08 포털 로그 설계 §3.1). 관측 > 로그 관리 화면이 조회한다.
--- 알람 원장(alarm_histories)·작업은 ref_type/ref_id 로 약하게 참조하며 FK 를 걸지 않는다.
+-- 알람 원장(alarm_history)·작업은 ref_type/ref_id 로 약하게 참조하며 FK 를 걸지 않는다.
 -- VM PostgreSQL은 ddl-auto: validate 이므로 배포 전 수동 실행 필요:
 --   psql -U aims -d aims -f 2026-09-07_portal_logs.sql
 

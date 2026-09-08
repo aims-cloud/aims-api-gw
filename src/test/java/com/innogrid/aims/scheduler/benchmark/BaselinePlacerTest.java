@@ -346,6 +346,15 @@ class BaselinePlacerTest {
         SchedulingResult onlyUnmeasuredFits = place(BaselinePlacers.coolestFirst(), big, nodes);
         assertEquals("u1", onlyUnmeasuredFits.selectedNodeId(), "계측 노드가 전부 부적격이면 미계측으로 간다 — 후보에서 빼지 않는다");
         assertTrue(onlyUnmeasuredFits.reason().contains("전부 부적격"), onlyUnmeasuredFits.reason());
+
+        // 계측 노드가 하나도 없는 판에서는 "전부 부적격"이 거짓이다 — 사유가 그 사실을 그대로 적어야 한다
+        List<NodeResource> noneMeasured = List.of(
+                node("v2", 16, 65536, 10, 10, 0, 800, 0),
+                node("v1", 16, 65536, 10, 10, 0, 800, 0));
+        SchedulingResult blind = place(BaselinePlacers.coolestFirst(), small, noneMeasured);
+        assertEquals("v1", blind.selectedNodeId(), "온도 정보가 없으면 nodeId 순 첫 적격 노드가 남는다");
+        assertTrue(blind.reason().contains("계측 노드가 없어"), blind.reason());
+        assertFalse(blind.reason().contains("전부 부적격"), "계측 노드가 없는데 부적격이라고 쓰면 거짓이다: " + blind.reason());
     }
 
     /**

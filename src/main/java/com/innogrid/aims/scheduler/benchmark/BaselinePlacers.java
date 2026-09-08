@@ -176,7 +176,8 @@ public final class BaselinePlacers {
      * {@code ThermalModel} 을 쓰면 {@link #pabfd} 가 {@code realMarginalPower} 를 쓰는 것과 같아져 대조군이 우리 모델을
      * 조금 바꾼 것이 되고, 생성식(오라클)을 쓰면 평가자의 식이 전략에 새는 것이다. 그래서 <b>엔진이 보는 것만</b>
      * 본다: {@code NodeResource} 의 실측 온도. 예약은 실측 온도를 바꾸지 않으므로 한 시각 지점 안에서 선택 순서는
-     * 상수이고, 가장 시원한 노드에 CPU 상한(C2)까지 <b>쌓인다</b>. 이것은 "초기 온도로 정렬한 통합"이며 기제가
+     * 상수이고, 가장 시원한 노드에 제약이 막을 때까지 <b>쌓인다</b>(비교 판들에서는 배치 후 예상 온도 제약이 시원한
+     * 노드에 닿지 않아 실제로 막는 것은 CPU 상한 C2 다). 이것은 "초기 온도로 정렬한 통합"이며 기제가
      * {@link #bfd} 와 같다 — 그 열과의 차이가 곧 정렬 기준에 온도를 넣은 효과의 전부다. 이 사실은 판정 규칙의
      * 한계 문구가 밝힌다.</p>
      *
@@ -306,12 +307,20 @@ public final class BaselinePlacers {
         }
         if (chosen == null) return noEligible(label, candidates);
 
-        String reason = measured(chosen.node())
-                ? String.format("[%s] 실측 온도 최저 %s (%.1f°C) — 열 모델 없이 지금 온도만 보고 고른다 (후보 %d개, 적격 %d개)",
-                        label, chosen.node().getNodeId(), chosen.node().getTemperatureCelsius(),
-                        candidates.size(), eligibleCount(candidates))
-                : String.format("[%s] 계측 노드가 전부 부적격이라 미계측 %s 를 고른다 (후보 %d개, 적격 %d개)",
-                        label, chosen.node().getNodeId(), candidates.size(), eligibleCount(candidates));
+        boolean anyMeasured = candidates.stream().anyMatch(c -> measured(c.node()));
+        String reason;
+        if (measured(chosen.node())) {
+            reason = String.format("[%s] 실측 온도 최저 %s (%.1f°C) — 열 모델 없이 지금 온도만 보고 고른다 (후보 %d개, 적격 %d개)",
+                    label, chosen.node().getNodeId(), chosen.node().getTemperatureCelsius(),
+                    candidates.size(), eligibleCount(candidates));
+        } else if (anyMeasured) {
+            reason = String.format("[%s] 계측 노드가 전부 부적격이라 미계측 %s 를 고른다 (후보 %d개, 적격 %d개)",
+                    label, chosen.node().getNodeId(), candidates.size(), eligibleCount(candidates));
+        } else {
+            // 계측 노드가 하나도 없는 판이면 "전부 부적격"은 거짓이다 — 온도 정보가 없어 nodeId 순 첫 적격 노드가 남았을 뿐이다.
+            reason = String.format("[%s] 계측 노드가 없어 온도로 고를 수 없다 — nodeId 순 첫 적격 노드 %s (후보 %d개, 적격 %d개)",
+                    label, chosen.node().getNodeId(), candidates.size(), eligibleCount(candidates));
+        }
 
         // 총점은 다른 대조군처럼 0~1 로 두되, 근거는 details 의 온도다 — 표에서 "왜 이 노드였나"를 온도로 되짚을 수
         // 있어야 한다. 미계측은 온도 0 이 아니라 계측 표시 0 으로 구분한다(NodeScore 의 열 칸은 여전히 0 + 미계산 표시).

@@ -766,7 +766,9 @@ public class PlacementBenchmarkService {
             }
             all.add(strategy);
         }
-        if (baselineOrder == BASELINE_ORDER && !baselines.keySet().equals(Set.copyOf(BASELINE_ORDER))) {
+        // 참조 비교(==)가 아니라 equals 다 — List.copyOf 가 같은 인스턴스를 돌려주는 것은 구현 노트일 뿐이라,
+        // 참조로 걸면 어느 날 이 검사가 조용히 영구히 꺼진다. 그것이 바로 이 검사가 막으려는 사고다.
+        if (BASELINE_ORDER.equals(baselineOrder) && !baselines.keySet().equals(Set.copyOf(BASELINE_ORDER))) {
             throw new IllegalStateException("구현은 있는데 순서 목록에 없는 대조군이 있다 — 열이 조용히 빠진다: "
                     + baselines.keySet() + " vs " + BASELINE_ORDER);
         }

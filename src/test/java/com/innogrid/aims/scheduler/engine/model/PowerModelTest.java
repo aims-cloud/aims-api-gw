@@ -269,6 +269,17 @@ class PowerModelTest {
                 "실효 CPU 로 역산하면 93.6 — 예약은 그 순간의 실측 전력을 만든 부하가 아니다");
     }
 
+    /**
+     * 상한 등호 경계 — 역산값이 정격과 정확히 같으면 여전히 유효값이어야 한다. 가드가
+     * {@code estimate > pMax} 가 아니라 {@code estimate >= pMax} 로 바뀌면 이 경계에서
+     * 대체값(150)으로 조용히 떨어진다.
+     */
+    @DisplayName("추정이 정격과 정확히 같은 경계는 여전히 유효값이다")
+    @Test
+    void an_estimate_exactly_at_capacity_is_still_valid() {
+        assertEquals(500.0, model.wakeupPower(node(0, 500, 500)), 1e-9);
+    }
+
     @DisplayName("플래그를 끄면 유휴 역산도 대체값으로 돌아간다")
     @Test
     void wakeup_power_is_off_by_the_flag() {

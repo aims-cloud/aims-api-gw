@@ -76,7 +76,10 @@ class PowerTrendScenarioTest {
         // t1 n3(110,0.02,500)≈102.0408, n4(100,0.01,500)≈95.9596 → 합≈198.0004 → round 198.00
         // t2 n4(100,0.01,500)≈95.9596 → round 95.96
         // t3 전부 가동이라 회수 0(변화 없음)
-        double[] expectedReclaim = {337.18, 198.00, 95.96, 0};
+        double n2t0 = PowerOptimizationService.round((150 - 500 * 0.03) / 0.97);
+        double n3t0 = PowerOptimizationService.round((110 - 500 * 0.02) / 0.98);
+        double n4t0 = PowerOptimizationService.round((100 - 500 * 0.01) / 0.99);
+        double[] expectedReclaim = {n2t0 + n3t0 + n4t0, n3t0 + n4t0, n4t0, 0};
         double[] expectedTotal = {560, 620, 680, 760};
         for (int i = 0; i < 4; i++) {
             Point p = trend.points().get(i);

@@ -77,18 +77,21 @@ class PowerOptimizationTrendTest {
         // 반납분은 wakeupPower — 유휴 2대 다 계측돼 실측에서 역산한다:
         // n2(P=160,u=0.02,Pmax=500): (160-500*0.02)/0.98 = 150/0.98 ≈ 153.0612
         // n3(P=150,u=0.01,Pmax=500): (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646
-        // 합 ≈ 299.5259 → round 299.53
-        assertEquals(299.53, p1.reclaimableIdleWatts(), EPS,
+        // 합 ≈ 299.5259 → round 299.53 (개별 반올림 후 합산하면 142.86+146.46 처럼 어긋난다 —
+        // 서비스는 raw 합을 낸 뒤 한 번만 반올림한다)
+        assertEquals(PowerOptimizationService.round((160 - 500 * 0.02) / 0.98 + (150 - 500 * 0.01) / 0.99),
+                p1.reclaimableIdleWatts(), EPS,
                 "(160-500*0.02)/0.98 + (150-500*0.01)/0.99 ≈ 299.53");
         assertEquals(0.40, p1.maxPeiRaw(), EPS);          // 80/200
         assertEquals(0.0067, p1.minPeiRaw(), 1e-3);       // 1/150
         assertEquals(3, p1.evaluableNodes()); assertTrue(p1.measured());
 
         // n3(P=150,u=0.01,Pmax=500) 만 유휴: (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646 → round 146.46
-        assertEquals(2, p2.activeNodes()); assertEquals(146.46, p2.reclaimableIdleWatts(), EPS);
+        assertEquals(2, p2.activeNodes());
+        assertEquals(PowerOptimizationService.round((150 - 500 * 0.01) / 0.99), p2.reclaimableIdleWatts(), EPS);
         assertEquals(3, p3.activeNodes()); assertEquals(0.0, p3.reclaimableIdleWatts(), EPS);
         assertTrue(p1.reclaimableIdleWatts() > p2.reclaimableIdleWatts() && p2.reclaimableIdleWatts() > p3.reclaimableIdleWatts(),
-                "회수 가능 전력이 300 → 150 → 0 으로 줄어든다");
+                "회수 가능 전력이 " + p1.reclaimableIdleWatts() + " → " + p2.reclaimableIdleWatts() + " → 0 으로 줄어든다");
     }
 
     @DisplayName("전력 메트릭이 없으면 measured false 전력 지표 null 가동 수만 낸다")

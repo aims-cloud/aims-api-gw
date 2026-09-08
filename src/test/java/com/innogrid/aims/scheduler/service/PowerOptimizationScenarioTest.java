@@ -84,10 +84,13 @@ class PowerOptimizationScenarioTest {
         // 유휴-2(P=150,u=0.01,Pmax=500): (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646
         // 유휴-3(P=155,u=0.03,Pmax=500): (155-500*0.03)/0.97 = 140/0.97 ≈ 144.3299
         // 합 ≈ 433.6517 → round 433.65
-        assertEquals(433.65, result.cluster().reclaimableIdleWatts(), 1e-6,
+        double expected = PowerOptimizationService.round((150 - 500 * 0.02) / 0.98)
+                + PowerOptimizationService.round((150 - 500 * 0.01) / 0.99)
+                + PowerOptimizationService.round((155 - 500 * 0.03) / 0.97);
+        assertEquals(expected, result.cluster().reclaimableIdleWatts(), 1e-6,
                 "(150-500*0.02)/0.98 + (150-500*0.01)/0.99 + (155-500*0.03)/0.97 ≈ 433.65");
         assertEquals(3, result.findings().stream().filter(f -> f.type().equals("IDLE_NODE")).count());
-        assertEquals(433.65, result.summary().estimatedSavingWatts(), 1e-6);
+        assertEquals(expected, result.summary().estimatedSavingWatts(), 1e-6);
     }
 
     /**

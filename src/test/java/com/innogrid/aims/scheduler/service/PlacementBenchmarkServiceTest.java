@@ -1159,6 +1159,21 @@ class PlacementBenchmarkServiceTest {
         assertEquals("heavytail-4class", response.assumptions().workloadDistribution());
     }
 
+    /**
+     * 생성식 문구가 유휴 역산의 범위(계측된 유휴 노드에 한함)와 그 결과가 상한일 뿐 알고리즘
+     * 개선의 증거가 아니라는 한계를 스스로 밝히는지 못 박는다. 이 문구가 빠지면 "격차 축소"가
+     * 실제 개선처럼 인용될 수 있다.
+     */
+    @DisplayName("생성식이 유휴 역산의 범위와 그 결과가 상한일 뿐이라는 한계를 함께 밝힌다")
+    @Test
+    void the_generator_formula_states_the_idle_reconstruction_and_its_ceiling() {
+        String formula = service.compare("main", "heavytail").assumptions().generatorFormula();
+
+        assertTrue(formula.contains("계측된 유휴 노드에 한해"), formula);
+        assertTrue(formula.contains("대체값"), formula);
+        assertTrue(formula.contains("상한이며 알고리즘 개선의 증거가 아니다"), formula);
+    }
+
     @DisplayName("응답이 실측이 아님과 노드 한 대를 스스로 밝힌다")
     @Test
     void the_response_states_its_own_limits() {

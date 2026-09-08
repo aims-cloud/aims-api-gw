@@ -27,10 +27,7 @@ public class NovaClient {
 
     @Autowired
     public NovaClient(OpenStackProperties props, KeystoneClient keystone) {
-        this(props, keystone, RestClient.builder()
-                .baseUrl(props.getComputeUrl() == null ? "" : props.getComputeUrl())
-                .defaultHeader("Content-Type", "application/json")
-                .build());
+        this(props, keystone, OpenStackRestClients.build(props.getComputeUrl(), props.isVerifyTls()));
     }
 
     NovaClient(OpenStackProperties props, KeystoneClient keystone, RestClient rest) {

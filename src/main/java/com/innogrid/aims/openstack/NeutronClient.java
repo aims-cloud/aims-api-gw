@@ -29,10 +29,7 @@ public class NeutronClient {
 
     @Autowired
     public NeutronClient(OpenStackProperties props, KeystoneClient keystone) {
-        this(props, keystone, RestClient.builder()
-                .baseUrl(props.getNetworkUrl() == null ? "" : props.getNetworkUrl())
-                .defaultHeader("Content-Type", "application/json")
-                .build());
+        this(props, keystone, OpenStackRestClients.build(props.getNetworkUrl(), props.isVerifyTls()));
     }
 
     NeutronClient(OpenStackProperties props, KeystoneClient keystone, RestClient rest) {

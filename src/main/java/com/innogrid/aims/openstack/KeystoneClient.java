@@ -35,10 +35,7 @@ public class KeystoneClient {
 
     @Autowired
     public KeystoneClient(OpenStackProperties props) {
-        this(props, RestClient.builder()
-                .baseUrl(props.getAuthUrl() == null ? "" : props.getAuthUrl())
-                .defaultHeader("Content-Type", "application/json")
-                .build());
+        this(props, OpenStackRestClients.build(props.getAuthUrl(), props.isVerifyTls()));
     }
 
     KeystoneClient(OpenStackProperties props, RestClient rest) {

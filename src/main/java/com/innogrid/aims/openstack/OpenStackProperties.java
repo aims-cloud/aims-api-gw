@@ -35,6 +35,9 @@ public class OpenStackProperties {
     private String projectName;
     private String domainName;
 
+    /** TLS 인증서 검증 여부. 사설 인증서 HTTPS 환경에서는 false로 설정 (기본 true). */
+    private boolean verifyTls = true;
+
     /** 필수 접속 정보가 모두 설정되어 있는지 여부. 미설정 환경에서는 연동 API가 503을 반환한다. */
     public boolean isConfigured() {
         return notBlank(authUrl) && notBlank(username) && notBlank(password) && notBlank(projectName);
@@ -60,4 +63,6 @@ public class OpenStackProperties {
     public void setProjectName(String projectName) { this.projectName = projectName; }
     public String getDomainName() { return domainName; }
     public void setDomainName(String domainName) { this.domainName = domainName; }
+    public boolean isVerifyTls() { return verifyTls; }
+    public void setVerifyTls(boolean verifyTls) { this.verifyTls = verifyTls; }
 }

@@ -256,17 +256,33 @@ class PlacementBenchmarkServiceTest {
     @Test
     void the_temperature_metrics_do_not_follow_the_engine_inertia_knob() {
         SchedulerProperties tuned = new SchedulerProperties();
-        // 기본 0.15 의 서른 배. 엔진 모델로 재고 있다면 예약 25% 인 노드의 온도가 2.25배로 뛰어 경고 구간이
-        // 계측 노드 전부가 된다 — 여섯 배(0.9)로는 경고 구간 노드 수가 우연히 같을 수 있어 변이가 살아남았다.
-        tuned.getThermal().setInertiaK(5.0);
+        // 기본 0.15 의 두 배. 온도 분포 지표는 총량과 같이 <b>전 전략의 배치 건수가 같은 지점</b>에서만 값이
+        // 나오는데, 노브를 서른 배로 돌리면 게이트가 켜진 다른 전략이 저부하에서도 배치에 실패해 어느 셀에도
+        // 짝 지점이 남지 않는다 — 그러면 비교할 값 자체가 없다. 두 배면 짝은 남고, 엔진 모델로 재고 있었다면
+        // 예약이 있는 노드의 온도가 (1+0.15r)→(1+0.30r) 로 움직여 4자리 반올림한 표준편차가 달라진다.
+        // 경고 구간 노드 수는 정수라 작은 흔들림에 우연히 같을 수 있으므로, 이 시험의 힘은 표준편차 쪽에 있다.
+        tuned.getThermal().setInertiaK(0.30);
         PlacementBenchmarkService other = serviceWith(tuned);
 
-        Cell base = cell(service.compare("main", "heavytail").boards().get(0), 60, "UNAVAILABLE");
-        Cell moved = cell(other.compare("main", "heavytail").boards().get(0), 60, "UNAVAILABLE");
+        // 어느 셀에서 짝이 사라질지는 노브 값에 따라 다르므로 셀을 하나로 못 박지 않고, 두 실행 모두에서 값이
+        // 나온 첫 셀을 고른다. 그런 셀이 없으면 시험은 아무것도 안 본 것이라 실패다.
+        Board baseBoard = service.compare("main", "heavytail").boards().get(0);
+        Board movedBoard = other.compare("main", "heavytail").boards().get(0);
+        Cell base = null;
+        Cell moved = null;
+        for (Cell candidate : baseBoard.cells()) {
+            Cell counterpart = cell(movedBoard, candidate.loadRatioPercent(), candidate.powerControl());
+            if (median(strategy(candidate, "resource-only-ungated"), BenchmarkRules.TEMP_STDDEV) != null
+                    && median(strategy(counterpart, "resource-only-ungated"), BenchmarkRules.TEMP_STDDEV) != null) {
+                base = candidate;
+                moved = counterpart;
+                break;
+            }
+        }
+        assertNotNull(base, "두 실행 모두에서 온도 표준편차가 나온 셀이 없다 — 값이 없으면 이 시험이 아무것도 보지 않는다");
 
         StrategyResult a = strategy(base, "resource-only-ungated");
         StrategyResult b = strategy(moved, "resource-only-ungated");
-        assertNotNull(median(a, BenchmarkRules.TEMP_STDDEV), "값이 없으면 이 시험이 아무것도 보지 않는다");
         assertEquals(median(a, BenchmarkRules.TEMP_STDDEV), median(b, BenchmarkRules.TEMP_STDDEV),
                 "열관성 계수가 온도 표준편차를 움직인다 — 평가 기준이 엔진의 가정이라는 뜻이다");
         assertEquals(median(a, BenchmarkRules.WARN_ZONE_NODES), median(b, BenchmarkRules.WARN_ZONE_NODES),
@@ -842,6 +858,76 @@ class PlacementBenchmarkServiceTest {
                         s.strategyId() + ": 짝이 온전한 셀인데 표본이 전 지점이 아니다");
             }
         }
+    }
+
+    /**
+     * 온도 분포 두 지표는 총량과 <b>같은 지점</b>에서만 표본에 들어가야 한다. 생성식 온도는 CPU 의 함수라
+     * 덜 배치한 전략은 CPU 를 덜 얹어 덜 뜨겁고 분포도 덜 벌어진다 — 건수가 다른 지점을 그냥 세면 열이
+     * 아니라 배치량을 재게 된다. 개입 횟수는 시도당 계수라 성공률과 같이 전 지점을 센다.
+     *
+     * <p>판 셋을 다 본다 — 짝이 어긋나는 셀이 어느 판에서 나올지는 판의 성질이라 하나만 보면 우연히
+     * 게이트가 한 번도 작동하지 않은 채 통과할 수 있다.</p>
+     */
+    @DisplayName("온도 분포 두 지표는 총량과 같은 지점에서만 세고 개입 횟수는 성공률과 같이 전 지점을 센다")
+    @Test
+    void the_temperature_distribution_metrics_are_paired_like_the_totals() {
+        boolean anyGateFired = false;
+
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            assertTrue(board.measuredNodeCount() >= 2, boardId + ": 계측 노드가 둘 미만이면 이 시험이 게이트를 못 본다");
+
+            for (Cell c : board.cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    String where = boardId + " " + c.loadRatioPercent() + "% " + c.powerControl() + " " + s.strategyId();
+                    MetricValue totals = metric(s, BenchmarkRules.GENERATOR_POWER);
+                    MetricValue rate = metric(s, BenchmarkRules.PLACEMENT_RATE);
+
+                    for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
+                        MetricValue thermal = metric(s, key);
+                        assertEquals(totals.samples(), thermal.samples(),
+                                where + " " + key + ": 표본 수가 총량과 다르다 — 짝이 아닌 지점을 세고 있다");
+                        assertEquals(totals.median() == null, thermal.median() == null,
+                                where + " " + key + ": 총량이 무효인 셀에서 값이 살아 있다(또는 반대)");
+                    }
+                    assertEquals(rate.samples(), metric(s, BenchmarkRules.C3_INTERVENTIONS).samples(),
+                            where + ": 개입 횟수는 시도당 계수라 성공률과 같은 지점 수여야 한다");
+
+                    if (totals.samples() < rate.samples()) anyGateFired = true;
+                }
+            }
+        }
+        assertTrue(anyGateFired, "세 판 어디서도 짝이 어긋난 지점이 없다 — 게이트가 한 번도 작동하지 않아 이 시험이 아무것도 보지 않았다");
+    }
+
+    /**
+     * 짝 지점이 하나도 없으면 온도 분포 두 지표도 총량처럼 <b>값을 싣지 않고 사유를 적는다</b>. 값이 남아 있으면
+     * valid 플래그를 보지 않은 인용자에게는 그냥 숫자다. 그런 셀이 지금 판에 없으면 이 시험은 그 사실을 알린다 —
+     * 없다는 것을 조용히 통과로 바꾸지 않는다.
+     */
+    @DisplayName("짝 지점이 하나도 없는 셀에서는 온도 분포 두 지표도 값 없이 사유만 싣는다")
+    @Test
+    void with_no_paired_point_the_temperature_distribution_metrics_carry_a_reason_and_no_number() {
+        int checked = 0;
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+            for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    if (metric(s, BenchmarkRules.GENERATOR_POWER).samples() > 0) continue;
+                    for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
+                        MetricValue m = metric(s, key);
+                        String where = boardId + " " + c.loadRatioPercent() + "% " + s.strategyId() + " " + key;
+                        assertNull(m.median(), where + ": 짝 지점이 없는데 값이 실렸다");
+                        assertEquals(0, m.samples(), where);
+                        assertNotNull(m.invalidReason(), where + ": 사유가 없다");
+                        assertTrue(m.invalidReason().contains("배치 건수가 같은 시각 지점이 없다"), where + ": " + m.invalidReason());
+                    }
+                    checked++;
+                }
+            }
+        }
+        // 짝 지점이 0 인 셀은 판의 성질이라 강제하지 않는다. 다만 하나도 없으면 위 단언이 아무것도 안 봤다는 뜻이므로
+        // 그 사실을 남긴다 — 통과가 아니라 "확인 대상 없음" 으로 읽어야 한다.
+        System.out.println("[gate] 짝 지점 0 인 전략·셀 수: " + checked);
     }
 
     /** 시각 지점을 훑었으므로 최솟값 ≤ 중앙값 ≤ 최댓값 이고, 폭이 0 이 아닌 지표가 있어야 한다. */

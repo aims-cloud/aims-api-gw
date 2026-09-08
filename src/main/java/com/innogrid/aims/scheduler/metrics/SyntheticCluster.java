@@ -17,7 +17,7 @@ import org.yaml.snakeyaml.Yaml;
  *
  * <p>YAML 한 장이 MDC·노드·기준값을 준다. 값은 <b>시각의 함수</b>라 같은 시각·같은 파일이면 언제 물어도 같다(재현 가능).
  * 사인 곡선(주기 {@code periodMinutes}) 위에 노드별 위상을 얹어 노드마다 다른 곡선을 만들고, 진폭은 {@code swing}
- * (사용률 %p)이다. 전력은 유휴 전력 + (정격 − 유휴) × CPU 사용률로 CPU 를 따라가고, 온도는 기준 온도 + CPU 기여로 따라간다.
+ * (사용률 %p)이다. 전력은 유휴 전력 + (정격 − 유휴) × CPU 사용률^{@code powerExponent}(기본 1 — 선형)로 CPU 를 따라가고, 온도는 기준 온도 + CPU 기여로 따라간다.
  * {@code ipmi: false} 인 노드는 전력·온도 메트릭이 <b>없다</b>(실환경의 미계측 노드 재현).</p>
  *
  * <p>정격 전력 {@code capacityWatts} 는 파일에 적어 두지만 이 단계에서는 읽기만 한다 — 배치 엔진의 정격은 설정
@@ -40,10 +40,13 @@ public final class SyntheticCluster {
     private final int periodMinutes;
     private final double swing;
     private final long seed;
+    private final double powerExponent;
     private final List<Node> nodes;
 
-    SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed, List<Node> nodes) {
+    SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
+                     double powerExponent, List<Node> nodes) {
         this.name = name; this.job = job; this.periodMinutes = periodMinutes; this.swing = swing; this.seed = seed;
+        this.powerExponent = powerExponent;
         this.nodes = List.copyOf(nodes);
     }
 
@@ -68,6 +71,10 @@ public final class SyntheticCluster {
         int period = num(map.get("periodMinutes"), 60).intValue();
         double swing = num(map.get("swing"), 15).doubleValue();
         long seed = num(map.get("seed"), 7).longValue();
+        double powerExponent = num(map.get("powerExponent"), 1.0).doubleValue();
+        if (!(powerExponent > 0) || !Double.isFinite(powerExponent)) {
+            throw new IllegalArgumentException("powerExponent 는 0 보다 큰 유한한 값이어야 합니다: " + location + " = " + powerExponent);
+        }
         Object rawNodes = map.get("nodes");
         if (!(rawNodes instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("nodes 가 비었습니다: " + location);
         List<Node> nodes = new ArrayList<>();
@@ -88,7 +95,7 @@ public final class SyntheticCluster {
                     num(n.get("networkRxBps"), 1_000_000).doubleValue(), num(n.get("networkTxBps"), 800_000).doubleValue(),
                     str(n.get("trait"), ""), n.get("swing") == null ? null : num(n.get("swing"), swing).doubleValue()));
         }
-        return new SyntheticCluster(name, job, period, swing, seed, nodes);
+        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes);
     }
 
     private static String str(Object v, String dflt) { return v == null ? dflt : String.valueOf(v); }
@@ -114,6 +121,12 @@ public final class SyntheticCluster {
      * 60 분이라고 가정하면 파일이 바뀌는 순간 조용히 같은 위상만 반복해서 훑게 된다.
      */
     public int periodMinutes() { return periodMinutes; }
+
+    /**
+     * 전력 생성식의 지수 β. 기본 1.0(선형) — 파일에 적지 않은 클러스터는 예전 그대로다.
+     * 1 보다 크면 저부하에서 전력이 선형보다 낮은 <b>볼록</b> 판이 되고, 1 보다 작으면 오목 판이 된다.
+     */
+    public double powerExponent() { return powerExponent; }
     public List<Node> nodes() { return nodes; }
     public int mdcCount() { return (int) nodes.stream().map(Node::mdcId).distinct().count(); }
     public Optional<Node> node(String nodeId) { return nodes.stream().filter(n -> n.nodeId().equals(nodeId)).findFirst(); }
@@ -143,9 +156,19 @@ public final class SyntheticCluster {
         return clamp(node.diskUsage() + 0.5 * wave(node, epochSeconds), 0, 100);   // 디스크는 거의 안 움직인다
     }
 
-    /** 전력 = 유휴 + (정격 − 유휴) × CPU 사용률. IPMI 없는 노드는 호출자가 묻지 않는다. */
+    /**
+     * 전력 = 유휴 + (정격 − 유휴) × 사용률^β. IPMI 없는 노드는 호출자가 묻지 않는다.
+     *
+     * <p>β=1.0 이면 <b>예전 식을 글자 그대로</b> 탄다. {@code Math.pow(x, 1.0) == x} 는 참이지만
+     * 예전 식은 좌결합 {@code ((정격−유휴) × cpu) / 100} 이고 일반식은 {@code (정격−유휴) × (cpu/100)^β} 라
+     * 결합 순서가 달라 마지막 비트가 어긋난다 — 지수를 적지 않은 판·운영 모의 모드의 출력을
+     * 비트까지 그대로 두려고 분기를 남긴다.</p>
+     */
     public double powerWatts(Node node, long epochSeconds) {
-        return node.idleWatts() + (node.capacityWatts() - node.idleWatts()) * cpuUsage(node, epochSeconds) / 100.0;
+        double dyn = node.capacityWatts() - node.idleWatts();
+        double cpu = cpuUsage(node, epochSeconds);
+        if (powerExponent == 1.0) return node.idleWatts() + dyn * cpu / 100.0;   // 좌결합 원형 — 괄호를 넣으면 비트 동일이 깨진다
+        return node.idleWatts() + dyn * Math.pow(cpu / 100.0, powerExponent);
     }
 
     /** 온도 = 기준 + CPU 사용률의 0.3 배 (100% 이면 +30°C). */

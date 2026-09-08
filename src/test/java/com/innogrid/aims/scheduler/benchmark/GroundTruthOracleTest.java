@@ -116,21 +116,21 @@ class GroundTruthOracleTest {
     @DisplayName("전원 제어가 없으면 배치 증분은 동적분뿐이다")
     @Test
     void marginal_power_without_control_is_dynamic_only() {
-        assertEquals(10.0, oracle.marginalPowerWatts("busan-02:9100", 2, true, PowerControl.UNAVAILABLE), EPS,
+        assertEquals(10.0, oracle.marginalPowerWatts("busan-02:9100", 0.0, 2, true, PowerControl.UNAVAILABLE), EPS,
                 "busan-02 는 동적 범위 (500−380)=120W·24코어 — 2코어면 120 × 2/24 = 10.0W. "
                         + "빈 노드여도 이미 통전되어 있으므로 유휴 전력이 새로 들지 않는다");
-        assertEquals(oracle.marginalPowerWatts("busan-02:9100", 2, true, PowerControl.UNAVAILABLE),
-                oracle.marginalPowerWatts("busan-02:9100", 2, false, PowerControl.UNAVAILABLE), EPS,
+        assertEquals(oracle.marginalPowerWatts("busan-02:9100", 0.0, 2, true, PowerControl.UNAVAILABLE),
+                oracle.marginalPowerWatts("busan-02:9100", 0.0, 2, false, PowerControl.UNAVAILABLE), EPS,
                 "전원 제어가 없으면 빈 노드였는지가 증분을 바꾸지 않는다 — 깨울 것이 없다");
     }
 
     @DisplayName("전원 제어가 있으면 빈 노드의 실제 유휴가 더해진다")
     @Test
     void marginal_power_with_control_adds_the_real_idle() {
-        assertEquals(390.0, oracle.marginalPowerWatts("busan-02:9100", 2, true, PowerControl.AVAILABLE), EPS,
+        assertEquals(390.0, oracle.marginalPowerWatts("busan-02:9100", 0.0, 2, true, PowerControl.AVAILABLE), EPS,
                 "동적분 10.0W + 실제 유휴 380W = 390.0W — 엔진이라면 이 자리에 정격×0.3 = 150W 를 넣어 "
                         + "160W 로 계산한다(모델 오사양 230W)");
-        assertEquals(10.0, oracle.marginalPowerWatts("busan-02:9100", 2, false, PowerControl.AVAILABLE), EPS,
+        assertEquals(10.0, oracle.marginalPowerWatts("busan-02:9100", 0.0, 2, false, PowerControl.AVAILABLE), EPS,
                 "이미 도는 노드면 깨우는 비용이 없어 동적분 10.0W 뿐");
     }
 
@@ -215,12 +215,101 @@ class GroundTruthOracleTest {
         assertTrue(temperature.getMessage().contains(unknown), "온도도 같은 자리에서 실패한다");
 
         IllegalStateException marginal = assertThrows(IllegalStateException.class,
-                () -> oracle.marginalPowerWatts(unknown, 2, true, PowerControl.UNAVAILABLE));
+                () -> oracle.marginalPowerWatts(unknown, 0.0, 2, true, PowerControl.UNAVAILABLE));
         assertTrue(marginal.getMessage().contains(unknown), "증분도 같은 자리에서 실패한다");
 
         IllegalStateException cluster = assertThrows(IllegalStateException.class,
                 () -> oracle.clusterPowerWatts(Map.of(unknown, 10.0), Set.of(), PowerControl.UNAVAILABLE));
         assertTrue(cluster.getMessage().contains(unknown),
                 "총전력 계산에 모르는 노드가 섞이면 그 노드를 빼고 합산하지 않고 실패한다");
+    }
+
+    // ── 생성식 지수 β ────────────────────────────────────────
+
+    /** 지수 판 하나 — 손으로 검산할 수 있게 정격 500W·유휴 100W·10코어로 둔다. */
+    private static GroundTruthOracle convexOracle() {
+        String yaml = """
+                powerExponent: 1.6
+                nodes:
+                  - {nodeId: n1, cores: 10, memoryMb: 1024, idleWatts: 100, capacityWatts: 500}
+                """;
+        try {
+            java.nio.file.Path file = java.nio.file.Files.createTempFile("convex-board", ".yml");
+            file.toFile().deleteOnExit();
+            java.nio.file.Files.writeString(file, yaml);
+            return new GroundTruthOracle(SyntheticCluster.load(file.toUri().toString()));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("지수 판 임시 파일을 만들 수 없습니다", e);   // 판을 못 만들면 시험이 아무것도 재지 않는다
+        }
+    }
+
+    /**
+     * 오라클이 판 파일의 지수를 그대로 쓰는지 — 엔진이 아니라 <b>판</b>이 세계의 모양을 정한다.
+     * 부등식만 걸면 1.2 도 1.6 도 통과하므로 값으로 잠근다.
+     */
+    @DisplayName("노드 전력이 판 파일의 지수를 그대로 따른다")
+    @Test
+    void node_power_follows_the_declared_exponent() {
+        GroundTruthOracle convex = convexOracle();
+
+        for (double cpu : new double[]{0, 1, 25, 60, 100}) {
+            assertEquals(100 + 400 * Math.pow(cpu / 100.0, 1.6), convex.nodePowerWatts("n1", cpu), EPS,
+                    "cpu " + cpu + "% — 유휴 100 + 동적 400 × (u)^1.6");
+        }
+        assertTrue(convex.nodePowerWatts("n1", 50) < 100 + 400 * 0.5,
+                "지수가 1 보다 크면 중간 부하에서 선형보다 낮다 — 엔진의 유휴 역산이 선언값을 밑도는 이유다");
+        assertEquals(100.0, convex.nodePowerWatts("n1", 0), EPS, "0% 는 유휴 그대로");
+        assertEquals(500.0, convex.nodePowerWatts("n1", 100), EPS, "100% 는 지수와 무관하게 정격");
+    }
+
+    /**
+     * 증분이 <b>곡선 위 두 점의 차</b>라는 것을 고정한다. 예전 식은 기울기 하나였고 그것은 선형 판에서만
+     * 맞다 — 지수 판에서 조용히 틀린 값을 내는 자리라 시그니처에 현재 부하를 넣었다.
+     */
+    @DisplayName("지수 판의 증분은 현재 부하에 따라 다르고 선형 판에서는 같다")
+    @Test
+    void the_marginal_depends_on_the_current_load_only_when_the_curve_bends() {
+        GroundTruthOracle convex = convexOracle();
+
+        double fromIdle = convex.marginalPowerWatts("n1", 0.0, 2, false, PowerControl.UNAVAILABLE);
+        double fromHalf = convex.marginalPowerWatts("n1", 50.0, 2, false, PowerControl.UNAVAILABLE);
+        assertEquals(400 * (Math.pow(0.2, 1.6) - 0), fromIdle, EPS, "0% 에서 2코어/10 = 20%p");
+        assertEquals(400 * (Math.pow(0.7, 1.6) - Math.pow(0.5, 1.6)), fromHalf, EPS, "50% 에서 같은 2코어");
+        assertTrue(fromHalf > fromIdle,
+                "지수가 1 보다 크면 같은 코어를 이미 바쁜 노드에 얹는 쪽이 더 비싸다");
+
+        assertEquals(oracle.marginalPowerWatts("busan-02:9100", 0.0, 2, false, PowerControl.UNAVAILABLE),
+                oracle.marginalPowerWatts("busan-02:9100", 40.0, 2, false, PowerControl.UNAVAILABLE), EPS,
+                "선형 판(β=1)에서는 예전처럼 현재 부하와 무관하다");
+    }
+
+    /** 사용률은 물리적으로 0~100 밖이 없다 — 자르지 않으면 정격을 넘는 전력이 만들어진다. */
+    @DisplayName("증분 계산의 사용률은 양쪽 다 0~1 로 잘린다")
+    @Test
+    void the_marginal_clamps_both_utilizations() {
+        GroundTruthOracle convex = convexOracle();
+
+        assertEquals(0.0, convex.marginalPowerWatts("n1", 150.0, 2, false, PowerControl.UNAVAILABLE), EPS,
+                "이미 100% 로 잘린 노드에는 더 얹을 동적분이 없다");
+        assertEquals(convex.marginalPowerWatts("n1", 0.0, 2, false, PowerControl.UNAVAILABLE),
+                convex.marginalPowerWatts("n1", -30.0, 2, false, PowerControl.UNAVAILABLE), EPS,
+                "음수 사용률은 0% 와 같다");
+        assertEquals(400.0, convex.marginalPowerWatts("n1", 0.0, 40, false, PowerControl.UNAVAILABLE), EPS,
+                "코어보다 큰 요구는 100% 로 잘려 동적 범위 전부(400W) 가 된다");
+    }
+
+    /**
+     * 파서가 이미 막지만 오라클도 스스로 막는다 — 운영 모의 모드는 오라클을 거치지 않으므로 검증이 파서에
+     * 있어야 하고, 하네스가 파서를 거치지 않고 클러스터를 만들면 여기서 크게 실패해야 한다.
+     */
+    @DisplayName("지수가 0 이하인 클러스터로는 오라클을 만들 수 없다")
+    @Test
+    void a_non_positive_exponent_fails_loudly() {
+        SyntheticCluster broken = org.mockito.Mockito.mock(SyntheticCluster.class);
+        org.mockito.Mockito.when(broken.powerExponent()).thenReturn(-1.0);
+        org.mockito.Mockito.when(broken.nodes()).thenReturn(List.of());
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> new GroundTruthOracle(broken));
+        assertTrue(e.getMessage().contains("지수"), "무엇이 잘못됐는지가 메시지에 있어야 한다: " + e.getMessage());
     }
 }

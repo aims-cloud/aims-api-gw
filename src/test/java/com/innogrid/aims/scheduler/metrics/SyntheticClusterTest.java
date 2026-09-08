@@ -69,5 +69,44 @@ class SyntheticClusterTest {
         assertEquals(500.0, n.capacityWatts());
         assertEquals(0, n.gpus());
         assertEquals("mdc-nodes", c.job());
+        assertEquals(1.0, c.powerExponent(), "지수를 적지 않은 파일은 예전 그대로 선형이다");
+    }
+
+    // ── 전력 생성식의 지수 ────────────────────────────────────
+
+    @DisplayName("지수는 0 보다 큰 유한한 값이어야 한다")
+    @Test
+    void power_exponent_must_be_positive() {
+        assertEquals(1.6, SyntheticCluster.parse(new Yaml().load(
+                "powerExponent: 1.6\nnodes:\n  - {nodeId: a, cores: 4, memoryMb: 1024}\n"), "x").powerExponent());
+        assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(new Yaml().load(
+                "powerExponent: 0\nnodes:\n  - {nodeId: a, cores: 4, memoryMb: 1024}\n"), "x"),
+                "0 이면 전 노드가 부하와 무관하게 정격을 먹는다 — 판이 아니라 오류다");
+        assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(new Yaml().load(
+                "powerExponent: -0.5\nnodes:\n  - {nodeId: a, cores: 4, memoryMb: 1024}\n"), "x"),
+                "음수면 0% 에서 전력이 무한대가 된다");
+    }
+
+    /**
+     * 지수를 일반화하면서 <b>기존 판의 값이 한 비트도 움직이지 않았는지</b> 본다. 예전 식은 좌결합
+     * {@code ((정격−유휴) × cpu) / 100} 이라 괄호를 옮기기만 해도 마지막 비트가 달라지고, 그러면 판
+     * 다이제스트는 같은데 숫자가 미세하게 바뀐 표가 나온다. 그래서 오차 허용 없이 {@code ==} 로 잠근다.
+     */
+    @DisplayName("지수가 1 인 클러스터의 전력은 예전 식과 비트까지 같다")
+    @Test
+    void a_linear_cluster_reproduces_the_old_formula_bit_for_bit() {
+        SyntheticCluster c = SyntheticCluster.load("classpath:scheduler/synthetic-cluster.yml");
+        long base = 1_800_000_000L;
+        long step = c.periodMinutes() * 60L / 12;
+
+        for (SyntheticCluster.Node n : c.nodes()) {
+            for (int i = 0; i < 12; i++) {
+                long t = base + step * i;
+                double expected = n.idleWatts()
+                        + (n.capacityWatts() - n.idleWatts()) * c.cpuUsage(n, t) / 100.0;
+                assertEquals(expected, c.powerWatts(n, t),
+                        () -> n.nodeId() + " @" + t + " — 지수 일반화가 기존 판의 값을 흔들면 안 된다");
+            }
+        }
     }
 }

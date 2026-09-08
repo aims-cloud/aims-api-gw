@@ -58,6 +58,16 @@ public class PowerModel {
         return node.getPowerCapacityWatts() * props.getIdleRatio();
     }
 
+    /**
+     * 빈 노드를 깨울 때 새로 드는 전력(W) — 깨우기 비용과 반납 가능 전력 계열 전용.
+     * 진단 지표(비례성·비낭비)와 동적 범위 {@code (Pmax − Pidle)} 는 이 값을 쓰지 않는다 —
+     * 그쪽 기준선에 실측을 넣으면 지표가 항등이 되고 전력 제약의 동적 범위가 무너진다.
+     * 지금은 대체값(정격 × idleRatio)과 같고, 실측 역산은 다음 커밋에서 이 메서드 본문만 바꾼다.
+     */
+    public double wakeupPower(NodeResource node) {
+        return idlePower(node);
+    }
+
     /** 전력 여유율 점수 (0~1). */
     public double headroomScore(NodeResource node) {
         return node.powerHeadroomPercent() / 100.0;
@@ -154,15 +164,16 @@ public class PowerModel {
      *
      * <p>클러스터 총 전력은 "가동 중인 노드의 유휴 전력 + 동적 전력"의 합이다. 이미 도는
      * 노드에 얹으면 동적 증가분만 들지만, 비어 있는 노드에 처음 얹으면 그 노드의 <b>유휴
-     * 전력이 통째로 새로 든다.</b> 500W 용량 · 유휴 비율 0.3 인 노드에 2코어(전체 8코어)를
-     * 얹을 때 가동 중이면 87.5W, 비어 있으면 237.5W 로 <b>2.7배</b> 차이가 난다.</p>
+     * 전력이 통째로 새로 든다.</b>(그 값은 {@link #wakeupPower}) 500W 용량 · 유휴 비율 0.3 인
+     * 노드에 2코어(전체 8코어)를 얹을 때 가동 중이면 87.5W, 비어 있으면 237.5W 로 <b>2.7배</b>
+     * 차이가 난다.</p>
      *
      * <p>이 한 줄이 전력 통합을 "CPU 가 10% 넘으면 보너스" 같은 임의 규칙이 아니라 물리량으로
      * 만든다. 별도의 통합 항이 필요 없어진다.</p>
      */
     public double realMarginalPower(NodeResource node, int requiredCpu) {
         double dynamic = marginalPowerOnCurve(node, requiredCpu);
-        return isActive(node) ? dynamic : dynamic + idlePower(node);
+        return isActive(node) ? dynamic : dynamic + wakeupPower(node);
     }
 
     /**

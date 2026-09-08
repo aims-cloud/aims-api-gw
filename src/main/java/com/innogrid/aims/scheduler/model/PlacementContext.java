@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -214,11 +215,14 @@ public class PlacementContext {
      * <b>실현된 절감이 아니라 "통합했다면 아낄 수 있었을 양"</b>이다. 실현 불가능한 절감을
      * 주장하지 않으면서 알고리즘 효과를 재기 위한 지표이며, 나중에 전원 제어가 생기면 그대로
      * 실현 값이 된다.</p>
+     *
+     * <p>노드별 유휴 전력은 {@code PowerModel.wakeupPower} 가 정한다 — 비율 인자를 받으면
+     * 모델과 갈라진다.</p>
      */
-    public double reclaimableIdleWatts(double activeCpuPercent, double idleRatio) {
+    public double reclaimableIdleWatts(double activeCpuPercent, PowerModel powerModel) {
         return nodes.stream()
                 .filter(n -> n.effectiveCpuUsagePercent() <= activeCpuPercent)   // activeNodeCount 와 같은 기준
-                .mapToDouble(n -> n.getPowerCapacityWatts() * idleRatio)
+                .mapToDouble(powerModel::wakeupPower)
                 .sum();
     }
 

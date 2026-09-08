@@ -11,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 
 import com.innogrid.aims.scheduler.dto.NodePowerSpecRequest;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -100,7 +101,7 @@ class NodePowerSpecScenarioTest {
     }
 
     private double reclaimable(PlacementContext ctx) {
-        return ctx.reclaimableIdleWatts(properties.getPower().getActiveCpuPercent(), properties.getPower().getIdleRatio());
+        return ctx.reclaimableIdleWatts(properties.getPower().getActiveCpuPercent(), new PowerModel(properties));
     }
 
     /** 배치에는 저장된 워크로드가 필요하다. 시나리오 뒤에는 지운다. */

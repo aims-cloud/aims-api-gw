@@ -38,7 +38,7 @@ public class PortalLogService {
                 .build());
     }
 
-    /** ALARM — 알람 발생·해소·확인 요약 행. 원장은 alarm_histories, 여기엔 ref 만 */
+    /** ALARM — 알람 발생·해소·확인 요약 행. 원장은 alarm_history, 여기엔 ref 만 */
     public void alarm(String action, String content, long alarmHistoryId) {
         PortalLogContext ctx = contextResolver.resolve();          // 확인(ack)은 사용자가 있고, 발생·해소는 없다
         writer.write(PortalLogEntry.builder(PortalLogType.ALARM)

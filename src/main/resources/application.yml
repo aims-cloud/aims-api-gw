@@ -86,6 +86,12 @@ aims:
   gpu-dashboard:
     # TODO:: 실제 Thanos 연동이 완료되면 Mock 설정 제거
     mock-enabled: ${AIMS_GPU_DASHBOARD_MOCK_ENABLED:false}
+  alarm:
+    evaluation:
+      # 정책 평가 주기(초) — 메트릭당 Thanos 즉시 쿼리 1회. 기동 시 고정되어 변경은 재기동 후 반영 (docs/09 A.6 #6)
+      interval-seconds: ${AIMS_ALARM_EVAL_INTERVAL_SECONDS:60}
+      # rate() 창 — 스크레이프 간격의 4배 이상, 자원 탐색기 패널 rate 창 하한(5m)과 같게 유지
+      rate-window: ${AIMS_ALARM_EVAL_RATE_WINDOW:5m}
 
 # ── JWT 설정 ───────────────────────────────────────────────
 jwt:

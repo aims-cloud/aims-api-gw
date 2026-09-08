@@ -207,6 +207,68 @@ public final class GroundTruthOracle {
         }
     }
 
+    // ── 열 상승 모델의 척도 점검 ─────────────────────────────
+
+    /**
+     * 노드마다 <b>코어 1개 예약당 온도 상승</b>을 세 식으로 나란히 낸다. 응답의 전제 블록에 싣는다.
+     *
+     * <p>세 값은 세 <b>가정</b>이고, 어느 것도 실측이 아니다. 이 표는 격차·비율·판정을 내지 않는다 —
+     * "엔진이 N배 과소평가한다"는 문장은 생성식이 옳다는 전제가 필요하고, 그 전제의 근거는 코드·문서 어디에도
+     * 없다. 게다가 그 배수는 <b>단위 선택의 산물</b>이다: 같은 엔진 식을 ℃ 로 재면 생성식보다 작고 K 로 재면
+     * 생성식보다 크다. 그래서 두 번째 열이 있다.</p>
+     *
+     * <ul>
+     *   <li>{@code engineRisePerCoreC} — 엔진 식 {@code ΔT = inertiaK × (요구코어/총코어) × T} 에 ℃ 눈금의
+     *       {@code T = baseTemperature} 를 넣은 값. 코어 1개면 {@code inertiaK × base / cores}.</li>
+     *   <li>{@code engineRisePerCoreIfKelvin} — <b>같은 식</b>에 같은 온도를 K 눈금으로 넣은 값
+     *       ({@code inertiaK × (base + 273.15) / cores}). 물리적으로 같은 상태인데 값이 다르다 —
+     *       상승분이 눈금의 원점에 비례하기 때문이다. 온도 차(ΔT)는 원점에 무관해야 하므로 이 식은
+     *       절대 척도 위에서 정의되지 않은 모델이고, 이 사실은 생성식과 무관하게 엔진 코드만으로 성립한다.</li>
+     *   <li>{@code generatorRisePerCoreC} — 생성식 {@code 온도 = base + 0.3 × CPU%} 에서 코어 1개가 CPU 를
+     *       {@code 100/cores}%p 올리므로 {@code 30 / cores}. 온도와 무관한 가산형이다 — 엔진 식과 함수형이 다르다.</li>
+     * </ul>
+     *
+     * <p>기준 온도는 {@code baseTemperature}(CPU 0%) 로 고정한다 — 판 하나에 한 값을 실으려면 시각을 타지
+     * 않아야 하고, 세 값 모두 판 파일의 상수만으로 계산된다. 정렬은 {@link #idleAssumptionGaps(double)} 와 같다.</p>
+     */
+    public List<ThermalRiseScale> thermalRiseScaleCheck(double engineInertiaK) {
+        if (!(engineInertiaK >= 0)) {
+            throw new IllegalStateException("엔진 열관성 계수는 0 이상이어야 합니다: " + engineInertiaK);
+        }
+        List<ThermalRiseScale> rows = new ArrayList<>(sortedNodeIds.size());
+        for (String nodeId : sortedNodeIds) {
+            SyntheticCluster.Node node = nodesById.get(nodeId);
+            if (node.cores() <= 0) {
+                throw new IllegalStateException("코어가 0 이하인 노드로는 열 상승을 계산할 수 없습니다: " + nodeId);
+            }
+            double base = node.baseTemperature();
+            rows.add(new ThermalRiseScale(nodeId, node.cores(), base,
+                    engineInertiaK * base / node.cores(),
+                    engineInertiaK * (base + CELSIUS_TO_KELVIN) / node.cores(),
+                    TEMPERATURE_CPU_COEFFICIENT * 100.0 / node.cores()));
+        }
+        return List.copyOf(rows);
+    }
+
+    /** 0℃ 의 절대온도. 엔진 식이 눈금 원점에 의존함을 보이는 데만 쓴다. */
+    private static final double CELSIUS_TO_KELVIN = 273.15;
+
+    /**
+     * 노드 한 대의 코어당 온도 상승 — 세 가정을 나란히. 격차·비율·판정 필드는 두지 않는다.
+     *
+     * @param nodeId                   노드 id
+     * @param cores                    총 코어 — 세 식 모두 코어에 반비례한다
+     * @param baseTemperatureC         기준 온도(℃) = CPU 0% 의 생성식 값
+     * @param engineRisePerCoreC       엔진 식을 ℃ 눈금으로 = {@code inertiaK × base / cores}
+     * @param engineRisePerCoreIfKelvin 같은 엔진 식을 K 눈금으로 = {@code inertiaK × (base + 273.15) / cores}.
+     *                                 앞 값과 다르다는 것이 척도 의존의 증거다
+     * @param generatorRisePerCoreC    생성식 상승 = {@code 30 / cores}. 온도 무관 가산형
+     */
+    public record ThermalRiseScale(String nodeId, int cores, double baseTemperatureC,
+                                   double engineRisePerCoreC, double engineRisePerCoreIfKelvin,
+                                   double generatorRisePerCoreC) {
+    }
+
     /** 노드 id 목록(정렬됨). */
     public List<String> nodeIds() {
         return sortedNodeIds;

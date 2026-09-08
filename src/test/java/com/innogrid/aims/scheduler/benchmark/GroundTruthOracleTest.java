@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle.IdleGap;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle.PowerControl;
+import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle.ThermalRiseScale;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,6 +34,51 @@ class GroundTruthOracleTest {
 
     private final GroundTruthOracle oracle =
             new GroundTruthOracle(SyntheticCluster.load("classpath:scheduler/synthetic-cluster.yml"));
+
+    // ── 열 상승 모델의 척도 점검 ─────────────────────────────
+
+    /**
+     * 세 계수가 각각 선언된 식 그대로인지 고정한다. 격차·비율 필드가 <b>없는</b> 것도 의도다 — 그것을 만드는
+     * 순간 "생성식이 옳다"를 전제하게 된다.
+     */
+    @DisplayName("코어당 열 상승 세 계수가 선언된 식과 같다")
+    @Test
+    void the_three_thermal_rise_coefficients_follow_their_declared_formulas() {
+        double k = 0.15;
+        List<ThermalRiseScale> rows = oracle.thermalRiseScaleCheck(k);
+
+        assertEquals(oracle.nodeIds(), rows.stream().map(ThermalRiseScale::nodeId).toList(),
+                "행 순서가 유휴 전력 격차 표와 같아야 나란히 읽을 수 있다");
+        for (ThermalRiseScale r : rows) {
+            assertEquals(k * r.baseTemperatureC() / r.cores(), r.engineRisePerCoreC(), EPS, r.nodeId());
+            assertEquals(k * (r.baseTemperatureC() + 273.15) / r.cores(), r.engineRisePerCoreIfKelvin(), EPS, r.nodeId());
+            assertEquals(30.0 / r.cores(), r.generatorRisePerCoreC(), EPS, r.nodeId());
+        }
+        assertTrue(rows.stream().map(ThermalRiseScale::cores).distinct().count() > 1,
+                "코어 수가 한 종류면 이 시험이 식의 코어 의존을 보지 못한다");
+    }
+
+    /**
+     * 엔진 상승 식은 온도 눈금의 <b>원점</b>에 의존한다 — 물리적으로 같은 상태를 ℃ 와 K 로 넣으면 다른 상승이 나온다.
+     * 이것이 이 표가 정당하게 주장할 수 있는 유일한 문장이고, 생성식과 무관하게 엔진 식만으로 성립한다.
+     * "엔진이 N배 과소평가"는 여기서 주장하지 않는다: ℃ 로 재면 엔진이 생성식보다 작고 K 로 재면 크다 —
+     * 배수와 부호가 단위 선택에 달려 있다.
+     */
+    @DisplayName("같은 엔진 식이 섭씨와 켈빈에서 다른 상승을 내고, 생성식과의 대소는 눈금에 따라 뒤집힌다")
+    @Test
+    void the_engine_rise_depends_on_the_temperature_scale_origin() {
+        for (ThermalRiseScale r : oracle.thermalRiseScaleCheck(0.15)) {
+            assertTrue(r.engineRisePerCoreIfKelvin() > r.engineRisePerCoreC(),
+                    r.nodeId() + ": 원점을 옮겼는데 상승이 같다면 식은 척도 불변이고 이 표는 필요 없다");
+            assertEquals((r.baseTemperatureC() + 273.15) / r.baseTemperatureC(),
+                    r.engineRisePerCoreIfKelvin() / r.engineRisePerCoreC(), EPS,
+                    r.nodeId() + ": 두 눈금의 비는 (base+273.15)/base — 코어와 무관하다");
+            assertTrue(r.engineRisePerCoreC() < r.generatorRisePerCoreC(),
+                    r.nodeId() + ": ℃ 로 재면 엔진 상승이 생성식보다 작아야 한다");
+            assertTrue(r.engineRisePerCoreIfKelvin() > r.generatorRisePerCoreC(),
+                    r.nodeId() + ": K 로 재면 엔진 상승이 생성식보다 커야 한다 — 부호가 눈금에 달렸다");
+        }
+    }
 
     @DisplayName("노드 전력은 생성식과 같다")
     @Test

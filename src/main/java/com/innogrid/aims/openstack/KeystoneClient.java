@@ -69,6 +69,18 @@ public class KeystoneClient {
         tokenExpiresAt = Instant.EPOCH;
     }
 
+    /**
+     * 현재 토큰으로 접근 가능한 프로젝트 목록.
+     * GET /auth/projects — 토폴로지 트리의 최상위(프로젝트) 계층에 사용한다.
+     */
+    public Map<String, Object> listProjects() {
+        return rest.get()
+                .uri("/auth/projects")
+                .header("X-Auth-Token", getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
     private boolean isTokenValid() {
         return cachedToken != null
                 && Instant.now().isBefore(tokenExpiresAt.minus(REFRESH_MARGIN));

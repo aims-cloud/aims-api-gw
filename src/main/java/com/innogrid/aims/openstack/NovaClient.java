@@ -59,6 +59,36 @@ public class NovaClient {
                 .body(MAP_TYPE);
     }
 
+    /** 모든 프로젝트의 VM 목록 (관리자 토큰 필요). 토폴로지 컴퓨트 레이어용. */
+    public Map<String, Object> listServersAllTenants() {
+        requireConfigured();
+        return rest.get()
+                .uri("/servers/detail?all_tenants=1")
+                .header("X-Auth-Token", keystone.getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
+    /** 가용영역 목록 — 토폴로지 컴퓨트 레이어 최상위. */
+    public Map<String, Object> listAvailabilityZones() {
+        requireConfigured();
+        return rest.get()
+                .uri("/os-availability-zone")
+                .header("X-Auth-Token", keystone.getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
+    /** 하이퍼바이저 목록 (관리자 토큰 필요) — 물리노드/하이퍼바이저 상태. */
+    public Map<String, Object> listHypervisors() {
+        requireConfigured();
+        return rest.get()
+                .uri("/os-hypervisors/detail")
+                .header("X-Auth-Token", keystone.getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
     private void requireConfigured() {
         if (props.getComputeUrl() == null || props.getComputeUrl().isBlank()) {
             throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE,

@@ -65,6 +65,12 @@ public class NeutronClient {
         return get("/v2.0/subnets/{id}", subnetId);
     }
 
+    // ── 라우터 (토폴로지 네트워크 레이어) ───────────────────────
+
+    public Map<String, Object> listRouters() {
+        return get("/v2.0/routers");
+    }
+
     // ── 포트 (네트워크 인터페이스 / IP 할당 현황) ───────────────
 
     public Map<String, Object> listPorts() {

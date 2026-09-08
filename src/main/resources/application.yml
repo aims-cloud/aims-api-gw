@@ -62,6 +62,8 @@ openstack:
   password: ${OPENSTACK_PASSWORD:}
   project-name: ${OPENSTACK_PROJECT:}
   domain-name: ${OPENSTACK_DOMAIN:Default}
+  # 사설 인증서 HTTPS 환경(자체 구축 OpenStack)에서는 false
+  verify-tls: ${OPENSTACK_VERIFY_TLS:true}
 
 # ── 메트릭 조회 설정 (Thanos Query — PromQL 호환) ──────────
 victoria-metrics:

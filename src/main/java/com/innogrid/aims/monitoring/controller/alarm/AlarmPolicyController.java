@@ -124,7 +124,9 @@ public class AlarmPolicyController {
     }
 
     @Operation(summary = "메트릭 카탈로그",
-            description = "생성 위저드 조건 설정 — 유형/메트릭 드롭다운 옵션. "
+            description = "생성 위저드 조건 설정 — 유형(CPU/Memory/File System/GPU)별 메트릭 드롭다운 옵션. "
+                    + "metric 은 정책에 저장하는 코드값(예: CPU_USED_PERCENT), displayName+unit 은 기준 문자열(CPU Used > 80%) 표기용입니다. "
+                    + "resourceType(node|vm|gpu)을 주면 그 자원 유형에 쓸 수 있는 메트릭만 돌려주고, 모르는 유형은 400 입니다. "
                     + "미리보기 차트는 자원 탐색기 trend API 를 재사용합니다.")
     @GetMapping("/metric-catalog")
     public ApiResponse<List<AlarmMetricCatalogResponse>> getMetricCatalog(

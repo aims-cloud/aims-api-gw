@@ -1,8 +1,10 @@
 package com.innogrid.aims.monitoring.service.alarm;
 
 import java.util.List;
+import java.util.Locale;
 
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmMetricCatalogResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyDetailResponse;
@@ -71,10 +73,17 @@ public class AlarmPolicyService {
         throw dataSourceNotImplemented();
     }
 
-    /** 위저드 조건 설정 — 유형별 메트릭 카탈로그 (미리보기 차트는 자원 탐색기 trend API 재사용) */
+    /**
+     * 위저드 조건 설정 — 유형별 메트릭 카탈로그 ({@link AlarmMetric} 코드 상수, 미리보기 차트는 자원 탐색기 trend API 재사용).
+     * resourceType(node|vm|gpu, 대소문자 무관)이 있으면 그 자원 유형에 쓸 수 있는 메트릭만, 없으면 전체. 모르는 유형은 400.
+     */
     public List<AlarmMetricCatalogResponse> getMetricCatalog(String resourceType) {
-        // TODO:: MetricCatalogService 와 통합 검토
-        throw dataSourceNotImplemented();
+        String type = resourceType == null || resourceType.isBlank() ? null : resourceType.trim().toLowerCase(Locale.ROOT);
+        if (type != null && !AlarmMetric.RESOURCE_TYPES.contains(type)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST,
+                    "지원하지 않는 자원 유형입니다: " + resourceType + " (node, vm, gpu)");
+        }
+        return AlarmMetric.catalog(type);
     }
 
     /** 위저드 전송 설정 — 수신자 후보 조직 트리(하위 조직 + 멤버) */

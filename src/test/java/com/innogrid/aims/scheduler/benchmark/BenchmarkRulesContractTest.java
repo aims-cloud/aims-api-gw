@@ -132,6 +132,9 @@ class BenchmarkRulesContractTest {
         assertTrue(l.contains("재평가 없는"), "재평가가 없다는 성질 — 문헌 TASA 와 갈리는 지점 — 을 밝혀야 한다");
         assertTrue(l.contains("bfd"), "자원 최밀집 열과의 차이로 해석하라는 지침이 있어야 한다");
         assertTrue(l.contains("열 지표는 헤드라인이 아니"), "대조군이 생겼다고 온도 축을 헤드라인으로 올리면 조용한 승격이다");
+        assertTrue(l.contains("제약을 켠 전 전략"),
+                "온도 제약을 '전 전략'이 받는다고 쓰면 제약 해제 변종의 셀 사유와 같은 응답 안에서 모순된다");
+        assertTrue(l.contains("기본 임계 75℃"), "75℃ 는 정책 기본값이지 상수가 아니다 — 같은 파일의 '기본 65℃' 와 어조를 맞춘다");
         assertFalse(l.contains("온도 축에는 결론을 지지하는 지표가 없다"),
                 "온도 축 참가자가 우리뿐이라는 옛 문구가 남아 있으면 대조군을 넣고도 응답이 거짓을 말한다");
     }

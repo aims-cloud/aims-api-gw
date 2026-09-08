@@ -108,10 +108,32 @@ class BenchmarkRulesContractTest {
 
         for (BenchmarkMetric m : List.of(warn, interventions)) {
             assertTrue(m.validity().contains("점수에 넣지 않"),
-                    m.key() + ": 대조군이 열을 점수에 넣지 않는다는 사실이 유효성 조건에 있어야 한다");
+                    m.key() + ": 열을 점수에 넣지 않는 대조군이 있다는 사실이 유효성 조건에 있어야 한다");
+            assertTrue(m.validity().contains("최저 온도 우선"),
+                    m.key() + ": 열을 점수에 넣는 대조군이 있다는 사실도 있어야 한다 — 없으면 온도 축 참가자가 우리뿐이라는 옛 문구다");
             assertFalse(m.validity().contains("열 모델이 없"),
                     m.key() + ": 대조군도 온도 제약은 받는다 — 코드가 증명하는 사실과 어긋나는 문구다");
         }
+    }
+
+    /**
+     * 열 대조군을 넣으면서 <b>결과보다 먼저</b> 고정하는 문구다. 대조군이 어떤 숫자를 내든 이 문장은 바뀌지 않는다 —
+     * 열 대조군은 재평가가 없어 초기 온도로 정렬한 통합에 가깝고(임계 75℃ 에서는 배치 후 예상 온도 제약이 시원한
+     * 노드에 작동하지 않는다), 그 열과 자원 최밀집 열의 차이가 정렬 기준에 온도를 넣은 효과의 전부다. 그래서 열 지표는
+     * 여전히 헤드라인이 아니다. 대조군이 자원 최밀집과 같은 숫자를 내더라도 대응은 대조군 교체가 아니라 이 문구의
+     * 강화다 — 결과를 보고 대조군을 바꾸면 사전 등록이 무의미해진다.
+     */
+    @DisplayName("한계 문구가 열 대조군의 성격과 자원 최밀집 대조 해석을 밝히고, 온도 축 결론을 여전히 주장하지 않는다")
+    @Test
+    void the_limitation_states_what_the_thermal_baseline_is_and_is_not() {
+        String l = BenchmarkRules.LIMITATION;
+
+        assertTrue(l.contains("최저 온도 우선"), "열 대조군의 이름이 한계 문구에 있어야 한다");
+        assertTrue(l.contains("재평가 없는"), "재평가가 없다는 성질 — 문헌 TASA 와 갈리는 지점 — 을 밝혀야 한다");
+        assertTrue(l.contains("bfd"), "자원 최밀집 열과의 차이로 해석하라는 지침이 있어야 한다");
+        assertTrue(l.contains("열 지표는 헤드라인이 아니"), "대조군이 생겼다고 온도 축을 헤드라인으로 올리면 조용한 승격이다");
+        assertFalse(l.contains("온도 축에는 결론을 지지하는 지표가 없다"),
+                "온도 축 참가자가 우리뿐이라는 옛 문구가 남아 있으면 대조군을 넣고도 응답이 거짓을 말한다");
     }
 
     /**
@@ -148,7 +170,7 @@ class BenchmarkRulesContractTest {
 
         assertEquals(new TreeSet<>(Set.of(BenchmarkRules.PLACEMENT_RATE, BenchmarkRules.GENERATOR_POWER,
                 BenchmarkRules.PER_WORKLOAD_POWER, BenchmarkRules.ACTIVE_NODE_DELTA)), primary);
-        assertTrue(BenchmarkRules.LIMITATION.contains("온도 축에는 결론을 지지하는 지표가 없다"),
+        assertTrue(BenchmarkRules.LIMITATION.contains("열 지표는 헤드라인이 아니"),
                 "주 지표에서 온도를 내렸으면 응답이 그 사실을 스스로 말해야 한다 — 아니면 조용한 강등이다");
     }
 

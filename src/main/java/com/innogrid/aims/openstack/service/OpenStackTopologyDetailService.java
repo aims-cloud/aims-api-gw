@@ -313,13 +313,8 @@ public class OpenStackTopologyDetailService {
             throw new BusinessException(HttpStatus.NOT_FOUND, "하이퍼바이저를 찾을 수 없습니다: " + hostname);
         }
 
-        String serviceHost = null;
-        if (found.get("service") instanceof Map<?, ?> svc) {
-            serviceHost = string(((Map<?, ?>) svc).get("host"));
-        }
-
         return new HypervisorDetail(string(found.get("hypervisor_hostname")), string(found.get("host_ip")),
-                availabilityZoneOf(serviceHost), "nova-compute",
+                availabilityZoneOf(hostname, found), "nova-compute",
                 string(found.get("state")), string(found.get("status")),
                 string(found.get("hypervisor_type")),
                 asInteger(found.get("vcpus_used")), asInteger(found.get("vcpus")),
@@ -328,18 +323,37 @@ public class OpenStackTopologyDetailService {
                 asInteger(found.get("running_vms")));
     }
 
+    /**
+     * 하이퍼바이저의 소속 가용영역.
+     * 1차: 해당 호스트에 떠 있는 VM의 OS-EXT-AZ:availability_zone (트리와 동일한 검증된 경로).
+     * 2차: os-availability-zone/detail 의 hosts 매핑 (VM 없는 호스트 대비).
+     */
     @SuppressWarnings("unchecked")
-    private String availabilityZoneOf(String host) {
-        if (host == null) return null;
+    private String availabilityZoneOf(String hostname, Map<String, Object> hypervisor) {
+        try {
+            for (Map<String, Object> server : extractList(nova.listServersAllTenants(), "servers")) {
+                if (hostname.equals(string(server.get("OS-EXT-SRV-ATTR:hypervisor_hostname")))) {
+                    String az = string(server.get("OS-EXT-AZ:availability_zone"));
+                    if (az != null && !az.isBlank()) return az;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("서버 기반 가용영역 매핑 실패: {}", e.getMessage());
+        }
+
+        String serviceHost = null;
+        if (hypervisor.get("service") instanceof Map<?, ?> svc) {
+            serviceHost = string(((Map<?, ?>) svc).get("host"));
+        }
+        String host = serviceHost != null ? serviceHost : hostname;
         try {
             for (Map<String, Object> zone : extractList(nova.listAvailabilityZonesDetail(), "availabilityZoneInfo")) {
-                Object hosts = zone.get("hosts");
-                if (hosts instanceof Map<?, ?> hostMap && hostMap.containsKey(host)) {
+                if (zone.get("hosts") instanceof Map<?, ?> hostMap && hostMap.containsKey(host)) {
                     return string(zone.get("zoneName"));
                 }
             }
         } catch (Exception e) {
-            log.warn("가용영역 매핑 실패: {}", e.getMessage());
+            log.warn("가용영역 상세 매핑 실패: {}", e.getMessage());
         }
         return null;
     }

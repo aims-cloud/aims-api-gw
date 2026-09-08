@@ -179,8 +179,10 @@ class OpenStackTopologyDetailServiceTest {
         hv.put("running_vms", 21);
         hv.put("service", Map.of("host", "com-1"));
         when(nova.listHypervisors()).thenReturn(Map.of("hypervisors", List.of(hv)));
-        when(nova.listAvailabilityZonesDetail()).thenReturn(Map.of("availabilityZoneInfo", List.of(
-                Map.of("zoneName", "nova", "hosts", Map.of("com-1", Map.of())))));
+        // 1차 경로: 이 호스트에 떠 있는 VM의 AZ
+        when(nova.listServersAllTenants()).thenReturn(Map.of("servers", List.of(
+                Map.of("OS-EXT-SRV-ATTR:hypervisor_hostname", "com-1",
+                        "OS-EXT-AZ:availability_zone", "nova"))));
 
         HypervisorDetail detail = service.getHypervisorDetail("com-1");
 
@@ -189,6 +191,20 @@ class OpenStackTopologyDetailServiceTest {
         assertThat(detail.vcpus()).isEqualTo(144);
         assertThat(detail.vcpusUsed()).isEqualTo(93);
         assertThat(detail.runningVms()).isEqualTo(21);
+        assertThat(detail.availabilityZone()).isEqualTo("nova");
+    }
+
+    @Test
+    void hypervisor_az_falls_back_to_zone_detail_when_no_vm() {
+        java.util.Map<String, Object> hv = new java.util.HashMap<>();
+        hv.put("hypervisor_hostname", "com-2");
+        hv.put("service", Map.of("host", "com-2"));
+        when(nova.listHypervisors()).thenReturn(Map.of("hypervisors", List.of(hv)));
+        when(nova.listServersAllTenants()).thenReturn(Map.of("servers", List.of())); // VM 없음
+        when(nova.listAvailabilityZonesDetail()).thenReturn(Map.of("availabilityZoneInfo", List.of(
+                Map.of("zoneName", "nova", "hosts", Map.of("com-2", Map.of())))));
+
+        HypervisorDetail detail = service.getHypervisorDetail("com-2");
         assertThat(detail.availabilityZone()).isEqualTo("nova");
     }
 

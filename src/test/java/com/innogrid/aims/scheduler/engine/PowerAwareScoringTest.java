@@ -65,7 +65,10 @@ class PowerAwareScoringTest {
         SchedulingResult result = scheduler.schedule(workload(2), nodes, policy());
 
         assertEquals(87.5, detail(result, "running", "실질한계전력W"), 1e-4);
-        assertEquals(237.5, detail(result, "parked", "실질한계전력W"), 1e-4, "150W 유휴 전력이 더해진다");
+        // parked 는 계측(250W)·유휴(2%)라 깨우기 비용을 실측에서 역산한다: (250 − 500×0.02)/(1−0.02) = 244.9W.
+        // 대체값 150W(정격×0.3)가 아니다 — 이 픽스처는 놀면서 250W 를 쓰는 노드라 깨우는 값도 그만큼이다.
+        assertEquals(87.5 + (250 - 500 * 0.02) / 0.98, detail(result, "parked", "실질한계전력W"), 1e-4,
+                "실측에서 역산한 유휴 전력 244.9W 가 더해진다");
         assertEquals(1.0, detail(result, "running", "가동중"), 1e-9);
         assertEquals(0.0, detail(result, "parked", "가동중"), 1e-9);
     }

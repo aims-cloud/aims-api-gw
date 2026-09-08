@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -24,22 +25,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PlacementContextEffectiveTest {
 
     private static final double ACTIVE_CPU = 5.0;
-    private static final double IDLE_RATIO = 0.3;
 
     private final ThermalModel thermalModel = new ThermalModel(new SchedulerProperties());
     private final double inertiaK = new SchedulerProperties().getThermal().getInertiaK();
+    private final PowerModel powerModel = new PowerModel(new SchedulerProperties());
 
     @DisplayName("이번 실행에서 깨어난 빈 노드는 가동 중으로 센다")
     @Test
     void woken_node_counts_active() {
         PlacementContext ctx = context(node("busy", 50, 45), node("empty", 1, 45));
         assertEquals(1, ctx.activeNodeCount(ACTIVE_CPU));
-        assertEquals(150.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
+        // empty 는 계측 200W·CPU 1% 라 반납 가능 전력을 실측에서 역산한다: (200 − 500×0.01)/(1−0.01) = 197.0W
+        assertEquals((200 - 500 * 0.01) / 0.99, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
 
         ctx.reserve("empty", new Workload("w", 1, 512));    // 1/8 코어 → 실효 13.5%
 
         assertEquals(2, ctx.activeNodeCount(ACTIVE_CPU), "예약으로 깨어난 노드는 가동 중이다");
-        assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9,
+        assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9,
                 "깨어난 노드의 유휴 전력은 더 이상 반납 가능하지 않다");
     }
 

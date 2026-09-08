@@ -21,6 +21,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -62,7 +63,9 @@ class ConsolidationServiceTest {
 
         assertTrue(idle.reclaimable());
         assertEquals("ALREADY_EMPTY", idle.basis());
-        assertEquals(150.0, idle.netSavingWatts(), 1e-9);
+        // 반납분은 wakeupPower — 계측된 유휴 노드(P=150,u=0.01,Pmax=500)라 실측에서 역산한다:
+        // (150 - 500*0.01)/(1-0.01) = 145/0.99 ≈ 146.4646 → round 146.46
+        assertEquals(PowerOptimizationService.round((150 - 500 * 0.01) / 0.99), idle.netSavingWatts(), 1e-6);
         assertEquals(0, idle.workloadCount());
     }
 
@@ -77,10 +80,13 @@ class ConsolidationServiceTest {
 
         assertTrue(c.reclaimable(), c.blockedReason());
         assertEquals("NET_SAVING", c.basis());
-        assertEquals(150.0, c.idlePowerWatts(), 1e-9);
-        // 8코어 중 1코어 = 0.125 → 350 × 0.125 = 43.75W
+        // 반납분은 wakeupPower — 계측된 유휴 노드(P=150,u=0.02,Pmax=500)라 실측에서 역산한다:
+        // (150 - 500*0.02)/(1-0.02) = 140/0.98 ≈ 142.8571 → round 142.86
+        assertEquals(PowerOptimizationService.round((150 - 500 * 0.02) / 0.98), c.idlePowerWatts(), 1e-6);
+        // 8코어 중 1코어 = 0.125 → 350 × 0.125 = 43.75W (host 는 가동 중이라 idlePower 기준, 안 바뀐다)
         assertEquals(43.75, c.relocationCostWatts(), 1e-4);
-        assertEquals(106.25, c.netSavingWatts(), 1e-4);
+        // 142.857142857... - 43.75 = 99.107142857... → round 99.11
+        assertEquals(PowerOptimizationService.round(140 / 0.98 - 43.75), c.netSavingWatts(), 1e-6);
         assertEquals(1, c.moves().size());
         assertEquals("host", c.moves().get(0).toNodeId());
     }
@@ -154,6 +160,23 @@ class ConsolidationServiceTest {
 
         assertFalse(c.reclaimable());
         assertTrue(c.blockedReason().contains("부하가 남아"), c.blockedReason());
+    }
+
+    /**
+     * 비율의 분모는 idlePower(가정값) 그대로 둔다 — wakeupPower 역산값을 분모에 넣으면
+     * (P - Pmax*u)/(1-u) 를 P 로 나눈 셈이 되어 1/(1-u) 항등식이 되고, 노드마다 값이 갈리던
+     * 성질이 사라진다.
+     */
+    @DisplayName("전력 비율의 분모는 가정한 유휴전력이다")
+    @Test
+    void power_ratio_uses_the_assumed_idle_as_denominator() {
+        given(List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250)), List.of());
+
+        Candidate c = find(service.diagnose(), "idle");
+
+        assertEquals(PowerOptimizationService.round(150 / (500 * 0.3)), c.powerRatioToIdle(), 1e-6);
+        assertNotEquals(PowerOptimizationService.round(1 / (1 - 0.01)), c.powerRatioToIdle(), 1e-6,
+                "분모에 역산값을 넣으면 1/(1−u) 항등");
     }
 
     // ── 상한 ──────────────────────────────────────────────────

@@ -808,7 +808,8 @@ public class PlacementBenchmarkService {
                 BenchmarkRules.POWERED_ON_CPU_PERCENT, p.getCurveAlpha(), p.getPeiWeight(),
                 p.getWasteWeight(), p.getMarginalWeight(), p.getPeiNormalizer(),
                 p.getResourceShare(), p.getDefaultCapacityWatts(),
-                p.getCapacityByNode() == null ? Map.of() : new TreeMap<>(p.getCapacityByNode()));
+                p.getCapacityByNode() == null ? Map.of() : new TreeMap<>(p.getCapacityByNode()),
+                p.isIdleFromMeasurement());
         ThermalKnobs thermal = new ThermalKnobs(t.getInertiaK(), t.getDefaultWarningCelsius(),
                 t.getCooldownMinutes(), BenchmarkRules.COOLDOWN_MINUTES_FOR_BENCHMARK);
 
@@ -826,6 +827,8 @@ public class PlacementBenchmarkService {
         canonical.add("resourceShare=" + power.resourceShare());
         canonical.add("defaultCapacityWatts=" + power.defaultCapacityWatts());
         canonical.add("capacityByNode=" + new TreeMap<>(power.capacityByNode()));
+        // 모델 형태 노브 — 값이 아니라 식이 바뀌는 자리라, 빠뜨리면 어제 표와 오늘 표가 같은 설정으로 보인다
+        canonical.add("idleFromMeasurement=" + power.idleFromMeasurement());
         canonical.add("inertiaK=" + thermal.inertiaK());
         canonical.add("defaultWarningCelsius=" + thermal.defaultWarningCelsius());
         canonical.add("cooldownMinutes=" + thermal.cooldownMinutes());

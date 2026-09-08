@@ -32,12 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   busy-y : 정격 900W, 실측 500W,                CPU 50%  → 가동 중
  *
  *   marginalPower     (고전 선형, 깨우기 비용 없음)   idle-x  87.5W  <  busy-y 157.5W
- *   realMarginalPower (유휴 가산)                    idle-x 237.5W  >  busy-y 157.5W
+ *   realMarginalPower (유휴 가산 — 계측된 유휴 노드는 실측 역산 153.1W)  idle-x 240.6W  >  busy-y 157.5W
  * </pre>
  *
  * <p>두 수식의 부등호가 <b>반대</b>다. 그래서 PABFD 는 빈 노드를, 우리 엔진은 가동 중인 노드를
  * 고른다. 정격이 큰 서버가 동적 증가분도 크다는 사실만 보면 빈 노드가 유리해 보이지만, 클러스터 총
- * 전력은 "가동 노드의 유휴 전력 + 동적 전력"이므로 빈 노드를 깨우면 유휴 150W 가 통째로 새로 든다.</p>
+ * 전력은 "가동 노드의 유휴 전력 + 동적 전력"이므로 빈 노드를 깨우면 그 노드의 유휴 전력(실측 160W 에서 역산한 153W)이 통째로 새로 든다.</p>
  */
 class PabfdVsPowerEngineTest {
 
@@ -67,7 +67,7 @@ class PabfdVsPowerEngineTest {
     /**
      * 손계산.
      * <pre>
-     * idle-x  CPU 2% ≤ 활성 기준 5% → 빈 노드 → 87.5 + 유휴 150 = 237.5W
+     * idle-x  CPU 2% ≤ 활성 기준 5% → 빈 노드 → 87.5 + 역산 유휴 153.1 = 240.6W (실측 160W 에서 역산, 대체값 150 아님)
      * busy-y  CPU 50% > 5%        → 가동 중  → 157.5W
      * </pre>
      */
@@ -77,7 +77,10 @@ class PabfdVsPowerEngineTest {
         NodeResource idle = idleNode();
         NodeResource busy = busyNode();
 
-        assertEquals(237.5, powerModel.realMarginalPower(idle, 2), 1e-9, "87.5 + 유휴 150W");
+        // idle-x 는 계측 160W·CPU 2% 라 깨우기 비용을 실측에서 역산한다: (160 − 500×0.02)/(1−0.02) = 153.1W.
+        // pabfd 가 쓰는 marginalPower(대체값 기준 87.5W)는 그대로다 — 갈리는 것은 깨우기 비용의 출처뿐이다.
+        assertEquals(87.5 + (160 - 500 * 0.02) / 0.98, powerModel.realMarginalPower(idle, 2), 1e-9,
+                "87.5 + 역산 유휴 153.1W");
         assertEquals(157.5, powerModel.realMarginalPower(busy, 2), 1e-9, "이미 도는 노드라 동적 증가분만");
         assertTrue(powerModel.realMarginalPower(idle, 2) > powerModel.realMarginalPower(busy, 2));
     }

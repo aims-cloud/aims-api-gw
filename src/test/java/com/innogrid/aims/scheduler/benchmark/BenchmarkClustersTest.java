@@ -57,7 +57,7 @@ class BenchmarkClustersTest {
     @DisplayName("주 결과판에는 유휴 노드가 다섯 대다")
     @Test
     void main_board_has_five_idle_nodes() {
-        double activeCpu = new SchedulerProperties().getPower().getActiveCpuPercent();   // 5.0
+        double activeCpu = BenchmarkRules.POWERED_ON_CPU_PERCENT;   // 하네스의 회계 문턱 — 엔진 노브가 아니다
         List<Node> nodes = clusters.get(BenchmarkClusters.MAIN).nodes();
         List<Node> idle = nodes.stream().filter(n -> peakCpu(n) <= activeCpu).toList();
         assertEquals(5, idle.size(), "유휴 5대 · 가동 9대 — 통합의 이득을 잴 빈 노드가 있어야 한다");
@@ -183,7 +183,7 @@ class BenchmarkClustersTest {
     @DisplayName("계측 공백판의 미계측 노드에 유휴와 가동이 섞여 있다")
     @Test
     void sparse_board_mixes_idle_and_active_unmeasured() {
-        double activeCpu = new SchedulerProperties().getPower().getActiveCpuPercent();
+        double activeCpu = BenchmarkRules.POWERED_ON_CPU_PERCENT;
         List<Node> unmeasured = clusters.get(BenchmarkClusters.SPARSE).nodes().stream()
                 .filter(n -> !n.ipmi()).toList();
         assertEquals(5, unmeasured.size());

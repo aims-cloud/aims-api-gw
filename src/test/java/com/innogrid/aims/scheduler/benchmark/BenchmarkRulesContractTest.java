@@ -240,6 +240,17 @@ class BenchmarkRulesContractTest {
                 "히스테리시스는 시계열 운영의 성질이라 단발 비교에 넣으면 셀 실행에 걸린 실제 시간이 결과를 바꾼다");
     }
 
+    /**
+     * 통전 회계 문턱은 판정 규칙이다. 엔진 노브를 그대로 읽으면 운영에서 그 값을 조정할 때 같은 배치
+     * 결정의 가동 노드 회계가 달라져, 두 실행의 표를 나란히 놓을 수 없다.
+     */
+    @DisplayName("통전 문턱이 판정 규칙으로 고정되어 있다")
+    @Test
+    void the_powered_on_threshold_is_pre_registered() {
+        assertEquals(5.0, BenchmarkRules.POWERED_ON_CPU_PERCENT, 1e-9,
+                "이 값을 바꾸면 같은 배치 결정의 가동 노드 회계가 달라진다 — 결과를 보고 바꿀 수 없게 여기서 고정한다");
+    }
+
     @DisplayName("배치 건수가 같을 때만 총량을 비교한다")
     @Test
     void totals_comparable_only_when_placed_counts_match() {

@@ -79,6 +79,24 @@ public final class BenchmarkRules {
     /** 열 히스테리시스는 시계열 운영의 성질이라 단발 비교에 넣을 근거가 없다. */
     public static final int COOLDOWN_MINUTES_FOR_BENCHMARK = 0;
 
+    /**
+     * 통전 판정 문턱(CPU %) — <b>비교의 회계 규칙</b>이지 엔진의 노브가 아니다.
+     *
+     * <p>지금 값은 {@code SchedulerProperties.Power.activeCpuPercent} 기본값과 같은 5.0 이다. 같은 숫자를
+     * 여기 다시 적는 이유는 저쪽이 <b>엔진의 판단 노브</b>이기 때문이다 — 운영에서 그 값을 조정하면 통전
+     * 판정이 따라 움직여 <b>같은 배치 결정의 회계가 달라지고</b>, "가동 노드를 몇 대 늘렸나"가 알고리즘이
+     * 아니라 설정의 함수가 된다. 판정 규칙은 결과보다 먼저 고정되어야 하므로 이 상수는 여기 있고, 엔진
+     * 노브와 벌어지면 응답의 설정 스냅샷이 두 값을 나란히 밝힌다.</p>
+     *
+     * <p>이것은 "엔진에서 독립했다"는 주장이 아니다 — 값의 출처가 엔진이고, 주 결과판의 유휴 노드는
+     * 이 문턱 아래 머물도록 설계됐다. 주장할 수 있는 것은 <b>민감도 0</b> 이다: 주 결과판은 유휴 5대가
+     * 3% 이하, 가동 9대가 20% 이상이라 문턱이 3~20% 어디에 있어도 통전 집합이 같다.</p>
+     *
+     * <p>엔진이 <b>스스로 믿은 비용</b>({@code PowerModel.realMarginalPower})은 여전히 엔진 노브로 계산한다 —
+     * 그건 엔진의 믿음을 재는 값이므로 하네스가 대신 정해 주면 안 된다.</p>
+     */
+    public static final double POWERED_ON_CPU_PERCENT = 5.0;
+
     /** 워크로드 메모리 = 코어 × 이 값. 이 값을 틀리면 전력이 아니라 메모리 산술을 측정한다. */
     public static final int MEMORY_MB_PER_CORE = 4096;
 

@@ -177,7 +177,7 @@ public final class BenchmarkRules {
                     Direction.LOWER_IS_BETTER, Role.SECONDARY,
                     "계측 노드가 둘 이상일 때만, 그리고 총량 지표와 같이 전 전략의 배치 건수가 같은 시각 지점에서만 — "
                             + "덜 배치한 전략은 CPU 를 덜 얹어 분포가 덜 벌어지므로 건수가 다르면 열이 아니라 배치량을 재게 된다. "
-                            + "값은 배치 후 CPU 분포를 생성식에 넣어 낸 것이지 센서 판독이 아니다. "
+                            + "값은 배치 후 CPU 분포를 생성식에 넣어 낸 것이지 센서 판독이 아니다. 분모는 계측 노드 수 n(모집단 표준편차)이다. "
                             + "평균은 배치로 거의 안 움직이지만 분산은 움직인다"),
 
             new BenchmarkMetric(UNMEASURED_RATE, "미계측 노드 배치 비율", "%",

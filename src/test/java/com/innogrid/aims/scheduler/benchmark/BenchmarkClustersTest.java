@@ -176,6 +176,8 @@ class BenchmarkClustersTest {
         List<Node> main = mainBoard.nodes();
         List<Node> sparse = sparseBoard.nodes();
         assertEquals(main.size(), sparse.size(), "두 판의 노드 수가 다르면 결과 차이를 센서 공백으로 돌릴 수 없다");
+        assertEquals(mainBoard.powerExponent(), sparseBoard.powerExponent(),
+                "생성식 지수가 다르면 두 판의 세계가 다르다 — 계측 플래그만 다르다는 주장이 거짓이 된다");
         int ipmiDiff = 0;
         for (int i = 0; i < main.size(); i++) {
             Node a = main.get(i);
@@ -190,6 +192,8 @@ class BenchmarkClustersTest {
             assertEquals(a.memoryUsage(), b.memoryUsage(), "memoryUsage" + at);
             assertEquals(a.idleWatts(), b.idleWatts(), "idleWatts" + at);
             assertEquals(a.capacityWatts(), b.capacityWatts(), "capacityWatts" + at);
+            assertEquals(a.believedCapacityWatts(), b.believedCapacityWatts(),
+                    "believedCapacityWatts" + at + " — 엔진에 알려 준 정격까지 같아야 차이를 센서 공백으로 돌릴 수 있다");
             assertEquals(a.baseTemperature(), b.baseTemperature(), "baseTemperature" + at);
             assertEquals(a.diskTotalGb(), b.diskTotalGb(), "diskTotalGb" + at);
             assertEquals(a.diskUsage(), b.diskUsage(), "diskUsage" + at);

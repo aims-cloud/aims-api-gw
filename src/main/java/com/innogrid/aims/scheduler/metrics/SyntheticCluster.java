@@ -17,18 +17,29 @@ import org.yaml.snakeyaml.Yaml;
  *
  * <p>YAML 한 장이 MDC·노드·기준값을 준다. 값은 <b>시각의 함수</b>라 같은 시각·같은 파일이면 언제 물어도 같다(재현 가능).
  * 사인 곡선(주기 {@code periodMinutes}) 위에 노드별 위상을 얹어 노드마다 다른 곡선을 만들고, 진폭은 {@code swing}
- * (사용률 %p)이다. 전력은 유휴 전력 + (정격 − 유휴) × CPU 사용률^{@code powerExponent}(기본 1 — 선형)로 CPU 를 따라가고, 온도는 기준 온도 + CPU 기여로 따라간다.
+ * (사용률 %p)이다. 전력은 유휴 전력 + (정격 − 유휴) × CPU 사용률^{@code powerExponent}(기본 1 — 선형)로
+ * CPU 를 따라가고, 온도는 기준 온도 + CPU 기여로 따라간다.
  * {@code ipmi: false} 인 노드는 전력·온도 메트릭이 <b>없다</b>(실환경의 미계측 노드 재현).</p>
  *
- * <p>정격 전력 {@code capacityWatts} 는 파일에 적어 두지만 이 단계에서는 읽기만 한다 — 배치 엔진의 정격은 설정
- * {@code capacityByNode} 에서 오며, 원장으로 바꾸는 일은 로드맵 #6 이다.</p>
+ * <p>정격 전력에는 두 값이 있다. <b>수집 경로</b>(운영 모의 모드)에서 배치 엔진이 보는 정격은 설정
+ * {@code capacityByNode}·{@code defaultCapacityWatts} 에서 오고, 이 파일의 {@code capacityWatts} 는 생성식이
+ * 전력을 만들 때만 쓴다. <b>판 경로</b>(배치 비교)에서는 이 파일이 원장 노릇을 한다 — 엔진이 보는 정격도
+ * 파일에서 오며 그 값은 {@code believedCapacityWatts}(적지 않으면 {@code capacityWatts})다. 그래서 판
+ * 경로에서는 설정의 정격이 읽히지 않는다.</p>
  */
 public final class SyntheticCluster {
 
-    /** 노드 한 대의 기준값. 사용률은 %(0~100), 메모리 MB, 디스크 GB, 네트워크 bytes/s. */
+    /**
+     * 노드 한 대의 기준값. 사용률은 %(0~100), 메모리 MB, 디스크 GB, 네트워크 bytes/s.
+     *
+     * <p>{@code capacityWatts} 는 <b>생성식이 쓰는 정격</b>이고, {@code believedCapacityWatts} 는
+     * <b>배치 엔진에게 알려 주는 정격</b>이다. 둘을 가른 이유는 엔진이 정격을 틀리게 알고 있을 때
+     * 무엇이 흔들리는지를 보는 판이 필요해서다 — 적지 않으면 두 값이 같아 예전 판과 다르지 않다.</p>
+     */
     public record Node(String mdcId, String nodeId, int cores, long memoryMb, int gpus,
                        double cpuUsage, double memoryUsage, double diskTotalGb, double diskUsage,
-                       boolean ipmi, double idleWatts, double capacityWatts, double baseTemperature,
+                       boolean ipmi, double idleWatts, double capacityWatts, double believedCapacityWatts,
+                       double baseTemperature,
                        double networkRxBps, double networkTxBps, String trait, Double swing) {
 
         double memoryTotalBytes() { return memoryMb * 1024.0 * 1024.0; }
@@ -87,10 +98,17 @@ public final class SyntheticCluster {
             int cores = num(n.get("cores"), 0).intValue();
             long memoryMb = num(n.get("memoryMb"), 0).longValue();
             if (cores <= 0 || memoryMb <= 0) throw new IllegalArgumentException("cores·memoryMb 는 0 보다 커야 합니다: " + nodeId);
+            double cap = num(n.get("capacityWatts"), 500).doubleValue();
+            double idle = num(n.get("idleWatts"), 150).doubleValue();
+            double believed = num(n.get("believedCapacityWatts"), cap).doubleValue();
+            if (!(believed > 0) || believed <= idle) {
+                throw new IllegalArgumentException("엔진에 알려 줄 정격은 0 보다 크고 유휴 전력보다 커야 합니다: "
+                        + nodeId + " (알려 줄 정격 " + believed + "W, 유휴 " + idle + "W)");
+            }
             nodes.add(new Node(str(n.get("mdcId"), "mdc-01"), nodeId, cores, memoryMb, num(n.get("gpus"), 0).intValue(),
                     pct(n.get("cpuUsage"), 20, nodeId), pct(n.get("memoryUsage"), 40, nodeId),
                     num(n.get("diskTotalGb"), 500).doubleValue(), pct(n.get("diskUsage"), 30, nodeId),
-                    bool(n.get("ipmi"), true), num(n.get("idleWatts"), 150).doubleValue(), num(n.get("capacityWatts"), 500).doubleValue(),
+                    bool(n.get("ipmi"), true), idle, cap, believed,
                     num(n.get("baseTemperature"), 40).doubleValue(),
                     num(n.get("networkRxBps"), 1_000_000).doubleValue(), num(n.get("networkTxBps"), 800_000).doubleValue(),
                     str(n.get("trait"), ""), n.get("swing") == null ? null : num(n.get("swing"), swing).doubleValue()));

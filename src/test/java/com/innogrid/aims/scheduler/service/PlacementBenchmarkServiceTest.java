@@ -1116,6 +1116,55 @@ class PlacementBenchmarkServiceTest {
                 "이 판을 만든 의도가 응답에 적혀 있어야 한다: " + adversarial.role());
     }
 
+    /**
+     * 기존 세 판은 엔진에게 <b>생성식과 같은 정격</b>을 준다. 정격을 어긋나게 주는 판이 생겨도 이 세 판은
+     * 예전 그대로여야 하고, 그렇지 않으면 새 판과의 비교가 정격 어긋남이 아니라 판 전체의 변화를 재게 된다.
+     */
+    @DisplayName("기존 세 판은 엔진이 믿는 정격과 생성식 정격이 노드마다 같다")
+    @Test
+    void the_three_existing_boards_tell_the_engine_the_generator_capacity() {
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            assertFalse(board.idleAssumptionGaps().isEmpty(), boardId);
+            for (IdleGap gap : board.idleAssumptionGaps()) {
+                assertEquals(gap.capacityWatts(), gap.engineBelievedCapacityWatts(),
+                        boardId + "/" + gap.nodeId() + ": 정격을 어긋나게 주지 않는 판인데 두 값이 다르다");
+            }
+        }
+    }
+
+    /**
+     * 유휴 격차 표의 <b>열이 이름대로</b> 실렸는지 본다. 전 필드가 {@code double} 이라 열을 하나 끼워 넣으면
+     * 뒤의 값들이 한 칸씩 밀려도 컴파일이 통과하고, 그러면 표는 그럴듯한 숫자로 가득 찬 채 거짓이 된다.
+     * 오라클이 직접 낸 행과 응답의 행을 열마다 맞춰 본다.
+     */
+    @DisplayName("유휴 격차 표의 각 열이 오라클의 같은 이름 값과 같다")
+    @Test
+    void every_idle_gap_column_carries_the_value_of_its_own_name() {
+        Board board = service.compare("main", "heavytail").boards().get(0);
+        double engineRatio = properties.getPower().getIdleRatio();
+        Map<String, com.innogrid.aims.scheduler.benchmark.GroundTruthOracle.IdleGap> expected =
+                new com.innogrid.aims.scheduler.benchmark.GroundTruthOracle(new BenchmarkClusters().get("main"))
+                        .idleAssumptionGaps(engineRatio).stream()
+                        .collect(Collectors.toMap(g -> g.nodeId(), g -> g));
+
+        assertEquals(expected.size(), board.idleAssumptionGaps().size());
+        for (IdleGap row : board.idleAssumptionGaps()) {
+            var o = Objects.requireNonNull(expected.get(row.nodeId()), row.nodeId() + " 가 오라클에 없다");
+            String at = row.nodeId() + ": ";
+            assertEquals(o.capacityWatts(), row.capacityWatts(), 1e-9, at + "capacityWatts");
+            assertEquals(o.engineBelievedCapacityWatts(), row.engineBelievedCapacityWatts(), 1e-9,
+                    at + "engineBelievedCapacityWatts");
+            assertEquals(o.declaredIdleWatts(), row.declaredIdleWatts(), 1e-9, at + "declaredIdleWatts");
+            assertEquals(o.engineAssumedIdleWatts(), row.engineAssumedIdleWatts(), 1e-9, at + "engineAssumedIdleWatts");
+            assertEquals(o.absoluteGapWatts(), row.gapWatts(), 1e-9, at + "gapWatts");
+            assertEquals(o.declaredIdleRatio(), row.declaredIdleRatio(), 1e-9, at + "declaredIdleRatio");
+            assertEquals(o.generatorWattsPerCore(), row.generatorWattsPerCore(), 1e-9, at + "generatorWattsPerCore");
+            assertEquals(row.engineBelievedCapacityWatts() * engineRatio, row.engineAssumedIdleWatts(), 1e-9,
+                    at + "엔진 가정은 엔진이 믿는 정격 × 유휴 비율이다");
+        }
+    }
+
     // ── 분포 두 종 ────────────────────────────────────────────
 
     /** 두 분포는 서로 다른 표본을 만든다 — 같으면 분포 축이 아무것도 확인하지 못한다. */

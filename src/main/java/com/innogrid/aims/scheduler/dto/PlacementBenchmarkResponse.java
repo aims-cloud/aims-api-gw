@@ -132,7 +132,8 @@ public record PlacementBenchmarkResponse(
      * @param periodMinutes        파동 주기
      * @param cooldownMinutes      벤치마크에서 쓴 냉각 대기(0). 히스테리시스는 시계열 운영의 성질이라 단발 비교에서 뺐다
      * @param memoryMbPerCore      워크로드 메모리 = 코어 × 이 값
-     * @param engineIdleRatio      엔진이 가정하는 유휴 전력 비율. 파일 선언값과의 차가 엔진 가정과 생성식의 격차다
+     * @param engineIdleRatio      엔진이 가정하는 유휴 전력 비율. 파일 선언값과의 차가 엔진 가정과 생성식의 격차다 —
+     *                             엔진 가정은 이 비율 × <b>엔진이 믿는 정격</b>({@code idleAssumptionGaps[].engineBelievedCapacityWatts})이다
      * @param generatorFormula     전력·온도를 만든 생성식 — 이 값들이 실측이 아니라 식의 출력임을 응답이 스스로 밝힌다
      * @param powerControlNote     전원 제어 두 판의 뜻
      * @param randomSeedCount      무작위 대조군에 쓴 시드 수
@@ -256,12 +257,15 @@ public record PlacementBenchmarkResponse(
      * 생성식 기준 전력이 엔진 점수의 재탕이 아니라는 것이 표에서 바로 보인다 — 어느 쪽이 실물에 가까운지는
      * 이 표가 말하지 않는다.</p>
      *
+     * @param engineBelievedCapacityWatts 판이 엔진에게 알려 준 정격(W). 판이 정격을 어긋나게 주지 않으면
+     *                              {@code capacityWatts} 와 같다. 판 경로에서 엔진이 보는 정격은 설정이 아니라 이 값이다
      * @param declaredIdleWatts     파일에 선언된 유휴 전력(W). 실측이 아니다
      * @param generatorWattsPerCore 생성식 기준 코어당 동적 전력(W/코어)
      */
     public record IdleGap(
             String nodeId,
             double capacityWatts,
+            double engineBelievedCapacityWatts,
             double declaredIdleWatts,
             double engineAssumedIdleWatts,
             double gapWatts,

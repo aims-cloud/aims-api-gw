@@ -228,19 +228,46 @@ class GroundTruthOracleTest {
 
     /** 지수 판 하나 — 손으로 검산할 수 있게 정격 500W·유휴 100W·10코어로 둔다. */
     private static GroundTruthOracle convexOracle() {
-        String yaml = """
+        return oracleFrom("""
                 powerExponent: 1.6
                 nodes:
                   - {nodeId: n1, cores: 10, memoryMb: 1024, idleWatts: 100, capacityWatts: 500}
-                """;
+                """);
+    }
+
+    /** 판 파일 한 장을 임시 파일로 써서 오라클을 만든다 — 파서를 그대로 거쳐야 검증도 같이 걸린다. */
+    private static GroundTruthOracle oracleFrom(String yaml) {
         try {
             java.nio.file.Path file = java.nio.file.Files.createTempFile("convex-board", ".yml");
             file.toFile().deleteOnExit();
             java.nio.file.Files.writeString(file, yaml);
             return new GroundTruthOracle(SyntheticCluster.load(file.toUri().toString()));
         } catch (java.io.IOException e) {
-            throw new IllegalStateException("지수 판 임시 파일을 만들 수 없습니다", e);   // 판을 못 만들면 시험이 아무것도 재지 않는다
+            throw new IllegalStateException("판 임시 파일을 만들 수 없습니다", e);   // 판을 못 만들면 시험이 아무것도 재지 않는다
         }
+    }
+
+    /**
+     * 엔진 가정 열이 <b>엔진이 믿는 정격</b>을 기준으로 서는지 고정한다. 생성식 정격을 쓰면 정격을 어긋나게
+     * 준 판에서 그 열이 엔진의 가정이 아니라 우리가 아는 진실을 실어 격차 표가 거짓이 된다.
+     */
+    @DisplayName("엔진 가정 유휴는 엔진이 믿는 정격 × 비율이고 생성식 정격은 따로 실린다")
+    @Test
+    void the_engine_assumption_stands_on_the_capacity_the_engine_believes() {
+        GroundTruthOracle misrated = oracleFrom("""
+                nodes:
+                  - {nodeId: n1, cores: 10, memoryMb: 1024, idleWatts: 100, capacityWatts: 500, believedCapacityWatts: 450}
+                """);
+
+        IdleGap gap = misrated.idleAssumptionGaps(ENGINE_IDLE_RATIO).get(0);
+        assertEquals(500.0, gap.capacityWatts(), EPS, "생성식이 쓰는 정격은 그대로다");
+        assertEquals(450.0, gap.engineBelievedCapacityWatts(), EPS, "엔진에게 알려 준 정격은 10% 낮다");
+        assertEquals(135.0, gap.engineAssumedIdleWatts(), EPS, "450 × 0.3 — 500 × 0.3 = 150 이 아니다");
+        assertEquals(0.2, gap.declaredIdleRatio(), EPS, "선언 유휴 비율은 생성식 정격 기준이다 (100/500)");
+
+        IdleGap plain = oracle.idleAssumptionGaps(ENGINE_IDLE_RATIO).get(0);
+        assertEquals(plain.capacityWatts(), plain.engineBelievedCapacityWatts(), EPS,
+                "정격을 어긋나게 주지 않는 판에서는 두 값이 같다 — 기존 판이 그대로여야 한다");
     }
 
     /**

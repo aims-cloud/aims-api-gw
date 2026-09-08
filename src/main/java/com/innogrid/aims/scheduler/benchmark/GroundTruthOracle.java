@@ -194,8 +194,8 @@ public final class GroundTruthOracle {
         List<IdleGap> gaps = new ArrayList<>(sortedNodeIds.size());
         for (String nodeId : sortedNodeIds) {
             SyntheticCluster.Node node = nodesById.get(nodeId);
-            gaps.add(new IdleGap(nodeId, node.capacityWatts(), node.idleWatts(),
-                    node.capacityWatts() * engineIdleRatio,
+            gaps.add(new IdleGap(nodeId, node.capacityWatts(), node.believedCapacityWatts(), node.idleWatts(),
+                    node.believedCapacityWatts() * engineIdleRatio,
                     node.idleWatts() / node.capacityWatts(),
                     (node.capacityWatts() - node.idleWatts()) / node.cores()));
         }
@@ -207,14 +207,16 @@ public final class GroundTruthOracle {
      *
      * @param nodeId                 노드 id
      * @param capacityWatts          정격 전력(W) — 생성식이 쓰는 값
+     * @param engineBelievedCapacityWatts 판이 엔진에게 알려 준 정격(W). 판이 정격을 어긋나게 주지 않으면
+     *                               {@code capacityWatts} 와 같다 — 다르면 엔진의 여유·벌점 계산이 그만큼 기운다
      * @param declaredIdleWatts      파일에 선언된 유휴 전력(W). 엔진은 이 값을 <b>모른다</b>. 실측이 아니다
-     * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = 정격 × idleRatio
+     * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = <b>엔진이 믿는 정격</b> × idleRatio
      * @param declaredIdleRatio      선언 유휴 비율 = 선언 유휴 / 정격. 엔진의 idleRatio 와 견줄 수 있는 형태
      * @param generatorWattsPerCore  코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어.
      *                               유휴 전력은 뺀 값이다 — 빈 노드를 깨우는 비용은
      *                               {@link GroundTruthOracle#marginalPowerWatts} 가 따로 센다
      */
-    public record IdleGap(String nodeId, double capacityWatts,
+    public record IdleGap(String nodeId, double capacityWatts, double engineBelievedCapacityWatts,
                           double declaredIdleWatts, double engineAssumedIdleWatts,
                           double declaredIdleRatio, double generatorWattsPerCore) {
 

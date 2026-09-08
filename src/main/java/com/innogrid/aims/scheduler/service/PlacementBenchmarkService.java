@@ -234,8 +234,8 @@ public class PlacementBenchmarkService {
 
     private List<IdleGap> idleGaps(GroundTruthOracle oracle) {
         return oracle.idleAssumptionGaps(properties.getPower().getIdleRatio()).stream()
-                .map(g -> new IdleGap(g.nodeId(), g.capacityWatts(), g.declaredIdleWatts(),
-                        g.engineAssumedIdleWatts(), g.absoluteGapWatts(),
+                .map(g -> new IdleGap(g.nodeId(), g.capacityWatts(), g.engineBelievedCapacityWatts(),
+                        g.declaredIdleWatts(), g.engineAssumedIdleWatts(), g.absoluteGapWatts(),
                         g.declaredIdleRatio(), g.generatorWattsPerCore()))
                 .toList();
     }
@@ -880,7 +880,8 @@ public class PlacementBenchmarkService {
             NodeResource node = new NodeResource(n.mdcId(), n.nodeId(), n.cores(), n.memoryMb(), n.gpus(),
                     cluster.cpuUsage(n, t), cluster.memoryUsage(n, t), cluster.diskUsage(n, t),
                     n.ipmi() ? cluster.powerWatts(n, t) : 0,
-                    n.capacityWatts(),
+                    n.believedCapacityWatts(),   // 판 경로에서는 파일이 원장이다 — 엔진이 믿는 정격은 생성식 정격과 다를 수 있다
+
                     n.ipmi() ? cluster.temperature(n, t) : 0,
                     cluster.networkRx(n, t), cluster.networkTx(n, t))
                     .withDiskCapacityGb((long) n.diskTotalGb());

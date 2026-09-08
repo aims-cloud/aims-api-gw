@@ -70,6 +70,22 @@ class SyntheticClusterTest {
         assertEquals(0, n.gpus());
         assertEquals("mdc-nodes", c.job());
         assertEquals(1.0, c.powerExponent(), "지수를 적지 않은 파일은 예전 그대로 선형이다");
+        assertEquals(n.capacityWatts(), n.believedCapacityWatts(),
+                "엔진에 알려 줄 정격을 적지 않으면 생성식 정격과 같다 — 기존 판이 그대로여야 한다");
+    }
+
+    @DisplayName("엔진에 알려 줄 정격은 0 보다 크고 유휴 전력보다 커야 한다")
+    @Test
+    void believed_capacity_must_exceed_the_idle_draw() {
+        assertEquals(450.0, SyntheticCluster.parse(new Yaml().load(
+                "nodes:\n  - {nodeId: a, cores: 4, memoryMb: 1024, capacityWatts: 500, believedCapacityWatts: 450}\n"), "x")
+                .nodes().get(0).believedCapacityWatts(), "적은 값이 그대로 실린다");
+        assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(new Yaml().load(
+                "nodes:\n  - {nodeId: a, cores: 4, memoryMb: 1024, believedCapacityWatts: 0}\n"), "x"),
+                "0 이면 엔진의 여유 계산이 0 나누기가 된다");
+        assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(new Yaml().load(
+                "nodes:\n  - {nodeId: a, cores: 4, memoryMb: 1024, idleWatts: 150, believedCapacityWatts: 120}\n"), "x"),
+                "유휴보다 작으면 엔진이 믿는 세계에서 유휴 노드가 이미 정격을 넘는다");
     }
 
     // ── 전력 생성식의 지수 ────────────────────────────────────

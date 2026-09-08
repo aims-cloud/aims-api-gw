@@ -363,6 +363,43 @@ class BaselinePlacerTest {
                 "두 건이 전부 가장 시원한 노드에 쌓여야 한다 — 흩어졌다면 어딘가에서 재평가를 하고 있다: " + placed);
     }
 
+    /**
+     * TASA 의 "가장 뜨거운 작업 먼저"다 — 발열의 대리로 요구 코어를 쓰므로 큰 작업이 먼저 가장 시원한 노드를 받는다.
+     * 도착 순서로 바꾸면 작은 작업이 시원한 노드를 선점하고 큰 작업이 밀려난다 — 픽스처의 c4 는 4코어분만 남아 있어
+     * 두 순서가 정확히 반대 배치를 낸다.
+     */
+    @DisplayName("최저 온도 우선은 큰 작업부터 놓는다 — 도착 순서가 아니다")
+    @Test
+    void coolest_first_places_the_largest_workload_first() {
+        List<Workload> arrivedSmallFirst = List.of(workload("small", 2, 8192), workload("big", 4, 16384));
+        Map<String, String> placed = run(BaselinePlacers.coolestFirst(), arrivedSmallFirst, thermalNodes());
+
+        assertEquals("c4", placed.get("big"), "큰 작업이 가장 시원한 노드를 받아야 한다: " + placed);
+        assertEquals("c2", placed.get("small"), "작은 작업은 그 다음 시원한 노드로 밀려야 한다: " + placed);
+        assertFalse(BaselinePlacers.coolestFirst().usesArrivalOrder(), "도착 순서면 순서 효과가 온도 효과에 섞인다");
+    }
+
+    /**
+     * 선택 기준은 <b>실측 온도</b>지 예약을 반영한 실효 온도가 아니다. 실효 온도({@code T × (1 + k·r)})는 엔진의 열관성
+     * 가정이라 그것으로 고르면 대조군이 우리 모델을 조금 바꾼 것이 된다. 픽스처는 첫 배치로 x1 의 예약비가 0.5 가
+     * 되어 실효 온도(40 × 1.075 = 43℃)가 x2(41℃)를 넘게 잡았다 — 실효 온도로 고르면 두 번째 건이 x2 로 가고,
+     * 실측 온도로 고르면 x1 에 남는다.
+     */
+    @DisplayName("최저 온도 우선은 예약이 쌓여도 실측 온도로 고른다 — 엔진의 실효 온도가 아니다")
+    @Test
+    void coolest_first_reads_measured_temperature_not_the_engine_effective_temperature() {
+        List<NodeResource> nodes = List.of(
+                node("x1", 8, 65536, 10, 10, 200, 500, 40),
+                node("x2", 64, 262144, 10, 10, 400, 900, 41));
+        List<Workload> workloads = List.of(workload("w1", 4, 8192), workload("w2", 2, 8192));
+
+        Map<String, String> placed = run(BaselinePlacers.coolestFirst(), workloads, nodes);
+
+        assertEquals("x1", placed.get("w1"));
+        assertEquals("x1", placed.get("w2"),
+                "예약이 실측 온도를 바꾸지 않으므로 두 번째 건도 x1 이어야 한다 — x2 로 갔다면 실효 온도(엔진 모델)로 고른 것이다: " + placed);
+    }
+
     // ── 공통 계약 ────────────────────────────────────────────
 
     /**

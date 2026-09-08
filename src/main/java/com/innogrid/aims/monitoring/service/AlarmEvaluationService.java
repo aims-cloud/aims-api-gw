@@ -3,14 +3,18 @@ package com.innogrid.aims.monitoring.service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,31 +25,35 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
-import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyType;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
-import com.innogrid.aims.monitoring.entity.AlarmRule;
+import com.innogrid.aims.monitoring.entity.AlarmPolicy;
 import com.innogrid.aims.monitoring.entity.Event;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
-import com.innogrid.aims.monitoring.repository.AlarmRuleRepository;
+import com.innogrid.aims.monitoring.repository.AlarmPolicyRepository;
 import com.innogrid.aims.monitoring.repository.EventRepository;
 import com.innogrid.aims.monitoring.service.alarm.AlarmMetric;
+import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyTargets;
+import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyTargets.Target;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 
 /**
- * 알람 규칙을 주기적으로 평가하여 임계치 초과 시 알람 이력과 이벤트를 생성한다 (docs/09 A.4, C.2).
+ * 알람 정책을 주기적으로 평가하여 임계치 초과 시 알람 이력과 이벤트를 생성한다 (docs/09 A.4, A.5.2, C.2).
  *
  * <ul>
- *   <li>평가 단위는 규칙이 아니라 <b>메트릭</b>이다. 활성 규칙을 {@link AlarmMetric} 별로 묶어 메트릭당 Thanos 쿼리 한 번으로
- *       전체 자원 벡터를 받고, 메모리에서 규칙별 임계값에 대조한다. 주기당 쿼리 수 = 메트릭 종류 수로 규칙 수와 무관하다.</li>
- *   <li>PromQL 은 카탈로그의 표준식({@code AlarmMetric.promql})을 쓰므로 자원 탐색기 패널 수치와 같은 식으로 판정한다.
- *       규칙의 metricName 은 카탈로그 코드(예: {@code CPU_USED_PERCENT})나 초안 별칭({@code cpu_usage})이며,
- *       해석되지 않으면 그 규칙은 건너뛴다.</li>
- *   <li>자원 식별은 자원 탐색기와 같은 라벨을 쓴다 — {@code tb_ns/tb_infra/tb_node} 가 있으면 Tumblebug VM(영역 = Namespace),
- *       없으면 물리 호스트 {@code instance}(영역 = {@code mdc_id}).</li>
- *   <li>이력에는 카탈로그 코드·단위와 기준 문자열({@code CPU Used > 80%})을 스냅샷으로 남긴다.</li>
- *   <li><b>중복 억제·해소</b>: 규칙×자원 지문({@code fingerprint} = SHA-256(규칙 id|메트릭|자원 id))으로 미해소(OPEN·ACKNOWLEDGED)
+ *   <li>평가 단위는 정책이 아니라 <b>메트릭</b>이다. 활성 정책을 {@link AlarmMetric} 별로 묶어 메트릭당 Thanos 쿼리 한 번으로
+ *       전체 자원 벡터를 받고, 메모리에서 정책별 대상·임계값에 대조한다. 주기당 쿼리 수 = 메트릭 종류 수로 정책 수와 무관하다.</li>
+ *   <li>정책의 대상 자원은 {@link AlarmPolicyTargets} 로 역할 스코프에서 전개한다(주기마다 역할 전체를 한 번 읽음).
+ *       표본은 호스트면 node_exporter instance 라벨, VM 이면 {@code TB:{ns}/{infra}/{node}} 로 대상에 대조하고,
+ *       대상이 아닌 표본은 건너뛴다. 이력의 자원 id 는 자원 탐색기와 같은 값({@code assets.id} / TB id)이다.</li>
+ *   <li>PromQL 은 카탈로그의 표준식({@code AlarmMetric.promql})을 쓰므로 자원 탐색기 패널 수치와 같은 식으로 판정한다.</li>
+ *   <li><b>지속 시간</b>: 정책의 durationSeconds 가 0 보다 크면 처음 초과한 시각부터 그 시간이 지나야 발생시킨다.
+ *       대기 상태는 메모리에만 두므로 재기동 시 다시 센다(단일 인스턴스 전제, ShedLock 도입 시 함께 재검토).</li>
+ *   <li><b>중복 억제·해소</b>: 정책×자원 지문({@code fingerprint} = SHA-256(정책 id|메트릭|자원 id))으로 미해소(OPEN·ACKNOWLEDGED)
  *       행을 찾아, 계속 초과면 새 행을 만들지 않고, 임계값 안으로 돌아오면 그 행을 RESOLVED 로 닫고 해소 이벤트를 발행한다.
- *       표본이 사라진 자원(exporter 다운 등)은 판정하지 않고 열어 둔다 — 수집 중단은 시스템 규칙(데드맨)의 몫이다.
- *       상태 행은 전이(발생·해소)가 있을 때만 쓴다.</li>
+ *       표본이 사라진 자원(exporter 다운 등)은 판정하지 않고 열어 둔다 — 수집 중단은 시스템 규칙(데드맨)의 몫이다.</li>
+ *   <li>이력에는 정책 id·이름, 역할, 영역, 카탈로그 코드·단위, 기준 문자열({@code CPU Used > 80%})을 스냅샷으로 남긴다.</li>
  * </ul>
  */
 @Service
@@ -58,53 +66,86 @@ public class AlarmEvaluationService {
     /** rate 창 — 1분 주기 평가에서 스크레이프 누락에 견디는 최소 창(자원 탐색기 rateWindow 하한과 동일) */
     static final String RATE_WINDOW = "5m";
 
-    private final AlarmRuleRepository ruleRepository;
+    private final AlarmPolicyRepository policyRepository;
     private final AlarmHistoryRepository historyRepository;
     private final EventRepository eventRepository;
     private final VictoriaMetricsClient vmClient;
+    private final ResourceScopeService resourceScopeService;
 
-    public AlarmEvaluationService(AlarmRuleRepository ruleRepository,
-                                   AlarmHistoryRepository historyRepository,
-                                   EventRepository eventRepository,
-                                   VictoriaMetricsClient vmClient) {
-        this.ruleRepository = ruleRepository;
+    /** 지속 시간 대기 — 지문 → 처음 초과를 본 시각. 초과가 풀리거나 발생시키면 지운다 */
+    private final Map<String, Instant> pendingSince = new ConcurrentHashMap<>();
+
+    public AlarmEvaluationService(AlarmPolicyRepository policyRepository,
+                                  AlarmHistoryRepository historyRepository,
+                                  EventRepository eventRepository,
+                                  VictoriaMetricsClient vmClient,
+                                  ResourceScopeService resourceScopeService) {
+        this.policyRepository = policyRepository;
         this.historyRepository = historyRepository;
         this.eventRepository = eventRepository;
         this.vmClient = vmClient;
+        this.resourceScopeService = resourceScopeService;
     }
 
     @Scheduled(fixedRate = 60_000)
     @Transactional
-    public void evaluateRules() {
-        List<AlarmRule> rules = ruleRepository.findByEnabledTrue();
-        if (rules.isEmpty()) return;
+    public void evaluatePolicies() {
+        List<AlarmPolicy> policies = policyRepository.findByEnabledTrueAndType(AlarmPolicyType.METRIC);
+        if (policies.isEmpty()) return;
 
-        for (Map.Entry<AlarmMetric, List<AlarmRule>> group : groupByMetric(rules).entrySet()) {
+        Set<String> roles = new LinkedHashSet<>();
+        policies.forEach(p -> roles.add(p.getRoleName()));
+        Scope scope;
+        try {
+            scope = resourceScopeService.scopeOf(roles);
+        } catch (RuntimeException e) {
+            log.warn("알람 평가 스킵 — 역할 스코프 조회 실패: roles={}, error={}", roles, e.getMessage());
+            return;
+        }
+        Map<AlarmPolicy, PolicyTargets> targets = new LinkedHashMap<>();
+        for (AlarmPolicy p : policies) targets.put(p, PolicyTargets.of(AlarmPolicyTargets.resolve(p, scope)));
+
+        Instant now = Instant.now();
+        for (Map.Entry<AlarmMetric, List<AlarmPolicy>> group : groupByMetric(policies).entrySet()) {
             AlarmMetric metric = group.getKey();
             List<Sample> samples;
             try {
                 samples = querySamples(metric);
             } catch (Exception e) {
-                log.debug("알람 평가 스킵: metric={}, rules={}, error={}", metric, group.getValue().size(), e.getMessage());
+                log.debug("알람 평가 스킵: metric={}, policies={}, error={}", metric, group.getValue().size(), e.getMessage());
                 continue;
             }
             Map<String, AlarmHistory> active = activeByFingerprint(metric);
             for (Sample sample : samples) {
-                for (AlarmRule rule : group.getValue()) {
-                    String fingerprint = fingerprint(rule, metric, sample.resourceId());
+                for (AlarmPolicy policy : group.getValue()) {
+                    Target target = targets.get(policy).match(sample);
+                    if (target == null) continue;                       // 이 정책의 대상이 아닌 자원
+
+                    String fingerprint = fingerprint(policy, metric, target.resourceId());
                     AlarmHistory open = active.get(fingerprint);
-                    boolean exceeded = isThresholdExceeded(rule.getCondition(), sample.value(), rule.getThreshold());
+                    boolean exceeded = policy.getOperator().test(sample.value(), policy.getThreshold());
                     if (exceeded && open == null) {
-                        active.put(fingerprint, record(rule, metric, sample, fingerprint));
-                    } else if (!exceeded && open != null) {
-                        resolve(open, rule, metric, sample);
-                        active.remove(fingerprint);
+                        if (!durationSatisfied(policy, fingerprint, now)) continue;
+                        active.put(fingerprint, record(policy, metric, target, sample, fingerprint));
+                        pendingSince.remove(fingerprint);
+                    } else if (!exceeded) {
+                        pendingSince.remove(fingerprint);
+                        if (open != null) {
+                            resolve(open, policy, metric, sample);
+                            active.remove(fingerprint);
+                        }
                     }
                     // exceeded && open != null: 계속 초과 — 기존 행 유지(중복 억제)
-                    // !exceeded && open == null: 정상 — 아무 것도 하지 않음
                 }
             }
         }
+    }
+
+    /** durationSeconds 가 0 이면 즉시. 아니면 처음 초과 시각부터 지속 시간이 지났을 때만 true */
+    private boolean durationSatisfied(AlarmPolicy policy, String fingerprint, Instant now) {
+        if (policy.getDurationSeconds() <= 0) return true;
+        Instant since = pendingSince.computeIfAbsent(fingerprint, k -> now);
+        return !now.isBefore(since.plus(Duration.ofSeconds(policy.getDurationSeconds())));
     }
 
     /** 한 메트릭의 미해소 정책 알람을 fingerprint 로 색인. 지문 없는 옛 행(초안 평가기)은 대조 대상이 아니다 */
@@ -117,9 +158,9 @@ public class AlarmEvaluationService {
         return byFingerprint;
     }
 
-    /** 규칙×자원 지문 — SHA-256 hex(64자). 규칙 id 가 아직 없으면(미저장) 이름으로 대신한다 */
-    static String fingerprint(AlarmRule rule, AlarmMetric metric, String resourceId) {
-        String key = "POLICY|" + (rule.getId() != null ? rule.getId() : rule.getName()) + "|" + metric.name() + "|" + resourceId;
+    /** 정책×자원 지문 — SHA-256 hex(64자). 정책 id 가 아직 없으면(미저장) 이름으로 대신한다 */
+    static String fingerprint(AlarmPolicy policy, AlarmMetric metric, String resourceId) {
+        String key = "POLICY|" + (policy.getId() != null ? policy.getId() : policy.getName()) + "|" + metric.name() + "|" + resourceId;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
@@ -128,16 +169,13 @@ public class AlarmEvaluationService {
         }
     }
 
-    /** 활성 규칙을 카탈로그 메트릭별로 묶는다. 해석되지 않는 metricName 은 경고 후 제외 */
-    static Map<AlarmMetric, List<AlarmRule>> groupByMetric(List<AlarmRule> rules) {
-        Map<AlarmMetric, List<AlarmRule>> byMetric = new LinkedHashMap<>();
-        for (AlarmRule rule : rules) {
-            Optional<AlarmMetric> metric = AlarmMetric.resolve(rule.getMetricName());
-            if (metric.isEmpty()) {
-                log.warn("알람 규칙 스킵 — 카탈로그에 없는 메트릭: rule={}, metricName={}", rule.getName(), rule.getMetricName());
-                continue;
-            }
-            byMetric.computeIfAbsent(metric.get(), k -> new ArrayList<>()).add(rule);
+    /** 활성 정책을 카탈로그 메트릭별로 묶는다. 해석되지 않는 metric 은 경고 후 제외(원장 검증을 거친 값이라 정상이면 없다) */
+    static Map<AlarmMetric, List<AlarmPolicy>> groupByMetric(List<AlarmPolicy> policies) {
+        Map<AlarmMetric, List<AlarmPolicy>> byMetric = new LinkedHashMap<>();
+        for (AlarmPolicy policy : policies) {
+            AlarmMetric.resolve(policy.getMetric()).ifPresentOrElse(
+                    m -> byMetric.computeIfAbsent(m, k -> new ArrayList<>()).add(policy),
+                    () -> log.warn("알람 정책 스킵 — 카탈로그에 없는 메트릭: policy={}, metric={}", policy.getName(), policy.getMetric()));
         }
         return byMetric;
     }
@@ -172,78 +210,58 @@ public class AlarmEvaluationService {
         return samples;
     }
 
-    /** 재정의된 alarm_history 원장에 규칙 스냅샷으로 기록하고 events 원장에도 발행 — docs/09 C.1 */
-    private AlarmHistory record(AlarmRule rule, AlarmMetric metric, Sample sample, String fingerprint) {
-        String criterion = metric.criterion(symbolOf(rule.getCondition()), rule.getThreshold());
-        AlarmHistory.Builder builder = AlarmHistory.builder(AlarmSource.POLICY, levelOf(rule.getSeverity()), criterion)
-                .policy(rule.getId(), rule.getName())
+    /** alarm_history 원장에 정책 스냅샷으로 기록하고 events 원장에도 발행 — docs/09 C.1 */
+    private AlarmHistory record(AlarmPolicy policy, AlarmMetric metric, Target target, Sample sample, String fingerprint) {
+        String criterion = policy.criterion();
+        AlarmHistory.Builder builder = AlarmHistory.builder(AlarmSource.POLICY, policy.getLevel(), criterion)
+                .policy(policy.getId(), policy.getName())
+                .role(policy.getRoleName())
+                .resource(target.resourceType(), target.resourceId(), target.name())
                 .metric(metric.name())
                 .observed(sample.value(), metric.unit())
                 .fingerprint(fingerprint);
-
-        String nsId = sample.label("tb_ns");
-        String mdcId = sample.label("mdc_id");
-        if (sample.isTumblebugVm()) {
-            builder.resource("vm", sample.resourceId(), sample.label("tb_node")).namespace(nsId);
-        } else {
-            builder.resource("node", sample.resourceId(), sample.resourceId()).mdc(mdcId);
-        }
+        if (target.nsId() != null) builder.namespace(target.nsId());
+        else builder.mdc(target.mdcId());
         AlarmHistory alarm = historyRepository.save(builder.build());
 
-        Event event = new Event(mdcId == null ? "unknown" : mdcId, rule.getSeverity(), alarm.getResourceName(),
-                String.format("%s: %s (관측값 %.1f%s)", rule.getName(), criterion, sample.value(), metric.unit()));
+        String mdcId = target.mdcId() != null ? target.mdcId() : sample.label("mdc_id");
+        Event event = new Event(mdcId == null ? "unknown" : mdcId, policy.getLevel().name(), alarm.getResourceName(),
+                String.format("%s: %s (관측값 %.1f%s)", policy.getName(), criterion, sample.value(), metric.unit()));
         eventRepository.save(event);
 
-        log.info("알람 발생: rule={}, resource={}, value={}", rule.getName(), alarm.getResourceId(), sample.value());
+        log.info("알람 발생: policy={}, resource={}, value={}", policy.getName(), alarm.getResourceId(), sample.value());
         return alarm;
     }
 
     /** 임계값 안으로 돌아온 미해소 행을 RESOLVED 로 닫고 해소 이벤트를 발행 */
-    private void resolve(AlarmHistory open, AlarmRule rule, AlarmMetric metric, Sample sample) {
+    private void resolve(AlarmHistory open, AlarmPolicy policy, AlarmMetric metric, Sample sample) {
         open.resolve(OffsetDateTime.now());
         historyRepository.save(open);
 
-        String mdcId = sample.label("mdc_id");
+        String mdcId = open.getAreaId() != null && open.getAreaKind() != null && !open.getAreaId().startsWith("TB:")
+                ? open.getAreaId() : sample.label("mdc_id");
         Event event = new Event(mdcId == null ? "unknown" : mdcId, "INFO", open.getResourceName(),
-                String.format("%s 해소: %s (관측값 %.1f%s)", rule.getName(), open.getCriterion(), sample.value(), metric.unit()));
+                String.format("%s 해소: %s (관측값 %.1f%s)", policy.getName(), open.getCriterion(), sample.value(), metric.unit()));
         eventRepository.save(event);
 
-        log.info("알람 해소: rule={}, resource={}, value={}", rule.getName(), open.getResourceId(), sample.value());
+        log.info("알람 해소: policy={}, resource={}, value={}", policy.getName(), open.getResourceId(), sample.value());
     }
 
-    /** 초안 규칙의 severity 문자열(INFO/WARNING/CRITICAL, 대소문자 무관) → AlarmLevel. 알 수 없으면 WARNING */
-    static AlarmLevel levelOf(String severity) {
-        if (severity == null) return AlarmLevel.WARNING;
-        try {
-            return AlarmLevel.valueOf(severity.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            return AlarmLevel.WARNING;
+    /** 정책 대상 자원 색인 — 호스트는 instance 라벨, VM 은 TB id 로 표본을 대조 */
+    record PolicyTargets(Map<String, Target> byInstance, Map<String, Target> byVmId) {
+        static PolicyTargets of(List<Target> targets) {
+            Map<String, Target> byInstance = new HashMap<>();
+            Map<String, Target> byVmId = new HashMap<>();
+            for (Target t : targets) {
+                if (t.nsId() != null) byVmId.put(t.resourceId(), t);
+                else if (t.instance() != null) byInstance.put(t.instance(), t);
+            }
+            return new PolicyTargets(byInstance, byVmId);
         }
-    }
 
-    /** 규칙 condition 코드(gt/gte/lt/lte/eq, 대소문자 무관) → 기준 문자열 연산자 기호 */
-    static String symbolOf(String condition) {
-        if (condition == null) return "?";
-        return switch (condition.trim().toLowerCase()) {
-            case "gt" -> ">";
-            case "gte" -> ">=";
-            case "lt" -> "<";
-            case "lte" -> "<=";
-            case "eq" -> "=";
-            default -> condition;
-        };
-    }
-
-    static boolean isThresholdExceeded(String condition, double value, double threshold) {
-        if (condition == null) return false;
-        return switch (condition.trim().toLowerCase()) {
-            case "gt" -> value > threshold;
-            case "gte" -> value >= threshold;
-            case "lt" -> value < threshold;
-            case "lte" -> value <= threshold;
-            case "eq" -> value == threshold;
-            default -> false;
-        };
+        Target match(Sample sample) {
+            return sample.isTumblebugVm() ? byVmId.get(sample.vmResourceId()) : byInstance.get(sample.label("instance"));
+        }
     }
 
     /** 자원 하나의 현재값과 식별 라벨 */
@@ -258,12 +276,9 @@ public class AlarmEvaluationService {
             return label("tb_ns") != null && label("tb_node") != null;
         }
 
-        /** 이력·지문에 쓰는 자원 id — VM 은 {@code TB:{ns}/{infra}/{node}}, 호스트는 instance(address:port) */
-        String resourceId() {
-            if (isTumblebugVm()) {
-                return "TB:" + label("tb_ns") + "/" + label("tb_infra") + "/" + label("tb_node");
-            }
-            return labels.getOrDefault("instance", "unknown");
+        /** VM 자원 id — {@code TB:{ns}/{infra}/{node}} */
+        String vmResourceId() {
+            return "TB:" + label("tb_ns") + "/" + label("tb_infra") + "/" + label("tb_node");
         }
     }
 }

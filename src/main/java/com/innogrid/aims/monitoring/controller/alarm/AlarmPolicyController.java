@@ -4,6 +4,8 @@ import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmMetricCatalogResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyDetailResponse;
@@ -34,7 +36,9 @@ import org.springframework.web.bind.annotation.RestController;
  * 하단 탭(대상 자원/전송 대상), 생성 위저드 보조(메트릭 카탈로그·수신자 후보 조직 트리)를 제공한다.
  * 발생 이력 탭은 AlarmHistoryController 의 /histories?policyId= 를 재사용하고,
  * 조건 설정의 미리보기 차트는 자원 탐색기 trend API 를 재사용한다.
- * 기존 AlarmController 의 규칙 CRUD(/rules)는 이 컨트롤러로 대체 예정이다.
+ * 구 AlarmController 의 규칙 CRUD(/rules)와 alarm_rules 원장은 이 컨트롤러·정책 원장으로 대체되어 제거됐다.
+ *
+ * 포털 로그: 생성·편집·복제·삭제는 {@code @PortalLog(AUDIT)} 로 남긴다(ref = ALARM_POLICY). 조회는 남기지 않는다.
  */
 @Tag(name = "관측 > 알람 (정책)", description = "알람 정책 목록·상세·CRUD·복제, 대상 자원/전송 대상, 생성 위저드 보조")
 @RestController
@@ -75,13 +79,20 @@ public class AlarmPolicyController {
 
     @Operation(summary = "알람 정책 생성",
             description = "정책 생성 위저드 4단계(대상 선택 → 조건 설정 → 전송 설정 → 요약) payload 로 생성합니다. "
-                    + "로그 알람의 조건 필드는 화면 확정 전 잠정입니다.")
+                    + "roleName 은 현재 사용자 토큰의 역할이어야 하고, areaId 는 mdcId 또는 TB:{nsId}(없으면 역할 전체), "
+                    + "resourceType 은 node|vm|gpu, condition.metric 은 메트릭 카탈로그 코드(초안 별칭 허용)이며 자원 유형에 맞아야 합니다. "
+                    + "targetScope=INDIVIDUAL 이면 targetResourceIds 1개 이상, 채널·수신자 1개 이상(개인 = users.id, 조직 = 조직명). "
+                    + "위반은 400. 로그 알람(alarmType=LOG)은 1차 범위 밖이라 400 입니다.")
+    @PortalLog(screen = "알람 정책", action = "생성", content = "'알람 정책 생성: ' + #request.policyName",
+               refType = "ALARM_POLICY", refId = "#result.data.policyId")
     @PostMapping
     public ApiResponse<AlarmPolicyDetailResponse> createPolicy(@RequestBody AlarmPolicyRequest request) {
         return ApiResponse.ok(alarmPolicyService.createPolicy(request));
     }
 
-    @Operation(summary = "알람 정책 편집")
+    @Operation(summary = "알람 정책 편집", description = "생성과 같은 payload 로 전체 값을 바꿉니다. 검증 규칙도 같습니다. 스코프 밖·없는 정책은 404.")
+    @PortalLog(screen = "알람 정책", action = "수정", content = "'알람 정책 수정: ' + #request.policyName + ' (id ' + #policyId + ')'",
+               refType = "ALARM_POLICY", refId = "#policyId")
     @PutMapping("/{policyId}")
     public ApiResponse<AlarmPolicyDetailResponse> updatePolicy(
             @PathVariable Long policyId,
@@ -90,14 +101,17 @@ public class AlarmPolicyController {
     }
 
     @Operation(summary = "알람 정책 복제",
-            description = "선택한 정책의 설정을 복사한 새 정책을 생성합니다.")
+            description = "선택한 정책의 설정을 복사한 새 정책을 '{이름} (복제)' 로 생성합니다. 복제한 사용자가 생성자가 됩니다.")
+    @PortalLog(screen = "알람 정책", action = "복제", content = "'알람 정책 복제: id ' + #policyId + ' → ' + #result.data.policyName",
+               refType = "ALARM_POLICY", refId = "#result.data.policyId")
     @PostMapping("/{policyId}/duplicate")
     public ApiResponse<AlarmPolicyDetailResponse> duplicatePolicy(@PathVariable Long policyId) {
         return ApiResponse.ok(alarmPolicyService.duplicatePolicy(policyId));
     }
 
     @Operation(summary = "알람 정책 삭제",
-            description = "목록 체크박스로 선택한 정책들을 삭제합니다. ids 는 콤마 구분 다중 지정입니다.")
+            description = "목록 체크박스로 선택한 정책들을 삭제합니다. ids 는 콤마 구분 다중 지정이며, 하나라도 없거나 스코프 밖이면 404 로 전체 거부합니다.")
+    @PortalLog(screen = "알람 정책", action = "삭제", content = "'알람 정책 삭제: id ' + #ids", refType = "ALARM_POLICY", refId = "#ids")
     @DeleteMapping
     public ApiResponse<Void> deletePolicies(@RequestParam List<Long> ids) {
         alarmPolicyService.deletePolicies(ids);
@@ -135,7 +149,9 @@ public class AlarmPolicyController {
     }
 
     @Operation(summary = "수신자 후보 조회",
-            description = "생성 위저드 전송 설정 — 수신자 선택용 조직 트리(하위 조직·멤버)를 조회합니다.")
+            description = "전송 설정의 수신자 선택 — 조직 트리(하위 조직·멤버)를 조회합니다. "
+                    + "조직 원장 확정 전이라 users.organization 문자열을 1단계 조직으로 삼고(하위 조직 없음), 조직 없는 사용자는 '미지정'에 묶입니다. "
+                    + "orgId 는 조직명 그대로이며 정책 수신자(ORGANIZATION)의 targetId 로 씁니다. keyword 는 조직명·이름·이메일 부분 일치.")
     @GetMapping("/recipient-candidates")
     public ApiResponse<AlarmRecipientCandidatesResponse> getRecipientCandidates(
             @RequestParam(required = false) String keyword) {

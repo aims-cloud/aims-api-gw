@@ -29,9 +29,10 @@ import static org.mockito.Mockito.when;
 /**
  * 클러스터 전력 최적화 추세 — 시각별 계산이 현재 진단과 같은 식인가, 결손·미계측·조회 실패를 설계대로 다루는가.
  *
- * <p>합성 시계열: 노드 3대(용량 기본 500W, 유휴 전력 = 500 × 0.3 = 150W), 가동 기준 CPU 5%.
- * t1 — n1 80%/200W · n2 2%/160W(유휴) · n3 1%/150W(유휴) → 가동 1·유휴 2·총 510W·회수 300W·PEI 0.40/0.0125/0.0067
- * t2 — n1 70%/200W · n2 60%/210W · n3 1%/150W(유휴)       → 가동 2·유휴 1·회수 150W
+ * <p>합성 시계열: 노드 3대(용량 기본 500W, 정격 유휴 전력 = 500 × 0.3 = 150W), 가동 기준 CPU 5%.
+ * 회수 가능은 계측된 유휴 노드라 실측에서 역산한 wakeupPower 합이다({@code (P − Pmax·u)/(1−u)}).
+ * t1 — n1 80%/200W · n2 2%/160W(유휴) · n3 1%/150W(유휴) → 가동 1·유휴 2·총 510W·회수 299.53W·PEI 0.40/0.0125/0.0067
+ * t2 — n1 70%/200W · n2 60%/210W · n3 1%/150W(유휴)       → 가동 2·유휴 1·회수 146.46W
  * t3 — 3대 모두 가동                                          → 회수 0W</p>
  */
 class PowerOptimizationTrendTest {
@@ -73,12 +74,18 @@ class PowerOptimizationTrendTest {
         assertEquals(T1, p1.at().toEpochSecond());
         assertEquals(3, p1.totalNodes()); assertEquals(1, p1.activeNodes()); assertEquals(2, p1.idleNodes());
         assertEquals(510.0, p1.totalPowerWatts(), EPS);
-        assertEquals(300.0, p1.reclaimableIdleWatts(), EPS, "유휴 2대 × 150W");
+        // 반납분은 wakeupPower — 유휴 2대 다 계측돼 실측에서 역산한다:
+        // n2(P=160,u=0.02,Pmax=500): (160-500*0.02)/0.98 = 150/0.98 ≈ 153.0612
+        // n3(P=150,u=0.01,Pmax=500): (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646
+        // 합 ≈ 299.5259 → round 299.53
+        assertEquals(299.53, p1.reclaimableIdleWatts(), EPS,
+                "(160-500*0.02)/0.98 + (150-500*0.01)/0.99 ≈ 299.53");
         assertEquals(0.40, p1.maxPeiRaw(), EPS);          // 80/200
         assertEquals(0.0067, p1.minPeiRaw(), 1e-3);       // 1/150
         assertEquals(3, p1.evaluableNodes()); assertTrue(p1.measured());
 
-        assertEquals(2, p2.activeNodes()); assertEquals(150.0, p2.reclaimableIdleWatts(), EPS);
+        // n3(P=150,u=0.01,Pmax=500) 만 유휴: (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646 → round 146.46
+        assertEquals(2, p2.activeNodes()); assertEquals(146.46, p2.reclaimableIdleWatts(), EPS);
         assertEquals(3, p3.activeNodes()); assertEquals(0.0, p3.reclaimableIdleWatts(), EPS);
         assertTrue(p1.reclaimableIdleWatts() > p2.reclaimableIdleWatts() && p2.reclaimableIdleWatts() > p3.reclaimableIdleWatts(),
                 "회수 가능 전력이 300 → 150 → 0 으로 줄어든다");

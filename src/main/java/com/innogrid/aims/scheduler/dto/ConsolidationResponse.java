@@ -40,6 +40,8 @@ public record ConsolidationResponse(
      * @param relocationCostWatts 워크로드를 옮기는 데 드는 전력 합
      * @param netSavingWatts      {@code idlePowerWatts − relocationCostWatts}
      * @param powerRatioToIdle    실측 전력 ÷ 유휴 전력. 1 에 가까울수록 실제로 놀고 있다.
+     *                            분모는 정격 × idleRatio(가정) — 반납분(idlePowerWatts)의 실측 역산값을 넣으면
+     *                            유휴 노드에서 비율이 1/(1−u) 로 고정되는 항등식이 되어 분모는 가정값을 유지한다.
      *                            전력을 수집하지 못하면 null
      * @param blockedReason       옮길 수 없을 때의 사유
      */

@@ -62,7 +62,9 @@ class ConsolidationServiceTest {
 
         assertTrue(idle.reclaimable());
         assertEquals("ALREADY_EMPTY", idle.basis());
-        assertEquals(150.0, idle.netSavingWatts(), 1e-9);
+        // 반납분은 wakeupPower — 계측된 유휴 노드(P=150,u=0.01,Pmax=500)라 실측에서 역산한다:
+        // (150 - 500*0.01)/(1-0.01) = 145/0.99 ≈ 146.4646 → round 146.46
+        assertEquals(146.46, idle.netSavingWatts(), 1e-6);
         assertEquals(0, idle.workloadCount());
     }
 
@@ -77,10 +79,13 @@ class ConsolidationServiceTest {
 
         assertTrue(c.reclaimable(), c.blockedReason());
         assertEquals("NET_SAVING", c.basis());
-        assertEquals(150.0, c.idlePowerWatts(), 1e-9);
-        // 8코어 중 1코어 = 0.125 → 350 × 0.125 = 43.75W
+        // 반납분은 wakeupPower — 계측된 유휴 노드(P=150,u=0.02,Pmax=500)라 실측에서 역산한다:
+        // (150 - 500*0.02)/(1-0.02) = 140/0.98 ≈ 142.8571 → round 142.86
+        assertEquals(142.86, c.idlePowerWatts(), 1e-6);
+        // 8코어 중 1코어 = 0.125 → 350 × 0.125 = 43.75W (host 는 가동 중이라 idlePower 기준, 안 바뀐다)
         assertEquals(43.75, c.relocationCostWatts(), 1e-4);
-        assertEquals(106.25, c.netSavingWatts(), 1e-4);
+        // 142.857142857... - 43.75 = 99.107142857... → round 99.11
+        assertEquals(99.11, c.netSavingWatts(), 1e-6);
         assertEquals(1, c.moves().size());
         assertEquals("host", c.moves().get(0).toNodeId());
     }

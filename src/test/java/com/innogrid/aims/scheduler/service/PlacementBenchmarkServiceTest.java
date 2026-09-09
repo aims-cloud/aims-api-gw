@@ -393,6 +393,12 @@ class PlacementBenchmarkServiceTest {
                         assertNull(m.median(), where + ": 무효인데 숫자가 실렸다 — valid 를 보지 않은 인용자에게는 그냥 값이다");
                         assertNull(m.min(), where);
                         assertNull(m.max(), where);
+                        // 지점별 값도 숫자 통로다. median 만 지우고 배열에 값을 남기면 무효 판정이
+                        // 응답의 한쪽에서만 지켜지고, 지점 대조는 그 배열을 그대로 읽는다.
+                        if (m.points() != null) {
+                            assertTrue(m.points().stream().allMatch(Objects::isNull),
+                                    where + ": 무효인데 지점별 값에 숫자가 남았다 — " + m.points());
+                        }
                         assertNotNull(m.invalidReason(), where + ": 사유 없는 무효는 되짚을 수 없다");
                     }
                 }
@@ -1184,6 +1190,226 @@ class PlacementBenchmarkServiceTest {
         }
     }
 
+    // ── 기준 전략 대비 격차 ───────────────────────────────────
+
+    /**
+     * 판정 셀에서 격차 열이 <b>쓸 수 있는 칸</b>인지 본다 — 다음 PR 의 판정이 읽을 자리라 여기가 비면
+     * 결과가 나쁜 것이 아니라 판을 못 쓰는 것이다.
+     *
+     * <p>부호도 함께 못 박는다. 지금 이 판에서 우리 전력 엔진은 문헌 기준선보다 전력을 <b>더</b> 쓰고
+     * (격차 &gt; 0), 그것이 다음 PR 이 줄이려는 값이다. 이 부호가 뒤집히면 세계가 달라진 것이거나 식의
+     * 분모·부호가 바뀐 것이므로, 조용히 지나가지 않고 여기서 멈춰 시험을 함께 고치게 한다.</p>
+     */
+    @DisplayName("판정 셀의 격차 열이 유효하고 표본이 있으며 기준선보다 큰 쪽에 있다")
+    @Test
+    void the_judgment_cell_carries_a_usable_gap_metric() {
+        Cell c = cell(service.compare(BenchmarkRules.JUDGMENT_BOARD, "heavytail").boards().get(0),
+                BenchmarkRules.JUDGMENT_LOAD_RATIO, BenchmarkRules.JUDGMENT_POWER_CONTROL.name());
+        MetricValue m = metric(strategy(c, "power"), BenchmarkRules.GAP_VS_PABFD);
+
+        assertTrue(m.valid(), "판정 셀의 격차 열이 무효다 — 판정할 지표가 없으므로 판을 다시 떠야 한다: "
+                + m.invalidReason());
+        assertTrue(m.samples() >= 1, "표본 지점이 하나도 없다 — 판정 셀이 비었다");
+        assertTrue(m.samples() >= BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS,
+                "짝 지점이 " + m.samples() + "곳뿐이라 사전 등록한 하한("
+                        + BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS + ")에 못 미친다 — 이 판으로는 판정 불가다");
+        assertTrue(m.median() > 0,
+                "우리 전력 엔진의 격차 중앙값이 " + m.median() + " 다 — 기준선보다 덜 쓰는 쪽으로 부호가 "
+                        + "뒤집혔다면 세계가 달라졌거나 식의 분모·부호가 바뀐 것이다");
+        assertEquals(BenchmarkRules.SWEEP_POINTS, m.points().size());
+    }
+
+    /**
+     * 빈 자리를 <b>있던 자리에</b> 남기는지 — 응답 수준 단언으로는 볼 수 없는 성질이다.
+     *
+     * <p>값을 앞으로 당겨 모으고 뒤를 null 로 채워도 길이·표본 수·중앙값은 전부 그대로다. 바뀌는 것은
+     * 인덱스가 가리키는 시각뿐이고, 다음 PR 의 판정 절차는 정확히 그 인덱스로 두 실행을 맞댄다.
+     * 변이 시험에서 압축 변이가 초록불로 살아남아 이 시험을 따로 둔다.</p>
+     */
+    /**
+     * 앞 시험은 배열을 만드는 자리만 본다 — <b>호출부가 걸러진 목록을 넘기면</b> 그 자리는 결백한 채로
+     * 정렬이 깨진다. 응답에서 "빈 자리 뒤에 값이 있는" 행을 세어 그 등가 변이까지 막는다. 압축하면 값이
+     * 앞으로 모이고 null 이 뒤로 밀려 이런 행이 하나도 남지 않는다.
+     */
+    @DisplayName("응답에도 빈 자리 뒤에 값이 있는 격차 행이 남아 있다")
+    @Test
+    void the_response_still_shows_values_after_a_gap_in_the_point_series() {
+        int interleaved = 0;
+        for (String board : List.of("main", "convex-misrated")) {
+            for (Cell c : service.compare(board, "heavytail").boards().get(0).cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    for (MetricValue m : s.metrics()) {
+                        if (!BenchmarkRules.GAP_VS_PABFD.equals(m.key()) || m.points() == null) continue;
+                        boolean sawNull = false;
+                        for (Double v : m.points()) {
+                            if (v == null) sawNull = true;
+                            else if (sawNull) { interleaved++; break; }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(interleaved > 0,
+                "빈 자리 뒤에 값이 있는 행이 하나도 없다 — 값이 앞으로 당겨졌거나 판이 바뀌어 이 시험이 "
+                        + "아무것도 보지 않는다. 둘 다 정렬 보장을 잃은 것이다");
+    }
+
+    @DisplayName("지점별 값은 빈 자리를 있던 자리에 남긴다")
+    @Test
+    void the_point_series_keeps_the_gaps_where_they_happened() {
+        List<Double> raw = new ArrayList<>();
+        raw.add(1.0);
+        raw.add(null);
+        raw.add(2.0);
+
+        List<Double> series = PlacementBenchmarkService.pointSeries(raw, 5);
+
+        assertEquals(5, series.size(), "길이는 스윕 지점 수로 맞춘다");
+        assertEquals(1.0, series.get(0), "첫 지점의 값이 자리를 옮겼다");
+        assertNull(series.get(1), "짝이 아니던 지점이 사라지고 뒤 값이 당겨졌다 — 두 실행의 같은 인덱스가 "
+                + "다른 시각을 가리키게 된다");
+        assertEquals(2.0, series.get(2), "세 번째 지점의 값이 자리를 옮겼다");
+        assertNull(series.get(3));
+        assertNull(series.get(4));
+    }
+
+    /**
+     * 지점별 값은 <b>두 실행을 지점마다 맞대는</b> 것이 목적이라 정렬이 전부다. 길이가 스윕 지점 수로
+     * 고정되고 짝이 아닌 지점이 null 로 남아야 인덱스가 곧 시각이고, 값만 모아 압축하면 두 실행의
+     * 3번 지점이 서로 다른 시각이 된다. 표본 수·중앙값이 그 배열과 같은 것도 함께 본다 — 셋이 갈리면
+     * 응답이 스스로 모순된다.
+     */
+    @DisplayName("격차 열만 지점별 값을 싣고 길이는 스윕 지점 수이며 표본 수·중앙값이 그 배열과 맞는다")
+    @Test
+    void the_gap_row_carries_one_slot_per_sweep_point_and_agrees_with_its_own_statistics() {
+        int nonNullSeen = 0;
+        int nullSlotsSeen = 0;
+
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL,
+                BenchmarkClusters.SPARSE, BenchmarkClusters.CONVEX_MISRATED)) {
+            for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    String where = boardId + " " + c.loadRatioPercent() + "% " + c.powerControl()
+                            + " " + s.strategyId();
+                    for (MetricValue m : s.metrics()) {
+                        if (!BenchmarkRules.GAP_VS_PABFD.equals(m.key())) {
+                            assertNull(m.points(), where + " " + m.key()
+                                    + ": 지점 대조가 필요 없는 지표까지 지점값을 실으면 응답이 배로 커진다");
+                            continue;
+                        }
+                        assertNotNull(m.points(), where + ": 격차 열에 지점값이 없다");
+                        assertEquals(BenchmarkRules.SWEEP_POINTS, m.points().size(),
+                                where + ": 지점 배열의 길이가 스윕 지점 수와 다르다 — 두 실행의 같은 인덱스가 "
+                                        + "같은 시각이라는 보장이 사라진다");
+
+                        List<Double> present = m.points().stream().filter(Objects::nonNull).toList();
+                        assertEquals(present.size(), m.samples(),
+                                where + ": 값이 있는 지점 " + present.size() + "곳인데 samples=" + m.samples());
+                        nonNullSeen += present.size();
+                        nullSlotsSeen += m.points().size() - present.size();
+
+                        if (m.valid()) {
+                            assertEquals(medianOf(present), m.median(), 1e-9,
+                                    where + ": 중앙값이 지점 배열의 중앙값과 다르다 — 둘 중 하나가 다른 지점을 "
+                                            + "보고 있다");
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(nonNullSeen > 0, "네 판 어디에도 격차 값이 없다 — 이 시험이 빈 배열만 보고 통과했다");
+        assertTrue(nullSlotsSeen > 0,
+                "짝이 아닌 지점이 하나도 없다 — null 자리를 지키는 이 시험이 아무것도 보지 않았다");
+    }
+
+    /**
+     * 격차의 짝짓기는 총량 열보다 <b>느슨하다</b> — 총량 열은 전 전략의 배치 건수가 같은 지점만 쓰지만
+     * 격차는 이 행과 기준 전략 <b>둘</b>만 본다. 그래서 표본 수가 총량 열 이상이어야 하고, 실제로 더 많은
+     * 셀이 있어야 두 정의가 다르다는 말이 사실이 된다. 기준 전략 자신은 값을 내지 않으므로 뺀다.
+     */
+    @DisplayName("격차의 표본 수는 총량 열 이상이고, 더 많은 셀이 실제로 있다")
+    @Test
+    void the_gap_is_paired_more_loosely_than_the_totals() {
+        boolean anyLooser = false;
+
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL,
+                BenchmarkClusters.SPARSE, BenchmarkClusters.CONVEX_MISRATED)) {
+            for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    if ("pabfd".equals(s.strategyId())) continue;
+                    int gap = metric(s, BenchmarkRules.GAP_VS_PABFD).samples();
+                    int totals = metric(s, BenchmarkRules.GENERATOR_POWER).samples();
+
+                    assertTrue(gap >= totals, boardId + " " + c.loadRatioPercent() + "% " + c.powerControl()
+                            + " " + s.strategyId() + ": 격차 표본 " + gap + "곳이 총량 표본 " + totals
+                            + "곳보다 적다 — 두 전략만 보는 짝이 전 전략 짝보다 좁을 수는 없다");
+                    if (gap > totals) anyLooser = true;
+                }
+            }
+        }
+        assertTrue(anyLooser,
+                "격차 표본이 총량 표본보다 많은 셀이 하나도 없다 — 두 짝 정의가 실제로는 같게 동작한다는 뜻이고, "
+                        + "그러면 유효성 문구의 '표본 수가 총량 열 이상일 수 있다' 가 근거를 잃는다");
+    }
+
+    /**
+     * 기준 전략 자신의 격차는 <b>0 이 아니라 값이 아니다</b>. 0 을 유효한 숫자로 실으면 표에서 그 열이
+     * "격차 없음" 으로 1등처럼 읽히고, 무효 판정이 없으면 그 오독을 막을 자리가 응답에 없다.
+     */
+    @DisplayName("기준 전략 행은 자기 격차를 싣지 않고 사유를 적는다")
+    @Test
+    void the_baseline_row_carries_no_gap_of_its_own() {
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.CONVEX_MISRATED)) {
+            for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
+                MetricValue m = metric(strategy(c, "pabfd"), BenchmarkRules.GAP_VS_PABFD);
+                String where = boardId + " " + c.loadRatioPercent() + "% " + c.powerControl();
+
+                assertFalse(m.valid(), where + ": 기준 전략의 0 이 유효한 격차로 나갔다 — 표에서 1등으로 읽힌다");
+                assertNull(m.median(), where + ": 무효인데 숫자가 실렸다");
+                assertEquals(0, m.samples(), where);
+                assertNotNull(m.invalidReason(), where);
+                assertTrue(m.invalidReason().contains("기준 전략 자신"), where + ": " + m.invalidReason());
+                assertEquals(BenchmarkRules.SWEEP_POINTS, m.points().size(),
+                        where + ": 값이 없어도 지점 배열의 길이는 지켜야 인덱스가 시각이다");
+                assertTrue(m.points().stream().allMatch(Objects::isNull), where + ": " + m.points());
+            }
+        }
+    }
+
+    /**
+     * 대조군 집합을 갈아 끼우는 이음매는 기준 전략이 <b>없는</b> 실행을 만들 수 있다. 그때 격차 열이
+     * 죽거나(NPE) 0 을 싣지 않고, 전 행이 사유를 달고 무효로 나가야 한다 — 기준이 없는 격차는 값이 아니다.
+     */
+    @DisplayName("기준 전략이 없는 실행에서는 격차 열 전부가 사유를 달고 무효다")
+    @Test
+    void a_run_without_the_baseline_marks_every_gap_row_invalid() {
+        SchedulerProperties props = new SchedulerProperties();
+        List<String> without = PlacementBenchmarkService.BASELINE_ORDER.stream()
+                .filter(id -> !id.equals("pabfd")).toList();
+        PlacementBenchmarkService noBaseline = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                        new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props), without);
+
+        for (Cell c : noBaseline.compare("main", "heavytail").boards().get(0).cells()) {
+            assertFalse(c.strategies().stream().anyMatch(s -> s.strategyId().equals("pabfd")),
+                    "이 실행에는 기준 전략이 없어야 이 시험이 무언가를 본다");
+            for (StrategyResult s : c.strategies()) {
+                MetricValue m = metric(s, BenchmarkRules.GAP_VS_PABFD);
+                String where = c.loadRatioPercent() + "% " + c.powerControl() + " " + s.strategyId();
+
+                assertFalse(m.valid(), where + ": 기준이 없는데 격차가 유효로 나갔다");
+                assertNull(m.median(), where);
+                assertEquals(0, m.samples(), where);
+                assertNotNull(m.invalidReason(), where);
+                assertTrue(m.invalidReason().contains("이 실행에 없다"), where + ": " + m.invalidReason());
+                assertEquals(BenchmarkRules.SWEEP_POINTS, m.points().size(),
+                        where + ": 한 번도 담기지 않은 키도 길이는 지켜야 한다");
+                assertTrue(m.points().stream().allMatch(Objects::isNull), where + ": " + m.points());
+            }
+        }
+    }
+
     /**
      * 정격 어긋남은 우리 엔진만 흔들지 않는다 — 문헌 대조군도 <b>판이 알려 준 정격</b>을 읽는다.
      * "대조군은 그대로"라고 읽으면 어긋남의 효과를 우리 엔진의 것으로만 돌리게 된다.
@@ -1582,6 +1808,14 @@ class PlacementBenchmarkServiceTest {
                         if (m.min() != null) flat.put(key + "min", m.min());
                         if (m.max() != null) flat.put(key + "max", m.max());
                         flat.put(key + "samples", (double) m.samples());
+                        // 지점별 값은 짝이 아닌 지점이 null 이라 그대로 넣으면 유한성 검사가 NPE 로 죽는다.
+                        // 값이 있는 지점만 인덱스와 함께 넣어 두면 지점이 밀렸는지도 결정론 비교가 잡는다.
+                        if (m.points() != null) {
+                            for (int i = 0; i < m.points().size(); i++) {
+                                Double at = m.points().get(i);
+                                if (at != null) flat.put(key + "p" + i, at);
+                            }
+                        }
                     }
                 }
             }
@@ -1607,6 +1841,19 @@ class PlacementBenchmarkServiceTest {
     private static MetricValue metric(StrategyResult s, String key) {
         return s.metrics().stream().filter(m -> m.key().equals(key)).findFirst()
                 .orElseThrow(() -> new AssertionError(s.strategyId() + " 에 " + key + " 지표가 없다"));
+    }
+
+    /**
+     * 지점 배열의 중앙값 — 응답과 <b>같은 반올림</b>으로 낸다. 반올림을 빼면 짝수 개의 평균에서 마지막
+     * 자리가 갈려 이 시험이 없는 결함을 신고한다.
+     */
+    private static double medianOf(List<Double> values) {
+        List<Double> sorted = values.stream().sorted().toList();
+        int mid = sorted.size() / 2;
+        double m = sorted.size() % 2 == 1
+                ? sorted.get(mid)
+                : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
+        return Math.round(m * 10000.0) / 10000.0;
     }
 
     private static Double median(StrategyResult s, String key) {

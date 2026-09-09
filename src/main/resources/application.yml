@@ -12,6 +12,16 @@ spring:
     password: ${AIMS_DB_PASSWORD}
     driver-class-name: ${AIMS_DB_DRIVER:org.postgresql.Driver}
 
+  # ── 알람 Email 발송 (docs/09 A.5.4) ─────────────────────────
+  # host 는 환경 변수(SPRING_MAIL_HOST)로만 넣는다. host 가 없으면 JavaMailSender 빈이 만들어지지 않고 Email 전송은 "미구성" FAILED.
+  mail:
+    properties:
+      mail.smtp.auth: ${AIMS_MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${AIMS_MAIL_SMTP_STARTTLS:true}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -28,6 +38,10 @@ server:
   shutdown: graceful
 
 management:
+  health:
+    mail:
+      # 메일 서버 연결 검사를 백엔드 헬스에서 뺀다 — SMTP 가 죽어도 포털 API 는 정상이고, 전송 실패는 알람 전송 원장(FAILED 사유)에 남는다
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -92,6 +106,15 @@ aims:
       interval-seconds: ${AIMS_ALARM_EVAL_INTERVAL_SECONDS:60}
       # rate() 창 — 스크레이프 간격의 4배 이상, 자원 탐색기 패널 rate 창 하한(5m)과 같게 유지
       rate-window: ${AIMS_ALARM_EVAL_RATE_WINDOW:5m}
+    notification:
+      # 알람 전송 (docs/09 A.5.4) — 발생 알람을 정책 수신자에게 Email 로 보낸다. 메일 서버는 SPRING_MAIL_HOST 등 환경 변수로.
+      # 서버가 없으면 전송 원장에 "메일 서버 미구성" FAILED 로만 남고 평가·이력은 그대로 동작한다.
+      enabled: ${AIMS_ALARM_NOTIFICATION_ENABLED:true}
+      from: ${AIMS_ALARM_MAIL_FROM:}
+      subject-prefix: "[AIMS]"
+      max-attempts: 3
+      retry-backoff: 2s
+      threads: 2
   portal-log:
     retention:
       # 포털 로그 보존 배치 (docs/08 §9) — 매일 03:30, 일반 1년 / SYSTEM 90일. 배치 단위로 별도 트랜잭션, 한 실행 최대 200배치

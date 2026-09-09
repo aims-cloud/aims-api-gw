@@ -15,6 +15,6 @@ public record GpuDeviceListItemResponse(
         double vramTotalGb,
         double temperatureCelsius,
         double powerWatts,
-        int recentAlarmCount              // AlarmHistory 연계 — 집계 기간 TODO:: 확정 필요
+        int recentAlarmCount              // AlarmHistory 연계 — TODO:: 집계 기간 확정 후 작업 예정 (현재 미구현, 서비스가 501)
 ) {
 }

@@ -393,6 +393,12 @@ class PlacementBenchmarkServiceTest {
                         assertNull(m.median(), where + ": 무효인데 숫자가 실렸다 — valid 를 보지 않은 인용자에게는 그냥 값이다");
                         assertNull(m.min(), where);
                         assertNull(m.max(), where);
+                        // 지점별 값도 숫자 통로다. median 만 지우고 배열에 값을 남기면 무효 판정이
+                        // 응답의 한쪽에서만 지켜지고, 지점 대조는 그 배열을 그대로 읽는다.
+                        if (m.points() != null) {
+                            assertTrue(m.points().stream().allMatch(Objects::isNull),
+                                    where + ": 무효인데 지점별 값에 숫자가 남았다 — " + m.points());
+                        }
                         assertNotNull(m.invalidReason(), where + ": 사유 없는 무효는 되짚을 수 없다");
                     }
                 }

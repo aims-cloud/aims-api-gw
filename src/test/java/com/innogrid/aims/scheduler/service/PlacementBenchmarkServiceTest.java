@@ -1226,6 +1226,34 @@ class PlacementBenchmarkServiceTest {
      * 인덱스가 가리키는 시각뿐이고, 다음 PR 의 판정 절차는 정확히 그 인덱스로 두 실행을 맞댄다.
      * 변이 시험에서 압축 변이가 초록불로 살아남아 이 시험을 따로 둔다.</p>
      */
+    /**
+     * 앞 시험은 배열을 만드는 자리만 본다 — <b>호출부가 걸러진 목록을 넘기면</b> 그 자리는 결백한 채로
+     * 정렬이 깨진다. 응답에서 "빈 자리 뒤에 값이 있는" 행을 세어 그 등가 변이까지 막는다. 압축하면 값이
+     * 앞으로 모이고 null 이 뒤로 밀려 이런 행이 하나도 남지 않는다.
+     */
+    @DisplayName("응답에도 빈 자리 뒤에 값이 있는 격차 행이 남아 있다")
+    @Test
+    void the_response_still_shows_values_after_a_gap_in_the_point_series() {
+        int interleaved = 0;
+        for (String board : List.of("main", "convex-misrated")) {
+            for (Cell c : service.compare(board, "heavytail").boards().get(0).cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    for (MetricValue m : s.metrics()) {
+                        if (!BenchmarkRules.GAP_VS_PABFD.equals(m.key()) || m.points() == null) continue;
+                        boolean sawNull = false;
+                        for (Double v : m.points()) {
+                            if (v == null) sawNull = true;
+                            else if (sawNull) { interleaved++; break; }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(interleaved > 0,
+                "빈 자리 뒤에 값이 있는 행이 하나도 없다 — 값이 앞으로 당겨졌거나 판이 바뀌어 이 시험이 "
+                        + "아무것도 보지 않는다. 둘 다 정렬 보장을 잃은 것이다");
+    }
+
     @DisplayName("지점별 값은 빈 자리를 있던 자리에 남긴다")
     @Test
     void the_point_series_keeps_the_gaps_where_they_happened() {

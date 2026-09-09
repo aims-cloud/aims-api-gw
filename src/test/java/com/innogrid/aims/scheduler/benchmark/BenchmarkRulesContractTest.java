@@ -510,6 +510,14 @@ class BenchmarkRulesContractTest {
                 "같은 값을 축소로 세면 아무것도 바뀌지 않은 지점이 성공 쪽에 들어간다: " + r);
         assertTrue(r.contains(BenchmarkRules.GAP_VS_PABFD),
                 "어느 지표를 읽는지가 문장에 있어야 다음 PR 이 다른 열을 골라 올 수 없다: " + r);
+        // 어휘만 보면 문장을 통째로 갈아치우는 변경이 통과한다. 문턱 셋의 이름과 올림·실패 처리까지
+        // 요구해, 절차의 뼈대가 빠진 문장은 빨간불이 되게 한다.
+        for (String part : List.of("JUDGMENT_MIN_PAIRED_POINTS", "JUDGMENT_MEDIAN_REDUCTION_PP",
+                "JUDGMENT_REDUCED_POINT_RATIO", "ceil", "실패로 기록")) {
+            assertTrue(r.contains(part),
+                    "판정 절차에서 '" + part + "' 가 사라졌다 — 문턱을 어떻게 쓰는지가 문장에 없으면 "
+                            + "다음 PR 이 같은 상수로 다른 절차를 만든다: " + r);
+        }
         assertFreeOfBannedClaims(r,
                 "격차 판정 규칙 — 금지 조각 순회는 한계 문구와 지표 유효성 조건만 보므로 이 상수는 여기서 따로 본다");
     }
@@ -529,6 +537,10 @@ class BenchmarkRulesContractTest {
         assertTrue(boards.contains(BenchmarkRules.JUDGMENT_BOARD), boards.toString());
         assertTrue(boards.contains(BenchmarkRules.DIRECTION_CHECK_BOARD),
                 "등록되지 않은 판을 방향 확인판으로 적으면 그 확인은 영원히 수행되지 않는다: " + boards);
+        // 값도 못 박는다. "다른 판이고 등록돼 있다"만 보면 결과를 본 뒤 유리한 판으로 갈아 끼워도
+        // 초록불이라, 사전 등록이 절반만 지켜진다. 방향 확인은 정격도 지수도 어긋나지 않은 판에서 한다.
+        assertEquals(BenchmarkClusters.MAIN, BenchmarkRules.DIRECTION_CHECK_BOARD,
+                "방향 확인판이 주 결과판이 아니다 — 두 판 모두 우리 엔진에 기운 판이면 방향 일치는 근거가 아니다");
     }
 
     /**
@@ -540,7 +552,9 @@ class BenchmarkRulesContractTest {
     @Test
     void the_gap_metric_label_names_the_baseline_in_its_denominator() {
         String baselineLabel = BaselinePlacers.pabfd(new PowerModel(new SchedulerProperties())).label();
-        String namePart = baselineLabel.substring(0, baselineLabel.indexOf('('));
+        int paren = baselineLabel.indexOf('(');
+        assertTrue(paren > 0, "대조군 라벨의 형태가 바뀌어 이름 부분을 잘라낼 수 없다: " + baselineLabel);
+        String namePart = baselineLabel.substring(0, paren);
 
         assertFalse(namePart.isBlank(), "대조군 라벨의 이름 부분이 비었다: " + baselineLabel);
         assertTrue(metric(BenchmarkRules.GAP_VS_PABFD).label().contains(namePart),

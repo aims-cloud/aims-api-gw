@@ -37,7 +37,7 @@ public record PowerOptimizationTrendResponse(
      * @param activeNodes          CPU 사용률이 가동 기준(설정 activeCpuPercent)을 넘는 노드 수
      * @param idleNodes            totalNodes − activeNodes
      * @param totalPowerWatts      전력이 있는 노드의 소비 전력 합. 미계측이면 null
-     * @param reclaimableIdleWatts 유휴 노드의 유휴 전력(P_max × idleRatio) 합. 미계측이면 null
+     * @param reclaimableIdleWatts 유휴 노드를 반납하면 아낄 전력 합 — 계측된 유휴 노드는 실측에서 역산, 그 외 정격 × idleRatio. 미계측이면 null
      * @param avgPeiRaw            평가 가능(전력 > 0) 노드의 PEI(CPU% ÷ W) 평균. 없으면 null
      * @param minPeiRaw            같은 노드들의 최소. 없으면 null
      * @param maxPeiRaw            같은 노드들의 최대. 없으면 null

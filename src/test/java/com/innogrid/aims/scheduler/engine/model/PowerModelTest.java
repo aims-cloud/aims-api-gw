@@ -159,14 +159,21 @@ class PowerModelTest {
     void real_marginal_adds_idle_power() {
         // 8코어 중 2코어 = 0.25, 동적 범위 350W → 동적 증가분 87.5W, 유휴 150W
         assertEquals(87.5, model.realMarginalPower(node(50, 250, 500), 2), 1e-9, "가동 중");
-        assertEquals(237.5, model.realMarginalPower(node(2, 250, 500), 2), 1e-9, "빈 노드 — 깨우는 비용 포함");
+        // node(2, 250, 500) 은 유휴(2% < 5%)이고 전력이 실측(250W)이라, 유휴 역산 경로가 켜져
+        // 있는 기본 모델에서는 대체값(150W)이 아니라 실측 역산값을 깨우기 비용으로 쓴다.
+        // 예전(대체값 시절)의 237.5 가 아니다 — 왜 바뀌었는지는 wakeupPower 역산식 그대로.
+        double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
+        assertEquals(87.5 + reconstructedWakeup, model.realMarginalPower(node(2, 250, 500), 2), 1e-9,
+                "빈 노드 — 깨우는 비용을 실측에서 역산(대체값 237.5 아님)");
     }
 
     @DisplayName("실질 한계전력 점수는 용량 대비로 정규화한다")
     @Test
     void real_marginal_score_normalized() {
         assertEquals(1.0 - 87.5 / 500, model.marginalScore(node(50, 250, 500), 2), 1e-9);
-        assertEquals(1.0 - 237.5 / 500, model.marginalScore(node(2, 250, 500), 2), 1e-9);
+        // real_marginal_adds_idle_power 와 같은 이유로 237.5 대신 역산값 기준.
+        double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
+        assertEquals(1.0 - (87.5 + reconstructedWakeup) / 500, model.marginalScore(node(2, 250, 500), 2), 1e-9);
     }
 
     /** 회귀 안전판 — α 기본값에서는 기존 선형 모델과 값이 같아야 한다. */
@@ -210,6 +217,107 @@ class PowerModelTest {
 
         double dp = model.marginalPowerOnCurve(node, 8);   // 8코어 전부 요구
         assertEquals(350 * 0.10, dp, 1e-9, "90% -> 100% 만큼만 는다");
+    }
+
+    // ── 깨우기 비용 실측 역산 ────────────────────────────────────
+
+    @DisplayName("유휴 노드는 실측에서 선언 유휴전력을 역산한다")
+    @Test
+    void wakeup_power_recovers_declared_idle_from_a_measured_idle_node() {
+        // 정격 500, 선언 유휴 100 을 가정한 생성식 P = 100 + 400·u, u=0.02 → P=108.
+        // 대체값(정격 × idleRatio=0.3=150) 도, 보정 없는 실측 108 도 아니고 역산한 100.0 이어야 한다.
+        NodeResource node = node(2, 108, 500);
+
+        assertEquals(100.0, model.wakeupPower(node), 1e-9,
+                "역산 없이 실측 108을 그대로 쓰면 안 된다");
+    }
+
+    @DisplayName("미계측·가동·범위 밖이면 대체값으로 돌아간다")
+    @Test
+    void wakeup_power_falls_back_for_unmeasured_active_or_out_of_range_nodes() {
+        assertEquals(150.0, model.wakeupPower(node(2, 0, 500)), 1e-9, "전력 미계측");
+        assertEquals(150.0, model.wakeupPower(node(40, 250, 500)), 1e-9, "가동 중이라 역산 불가");
+        assertEquals(0.0, model.wakeupPower(node(2, 108, 0)), 1e-9, "정격 미상");
+        // (5 - 500×0.02) / 0.98 = -5.10... < 0 → 계측 잡음으로 보고 대체값
+        assertEquals(150.0, model.wakeupPower(node(2, 5, 500)), 1e-9, "역산이 음수");
+        // (520 - 500×0.04) / 0.96 = 520.8 > 500(정격) → 계측 잡음으로 보고 대체값
+        assertEquals(150.0, model.wakeupPower(node(4, 520, 500)), 1e-9, "역산이 정격을 넘음");
+    }
+
+    /** 추정이 정확히 0 인 경계 — 0W 유휴는 물리적으로 없으므로 유효값이 아니라 대체값이어야 한다. */
+    @DisplayName("역산이 정확히 0 이면 유효값이 아니라 대체값이다")
+    @Test
+    void a_zero_estimate_is_not_a_valid_idle_power() {
+        // (10 − 500×0.02) / 0.98 = 0 정확히 — 하한 가드가 <= 0 이어야 한다(< 0 이면 0W 유휴가 나간다)
+        assertEquals(150.0, model.wakeupPower(node(2, 10, 500)), 1e-9, "0W 유휴 전력은 없다");
+    }
+
+    /**
+     * 역산 입력은 <b>실측</b> CPU 다. 예약분을 섞으면 "같은 순간의 (P, u) 쌍"이 아니게 되어 식이 어긋난다.
+     * 64코어 노드에 1코어를 예약하면 실효 CPU 는 1% → 2.56% 로 움직이지만(여전히 유휴), 실측 전력 104W 는 그대로다 —
+     * 실측 u 로 역산하면 (104 − 500×0.01)/0.99 = 100, 실효 u 로 역산하면 93.6 이 나온다.
+     */
+    @DisplayName("역산은 예약분이 아니라 실측 CPU 로 한다")
+    @Test
+    void wakeup_power_reads_measured_cpu_not_effective_cpu() {
+        NodeResource wide = new NodeResource("mdc-01", "wide", 64, 262144, 0,
+                1, 30, 30, 104, 500, 50, 1000, 500);
+        wide.reserve(1, 4096, 0);
+        assertTrue(wide.effectiveCpuUsagePercent() > wide.getCpuUsagePercent(), "예약이 실효 CPU 를 올려야 시험이 성립한다");
+        assertTrue(wide.effectiveCpuUsagePercent() <= 5.0, "여전히 유휴여야 역산 경로를 탄다");
+        assertEquals(100.0, model.wakeupPower(wide), 1e-9,
+                "실효 CPU 로 역산하면 93.6 — 예약은 그 순간의 실측 전력을 만든 부하가 아니다");
+    }
+
+    /**
+     * 상한 등호 경계 — 역산값이 정격과 정확히 같으면 여전히 유효값이어야 한다. 가드가
+     * {@code estimate > pMax} 가 아니라 {@code estimate >= pMax} 로 바뀌면 이 경계에서
+     * 대체값(150)으로 조용히 떨어진다.
+     */
+    @DisplayName("추정이 정격과 정확히 같은 경계는 여전히 유효값이다")
+    @Test
+    void an_estimate_exactly_at_capacity_is_still_valid() {
+        assertEquals(500.0, model.wakeupPower(node(0, 500, 500)), 1e-9);
+    }
+
+    @DisplayName("플래그를 끄면 유휴 역산도 대체값으로 돌아간다")
+    @Test
+    void wakeup_power_is_off_by_the_flag() {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getPower().setIdleFromMeasurement(false);
+        PowerModel withoutReconstruction = new PowerModel(props);
+
+        assertEquals(150.0, withoutReconstruction.wakeupPower(node(2, 108, 500)), 1e-9);
+    }
+
+    @DisplayName("유휴전력과 진단 점수는 역산을 따라가지 않는다")
+    @Test
+    void idle_power_and_the_diagnostic_scores_do_not_follow_measurement() {
+        SchedulerProperties onProps = new SchedulerProperties();
+        SchedulerProperties offProps = new SchedulerProperties();
+        offProps.getPower().setIdleFromMeasurement(false);
+        PowerModel reconstructing = new PowerModel(onProps);
+        PowerModel fixed = new PowerModel(offProps);
+        NodeResource node = node(2, 108, 500);
+
+        // idlePower 는 진단·동적 범위의 기준선이다 — 역산을 넣으면 항등식이 되어 구별력을 잃는다.
+        assertEquals(150.0, reconstructing.idlePower(node), 1e-9);
+        assertEquals(150.0, fixed.idlePower(node), 1e-9);
+        assertEquals(fixed.proportionality(node), reconstructing.proportionality(node), 1e-9,
+                "역산 여부와 무관하게 같아야 한다");
+        assertEquals(fixed.wasteScore(node), reconstructing.wasteScore(node), 1e-9,
+                "역산 여부와 무관하게 같아야 한다");
+    }
+
+    @DisplayName("실질 한계전력은 역산한 유휴전력으로 깨어난다")
+    @Test
+    void real_marginal_power_wakes_with_the_measured_idle() {
+        // marginalOnCurve(α=1) = 350 × (2/8) = 87.5 — 동적 범위는 idlePower 기준 350 그대로.
+        // 유휴는 대체값 150 이 아니라 역산값 100 → 87.5 + 100 = 187.5 (대체값 시절 237.5 아님).
+        NodeResource node = node(2, 108, 500);
+
+        assertEquals(87.5, model.marginalPowerOnCurve(node, 2), 1e-9);
+        assertEquals(187.5, model.realMarginalPower(node, 2), 1e-9);
     }
 
     private NodeResource node(double cpuUsage, double powerWatts, double capacityWatts) {

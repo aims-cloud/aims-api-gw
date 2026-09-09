@@ -5,6 +5,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PlacementContextPowerTest {
 
     private static final double ACTIVE_CPU = 5.0;
-    private static final double IDLE_RATIO = 0.3;
+    private final PowerModel powerModel = new PowerModel(new SchedulerProperties());
 
     @DisplayName("후보 전체의 소비 전력을 더한다")
     @Test
@@ -61,8 +63,9 @@ class PlacementContextPowerTest {
                 node("empty-1", 1, 150, 500),
                 node("empty-2", 0, 150, 400));
 
-        // 500×0.3 + 400×0.3 = 150 + 120
-        assertEquals(270.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
+        // 계측된 유휴 노드는 실측에서 역산한다 — empty-1: (150 − 500×0.01)/0.99 = 146.5, empty-2: CPU 0% 라 실측 그대로 150.
+        // 대체값 기준(500×0.3 + 400×0.3 = 270)이 아니다.
+        assertEquals((150 - 500 * 0.01) / 0.99 + 150.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
     }
 
     @DisplayName("전부 가동 중이면 반납할 전력이 없다")
@@ -72,7 +75,7 @@ class PlacementContextPowerTest {
                 node("n1", 50, 250, 500),
                 node("n2", 40, 220, 500));
 
-        assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
+        assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
     }
 
     @DisplayName("후보가 비면 집계도 0이다")
@@ -82,7 +85,7 @@ class PlacementContextPowerTest {
 
         assertEquals(0.0, ctx.totalPowerWatts(), 1e-9);
         assertEquals(0, ctx.activeNodeCount(ACTIVE_CPU));
-        assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, IDLE_RATIO), 1e-9);
+        assertEquals(0.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
     }
 
     // ── 픽스처 ──────────────────────────────────────────────────

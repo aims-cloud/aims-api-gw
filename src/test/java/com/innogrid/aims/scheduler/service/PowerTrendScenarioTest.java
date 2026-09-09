@@ -30,11 +30,12 @@ import static org.mockito.Mockito.when;
  * 같은 상태로 만든 <b>현재 진단</b>과 같은 숫자를 내는가(같은 식이라는 증명).
  *
  * <pre>
- * 노드 4대 · 용량 500W · 유휴 전력 150W · 가동 기준 CPU 5%
+ * 노드 4대 · 용량 500W · 정격 유휴 전력 150W · 가동 기준 CPU 5%. 회수 가능은 계측된 유휴 노드라 실측에서
+ * 역산한 wakeupPower 합이다({@code (P − Pmax·u)/(1−u)}) — 정격 × idleRatio 가 아니다.
  * 시각   상태                                   가동/유휴   총 전력   회수 가능
- * t0     n1 60%  n2 3%  n3 2%  n4 1%            1 / 3      560W      450W   (통합 전: 빈 노드 3대가 유휴 전력을 씀)
- * t1     n1 70%  n2 40% n3 2%  n4 1%            2 / 2      620W      300W   (워크로드 1건 n2 로)
- * t2     n1 70%  n2 45% n3 30% n4 1%            3 / 1      680W      150W
+ * t0     n1 60%  n2 3%  n3 2%  n4 1%            1 / 3      560W      337.18W   (통합 전: 빈 노드 3대가 유휴 전력을 씀)
+ * t1     n1 70%  n2 40% n3 2%  n4 1%            2 / 2      620W      198.00W   (워크로드 1건 n2 로)
+ * t2     n1 70%  n2 45% n3 30% n4 1%            3 / 1      680W       95.96W
  * t3     n1 70%  n2 45% n3 35% n4 20%           4 / 0      760W        0W   (통합 완료)
  * </pre>
  */
@@ -69,7 +70,16 @@ class PowerTrendScenarioTest {
 
         assertEquals(4, trend.points().size());
         int[] expectedActive = {1, 2, 3, 4};
-        double[] expectedReclaim = {450, 300, 150, 0};
+        // 반납분은 wakeupPower — 계측된 유휴 노드는 실측에서 역산한다 (P,u,Pmax)=(150,220,110,100 실측; 500 정격):
+        // t0 n2(150,0.03,500)=(150-500*.03)/.97=135/.97≈139.1753, n3(110,0.02,500)=100/.98≈102.0408,
+        //    n4(100,0.01,500)=95/.99≈95.9596 → 합≈337.1757 → round 337.18
+        // t1 n3(110,0.02,500)≈102.0408, n4(100,0.01,500)≈95.9596 → 합≈198.0004 → round 198.00
+        // t2 n4(100,0.01,500)≈95.9596 → round 95.96
+        // t3 전부 가동이라 회수 0(변화 없음)
+        double n2t0 = PowerOptimizationService.round((150 - 500 * 0.03) / 0.97);
+        double n3t0 = PowerOptimizationService.round((110 - 500 * 0.02) / 0.98);
+        double n4t0 = PowerOptimizationService.round((100 - 500 * 0.01) / 0.99);
+        double[] expectedReclaim = {n2t0 + n3t0 + n4t0, n3t0 + n4t0, n4t0, 0};
         double[] expectedTotal = {560, 620, 680, 760};
         for (int i = 0; i < 4; i++) {
             Point p = trend.points().get(i);

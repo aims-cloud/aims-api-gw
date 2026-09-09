@@ -230,7 +230,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
                 best.totalScore(), best.powerScore(), best.temperatureScore(), candidateCount,
                 context.totalPowerWatts(),
                 context.activeNodeCount(props.getActiveCpuPercent()),
-                context.reclaimableIdleWatts(props.getActiveCpuPercent(), props.getIdleRatio()));
+                context.reclaimableIdleWatts(props.getActiveCpuPercent(), powerModel));
     }
 
     /**

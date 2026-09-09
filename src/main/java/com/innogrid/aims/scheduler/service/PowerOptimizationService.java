@@ -232,7 +232,7 @@ public class PowerOptimizationService {
         boolean measured = !powered.isEmpty();
         Double total = measured ? round(nodes.stream().mapToDouble(NodeResource::getPowerWatts).sum()) : null;
         Double reclaimable = measured
-                ? round(nodes.stream().filter(n -> !powerModel.isActive(n)).mapToDouble(powerModel::idlePower).sum()) : null;
+                ? round(nodes.stream().filter(n -> !powerModel.isActive(n)).mapToDouble(powerModel::wakeupPower).sum()) : null;
         DoubleSummaryStatistics pei = powered.stream()
                 .mapToDouble(n -> n.getCpuUsagePercent() / n.getPowerWatts()).summaryStatistics();
         return new PowerOptimizationTrendResponse.Point(
@@ -282,7 +282,7 @@ public class PowerOptimizationService {
         double total = nodes.stream().mapToDouble(NodeResource::getPowerWatts).sum();
         double reclaimable = nodes.stream()
                 .filter(n -> !powerModel.isActive(n))
-                .mapToDouble(powerModel::idlePower).sum();
+                .mapToDouble(powerModel::wakeupPower).sum();
 
         return new Cluster(nodes.size(), active, nodes.size() - active,
                 round(total), round(measured ? reclaimable : 0),
@@ -350,7 +350,7 @@ public class PowerOptimizationService {
     private java.util.Optional<Finding> idleNode(NodeResource node) {
         if (powerModel.isActive(node)) return java.util.Optional.empty();
 
-        double idle = powerModel.idlePower(node);
+        double idle = powerModel.wakeupPower(node);
         return java.util.Optional.of(new Finding(
                 "IDLE_NODE", "HIGH", node.getMdcId(), node.getNodeId(),
                 "유휴 노드가 전력을 소모합니다",

@@ -29,10 +29,7 @@ public class NeutronClient {
 
     @Autowired
     public NeutronClient(OpenStackProperties props, KeystoneClient keystone) {
-        this(props, keystone, RestClient.builder()
-                .baseUrl(props.getNetworkUrl() == null ? "" : props.getNetworkUrl())
-                .defaultHeader("Content-Type", "application/json")
-                .build());
+        this(props, keystone, OpenStackRestClients.build(props.getNetworkUrl(), props.isVerifyTls()));
     }
 
     NeutronClient(OpenStackProperties props, KeystoneClient keystone, RestClient rest) {
@@ -63,6 +60,26 @@ public class NeutronClient {
 
     public Map<String, Object> getSubnet(String subnetId) {
         return get("/v2.0/subnets/{id}", subnetId);
+    }
+
+    // ── 라우터 (토폴로지 네트워크 레이어) ───────────────────────
+
+    public Map<String, Object> listRouters() {
+        return get("/v2.0/routers");
+    }
+
+    public Map<String, Object> getRouter(String routerId) {
+        return get("/v2.0/routers/{id}", routerId);
+    }
+
+    /** 특정 장비(라우터 등)에 연결된 포트 — 라우터 내부 인터페이스 조회에 사용. */
+    public Map<String, Object> listPortsByDevice(String deviceId) {
+        return get("/v2.0/ports?device_id={id}", deviceId);
+    }
+
+    /** 보안그룹 목록 (각 그룹에 security_group_rules 가 포함되어 내려온다). */
+    public Map<String, Object> listSecurityGroups() {
+        return get("/v2.0/security-groups");
     }
 
     // ── 포트 (네트워크 인터페이스 / IP 할당 현황) ───────────────

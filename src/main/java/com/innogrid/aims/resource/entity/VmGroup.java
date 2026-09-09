@@ -1,15 +1,14 @@
 package com.innogrid.aims.resource.entity;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 import jakarta.persistence.*;
 
 /**
  * 가상서버 그룹.
- * 여러 클라우드(CB-Spider 연결)에 흩어진 VM을 논리 그룹으로 묶어
- * 일괄 동작(시작/중지)과 그룹 단위 조회를 제공한다.
+ * 통합 토폴로지의 OpenStack 배포영역 내 VM들을 논리 그룹으로 묶는다.
+ * 그룹에 담긴 가상서버(VmGroupMember)와 서버 간 연결(VmGroupConnection, 네트워크 맵)을 관리한다.
+ * VM 생성/제어는 하지 않으며, 기존 VM을 담아 구성·연결만 관리한다.
  */
 @Entity
 @Table(name = "vm_groups")
@@ -19,19 +18,23 @@ public class VmGroup {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100, unique = true)
+    /** 배포영역 (통합 토폴로지의 deployZone). */
+    @Column(nullable = false, length = 100)
+    private String deployZone;
+
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(length = 500)
     private String description;
 
-    /** 배포영역 (MDC 식별자 또는 퍼블릭 클라우드 리전 표기) */
-    @Column(length = 100)
-    private String deployZone;
+    /** 사용 여부 (화면 토글). */
+    @Column(nullable = false)
+    private boolean enabled = true;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "vm_group_members", joinColumns = @JoinColumn(name = "vm_group_id"))
-    private List<VmGroupMember> members = new ArrayList<>();
+    /** 생성자 (인증 사용자 이름). */
+    @Column(length = 100)
+    private String createdBy;
 
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
@@ -47,28 +50,25 @@ public class VmGroup {
 
     protected VmGroup() {}
 
-    public VmGroup(String name, String description, String deployZone) {
+    public VmGroup(String deployZone, String name, String description, boolean enabled, String createdBy) {
+        this.deployZone = deployZone;
         this.name = name;
         this.description = description;
-        this.deployZone = deployZone;
+        this.enabled = enabled;
+        this.createdBy = createdBy;
     }
 
     public Long getId() { return id; }
+    public String getDeployZone() { return deployZone; }
     public String getName() { return name; }
     public String getDescription() { return description; }
-    public String getDeployZone() { return deployZone; }
-    public List<VmGroupMember> getMembers() { return members; }
+    public boolean isEnabled() { return enabled; }
+    public String getCreatedBy() { return createdBy; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
 
+    public void setDeployZone(String deployZone) { this.deployZone = deployZone; }
     public void setName(String name) { this.name = name; }
     public void setDescription(String description) { this.description = description; }
-    public void setDeployZone(String deployZone) { this.deployZone = deployZone; }
-
-    public void replaceMembers(List<VmGroupMember> newMembers) {
-        this.members.clear();
-        if (newMembers != null) {
-            this.members.addAll(newMembers);
-        }
-    }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

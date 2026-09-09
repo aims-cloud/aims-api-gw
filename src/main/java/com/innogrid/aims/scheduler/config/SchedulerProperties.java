@@ -140,8 +140,18 @@ public class SchedulerProperties {
         /** 노드별 전력 용량 override. key 는 노드 식별자(instance). */
         private Map<String, Double> capacityByNode = new HashMap<>();
 
-        /** 유휴 전력 비율. P_idle = P_max × idleRatio */
+        /** 유휴 전력 비율. P_idle = P_max × idleRatio — 진단 지표·동적 범위의 기준선이고, 계측이 없을 때 깨우기 비용의 대체값 */
         private double idleRatio = 0.3;
+
+        /**
+         * 계측된 유휴 노드의 깨우기 비용을 실측 전력에서 역산하는가.
+         *
+         * <p>끄면 전 노드가 {@code P_max × idleRatio} 로 돌아간다 — 되돌리기는 이 값 하나다(팀 관례대로
+         * 환경변수 바인딩 한 줄). 유휴 판정은 {@code isActive}(실효 CPU)와 같은 기준이고, 역산 입력은 같은 순간의
+         * 실측 CPU 다. 이 값은 비교 API 의 설정 스냅샷과 다이제스트에 들어간다 — 모델 형태가 바뀌었는데
+         * 다이제스트가 같으면 어제 표와 오늘 표가 같은 설정으로 보인다.</p>
+         */
+        private boolean idleFromMeasurement = true;
 
         /** PEI 정규화 기준(%/W). 이 값을 1.0 으로 본다. */
         private double peiNormalizer = 0.5;
@@ -244,6 +254,8 @@ public class SchedulerProperties {
         public void setCapacityByNode(Map<String, Double> v) { this.capacityByNode = v; }
         public double getIdleRatio() { return idleRatio; }
         public void setIdleRatio(double v) { this.idleRatio = v; }
+        public boolean isIdleFromMeasurement() { return idleFromMeasurement; }
+        public void setIdleFromMeasurement(boolean v) { this.idleFromMeasurement = v; }
         public double getPeiNormalizer() { return peiNormalizer; }
         public void setPeiNormalizer(double v) { this.peiNormalizer = v; }
         public double getResourceShare() { return resourceShare; }

@@ -9,20 +9,25 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
-import com.innogrid.aims.cloudbarista.spider.SpiderClient;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.openstack.OpenStackServerCatalog;
+import com.innogrid.aims.openstack.OpenStackServerCatalog.ServerInfo;
+import com.innogrid.aims.resource.dto.VmGroupDtos.CandidateServer;
+import com.innogrid.aims.resource.dto.VmGroupDtos.EdgeRequest;
+import com.innogrid.aims.resource.dto.VmGroupDtos.GroupServer;
+import com.innogrid.aims.resource.dto.VmGroupDtos.GroupSummary;
 import com.innogrid.aims.resource.entity.VmGroup;
 import com.innogrid.aims.resource.entity.VmGroupActionHistory;
+import com.innogrid.aims.resource.entity.VmGroupConnection;
 import com.innogrid.aims.resource.entity.VmGroupMember;
 import com.innogrid.aims.resource.repository.VmGroupActionHistoryRepository;
+import com.innogrid.aims.resource.repository.VmGroupConnectionRepository;
+import com.innogrid.aims.resource.repository.VmGroupMemberRepository;
 import com.innogrid.aims.resource.repository.VmGroupRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,174 +35,156 @@ import static org.mockito.Mockito.when;
 class VmGroupServiceTest {
 
     private VmGroupRepository groupRepository;
+    private VmGroupMemberRepository memberRepository;
+    private VmGroupConnectionRepository connectionRepository;
     private VmGroupActionHistoryRepository historyRepository;
-    private SpiderClient spiderClient;
+    private OpenStackServerCatalog catalog;
     private VmGroupService service;
 
     @BeforeEach
     void setUp() {
         groupRepository = mock(VmGroupRepository.class);
+        memberRepository = mock(VmGroupMemberRepository.class);
+        connectionRepository = mock(VmGroupConnectionRepository.class);
         historyRepository = mock(VmGroupActionHistoryRepository.class);
-        spiderClient = mock(SpiderClient.class);
-        service = new VmGroupService(groupRepository, historyRepository, spiderClient);
+        catalog = mock(OpenStackServerCatalog.class);
+        service = new VmGroupService(groupRepository, memberRepository, connectionRepository,
+                historyRepository, catalog);
+
+        when(connectionRepository.findByVmGroupId(any())).thenReturn(List.of());
+        when(memberRepository.countByVmGroupId(any())).thenReturn(0L);
     }
 
-    private static VmGroup groupWithMembers(VmGroupMember... members) {
-        VmGroup group = new VmGroup("web-group", "웹 서버 그룹", "aws-seoul");
-        group.replaceMembers(List.of(members));
-        return group;
+    private VmGroup group() {
+        return new VmGroup("rnd-openstack", "web-group", "설명", true, "admin");
     }
 
     @Test
-    void create_group_saves_and_records_history() {
-        when(groupRepository.existsByName("web-group")).thenReturn(false);
+    void create_group_records_history_with_client_ip() {
         when(groupRepository.save(any(VmGroup.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        VmGroup created = service.createGroup("web-group", "설명", "aws-seoul",
-                List.of(new VmGroupMember("aws-seoul", "vm-1")), "admin@aims.cloud");
+        GroupSummary summary = service.createGroup("rnd-openstack", "web-group", "설명", true,
+                "admin", "192.168.0.1");
 
-        assertThat(created.getName()).isEqualTo("web-group");
-        assertThat(created.getMembers()).hasSize(1);
-        ArgumentCaptor<VmGroupActionHistory> captor =
-                ArgumentCaptor.forClass(VmGroupActionHistory.class);
-        verify(historyRepository).save(captor.capture());
-        assertThat(captor.getValue().getAction()).isEqualTo(VmGroupActionHistory.Action.CREATE);
-        assertThat(captor.getValue().getPerformedBy()).isEqualTo("admin@aims.cloud");
+        assertThat(summary.name()).isEqualTo("web-group");
+        assertThat(summary.enabled()).isTrue();
+        ArgumentCaptor<VmGroupActionHistory> cap = ArgumentCaptor.forClass(VmGroupActionHistory.class);
+        verify(historyRepository).save(cap.capture());
+        assertThat(cap.getValue().getAction()).isEqualTo(VmGroupActionHistory.Action.CREATE);
+        assertThat(cap.getValue().getClientIp()).isEqualTo("192.168.0.1");
     }
 
     @Test
-    void create_group_with_duplicate_name_throws_conflict() {
-        when(groupRepository.existsByName("web-group")).thenReturn(true);
-
-        assertThatThrownBy(() -> service.createGroup("web-group", null, null, List.of(), null))
+    void create_group_requires_deploy_zone_and_name() {
+        assertThatThrownBy(() -> service.createGroup(null, "g", null, true, "admin", "ip"))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(ex -> assertThat(((BusinessException) ex).getStatus())
-                        .isEqualTo(HttpStatus.CONFLICT));
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> service.createGroup("zone", " ", null, true, "admin", "ip"))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
-    void get_group_throws_not_found() {
+    void candidates_exclude_already_added_servers() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group()));
+        when(memberRepository.findByVmGroupIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                new VmGroupMember(1L, "srv-1", "vm1", "com-1", "10.0.0.5")));
+        when(catalog.listServers()).thenReturn(List.of(
+                new ServerInfo("srv-1", "rnd-openstack", "vm1", "com-1", "10.0.0.5", "ACTIVE"),
+                new ServerInfo("srv-2", "rnd-openstack", "vm2", "com-1", "10.0.0.6", "ACTIVE")));
+
+        List<CandidateServer> candidates = service.listCandidates(1L);
+
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).serverId()).isEqualTo("srv-2");
+    }
+
+    @Test
+    void add_servers_snapshots_info_and_skips_duplicates() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group()));
+        when(memberRepository.existsByVmGroupIdAndServerId(1L, "srv-2")).thenReturn(false);
+        when(memberRepository.existsByVmGroupIdAndServerId(1L, "srv-dup")).thenReturn(true);
+        when(catalog.getServer("srv-2")).thenReturn(
+                new ServerInfo("srv-2", "rnd-openstack", "vm2", "com-1", "10.0.0.6", "ACTIVE"));
+
+        service.addServers(1L, List.of("srv-2", "srv-dup"), "admin", "ip");
+
+        ArgumentCaptor<VmGroupMember> cap = ArgumentCaptor.forClass(VmGroupMember.class);
+        verify(memberRepository).save(cap.capture()); // srv-dup 은 스킵
+        assertThat(cap.getValue().getServerId()).isEqualTo("srv-2");
+        assertThat(cap.getValue().getVmName()).isEqualTo("vm2");
+        assertThat(cap.getValue().getIp()).isEqualTo("10.0.0.6");
+    }
+
+    @Test
+    void list_servers_fills_live_status_and_connection_endpoints() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group()));
+        when(memberRepository.findByVmGroupIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                new VmGroupMember(1L, "srv-1", "vm1", "com-1", "10.0.0.5")));
+        when(catalog.statusByServerId()).thenReturn(Map.of("srv-1", "ACTIVE"));
+        when(connectionRepository.findByVmGroupId(1L)).thenReturn(List.of(
+                new VmGroupConnection(1L, "srv-1", "10.0.0.5:8000", "srv-2", "10.0.0.6:1")));
+
+        List<GroupServer> servers = service.listServers(1L);
+
+        assertThat(servers).hasSize(1);
+        assertThat(servers.get(0).status()).isEqualTo("ACTIVE");
+        assertThat(servers.get(0).connections()).containsExactly("10.0.0.5:8000");
+    }
+
+    @Test
+    void list_servers_marks_deleted_when_status_missing() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group()));
+        when(memberRepository.findByVmGroupIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                new VmGroupMember(1L, "gone", "vmX", "com-1", "10.0.0.9")));
+        when(catalog.statusByServerId()).thenReturn(Map.of()); // OpenStack에서 사라짐
+
+        List<GroupServer> servers = service.listServers(1L);
+        assertThat(servers.get(0).status()).isEqualTo("Deleted");
+    }
+
+    @Test
+    void save_network_map_replaces_connections_and_records_history() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group()));
+        when(memberRepository.findByVmGroupIdOrderByCreatedAtAsc(1L)).thenReturn(List.of());
+        when(catalog.statusByServerId()).thenReturn(Map.of());
+
+        service.saveNetworkMap(1L, List.of(
+                new EdgeRequest("srv-1", "10.0.0.5:8000", "srv-2", "10.0.0.6:1")), "admin", "ip");
+
+        verify(connectionRepository).deleteByVmGroupId(1L);
+        verify(connectionRepository).save(any(VmGroupConnection.class));
+        ArgumentCaptor<VmGroupActionHistory> cap = ArgumentCaptor.forClass(VmGroupActionHistory.class);
+        verify(historyRepository).save(cap.capture());
+        assertThat(cap.getValue().getAction()).isEqualTo(VmGroupActionHistory.Action.CONNECTION_UPDATE);
+    }
+
+    @Test
+    void remove_server_also_removes_its_connections() {
+        VmGroupMember member = new VmGroupMember(1L, "srv-1", "vm1", "com-1", "10.0.0.5");
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group()));
+        when(memberRepository.findById(10L)).thenReturn(Optional.of(member));
+        when(connectionRepository.findByVmGroupId(1L)).thenReturn(List.of(
+                new VmGroupConnection(1L, "srv-1", "a", "srv-2", "b"),
+                new VmGroupConnection(1L, "srv-3", "c", "srv-4", "d")));
+
+        service.removeServer(1L, 10L, "admin", "ip");
+
+        verify(connectionRepository).deleteAll(argThat(list -> {
+            java.util.List<?> l = (java.util.List<?>) list;
+            return l.size() == 1;
+        }));
+        verify(memberRepository).delete(member);
+    }
+
+    @Test
+    void get_group_not_found() {
         when(groupRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.getGroup(99L))
+        assertThatThrownBy(() -> service.getGroupSummary(99L))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(ex -> assertThat(((BusinessException) ex).getStatus())
-                        .isEqualTo(HttpStatus.NOT_FOUND));
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
-    @Test
-    void start_group_resumes_all_members_and_records_success() {
-        VmGroup group = groupWithMembers(
-                new VmGroupMember("aws-seoul", "vm-1"),
-                new VmGroupMember("aws-seoul", "vm-2"));
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-
-        Map<String, Object> result = service.startGroup(1L, "admin@aims.cloud");
-
-        verify(spiderClient).controlVM("aws-seoul", "vm-1", "resume");
-        verify(spiderClient).controlVM("aws-seoul", "vm-2", "resume");
-        assertThat(result)
-                .containsEntry("total", 2)
-                .containsEntry("success", 2)
-                .containsEntry("result", "SUCCESS");
-    }
-
-    @Test
-    void stop_group_suspends_members() {
-        VmGroup group = groupWithMembers(new VmGroupMember("aws-seoul", "vm-1"));
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-
-        Map<String, Object> result = service.stopGroup(1L, null);
-
-        verify(spiderClient).controlVM("aws-seoul", "vm-1", "suspend");
-        assertThat(result).containsEntry("action", "STOP");
-    }
-
-    @Test
-    void partial_failure_records_partial_result() {
-        VmGroup group = groupWithMembers(
-                new VmGroupMember("aws-seoul", "vm-ok"),
-                new VmGroupMember("aws-seoul", "vm-bad"));
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-        doThrow(new RuntimeException("spider error"))
-                .when(spiderClient).controlVM("aws-seoul", "vm-bad", "resume");
-
-        Map<String, Object> result = service.startGroup(1L, null);
-
-        assertThat(result)
-                .containsEntry("success", 1)
-                .containsEntry("result", "PARTIAL");
-        assertThat(result.get("failed")).isEqualTo(List.of("vm-bad"));
-
-        ArgumentCaptor<VmGroupActionHistory> captor =
-                ArgumentCaptor.forClass(VmGroupActionHistory.class);
-        verify(historyRepository).save(captor.capture());
-        assertThat(captor.getValue().getResult()).isEqualTo(VmGroupActionHistory.Result.PARTIAL);
-    }
-
-    @Test
-    void start_empty_group_throws_bad_request() {
-        VmGroup group = groupWithMembers();
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-
-        assertThatThrownBy(() -> service.startGroup(1L, null))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(ex -> assertThat(((BusinessException) ex).getStatus())
-                        .isEqualTo(HttpStatus.BAD_REQUEST));
-    }
-
-    @Test
-    void group_detail_includes_member_vm_status() {
-        VmGroup group = groupWithMembers(new VmGroupMember("aws-seoul", "vm-1"));
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-        when(spiderClient.getVMStatus("aws-seoul", "vm-1"))
-                .thenReturn(Map.of("Status", "Running"));
-
-        Map<String, Object> detail = service.getGroupDetail(1L);
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> vms = (List<Map<String, Object>>) detail.get("vms");
-        assertThat(vms).hasSize(1);
-        assertThat(vms.get(0))
-                .containsEntry("vmName", "vm-1")
-                .containsEntry("status", "Running");
-    }
-
-    @Test
-    void group_detail_marks_unknown_status_on_spider_error() {
-        VmGroup group = groupWithMembers(new VmGroupMember("aws-seoul", "vm-1"));
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-        when(spiderClient.getVMStatus(anyString(), anyString()))
-                .thenThrow(new RuntimeException("timeout"));
-
-        Map<String, Object> detail = service.getGroupDetail(1L);
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> vms = (List<Map<String, Object>>) detail.get("vms");
-        assertThat(vms.get(0)).containsEntry("status", "UNKNOWN");
-    }
-
-    @Test
-    void delete_group_records_history() {
-        VmGroup group = groupWithMembers();
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-
-        service.deleteGroup(1L, "admin@aims.cloud");
-
-        verify(groupRepository).delete(group);
-        ArgumentCaptor<VmGroupActionHistory> captor =
-                ArgumentCaptor.forClass(VmGroupActionHistory.class);
-        verify(historyRepository).save(captor.capture());
-        assertThat(captor.getValue().getAction()).isEqualTo(VmGroupActionHistory.Action.DELETE);
-    }
-
-    @Test
-    void histories_query_validates_group_exists() {
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(groupWithMembers()));
-        when(historyRepository.findByVmGroupIdOrderByCreatedAtDesc(eq(1L)))
-                .thenReturn(List.of());
-
-        assertThat(service.getGroupHistories(1L)).isEmpty();
-        verify(historyRepository).findByVmGroupIdOrderByCreatedAtDesc(1L);
+    private static <T> T argThat(org.mockito.ArgumentMatcher<T> m) {
+        return org.mockito.ArgumentMatchers.argThat(m);
     }
 }

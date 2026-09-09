@@ -1,0 +1,40 @@
+# 배치 비교 — 반증(적대)판. 이 판은 우리 엔진이 지도록 설계했다.
+#
+# 심어 둔 데이터로 이긴 결과에 대한 유일한 방어는, 반대로 심은 판에서 지는 것을 같은 코드·같은 지표로 보여 주는 것이다.
+# 그래서 이 파일은 "우리 엔진이 어떤 세상에서 틀리는가"를 역산해 그 세상을 그대로 적어 둔 것이고,
+# 여기서 우리 엔진이 이기면 그것은 좋은 소식이 아니라 <이 판이 적대적이지 않다는 뜻>이므로 판을 다시 설계해야 한다.
+#
+# 우리 엔진이 지는 조건 세 줄:
+#  1. 유휴 전력 비율이 낮다(idleWatts/capacityWatts = 0.060~0.100). 엔진은 정격 × power.idle-ratio(0.3) 를 유휴 전력으로 가정하므로
+#     여기서는 실제 유휴를 3.0~5.0배 과대 추정한다(예: adv-01 은 가정 480W 대 실제 96W). 깨우기 비용을 과대평가한 만큼 통합이
+#     과대평가되고, 깨우기가 실제로는 싼 이 판에서는 흩뿌리기(빈 노드를 열어 낮은 사용률로 쓰기)가 유리해진다.
+#  2. 코어당 지상진실 전력((정격−유휴)/코어)이 PEI 와 어긋난다. PEI(사용률 %/W)는 전력을 분모에 두므로 전력을 많이 쓰는 큰 노드를
+#     벌하는데, 이 판의 큰 노드는 코어가 그보다 더 많아 코어당은 가장 싸다 — adv-02 는 PEI 가 가장 낮은 축(0.047 %/W)이면서
+#     코어당 14.5W 로 지상진실 최선이고, adv-09 는 PEI 가 가장 높은데(0.228 %/W) 코어당 40.8W 로 최악이다.
+#     가동 노드만 보면 PEI 와 코어당 전력의 상관이 +0.97 이라, PEI 순위가 지상진실 순위를 거의 정확히 뒤집는다.
+#  3. 정격이 큰 노드가 효율적이다(정격과 코어당 전력의 상관 −0.87). 주 결과판(−0.21, 양방향)과 반대 방향이므로,
+#     "큰 노드를 피한다"는 판단이 주 결과판에서는 손해가 작고 이 판에서는 곧바로 손해가 된다.
+#
+# 값은 시각의 함수다: 기준 사용률 ± swing(%p) 사인 곡선(주기 periodMinutes), 노드별 위상은 nodeId 해시 + seed 로 고정.
+# 전력 = idleWatts + (capacityWatts - idleWatts) × CPU 사용률 · 온도 = baseTemperature + 0.3 × CPU 사용률.
+# 전 노드 ipmi: true — 미계측을 섞으면 패배의 원인이 "센서가 없어서"로 흐려진다. 계측 공백은 benchmark-cluster-sparse.yml 이 따로 잰다.
+# memoryMb 는 주 결과판과 같이 코어 × 4096MB, 온도는 전부 임계 75℃ 아래로 두었다 — 이 판에서 지는 이유를 전력 하나로 좁히기 위해,
+# 메모리 비율·온도 제약·디스크 여유는 판을 좌우하지 않게 맞춰 두었다(seed 만 11 로 달라 위상이 주 결과판과 겹치지 않는다).
+#
+# 담긴 상황: 노드 9대(전수 계측) / 유휴 3대(adv-01·adv-03·adv-08: cpuUsage+swing ≤ 3) · 가동 6대 / 정격 360~2000W /
+#           유휴비 0.060~0.100 / 최고 온도 64.6℃(adv-07) / GPU 8장을 2대에 분산(adv-01 4 · adv-03 4) / MDC 2곳.
+name: benchmark-adversarial-9nodes
+job: mdc-nodes
+periodMinutes: 60
+swing: 12
+seed: 11
+nodes:
+  - { mdcId: adv-mdc-a, nodeId: "adv-01:9100", cores: 96,  memoryMb: 393216, gpus: 4, cpuUsage: 2,  memoryUsage: 12, diskTotalGb: 16000, diskUsage: 20, ipmi: true, idleWatts: 96,  capacityWatts: 1600, baseTemperature: 34, swing: 1,  trait: "유휴 대형 — 유휴비 0.060, 엔진 가정(480W)이 실제(96W)의 5.00배. 깨우기가 실제로는 가장 싸다. GPU 4" }
+  - { mdcId: adv-mdc-a, nodeId: "adv-02:9100", cores: 128, memoryMb: 524288, gpus: 0, cpuUsage: 55, memoryUsage: 60, diskTotalGb: 20000, diskUsage: 30, ipmi: true, idleWatts: 140, capacityWatts: 2000, baseTemperature: 38, swing: 12, trait: "지상진실 최선 — 코어당 14.5W. 전력 1163W 라 PEI 는 0.047 %/W 로 최하위권(엔진이 벌하는 노드)" }
+  - { mdcId: adv-mdc-a, nodeId: "adv-03:9100", cores: 64,  memoryMb: 262144, gpus: 4, cpuUsage: 2,  memoryUsage: 14, diskTotalGb: 12000, diskUsage: 18, ipmi: true, idleWatts: 84,  capacityWatts: 1200, baseTemperature: 35, swing: 1,  trait: "유휴 대형 — 유휴비 0.070, 엔진 가정이 실제의 4.29배. GPU 4" }
+  - { mdcId: adv-mdc-a, nodeId: "adv-04:9100", cores: 48,  memoryMb: 196608, gpus: 0, cpuUsage: 45, memoryUsage: 48, diskTotalGb: 8000,  diskUsage: 26, ipmi: true, idleWatts: 60,  capacityWatts: 1000, baseTemperature: 40, swing: 12, trait: "코어당 19.6W — 유휴비 0.060 으로 이 판에서 가장 낮다" }
+  - { mdcId: adv-mdc-a, nodeId: "adv-05:9100", cores: 32,  memoryMb: 131072, gpus: 0, cpuUsage: 60, memoryUsage: 62, diskTotalGb: 6000,  diskUsage: 32, ipmi: true, idleWatts: 64,  capacityWatts: 800,  baseTemperature: 42, swing: 12, trait: "중간 — 코어당 23.0W, PEI 0.119 %/W" }
+  - { mdcId: adv-mdc-b, nodeId: "adv-06:9100", cores: 24,  memoryMb: 98304,  gpus: 0, cpuUsage: 35, memoryUsage: 38, diskTotalGb: 4000,  diskUsage: 24, ipmi: true, idleWatts: 52,  capacityWatts: 650,  baseTemperature: 44, swing: 12, trait: "중간 — 코어당 24.9W, PEI 0.134 %/W" }
+  - { mdcId: adv-mdc-b, nodeId: "adv-07:9100", cores: 16,  memoryMb: 65536,  gpus: 0, cpuUsage: 50, memoryUsage: 52, diskTotalGb: 3000,  diskUsage: 22, ipmi: true, idleWatts: 45,  capacityWatts: 500,  baseTemperature: 46, swing: 12, trait: "코어당 28.4W 인데 PEI 0.184 %/W — 엔진이 선호하기 시작하는 자리. 최고 온도 64.6℃" }
+  - { mdcId: adv-mdc-b, nodeId: "adv-08:9100", cores: 12,  memoryMb: 49152,  gpus: 0, cpuUsage: 1,  memoryUsage: 10, diskTotalGb: 2000,  diskUsage: 14, ipmi: true, idleWatts: 42,  capacityWatts: 420,  baseTemperature: 36, swing: 1,  trait: "유휴 소형 — 유휴비 0.100(이 판 최대), 깨워도 42W 뿐이다" }
+  - { mdcId: adv-mdc-b, nodeId: "adv-09:9100", cores: 8,   memoryMb: 32768,  gpus: 0, cpuUsage: 30, memoryUsage: 32, diskTotalGb: 2000,  diskUsage: 28, ipmi: true, idleWatts: 34,  capacityWatts: 360,  baseTemperature: 48, swing: 12, trait: "지상진실 최악 — 코어당 40.8W. 그런데 PEI 0.228 %/W 로 최고(엔진이 가장 선호하는 노드)" }

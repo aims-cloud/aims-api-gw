@@ -8,5 +8,5 @@ import com.innogrid.aims.resource.entity.VmGroupActionHistory;
 
 public interface VmGroupActionHistoryRepository extends JpaRepository<VmGroupActionHistory, Long> {
 
-    List<VmGroupActionHistory> findByVmGroupIdOrderByCreatedAtDesc(Long vmGroupId);
+    List<VmGroupActionHistory> findByVmGroupIdOrderByStartedAtDesc(Long vmGroupId);
 }

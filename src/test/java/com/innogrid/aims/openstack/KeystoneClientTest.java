@@ -16,6 +16,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -116,6 +117,22 @@ class KeystoneClientTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getStatus())
                         .isEqualTo(HttpStatus.BAD_GATEWAY));
+    }
+
+    @Test
+    void list_projects_sends_issued_token() {
+        expectTokenIssue("tok-123", Instant.now().plus(1, ChronoUnit.HOURS));
+        server.expect(requestTo(AUTH_URL + "/auth/projects"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Auth-Token", "tok-123"))
+                .andRespond(withStatus(HttpStatus.OK)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"projects\":[{\"id\":\"p-1\",\"name\":\"admin\"}]}"));
+
+        var result = client.listProjects();
+
+        assertThat(result).containsKey("projects");
+        server.verify();
     }
 
     @Test

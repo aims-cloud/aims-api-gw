@@ -2,7 +2,8 @@ package com.innogrid.aims.resource.controller;
 
 import java.security.Principal;
 import java.util.List;
-import java.util.Map;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,100 +15,137 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.innogrid.aims.common.dto.ApiResponse;
-import com.innogrid.aims.resource.entity.VmGroup;
-import com.innogrid.aims.resource.entity.VmGroupActionHistory;
-import com.innogrid.aims.resource.entity.VmGroupMember;
+import com.innogrid.aims.resource.dto.VmGroupDtos.AddServersRequest;
+import com.innogrid.aims.resource.dto.VmGroupDtos.CandidateServer;
+import com.innogrid.aims.resource.dto.VmGroupDtos.GroupRequest;
+import com.innogrid.aims.resource.dto.VmGroupDtos.GroupServer;
+import com.innogrid.aims.resource.dto.VmGroupDtos.GroupSummary;
+import com.innogrid.aims.resource.dto.VmGroupDtos.HistoryRow;
+import com.innogrid.aims.resource.dto.VmGroupDtos.NetworkMap;
+import com.innogrid.aims.resource.dto.VmGroupDtos.NetworkMapRequest;
 import com.innogrid.aims.resource.service.VmGroupService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * 가상서버 그룹 API.
- * 그룹 CRUD + 일괄 동작(시작/중지) + 상세(소속 가상서버/행위이력 탭).
+ * 가상서버 그룹 API (통합 토폴로지 OpenStack 기준).
+ * 그룹 CRUD + 가상서버 담기/빼기 + 네트워크 맵(서버 연결 관리) + 행위 이력.
  */
-@Tag(name = "가상서버 그룹", description = "VM 논리 그룹 관리 및 일괄 동작")
+@Tag(name = "토폴로지 > 가상서버 그룹", description = "OpenStack VM 논리 그룹·연결(네트워크 맵) 관리")
 @RestController
 @RequestMapping("/api/v1/vm-groups")
 public class VmGroupController {
 
-    private final VmGroupService vmGroupService;
+    private final VmGroupService service;
 
-    public VmGroupController(VmGroupService vmGroupService) {
-        this.vmGroupService = vmGroupService;
+    public VmGroupController(VmGroupService service) {
+        this.service = service;
     }
+
+    // ── 그룹 CRUD ───────────────────────────────────────────────
 
     @Operation(summary = "그룹 목록")
     @GetMapping
-    public ApiResponse<List<VmGroup>> listGroups() {
-        return ApiResponse.ok(vmGroupService.listGroups());
+    public ApiResponse<List<GroupSummary>> listGroups() {
+        return ApiResponse.ok(service.listGroups());
+    }
+
+    @Operation(summary = "그룹 상세 — 상세 탭")
+    @GetMapping("/{groupId}")
+    public ApiResponse<GroupSummary> getGroup(@PathVariable Long groupId) {
+        return ApiResponse.ok(service.getGroupSummary(groupId));
     }
 
     @Operation(summary = "그룹 생성")
     @PostMapping
-    public ApiResponse<VmGroup> createGroup(@RequestBody GroupRequest request, Principal principal) {
-        return ApiResponse.ok(vmGroupService.createGroup(
-                request.name(), request.description(), request.deployZone(),
-                toMembers(request.members()), name(principal)));
+    public ApiResponse<GroupSummary> createGroup(@RequestBody GroupRequest req,
+                                                 Principal principal, HttpServletRequest http) {
+        return ApiResponse.ok(service.createGroup(req.deployZone(), req.name(), req.description(),
+                req.enabled() == null || req.enabled(), name(principal), clientIp(http)));
     }
 
-    @Operation(summary = "그룹 상세 — 소속 가상서버 탭 (VM별 현재 상태 포함)")
-    @GetMapping("/{groupId}")
-    public ApiResponse<Map<String, Object>> getGroupDetail(@PathVariable Long groupId) {
-        return ApiResponse.ok(vmGroupService.getGroupDetail(groupId));
-    }
-
-    @Operation(summary = "그룹 수정")
+    @Operation(summary = "그룹 편집")
     @PutMapping("/{groupId}")
-    public ApiResponse<VmGroup> updateGroup(@PathVariable Long groupId,
-                                            @RequestBody GroupRequest request,
-                                            Principal principal) {
-        return ApiResponse.ok(vmGroupService.updateGroup(
-                groupId, request.name(), request.description(), request.deployZone(),
-                request.members() == null ? null : toMembers(request.members()),
-                name(principal)));
+    public ApiResponse<GroupSummary> updateGroup(@PathVariable Long groupId, @RequestBody GroupRequest req,
+                                                 Principal principal, HttpServletRequest http) {
+        return ApiResponse.ok(service.updateGroup(groupId, req.deployZone(), req.name(),
+                req.description(), req.enabled(), name(principal), clientIp(http)));
     }
 
     @Operation(summary = "그룹 삭제")
     @DeleteMapping("/{groupId}")
-    public ApiResponse<Void> deleteGroup(@PathVariable Long groupId, Principal principal) {
-        vmGroupService.deleteGroup(groupId, name(principal));
+    public ApiResponse<Void> deleteGroup(@PathVariable Long groupId,
+                                         Principal principal, HttpServletRequest http) {
+        service.deleteGroup(groupId, name(principal), clientIp(http));
         return ApiResponse.ok(null);
     }
 
-    @Operation(summary = "그룹 시작 — 소속 VM 전체 resume")
-    @PostMapping("/{groupId}/start")
-    public ApiResponse<Map<String, Object>> startGroup(@PathVariable Long groupId, Principal principal) {
-        return ApiResponse.ok(vmGroupService.startGroup(groupId, name(principal)));
+    // ── 가상서버 탭 ─────────────────────────────────────────────
+
+    @Operation(summary = "그룹의 가상서버 목록 (실시간 상태)")
+    @GetMapping("/{groupId}/servers")
+    public ApiResponse<List<GroupServer>> listServers(@PathVariable Long groupId) {
+        return ApiResponse.ok(service.listServers(groupId));
     }
 
-    @Operation(summary = "그룹 중지 — 소속 VM 전체 suspend")
-    @PostMapping("/{groupId}/stop")
-    public ApiResponse<Map<String, Object>> stopGroup(@PathVariable Long groupId, Principal principal) {
-        return ApiResponse.ok(vmGroupService.stopGroup(groupId, name(principal)));
+    @Operation(summary = "가상서버 추가 후보 목록", description = "배포영역의 OpenStack 서버 중 미담김 항목")
+    @GetMapping("/{groupId}/candidates")
+    public ApiResponse<List<CandidateServer>> listCandidates(@PathVariable Long groupId) {
+        return ApiResponse.ok(service.listCandidates(groupId));
     }
 
-    @Operation(summary = "그룹 상세 — 행위이력 탭")
+    @Operation(summary = "가상서버 추가")
+    @PostMapping("/{groupId}/servers")
+    public ApiResponse<Void> addServers(@PathVariable Long groupId, @RequestBody AddServersRequest req,
+                                        Principal principal, HttpServletRequest http) {
+        service.addServers(groupId, req.serverIds(), name(principal), clientIp(http));
+        return ApiResponse.ok(null);
+    }
+
+    @Operation(summary = "가상서버 제거")
+    @DeleteMapping("/{groupId}/servers/{memberId}")
+    public ApiResponse<Void> removeServer(@PathVariable Long groupId, @PathVariable Long memberId,
+                                          Principal principal, HttpServletRequest http) {
+        service.removeServer(groupId, memberId, name(principal), clientIp(http));
+        return ApiResponse.ok(null);
+    }
+
+    // ── 네트워크 맵 (서버 연결 관리) ────────────────────────────
+
+    @Operation(summary = "네트워크 맵 조회", description = "그룹 내 VM 노드와 방향성 연결(엣지)")
+    @GetMapping("/{groupId}/network-map")
+    public ApiResponse<NetworkMap> getNetworkMap(@PathVariable Long groupId) {
+        return ApiResponse.ok(service.getNetworkMap(groupId));
+    }
+
+    @Operation(summary = "네트워크 맵 저장 (서버 연결 관리)", description = "연결 전체 교체")
+    @PutMapping("/{groupId}/network-map")
+    public ApiResponse<NetworkMap> saveNetworkMap(@PathVariable Long groupId,
+                                                  @RequestBody NetworkMapRequest req,
+                                                  Principal principal, HttpServletRequest http) {
+        return ApiResponse.ok(service.saveNetworkMap(groupId, req.edges(), name(principal), clientIp(http)));
+    }
+
+    // ── 행위 이력 탭 ────────────────────────────────────────────
+
+    @Operation(summary = "행위 이력")
     @GetMapping("/{groupId}/histories")
-    public ApiResponse<List<VmGroupActionHistory>> getGroupHistories(@PathVariable Long groupId) {
-        return ApiResponse.ok(vmGroupService.getGroupHistories(groupId));
+    public ApiResponse<List<HistoryRow>> getHistories(@PathVariable Long groupId) {
+        return ApiResponse.ok(service.getHistories(groupId));
     }
 
-    // ── 요청 DTO ────────────────────────────────────────────────
-
-    public record GroupRequest(String name, String description, String deployZone,
-                               List<MemberRequest> members) {}
-
-    public record MemberRequest(String connectionName, String vmName) {}
-
-    private static List<VmGroupMember> toMembers(List<MemberRequest> requests) {
-        if (requests == null) return List.of();
-        return requests.stream()
-                .map(m -> new VmGroupMember(m.connectionName(), m.vmName()))
-                .toList();
-    }
+    // ── 공통 ────────────────────────────────────────────────────
 
     private static String name(Principal principal) {
         return principal == null ? null : principal.getName();
+    }
+
+    private static String clientIp(HttpServletRequest http) {
+        String forwarded = http.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return http.getRemoteAddr();
     }
 }

@@ -1,6 +1,8 @@
 package com.innogrid.aims.scheduler.dto;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -397,6 +399,10 @@ public record PlacementBenchmarkResponse(
      *                      두 전략의 max 가 같은 시각 지점에서 나왔다는 보장이 없다
      * @param samples       값이 나온 시각 지점 수. 무효여도 남긴다 — "지점이 없어 무효"와 "지점은 있었지만
      *                      판정이 무효"를 구분하는 유일한 자리다
+     * @param points        지점별 값. <b>인덱스 = 시각 지점</b>이고 짝이 아닌 지점은 null 이며 길이는 항상
+     *                      스윕 지점 수다 — 두 실행을 지점별로 대조하기 위한 것이라 값만 모아 압축하면
+     *                      지점 정렬이 깨져 대조 자체가 성립하지 않는다. 지금은 지점별 판정이 필요한 지표만
+     *                      채우고 나머지는 null 이다(같은 값을 전 지표에 실으면 응답이 배로 커진다)
      * @param valid         이 숫자를 순위 근거로 써도 되는가
      * @param invalidReason 쓸 수 없을 때의 사유
      */
@@ -406,8 +412,14 @@ public record PlacementBenchmarkResponse(
             Double min,
             Double max,
             int samples,
+            List<Double> points,
             boolean valid,
             String invalidReason
     ) {
+        public MetricValue {
+            // null 요소를 담아야 하므로 List.copyOf 를 쓸 수 없다 — 그쪽은 null 원소에서 NPE 다.
+            // 채우지 않은 지표는 null 을 그대로 두어 "지점값이 없다"와 "지점값이 전부 null 이다"를 가른다.
+            points = points == null ? null : Collections.unmodifiableList(new ArrayList<>(points));
+        }
     }
 }

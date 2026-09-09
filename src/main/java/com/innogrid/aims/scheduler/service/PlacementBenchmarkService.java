@@ -101,6 +101,12 @@ public class PlacementBenchmarkService {
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     private static final String RANDOM_ID = "random";
 
+    /**
+     * 격차 지표의 <b>분모가 되는 대조군</b>. 문헌 기준선이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
+     * 값이 없다. 시험 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
+     */
+    private static final String PABFD_ID = "pabfd";
+
     private final EngineRegistry engineRegistry;
     private final SchedulerProperties properties;
     private final BenchmarkClusters clusters;
@@ -469,6 +475,16 @@ public class PlacementBenchmarkService {
                 placedHere.put(id, point.byStrategy().get(id).placed());
             }
             boolean pointComparable = BenchmarkRules.totalsComparable(placedHere.values());
+
+            // 생성식 총전력은 지점마다 전략당 한 번 내어 두 열이 같은 값을 읽는다. 총량 열은 짝이 아닌
+            // 지점을 null 로 가리지만(아래), 격차 열은 이 행과 기준 전략 둘만 짝지으므로 가리는 조건이
+            // 다르다 — 같은 오라클 호출을 두 조건으로 쓰는 것이지 값을 두 번 계산하는 것이 아니다.
+            Map<String, Double> powerByStrategy = new LinkedHashMap<>();
+            for (String id : strategyIds) {
+                powerByStrategy.put(id, power(oracle, point, point.byStrategy().get(id), mode));
+            }
+            Integer placedBaseline = placedHere.get(PABFD_ID);
+            Double powerBaseline = powerByStrategy.get(PABFD_ID);
             if (pointComparable) {
                 usablePoints++;
             } else {
@@ -492,7 +508,11 @@ public class PlacementBenchmarkService {
                 // 아니다 — 생성식 온도는 CPU 의 함수라 배치량이 다르면 열이 아니라 배치량을 재게 된다.
                 // 짝이 아닌 지점의 값은 아예 세지 않는다.
                 add(into, BenchmarkRules.GENERATOR_POWER,
-                        pointComparable ? power(oracle, point, p, mode) : null);
+                        pointComparable ? powerByStrategy.get(id) : null);
+                // 격차는 전 전략 짝을 요구하지 않는다 — 이 행과 기준 전략의 건수만 같으면 낸다.
+                add(into, BenchmarkRules.GAP_VS_PABFD,
+                        gapVsBaseline(id, placedHere.get(id), powerByStrategy.get(id),
+                                placedBaseline, powerBaseline));
                 add(into, BenchmarkRules.ACTIVE_NODE_DELTA, pointComparable
                         ? (double) (p.activeCountAfter() - point.activeCountBefore()) : null);
                 add(into, BenchmarkRules.WARN_ZONE_NODES,
@@ -535,6 +555,23 @@ public class PlacementBenchmarkService {
     }
 
     /**
+     * 이 행의 <b>기준 전략 대비</b> 총전력 격차(%). 기준 전략 자신과 기준이 없는 실행에서는 값을 내지 않는다 —
+     * 자기 자신의 0 은 "격차가 없다"가 아니라 값이 아니고, 그 사유는 {@code invalidReason} 이 적는다.
+     *
+     * <p>짝 조건과 분모 가드는 {@link BenchmarkRules#pairedGapPercent} 가 들고 있다 — 판정에 쓰는 식이라
+     * 결과 코드보다 먼저 등록된 자리에 있어야 하고, 여기서는 반올림만 한다.</p>
+     */
+    private static Double gapVsBaseline(String id, Integer placed, Double power,
+                                        Integer placedBaseline, Double powerBaseline) {
+        if (PABFD_ID.equals(id) || placed == null || power == null
+                || placedBaseline == null || powerBaseline == null) {
+            return null;
+        }
+        Double gap = BenchmarkRules.pairedGapPercent(placed, placedBaseline, power, powerBaseline);
+        return gap == null ? null : round(gap);
+    }
+
+    /**
      * 총량 지표를 몇 곳에서 냈는지 밝히는 문장. 셀에 실어 두면 "몇 곳의 중앙값" 이라는 사실이 숫자와
      * 같은 자리에서 읽힌다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.
      */
@@ -555,15 +592,21 @@ public class PlacementBenchmarkService {
         String strategyId = any.strategy().id();
         boolean placedAnywhere = points.stream()
                 .anyMatch(p -> p.byStrategy().get(strategyId).placed() > 0);
+        boolean baselinePresent = points.get(0).byStrategy().containsKey(PABFD_ID);
         List<MetricValue> values = new ArrayList<>(BenchmarkRules.METRICS.size());
 
         for (BenchmarkMetric metric : BenchmarkRules.METRICS) {
-            List<Double> series = samples.getOrDefault(metric.key(), List.of()).stream()
-                    .filter(Objects::nonNull).toList();
+            List<Double> raw = samples.getOrDefault(metric.key(), List.of());
+            List<Double> series = raw.stream().filter(Objects::nonNull).toList();
+            // 지점별 값은 지점 대조가 필요한 지표만 싣는다. 필터 전 리스트라 인덱스가 시각 지점이고,
+            // 짝이 아닌 지점은 null 로 남는다.
+            List<Double> pointValues = BenchmarkRules.GAP_VS_PABFD.equals(metric.key())
+                    ? pointSeries(raw, points.size()) : null;
 
-            String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere);
+            String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere,
+                    baselinePresent);
             if (series.isEmpty()) {
-                values.add(new MetricValue(metric.key(), null, null, null, 0, false,
+                values.add(new MetricValue(metric.key(), null, null, null, 0, pointValues, false,
                         invalid != null ? invalid : "이 셀에서 값이 나오지 않았다"));
                 continue;
             }
@@ -571,15 +614,30 @@ public class PlacementBenchmarkService {
                 // 순위 근거가 될 수 없다고 판정한 지표에 중앙값을 실으면, valid 플래그를 보지 않은
                 // 인용자에게는 그냥 숫자로 읽힌다. 값은 지우고 표본 수는 남긴다 — "지점이 없어 무효"와
                 // "지점은 있었지만 판정이 무효"가 응답에서 구분되어야 한다.
-                values.add(new MetricValue(metric.key(), null, null, null, series.size(), false, invalid));
+                values.add(new MetricValue(metric.key(), null, null, null, series.size(), pointValues,
+                        false, invalid));
                 continue;
             }
             values.add(new MetricValue(metric.key(), median(series),
                     round(series.stream().mapToDouble(Double::doubleValue).min().orElseThrow()),
                     round(series.stream().mapToDouble(Double::doubleValue).max().orElseThrow()),
-                    series.size(), true, null));
+                    series.size(), pointValues, true, null));
         }
         return values;
+    }
+
+    /**
+     * 지점별 값 — 길이는 <b>항상</b> 스윕 지점 수이고 인덱스가 시각 지점이다.
+     *
+     * <p>선언만 되고 한 번도 담기지 않은 키(예: 기준 전략이 없는 실행의 격차)는 빈 리스트로 오므로 null 로
+     * 채워 길이를 맞춘다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
+     * 성립하지 않는다 — 짝이 아닌 지점이 몇 번째였는지가 응답에 남아야 한다.</p>
+     */
+    private static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
+        List<Double> series = new ArrayList<>(Math.max(raw.size(), sweepPoints));
+        series.addAll(raw);
+        while (series.size() < sweepPoints) series.add(null);
+        return series;
     }
 
     /**
@@ -593,8 +651,19 @@ public class PlacementBenchmarkService {
      * 는 셀 전체를 보고 온다. 온도 게이트·계측 노드 수는 셀 안에서 상수라 첫 지점으로 판정해도 된다.</p>
      */
     private static String invalidReason(BenchmarkMetric metric, Placement any,
-                                        int usablePoints, int measuredNodes, boolean placedAnywhere) {
+                                        int usablePoints, int measuredNodes, boolean placedAnywhere,
+                                        boolean baselinePresent) {
         String key = metric.key();
+        if (BenchmarkRules.GAP_VS_PABFD.equals(key)) {
+            // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0 이나 빈 값을 내면 "격차가
+            // 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
+            if (!baselinePresent) {
+                return "기준 전략(전력 인지 최적적합)이 이 실행에 없다";
+            }
+            if (PABFD_ID.equals(any.strategy().id())) {
+                return "기준 전략 자신 — 0 은 값이 아니다";
+            }
+        }
         if ((BenchmarkRules.GENERATOR_POWER.equals(key) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(key))
                 && usablePoints == 0) {
             return "전 전략의 배치 건수가 같은 시각 지점이 없다 — 적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다";
@@ -797,7 +866,7 @@ public class PlacementBenchmarkService {
         Map<String, PlacementStrategy> baselines = new LinkedHashMap<>();
         baselines.put("ffd-size", BaselinePlacers.ffdBySize());
         baselines.put("ffd-priority-size", BaselinePlacers.ffdByPriorityThenSize());
-        baselines.put("pabfd", BaselinePlacers.pabfd(powerModel));
+        baselines.put(PABFD_ID, BaselinePlacers.pabfd(powerModel));
         baselines.put("bfd", BaselinePlacers.bfd());
         baselines.put("coolest-first", BaselinePlacers.coolestFirst());
         baselines.put(RANDOM_ID, BaselinePlacers.random(BenchmarkRules.RANDOM_SEEDS.get(0)));

@@ -3,8 +3,12 @@ package com.innogrid.aims.monitoring.service.alarm;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -16,15 +20,20 @@ import com.innogrid.aims.common.util.SortSupport;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgeRequest;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgementResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmDeliveryResponse;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmDeliveryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryListItemResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistorySearchField;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmMessageDetailResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmChannel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmTargetType;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleAreaListItemResponse.AreaKind;
+import com.innogrid.aims.monitoring.entity.AlarmDelivery;
+import com.innogrid.aims.monitoring.entity.AlarmDeliveryRecipient;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
 import com.innogrid.aims.monitoring.log.PortalLogService;
+import com.innogrid.aims.monitoring.repository.AlarmDeliveryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmHistorySpecifications;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
@@ -37,7 +46,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 관측 > 알람 > 발생 이력 탭 조회·확인 서비스 (docs/09).
@@ -67,6 +75,7 @@ public class AlarmHistoryService {
     private static final String NAMESPACE_PREFIX = "TB:";
 
     private final AlarmHistoryRepository repository;
+    private final AlarmDeliveryRepository deliveryRepository;
     private final AuthService authService;
     private final TumblebugTreeBuilder tumblebugTreeBuilder;
     private final PortalLogContextResolver contextResolver;
@@ -74,17 +83,19 @@ public class AlarmHistoryService {
     private final ZoneId zone;
 
     @Autowired
-    public AlarmHistoryService(AlarmHistoryRepository repository, AuthService authService,
-                               TumblebugTreeBuilder tumblebugTreeBuilder,
+    public AlarmHistoryService(AlarmHistoryRepository repository, AlarmDeliveryRepository deliveryRepository,
+                               AuthService authService, TumblebugTreeBuilder tumblebugTreeBuilder,
                                PortalLogContextResolver contextResolver, PortalLogService portalLogService) {
-        this(repository, authService, tumblebugTreeBuilder, contextResolver, portalLogService, ZoneId.systemDefault());
+        this(repository, deliveryRepository, authService, tumblebugTreeBuilder, contextResolver, portalLogService,
+                ZoneId.systemDefault());
     }
 
     /** 테스트용 — 기간 변환 타임존 고정 */
-    AlarmHistoryService(AlarmHistoryRepository repository, AuthService authService,
-                        TumblebugTreeBuilder tumblebugTreeBuilder,
+    AlarmHistoryService(AlarmHistoryRepository repository, AlarmDeliveryRepository deliveryRepository,
+                        AuthService authService, TumblebugTreeBuilder tumblebugTreeBuilder,
                         PortalLogContextResolver contextResolver, PortalLogService portalLogService, ZoneId zone) {
         this.repository = repository;
+        this.deliveryRepository = deliveryRepository;
         this.authService = authService;
         this.tumblebugTreeBuilder = tumblebugTreeBuilder;
         this.contextResolver = contextResolver;
@@ -155,16 +166,60 @@ public class AlarmHistoryService {
         return date == null ? null : date.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
     }
 
-    /** 전송 이력 (행 확장) — 대상별 채널 전송 결과 (개인: 단일 상태, 조직: 카운트) */
+    /**
+     * 전송 이력 (행 확장) — 전송 원장을 대상(개인/조직) 단위로 묶고 채널별 결과를 붙인다.
+     * 개인은 단일 상태, 조직은 성공/전송중/실패 카운트. 스코프 밖·없는 알람은 404, 전송이 없으면 빈 목록.
+     */
     public List<AlarmDeliveryResponse> getDeliveries(Long alarmId) {
-        // TODO:: 전송 원장(alarm_deliveries·alarm_delivery_recipients) 구현 후 (docs/09 A.5.4)
-        throw dataSourceNotImplemented();
+        accessibleAlarm(alarmId);
+        Map<String, List<AlarmDelivery>> byTarget = new LinkedHashMap<>();
+        for (AlarmDelivery d : deliveryRepository.findByHistoryIdOrderByIdAsc(alarmId)) {
+            byTarget.computeIfAbsent(d.getTargetType() + ":" + d.getTargetId(), k -> new ArrayList<>()).add(d);
+        }
+        return byTarget.values().stream().map(AlarmHistoryService::toDeliveryResponse).toList();
     }
 
-    /** 메시지 상세 모달 — 발송 메시지 본문과 전송 대상 목록(수신 주소·결과·실패 사유·전송 일시) */
+    private static AlarmDeliveryResponse toDeliveryResponse(List<AlarmDelivery> group) {
+        AlarmDelivery first = group.get(0);
+        boolean organization = first.getTargetType() == AlarmTargetType.ORGANIZATION;
+        List<AlarmDeliveryResponse.ChannelSummary> channels = group.stream().map(d -> {
+            long success = d.countByStatus(AlarmDeliveryStatus.SUCCESS);
+            long sending = d.countByStatus(AlarmDeliveryStatus.SENDING);
+            long failed = d.countByStatus(AlarmDeliveryStatus.FAILED);
+            AlarmDeliveryStatus status = organization ? null : d.getRecipients().stream().findFirst()
+                    .map(AlarmDeliveryRecipient::getStatus).orElse(AlarmDeliveryStatus.FAILED);
+            OffsetDateTime sentAt = d.getRecipients().stream().map(AlarmDeliveryRecipient::getSentAt)
+                    .filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null);
+            return new AlarmDeliveryResponse.ChannelSummary(d.getId(), d.getChannel(), status,
+                    organization ? success : null, organization ? sending : null, organization ? failed : null,
+                    d.getRecipients().size(), sentAt);
+        }).toList();
+        return new AlarmDeliveryResponse(first.getTargetType(), first.getTargetId(), first.getTargetName(), channels);
+    }
+
+    /**
+     * 메시지 상세 모달 — 발송 시점 제목·본문 스냅샷과 수신자 목록(수신 주소·결과·실패 사유·전송 일시).
+     * deliveryId 가 이 알람의 것이 아니면 404, channel 을 주었는데 전송 행의 채널과 다르면 400.
+     */
     public AlarmMessageDetailResponse getMessageDetail(Long alarmId, Long deliveryId, AlarmChannel channel) {
-        // TODO:: 전송 원장 구현 후 — 본문은 alarm_deliveries.body 스냅샷
-        throw dataSourceNotImplemented();
+        AlarmHistory alarm = accessibleAlarm(alarmId);
+        AlarmDelivery d = deliveryRepository.findByIdAndHistoryId(deliveryId, alarmId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "전송 이력을 찾을 수 없습니다: " + deliveryId));
+        if (channel != null && channel != d.getChannel()) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "전송 이력의 채널(" + d.getChannel() + ")과 다릅니다: " + channel);
+        }
+        boolean organization = d.getTargetType() == AlarmTargetType.ORGANIZATION;
+        List<AlarmMessageDetailResponse.Recipient> recipients = d.getRecipients().stream()
+                .map(r -> new AlarmMessageDetailResponse.Recipient(r.getName(),
+                        r.getUserId() == null ? null : String.valueOf(r.getUserId()),
+                        r.getAddress(), r.getStatus(), r.getFailReason(), r.getSentAt()))
+                .toList();
+        return new AlarmMessageDetailResponse(alarm.getPolicyName(), alarm.getResourceName(), d.getChannel(),
+                d.getTargetType(), d.getTargetName(),
+                organization ? d.getRecipients().size() : null,
+                organization ? new AlarmMessageDetailResponse.ResultSummary(
+                        d.countByStatus(AlarmDeliveryStatus.SUCCESS), d.countByStatus(AlarmDeliveryStatus.FAILED)) : null,
+                d.getSubject(), d.getBody(), recipients);
     }
 
     /** 알람 확인 — 확인 내용(필수) 저장, 확인자·확인 시각은 인증 사용자 기준으로 서버가 기록. 이미 확인됐으면 409 */
@@ -210,11 +265,5 @@ public class AlarmHistoryService {
         return new AlarmAcknowledgementResponse(a.getOccurredAt(), a.getLevel(), a.getResourceType(), a.getResourceName(),
                 a.getCriterion(), AlarmHistoryListItemResponse.formatObserved(a.getObservedValue(), a.getUnit()),
                 a.getAcknowledgedAt(), a.getAcknowledgedBy(), a.getAckContent());
-    }
-
-    private ResponseStatusException dataSourceNotImplemented() {
-        return new ResponseStatusException(
-                HttpStatus.NOT_IMPLEMENTED,
-                "알림 전송 이력·확인 데이터와 알람 발생 이력 화면의 매핑 구현 전입니다.");
     }
 }

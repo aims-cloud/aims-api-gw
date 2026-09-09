@@ -75,7 +75,8 @@ public class AlarmHistoryController {
 
     @Operation(summary = "알람 전송 이력",
             description = "목록 행 확장 서브테이블 — 대상(개인/조직)별 Email·SMS 전송 결과를 조회합니다. "
-                    + "개인은 채널별 단일 상태, 조직은 채널별 성공/전송중/실패 카운트입니다.")
+                    + "개인은 채널별 단일 상태, 조직은 채널별 성공/전송중/실패 카운트입니다. "
+                    + "채널마다 deliveryId 가 다르며 메시지 상세는 그 id 로 엽니다. 전송이 없으면 빈 배열, 스코프 밖·없는 알람은 404.")
     @GetMapping("/histories/{alarmId}/deliveries")
     public ApiResponse<List<AlarmDeliveryResponse>> getDeliveries(@PathVariable Long alarmId) {
         return ApiResponse.ok(alarmHistoryService.getDeliveries(alarmId));
@@ -83,12 +84,13 @@ public class AlarmHistoryController {
 
     @Operation(summary = "메시지 상세",
             description = "전송 이력의 이메일/SMS 버튼 모달 — 정책명/대상 자원/알람 방식/전송 대상, "
-                    + "발송 메시지 본문, 전송 대상 목록(수신 주소·전송 결과·실패 사유·전송 일시)을 조회합니다.")
+                    + "발송 시점 제목·본문 스냅샷, 수신자 목록(수신 주소·전송 결과·실패 사유·전송 일시)을 조회합니다. "
+                    + "channel 은 선택이며 전송 행의 채널과 다르면 400, 이 알람의 전송이 아니면 404.")
     @GetMapping("/histories/{alarmId}/deliveries/{deliveryId}/message")
     public ApiResponse<AlarmMessageDetailResponse> getMessageDetail(
             @PathVariable Long alarmId,
             @PathVariable Long deliveryId,
-            @RequestParam AlarmChannel channel) {
+            @RequestParam(required = false) AlarmChannel channel) {
         return ApiResponse.ok(alarmHistoryService.getMessageDetail(alarmId, deliveryId, channel));
     }
 

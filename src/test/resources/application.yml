@@ -34,6 +34,10 @@ aims:
     # 기본값은 30초인데 전체 스위트가 그보다 오래 걸려, 테스트가 심어 둔 "예정 시각이 지난" 스케줄을
     # 폴러가 진짜로 집어가 무작위 실패를 만든다. 러너 자체의 동작은 ScheduleRunnerTest 가 따로 본다.
     initial-delay-seconds: 86400
+  alarm:
+    notification:
+      # 발송 재시도 대기를 거의 없애 테스트를 빠르게
+      retry-backoff: 10ms
 
 jwt:
   secret: test-secret-key-for-unit-tests-must-be-32bytes!!

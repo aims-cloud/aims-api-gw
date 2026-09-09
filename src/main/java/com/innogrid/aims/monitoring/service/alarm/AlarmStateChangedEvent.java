@@ -13,7 +13,7 @@ import com.innogrid.aims.monitoring.entity.AlarmHistory;
  * 구독자는 평가 트랜잭션과 분리해 동작한다({@code @TransactionalEventListener(AFTER_COMMIT)}):
  * <ul>
  *   <li>{@link AlarmEventRecorder} — 대외 이벤트 원장({@code events})에 한 줄 적재 + 포털 로그 ALARM 요약 행(docs/08 §3.2)</li>
- *   <li>(예정) 전송 파이프라인 — 수신자 전개·발송 작업 생성</li>
+ *   <li>{@code notification.AlarmNotificationDispatcher} — 발생 전이만 수신자 전개·전송 원장 생성·Email 발송(docs/09 A.5.4)</li>
  *   <li>(예정) 스케줄러 — 온도 2단계 조치(허용 초과 → 배치 차단·이전 제안)</li>
  * </ul>
  * 값은 전이 시점의 이력 스냅샷이라 구독자가 원장을 다시 읽지 않아도 된다.

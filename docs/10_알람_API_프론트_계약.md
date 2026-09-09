@@ -1,6 +1,6 @@
 # 10. 알람 API 프론트 계약 — 관측 > 알람 (발생 이력 · 정책)
 
-- 작성일: 2026-09-08
+- 작성일: 2026-09-08 (최신화 2026-09-09)
 - 대상: 프론트 `src/features/alarm/api/{alarmApi,alarmMapper,alarmQueries}.ts` (specs/010-alarm-management)
 - 기준 코드: 백엔드 `feat/event-alarm` — `AlarmHistoryController`, `AlarmPolicyController`
 - 관련 문서: docs/09 알람 설계(D부 구현 현황), docs/06 자원 탐색기 트리 설계(역할·자원 영역 식별자)
@@ -22,6 +22,7 @@
 | 9 | 조직 트리 3단(DIFF-023) | 1단 — 조직 노드(`orgId` = 조직명 문자열, `children` 빈 배열) → `members[{userId, name}]`. 조직 없는 사용자는 `미지정` | `mapCandidates` 의 1단 렌더 유지. `children` 필드가 응답에 추가됐지만 비어 있다 |
 | 10 | 확인 후 재확인 시 처리 없음 | 이미 확인된 알람에 `POST …/acknowledge` → **409** | 409 는 "이미 확인됨"으로 안내 후 확인 내역 재조회 |
 | 11 | 이력 행 `deliveryCount` 클릭 → 전송 이력 조회 | `GET …/deliveries`, `…/message` 는 **501**(전송 원장 미구현). `deliveryCount` 는 항상 0 | 501 은 "준비 중" 상태로 표시. 전송 구현 시 스키마 확정 후 재공지 |
+| 12 | 정책 목록에 알림 방식 없음(DIFF-013) | 목록 응답에 `channels[]`(`EMAIL`\|`SMS`) 추가(2026-09-09) | 목록 열에 바로 표시 가능. 상세 재조회 불필요 |
 
 ## 2. 공통
 
@@ -101,7 +102,7 @@
 | `keyword` | string | 정책명 부분 일치 |
 | `page`, `size`, `sort` | | `sort` 허용: `policyName`, `roleName`, `areaId`, `resourceType`, `level`, `createdBy`, `createdAt`(기본 desc). `targetResourceCount` 는 정렬 불가(계산값) |
 
-응답 항목 `AlarmPolicyListItemResponse`: `policyId, policyName, roleName, areaId, resourceType, targetResourceCount, criterion, level, createdBy(표시명), createdAt`. 알림 방식(`channels`)은 목록에 없고 상세에만(DIFF-013 유지).
+응답 항목 `AlarmPolicyListItemResponse`: `policyId, policyName, roleName, areaId, resourceType, targetResourceCount, criterion, level, createdBy(표시명), createdAt`. 알림 방식 `channels[]`(`EMAIL`\|`SMS`)도 목록 응답에 포함된다(2026-09-09 추가 — DIFF-013 해소).
 
 ### 4.2 `GET /policies/{policyId}`
 
@@ -212,11 +213,11 @@ body 없음. `"{이름} (복제)"` 로 새 정책, 복제한 사용자가 생성
 
 | # | 항목 | 백엔드 입장 |
 |---|---|---|
-| 1 | fixture 의 `CPU Utilization` 메트릭 | `CPU Used(%)` 와 구별되는 정의가 없어 카탈로그에서 제외. 필요하면 정의(예: load 기반)를 알려 주면 추가 |
+| 1 | fixture 의 `CPU Utilization` 메트릭 | **확정: 카탈로그 제외.** `CPU Used(%)` 와 구별되는 정의가 없다. fixture 에서 지우면 되고, 다른 정의(load 기반 등)가 필요해지면 그때 코드 추가 |
 | 2 | VM 정책의 GPU 메트릭 | VM↔GPU 할당 원장이 없어 `vm` 에는 GPU 유형이 오지 않는다. 자원 탐색기 VM GPU 패널도 501 |
-| 3 | 이력 신규 필드 `source`·`status`·`inhibited`·`areaName` | 컬럼 추가 여부는 화면 판단. `areaName` 은 배포영역 열에 쓰는 것을 권장 |
-| 4 | 정책 목록에 `channels` 열 | 필요하면 목록 응답에 추가 가능(현재는 상세만) |
+| 3 | 이력 신규 필드 `source`·`status`·`inhibited`·`areaName` | **백엔드 작업 없음.** 필드는 이미 응답에 있으므로 컬럼 추가 여부는 화면 판단. `areaName` 은 배포영역 열에 쓰는 것을 권장 |
+| 4 | 정책 목록에 `channels` 열 | **완료(2026-09-09).** 목록 응답에 `channels[]` 추가(§1 #12, §4.1) |
 | 5 | 확인(acknowledge) 409 처리 | "이미 확인됨" 안내 후 확인 내역 재조회 |
-| 6 | 미인증 응답 코드 | 현재 403(Spring 기본). 401 로 바꾸면 apiClient 의 토큰 갱신 분기가 명확해진다 — 백엔드가 변경 검토 |
+| 6 | 미인증 응답 코드 | 현재 403(Spring 기본). 401 로 바꾸면 apiClient 의 토큰 갱신 분기가 명확해진다 — **알람 범위 밖**(전역 Security 엔트리포인트). 인증·RBAC 공통 작업으로 이관 |
 | 7 | 전송 이력·메시지 상세 스키마 | 전송 원장 구현 시 재공지. 수신자별 주소·결과·일시·실패 사유 포함 예정 |
 | 8 | 조직 트리 3단 | 조직 원장(organizations)이 계정 도메인에 생기면 `children` 을 채운다. 그때까지 1단 |

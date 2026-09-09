@@ -7,6 +7,6 @@ public record VmGpuGroupSummaryResponse(
         double avgGpuUtilizationPercent,
         double avgGpuMemoryUtilizationPercent,
         double maxGpuMemoryUtilizationPercent,
-        long recentAlarmCount           // 집계 기간 TODO:: 확정 필요 (노드 GPU 목록과 공통)
+        long recentAlarmCount           // AlarmHistory 연계 — TODO:: 집계 기간 확정 후 작업 예정 (노드 GPU 목록과 공통, 현재 미구현·501)
 ) {
 }

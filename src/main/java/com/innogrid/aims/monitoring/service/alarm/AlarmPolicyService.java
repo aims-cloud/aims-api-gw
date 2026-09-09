@@ -29,6 +29,7 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyRecipientRe
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyRequest;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyResourceResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyType;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmResourceType;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRecipientCandidatesResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRecipientCandidatesResponse.Member;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRecipientCandidatesResponse.OrgNode;
@@ -125,7 +126,7 @@ public class AlarmPolicyService {
         List<AlarmPolicyListItemResponse> items = policies.stream()
                 .map(p -> new AlarmPolicyListItemResponse(p.getId(), p.getName(), p.getRoleName(), p.getAreaId(),
                         p.getResourceType(), targets.getOrDefault(p.getId(), List.of()).size(), p.criterion(), p.getLevel(),
-                        names.getOrDefault(p.getCreatedBy(), p.getCreatedBy()), p.getCreatedAt()))
+                        p.getChannels(), names.getOrDefault(p.getCreatedBy(), p.getCreatedBy()), p.getCreatedAt()))
                 .toList();
         return new PageResponse<>(items, page, size, result.getTotalElements(), result.getTotalPages());
     }
@@ -415,17 +416,15 @@ public class AlarmPolicyService {
         return u.getOrganization() == null || u.getOrganization().isBlank() ? UNASSIGNED_ORG : u.getOrganization().trim();
     }
 
-    /** node|vm|gpu 로 정규화. required 가 false 면 빈 값은 null */
+    /** {@link AlarmResourceType} 코드(node|vm|gpu)로 정규화. required 가 false 면 빈 값은 null */
     private static String normalizeResourceType(String resourceType, boolean required) {
         if (resourceType == null || resourceType.isBlank()) {
             if (required) throw badRequest("자원 유형(resourceType)을 선택해 주세요");
             return null;
         }
-        String type = resourceType.trim().toLowerCase(Locale.ROOT);
-        if (!AlarmMetric.RESOURCE_TYPES.contains(type)) {
-            throw badRequest("지원하지 않는 자원 유형입니다: " + resourceType + " (node, vm, gpu)");
-        }
-        return type;
+        return AlarmResourceType.fromCode(resourceType)
+                .map(AlarmResourceType::code)
+                .orElseThrow(() -> badRequest("지원하지 않는 자원 유형입니다: " + resourceType + " (node, vm, gpu)"));
     }
 
     private static String required(String value, String label) {

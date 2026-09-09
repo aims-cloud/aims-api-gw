@@ -188,6 +188,7 @@ class AlarmPolicyServiceTest {
         assertThat(page.items()).extracting(AlarmPolicyListItemResponse::policyName).containsExactly("a-policy", "b-policy");
         assertThat(page.items()).extracting(AlarmPolicyListItemResponse::targetResourceCount).containsExactly(1L, 2L);
         assertThat(page.items().get(1).criterion()).isEqualTo("CPU Used > 80%");
+        assertThat(page.items().get(1).channels()).containsExactly(AlarmChannel.EMAIL, AlarmChannel.SMS);
         assertThat(page.items().get(1).createdBy()).isEqualTo("관리자");
 
         assertThat(service.getPolicies("USER", null, null, null, null, null, 1, 10, null).items()).isEmpty();

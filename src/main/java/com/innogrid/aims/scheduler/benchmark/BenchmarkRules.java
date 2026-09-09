@@ -202,6 +202,12 @@ public final class BenchmarkRules {
     public static final String UNMEASURED_SPREAD = "unmeasuredRateSpreadPercentPoints";
 
     /**
+     * 전력 인지 최적적합 대비 총전력 격차(%). <b>지점마다</b> 두 전략을 짝지어 낸 비라서, 두 전략의 총전력
+     * 중앙값을 나눈 수와 같지 않다 — 짝짓기가 지점 안에서 끝나므로 어느 지점이 빠져도 남은 지점의 비는 그대로다.
+     */
+    public static final String GAP_VS_PABFD = "gapVsPabfdPercent";
+
+    /**
      * 사전 등록된 지표 전량. 응답이 이 목록을 그대로 싣는다.
      *
      * <p><b>최고 온도가 없는 이유</b> — 배치 1건의 온도 상승분은 열관성 계수 × 코어 비율 × 기준 온도라
@@ -220,6 +226,13 @@ public final class BenchmarkRules {
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
                     "전 전략의 배치 건수가 같을 때만 총량을 비교한다. 건수가 다르면 건당 값을 쓴다. "
                             + "클러스터 파일 생성식으로 계산한 값이라 실측 서버의 전력이 아니다"),
+
+            new BenchmarkMetric(GAP_VS_PABFD, "총전력 격차(전력 인지 최적적합 대비)", "%",
+                    Direction.LOWER_IS_BETTER, Role.PRIMARY,
+                    "두 전략(이 행·pabfd)의 배치 건수가 같은 지점만 값을 내며 pabfd 총전력이 0 이면 제외한다 — "
+                            + "짝 정의가 총량 열(전 전략 일치)보다 느슨해 표본 수가 총량 열 이상일 수 있다. "
+                            + "pabfd 행 자신은 0 이 값이 아니라 기준이므로 무효. "
+                            + "지점별 비의 중앙값이라 '총전력 중앙값의 비' 와 다른 숫자다"),
 
             new BenchmarkMetric(PER_WORKLOAD_POWER, "건당 전력(생성식 기준)", "W/건",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
@@ -287,6 +300,85 @@ public final class BenchmarkRules {
         int max = placedByStrategy.values().stream().mapToInt(Integer::intValue).max().orElse(0);
         return String.format("전략 간 배치 건수 상이 (%d~%d건) — 총량 대신 건당 값으로 비교한다", min, max);
     }
+
+    /**
+     * 전력 인지 최적적합(pabfd) 대비 <b>이 지점의</b> 총전력 격차(%). 짝이 아니거나 기준 전력이 0 이하면 null.
+     *
+     * <p><b>왜 판정 규칙에 두는가.</b> 이 식이 다음 PR 의 성공 문턱이 읽을 값을 만든다. 서비스 안에 두면
+     * 결과 코드와 같은 커밋에서 바뀔 수 있어 "문턱을 결과보다 먼저 등록했다"는 주장이 식에는 걸리지 않는다.
+     * 여기 두면 식 자체가 사전 등록의 대상이 되고, 단위 시험이 짝 조건·분모·부호를 잠근다 — 분모를 이 행의
+     * 전력으로 바꾸거나 부호를 뒤집거나 짝 조건을 지우면 판을 돌려 보기 전에 빨간불이 된다.</p>
+     *
+     * <p>짝 조건은 총량 열보다 <b>느슨하다</b>. 총량 열은 전 전략의 배치 건수가 같은 지점만 쓰지만 여기는
+     * 이 행과 pabfd <b>둘</b>만 본다 — 그래서 이 지표의 표본 수가 총량 열 이상일 수 있다.</p>
+     *
+     * @param placedA 이 행의 배치 건수
+     * @param placedB 기준(pabfd) 행의 배치 건수
+     * @param powerA  이 행의 생성식 기준 총전력
+     * @param powerB  기준(pabfd) 행의 생성식 기준 총전력 — 분모다
+     */
+    public static Double pairedGapPercent(int placedA, int placedB, double powerA, double powerB) {
+        if (placedA != placedB) return null;
+        if (!(powerB > 0)) return null;
+        return (powerA - powerB) / powerB * 100.0;
+    }
+
+    /**
+     * 판정에 쓸 수 있는 <b>짝 지점의 최소 개수</b>. 짝이 몇 곳 안 되면 중앙값이 한 지점의 이동으로 뒤집혀
+     * 판정이 표본이 아니라 우연을 읽는다. {@link #SWEEP_POINTS} 이하여야 한다 — 스윕이 낼 수 있는 지점보다
+     * 많은 짝을 요구하면 어떤 실행도 영원히 판정 불가다.
+     */
+    public static final int JUDGMENT_MIN_PAIRED_POINTS = 10;
+
+    /**
+     * 격차 중앙값이 줄어야 하는 최소 폭(%p). 이 지표가 <b>이미 백분율</b>이라 단위는 %p 다.
+     * 값이 0 이면 부호만으로 성공이 되어 잡음이 곧 결론이 된다.
+     */
+    public static final double JUDGMENT_MEDIAN_REDUCTION_PP = 2.0;
+
+    /**
+     * 축소한 지점이 교집합에서 차지해야 하는 최소 <b>비율</b>. 개수로 적으면 교집합이 하한과 같은 실행에서
+     * "열두 곳 중 열 곳"이 조용히 "열 곳 중 열 곳"(전 지점 축소)이 되어, 적어 둔 것보다 센 기준이 된다.
+     * 비율로 두면 교집합이 몇 곳이든 같은 엄격도다.
+     */
+    public static final double JUDGMENT_REDUCED_POINT_RATIO = 10.0 / 12;
+
+    /**
+     * <b>방향만</b> 확인하는 판 — 주 결과판이다. 판정 자체는 {@link #JUDGMENT_BOARD} 한 곳에서만 하고
+     * (진실 원본이 둘이 되면 유리한 판을 고르는 자유도가 생긴다), 이 판에서는 크기 문턱 없이 부호가 같은지만 본다.
+     * 판정판만 좋아진 결과는 판이 우리 엔진 쪽으로 기울었을 가능성을 배제하지 못하므로 <b>실패</b>로 적는다.
+     */
+    public static final String DIRECTION_CHECK_BOARD = BenchmarkClusters.MAIN;
+
+    /**
+     * 격차 지표로 다음 PR 을 판정하는 <b>절차</b> — 결과보다 먼저 문장으로 고정한다.
+     *
+     * <p>상수 넷만 두면 "무엇을 무엇과 견주는가"가 사람의 기억에 남고, 기억은 결과를 본 뒤에 바뀐다.
+     * 교집합을 먼저 잡는 것·중앙값을 같은 집합에서 내는 것·축소의 부호·불일치의 처리를 여기 적어 두고,
+     * 계약 시험이 이 문장에서 네 조각이 사라지지 않게 지킨다.</p>
+     */
+    public static final String GAP_JUDGMENT_RULE =
+            "격차 판정 규칙. 판정 셀은 JUDGMENT_BOARD·JUDGMENT_LOAD_RATIO·JUDGMENT_POWER_CONTROL 로 정해지며, "
+                    + "판정 값은 그 셀 power 행의 " + GAP_VS_PABFD + ".points 다. "
+                    + "지점 i(0 ≤ i < SWEEP_POINTS)의 값 g_i 는 두 전략의 배치 건수가 같고 pabfd 총전력이 0 보다 "
+                    + "클 때만 정의되고 아니면 null 이다. "
+                    + "두 실행(이 PR 의 기준선 B, 다음 PR 의 N)에 대해 교집합 I = { i : g_i(B) ≠ null ∧ g_i(N) ≠ null } "
+                    + "을 먼저 잡는다. "
+                    + "1. 판정 가능 — |I| ≥ JUDGMENT_MIN_PAIRED_POINTS 가 아니면 판정 불가(성공도 실패도 아님). "
+                    + "한 판이라도 |I| 가 JUDGMENT_MIN_PAIRED_POINTS 에 못 미치면 그 판은 판정 불가이고, 두 판 모두 "
+                    + "통과가 성립하지 않으므로 전체를 성공으로 쓰지 않는다. "
+                    + "2. 중앙값 — median{g_i(N): i∈I} ≤ median{g_i(B): i∈I} − JUDGMENT_MEDIAN_REDUCTION_PP. "
+                    + "두 중앙값은 같은 집합 I 위에서 낸다. "
+                    + "3. 지점 — g_i(B) − g_i(N) > 0 인 i 가 ceil(JUDGMENT_REDUCED_POINT_RATIO × |I|) 이상. "
+                    + "'축소' 는 부호 있는 값이 작아지는 것이며(LOWER_IS_BETTER), 절댓값이 아니다 — 음수가 되는 것도 "
+                    + "축소다. 기준선보다 엄격히 작은 지점만 센다(같으면 축소가 아니다). "
+                    + "4. 방향 일치 — DIRECTION_CHECK_BOARD(주 결과판) 의 같은 셀에서 1 을 만족하고 "
+                    + "median{g_i(N)} < median{g_i(B)}(같은 I 위) 이어야 한다. 크기 문턱은 두지 않는다. "
+                    + "불일치면 실패로 기록한다(판정판만 좋아진 결과는 판이 우리 엔진 쪽으로 기울었을 가능성을 "
+                    + "배제하지 못한다). "
+                    + "고치는 대상은 일률 편향 하나이며 포화는 판정 대상이 아니다. 기준선 값은 상수에 넣지 않는다 — "
+                    + "값은 판을 실행해야 나오고, 상수에 박으면 실행 순서가 커밋 순서를 강제한다. "
+                    + "이 지표의 정의와 문턱 상수는 이 PR 에서만 바뀌고 다음 PR 은 참조만 한다.";
 
     /**
      * 미계측 비율의 전략 간 격차가 이 값(%p)을 넘으면 전력·온도 비교의 유효성을 의심한다.

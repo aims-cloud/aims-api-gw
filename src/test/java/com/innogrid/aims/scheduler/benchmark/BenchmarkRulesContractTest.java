@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.benchmark;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.RecordComponent;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +19,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
@@ -550,6 +552,29 @@ class BenchmarkRulesContractTest {
                         "전력 모델의 공개 메서드 " + m.getName() + " 이 판을 직접 받는다 — "
                                 + "엔진이 생성식을 읽으면 격차가 정의상 0 이 된다");
             }
+        }
+    }
+
+    /**
+     * 판에 <b>필드를 더하면 설명도 따라오게</b> 만든다. 응답에 열이 하나 늘어도 Swagger 설명이 그대로면
+     * 읽는 사람은 그 열이 무엇인지 모른 채 숫자만 보게 되고, 실제로 지수와 역산 점검표가 응답에 먼저 실리고
+     * 설명에는 뒤늦게 들어왔다.
+     *
+     * <p>제외 목록을 두지 않는다 — "이건 자명하니 빼자"가 한 번 허용되면 그 목록이 설명의 구멍이 된다.
+     * 이름 전부를 문자열로 요구하고, 설명이 길어지면 필드를 한 문장에 나열해 통과시킨다.</p>
+     */
+    @DisplayName("판의 필드 이름이 하나도 빠짐없이 배치 비교 설명에 등장한다")
+    @Test
+    void every_board_field_is_named_in_the_swagger_description() throws Exception {
+        String description = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class)
+                .description();
+
+        for (RecordComponent component : Board.class.getRecordComponents()) {
+            assertTrue(description.contains(component.getName()),
+                    "판에 필드 " + component.getName() + " 이 늘었는데 설명이 그대로다 — "
+                            + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
         }
     }
 

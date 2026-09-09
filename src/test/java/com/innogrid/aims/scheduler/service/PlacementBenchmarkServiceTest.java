@@ -1306,6 +1306,8 @@ class PlacementBenchmarkServiceTest {
 
         assertTrue(formula.contains("계측된 유휴 노드에 한해"), formula);
         assertTrue(formula.contains("대체값"), formula);
+        assertTrue(formula.contains("β 는 판 파일이 선언"),
+                "지수의 출처가 문구에서 빠지면 β 가 엔진 노브로 읽힌다: " + formula);
         assertTrue(formula.contains("상한이며 알고리즘 개선의 증거가 아니다"), formula);
         assertTrue(formula.contains("복원하지 않"),
                 "복원이 성립하지 않는 판이 생겼는데 문구가 그 사실을 말하지 않으면, 상한 문장이 모든 판에 걸린 것으로 읽힌다: "

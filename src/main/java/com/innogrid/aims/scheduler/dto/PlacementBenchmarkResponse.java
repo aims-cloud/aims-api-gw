@@ -390,8 +390,11 @@ public record PlacementBenchmarkResponse(
      * @param key           지표 키. {@code metrics} 선언의 key 와 같다
      * @param median        시각 지점들의 중앙값. <b>유효하지 않으면 null</b> — 순위 근거가 아닌 칸에 숫자를
      *                      실으면 {@code valid} 를 보지 않은 인용자에게는 그냥 값이다
-     * @param min           최솟값. 유효하지 않으면 null
-     * @param max           최댓값. 유효하지 않으면 null
+     * @param min           최솟값. 유효하지 않으면 null. <b>전략별 계열에서 독립으로 뽑은 값이라 전략마다 서로 다른
+     *                      시각 지점의 숫자일 수 있다</b> — 두 전략 사이의 짝 비교(예: power.min − pabfd.min)에 쓰면
+     *                      안 되고, 짝 비교는 median 과 samples 로만 한다
+     * @param max           최댓값. 유효하지 않으면 null. min 과 같은 이유로 <b>전략 간 짝 비교에 쓰지 않는다</b> —
+     *                      두 전략의 max 가 같은 시각 지점에서 나왔다는 보장이 없다
      * @param samples       값이 나온 시각 지점 수. 무효여도 남긴다 — "지점이 없어 무효"와 "지점은 있었지만
      *                      판정이 무효"를 구분하는 유일한 자리다
      * @param valid         이 숫자를 순위 근거로 써도 되는가

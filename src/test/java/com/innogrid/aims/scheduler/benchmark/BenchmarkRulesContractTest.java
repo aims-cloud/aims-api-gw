@@ -17,6 +17,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
@@ -487,6 +488,24 @@ class BenchmarkRulesContractTest {
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {
             assertFreeOfBannedClaims(m.validity(), m.key() + " 유효성 조건");
         }
+    }
+
+    /**
+     * 금지 조각 검사가 <b>판정 규칙의 사본 전량</b>에 걸리게 한다. 판 설명과 전제 문구도 응답에 그대로 실리는
+     * 사본이라, 한계 문구에서 지운 문장이 그쪽에 남아 있으면 읽는 사람에게는 그 문장이 여전히 살아 있다.
+     * 실제로 옛 온도 문구가 사본 쪽에 남아 있던 적이 있다.
+     */
+    @DisplayName("여섯 판의 설명과 전제 문구에도 금지 문장 조각이 없다")
+    @Test
+    void the_board_roles_and_the_assumption_notes_are_free_of_banned_claims() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+
+        assertEquals(6, clusters.boardIds().size(), "판이 늘거나 줄면 검사할 설명의 수도 달라진다");
+        for (String boardId : clusters.boardIds()) {
+            assertFreeOfBannedClaims(clusters.roleOf(boardId), boardId + " 판 설명");
+        }
+        assertFreeOfBannedClaims(Assumptions.GENERATOR_FORMULA, "전제 블록의 생성식 문구");
+        assertFreeOfBannedClaims(Assumptions.POWER_CONTROL_NOTE, "전제 블록의 전원 가정 문구");
     }
 
     /**

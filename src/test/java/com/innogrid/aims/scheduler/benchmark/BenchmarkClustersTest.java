@@ -359,17 +359,18 @@ class BenchmarkClustersTest {
      * 동률이면 과대 믿음 집합의 {@code nodeId} 열을 사전순으로 비교해 앞선 것.
      *
      * <p>층 분리는 판의 회계 규칙({@link BenchmarkRules#POWERED_ON_CPU_PERCENT})으로 한다 — 엔진 노브로
-     * 고르면 노브를 돌리는 것만으로 부호 규칙이 달라진다.</p>
+     * 고르면 노브를 돌리는 것만으로 부호 규칙이 달라진다. 그리고 해석적 상한(기준 + 진폭)이 아니라
+     * <b>12지점 표본</b>으로 가른다 — 응답의 역산 점검표가 고르는 행이 그 표본이라, 해석적 상한으로
+     * 가르면 표본이 닿지 않는 마루 때문에 두 층 정의가 조용히 갈릴 수 있다.</p>
      */
     @DisplayName("정격 어긋남의 부호가 층별 최소 편향 분할과 일치한다 — 파일만 보고 재계산")
     @Test
     void the_misrating_signs_match_the_recomputed_split() {
-        double threshold = BenchmarkRules.POWERED_ON_CPU_PERCENT;
-
         for (String boardId : List.of(BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED)) {
-            List<Node> nodes = clusters.get(boardId).nodes();
-            List<Node> idleTier = nodes.stream().filter(n -> n.ipmi() && peakCpu(n) <= threshold).toList();
-            List<Node> busyTier = nodes.stream().filter(n -> !(n.ipmi() && peakCpu(n) <= threshold)).toList();
+            SyntheticCluster cluster = clusters.get(boardId);
+            List<Node> nodes = cluster.nodes();
+            List<Node> idleTier = nodes.stream().filter(n -> staysIdleAcrossSweep(cluster, n)).toList();
+            List<Node> busyTier = nodes.stream().filter(n -> !staysIdleAcrossSweep(cluster, n)).toList();
             assertTrue(idleTier.size() >= 2 && busyTier.size() >= 2, boardId + ": 층이 갈리지 않는다");
 
             Set<String> idleOver = overBelieved(idleTier);
@@ -387,6 +388,13 @@ class BenchmarkClustersTest {
                     + " 가 1% 를 넘는다 — 깨우기 벌점이 한쪽으로 기울어 판정 셀이 통합 쪽으로 쏠린다");
             assertTrue(skew <= 0.05, boardId + ": 가동 층 정격 합 편중 " + fmt(skew)
                     + " 가 5% 를 넘는다 — 전력 제약 여유가 함께 움직여 어긋남의 효과와 갈리지 않는다");
+
+            // 실측값 핀 — 이 두 숫자는 판 설명과 판 파일 머리말에 글자로 적혀 있다. 파일을 고치면
+            // 규칙은 여전히 통과하지만 적어 둔 숫자가 낡으므로, 여기서 먼저 빨간불이 되게 한다.
+            assertEquals(0.000367, bias, 1e-5, boardId
+                    + ": 유휴 층 벌점 편향이 " + fmt(bias) + " 로 바뀌었다 — 판 파일 머리말의 0.037% 가 낡았다");
+            assertEquals(50.0 / 5850.0, skew, 1e-9, boardId
+                    + ": 가동 층 정격 합 편중이 " + fmt(skew) + " 로 바뀌었다 — 판 파일 머리말의 0.85% 가 낡았다");
         }
     }
 
@@ -414,6 +422,23 @@ class BenchmarkClustersTest {
     private static double peakCpu(Node node) {
         assertNotNull(node.swing(), "노드마다 swing 을 파일에 적어 둔다 — 계약이 파일만 보고 상한을 계산한다: " + node.nodeId());
         return Math.min(100.0, node.cpuUsage() + node.swing());
+    }
+
+    /**
+     * 한 주기의 <b>12지점 표본</b>이 전부 통전 문턱 아래에 머무는 계측 노드인가 — 이것이 판의 회계 규칙이
+     * 정의하는 유휴 층이다. 지점 식 {@code 주기초 × i / 지점수} 는 서비스의 {@code sweepPoints} 와 같으며,
+     * 패키지가 달라 그 메서드를 부를 수 없어 여기서 재계산한다.
+     */
+    private static boolean staysIdleAcrossSweep(SyntheticCluster cluster, Node node) {
+        if (!node.ipmi()) return false;   // 미계측 노드는 깨우기 벌점을 잴 근거가 없어 유휴 층이 아니다
+        long period = cluster.periodMinutes() * 60L;
+        for (int i = 0; i < BenchmarkRules.SWEEP_POINTS; i++) {
+            if (cluster.cpuUsage(node, period * i / BenchmarkRules.SWEEP_POINTS)
+                    > BenchmarkRules.POWERED_ON_CPU_PERCENT) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** 사용률 하한 = 기준 − 진폭. {@link #peakCpu} 의 대칭이다 — 통전 문턱이 두 무리 사이에 있는지 잴 때 쓴다. */

@@ -16,6 +16,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
+import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
@@ -715,19 +716,38 @@ class PlacementBenchmarkServiceTest {
     /**
      * 엔진이 믿은 비용과 생성식 기준 전력이 <b>다른 함수</b>다. 같은 값이면 주 지표가 엔진 목적함수의
      * 재탕이고, 그 지표에서 그 목적함수를 최대화한 전략이 정의상 이긴다.
+     *
+     * <p>한 셀만 보면 그 셀에서 우연히 갈린 것과 구분되지 않는다 — 여섯 판 × 부하율 넷 × 전원 가정 둘을
+     * 전부 훑는다. 분포는 heavytail 하나만 쓴다: 분포는 요구 워크로드를 바꿀 뿐 두 값을 만드는 함수를
+     * 바꾸지 않으므로, 둘째 분포를 더해도 잠기는 성질은 같고 시간만 두 배가 된다.</p>
      */
-    @DisplayName("엔진이 믿은 비용과 생성식 기준 전력은 다른 함수다")
+    @DisplayName("여섯 판 전 셀에서 엔진이 믿은 비용과 생성식 기준 전력은 다른 함수다")
     @Test
     void engine_belief_and_ground_truth_are_different_functions() {
-        Cell target = cell(service.compare("main", "heavytail").boards().get(0), 30, "UNAVAILABLE");
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        int checkedCells = 0;
 
-        for (StrategyResult s : target.strategies()) {
-            Double believed = median(s, BenchmarkRules.ENGINE_BELIEVED_COST);
-            Double truth = median(s, BenchmarkRules.GENERATOR_POWER);
-            assertNotNull(believed, s.strategyId());
-            assertNotNull(truth, s.strategyId());
-            assertNotEquals(believed, truth, s.strategyId() + ": 두 값이 같다 — 평가 기준이 엔진의 목적 함수다");
+        for (String boardId : clusters.boardIds()) {
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            assertEquals(BenchmarkRules.LOAD_RATIOS.size() * 2, board.cells().size(),
+                    boardId + ": 셀이 부하율 네 지점 × 전원 가정 둘이 아니다 — 잠글 자리가 빠졌다");
+
+            for (Cell target : board.cells()) {
+                String at = boardId + "/" + target.loadRatioPercent() + "%/" + target.powerControl() + "/";
+                boolean checked = false;
+
+                for (StrategyResult s : target.strategies()) {
+                    Double believed = median(s, BenchmarkRules.ENGINE_BELIEVED_COST);
+                    Double truth = median(s, BenchmarkRules.GENERATOR_POWER);
+                    if (believed == null || truth == null) continue;   // 배치 0건 셀 — 잴 값이 없다
+                    checked = true;
+                    assertNotEquals(believed, truth,
+                            at + s.strategyId() + ": 두 값이 같다 — 평가 기준이 엔진의 목적 함수다");
+                }
+                if (checked) checkedCells++;
+            }
         }
+        assertTrue(checkedCells > 0, "값이 있는 셀이 한 칸도 없었다 — 루프가 조용히 비면 이 시험은 아무것도 잠그지 않는다");
     }
 
     /**
@@ -747,7 +767,7 @@ class PlacementBenchmarkServiceTest {
         assertTrue(target.totalsComparable(), "가동 노드 증감이 무효인 셀에서는 이 시험이 성립하지 않는다");
 
         double minCapacity = board.idleAssumptionGaps().stream()
-                .mapToDouble(IdleGap::capacityWatts).min().orElseThrow();
+                .mapToDouble(IdleGap::engineBelievedCapacityWatts).min().orElseThrow();   // 엔진은 믿는 정격으로 가정한다
         double engineIdleRatio = properties.getPower().getIdleRatio();
 
         StrategyResult spreads = strategy(target, "temperature");
@@ -1190,31 +1210,44 @@ class PlacementBenchmarkServiceTest {
      * 유휴 격차 표의 <b>열이 이름대로</b> 실렸는지 본다. 전 필드가 {@code double} 이라 열을 하나 끼워 넣으면
      * 뒤의 값들이 한 칸씩 밀려도 컴파일이 통과하고, 그러면 표는 그럴듯한 숫자로 가득 찬 채 거짓이 된다.
      * 오라클이 직접 낸 행과 응답의 행을 열마다 맞춰 본다.
+     *
+     * <p>주 결과판만 보면 두 정격 열이 <b>같은 값</b>이라 서로 바뀌어 실려도 통과한다 — 두 값이 노드마다
+     * 다른 정격 어긋남 판을 함께 돌려 그 구멍을 막는다.</p>
      */
-    @DisplayName("유휴 격차 표의 각 열이 오라클의 같은 이름 값과 같다")
+    @DisplayName("유휴 격차 표의 각 열이 오라클의 같은 이름 값과 같다 — 주 결과판과 정격 어긋남 판")
     @Test
     void every_idle_gap_column_carries_the_value_of_its_own_name() {
-        Board board = service.compare("main", "heavytail").boards().get(0);
         double engineRatio = properties.getPower().getIdleRatio();
-        Map<String, com.innogrid.aims.scheduler.benchmark.GroundTruthOracle.IdleGap> expected =
-                new com.innogrid.aims.scheduler.benchmark.GroundTruthOracle(new BenchmarkClusters().get("main"))
-                        .idleAssumptionGaps(engineRatio).stream()
-                        .collect(Collectors.toMap(g -> g.nodeId(), g -> g));
 
-        assertEquals(expected.size(), board.idleAssumptionGaps().size());
-        for (IdleGap row : board.idleAssumptionGaps()) {
-            var o = Objects.requireNonNull(expected.get(row.nodeId()), row.nodeId() + " 가 오라클에 없다");
-            String at = row.nodeId() + ": ";
-            assertEquals(o.capacityWatts(), row.capacityWatts(), 1e-9, at + "capacityWatts");
-            assertEquals(o.engineBelievedCapacityWatts(), row.engineBelievedCapacityWatts(), 1e-9,
-                    at + "engineBelievedCapacityWatts");
-            assertEquals(o.declaredIdleWatts(), row.declaredIdleWatts(), 1e-9, at + "declaredIdleWatts");
-            assertEquals(o.engineAssumedIdleWatts(), row.engineAssumedIdleWatts(), 1e-9, at + "engineAssumedIdleWatts");
-            assertEquals(o.absoluteGapWatts(), row.gapWatts(), 1e-9, at + "gapWatts");
-            assertEquals(o.declaredIdleRatio(), row.declaredIdleRatio(), 1e-9, at + "declaredIdleRatio");
-            assertEquals(o.generatorWattsPerCore(), row.generatorWattsPerCore(), 1e-9, at + "generatorWattsPerCore");
-            assertEquals(row.engineBelievedCapacityWatts() * engineRatio, row.engineAssumedIdleWatts(), 1e-9,
-                    at + "엔진 가정은 엔진이 믿는 정격 × 유휴 비율이다");
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.MISRATED)) {
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            Map<String, GroundTruthOracle.IdleGap> expected =
+                    new GroundTruthOracle(new BenchmarkClusters().get(boardId))
+                            .idleAssumptionGaps(engineRatio).stream()
+                            .collect(Collectors.toMap(g -> g.nodeId(), g -> g));
+
+            assertEquals(expected.size(), board.idleAssumptionGaps().size(), boardId);
+            for (IdleGap row : board.idleAssumptionGaps()) {
+                var o = Objects.requireNonNull(expected.get(row.nodeId()), row.nodeId() + " 가 오라클에 없다");
+                String at = boardId + "/" + row.nodeId() + ": ";
+                assertEquals(o.capacityWatts(), row.capacityWatts(), 1e-9, at + "capacityWatts");
+                assertEquals(o.engineBelievedCapacityWatts(), row.engineBelievedCapacityWatts(), 1e-9,
+                        at + "engineBelievedCapacityWatts");
+                assertEquals(o.declaredIdleWatts(), row.declaredIdleWatts(), 1e-9, at + "declaredIdleWatts");
+                assertEquals(o.engineAssumedIdleWatts(), row.engineAssumedIdleWatts(), 1e-9,
+                        at + "engineAssumedIdleWatts");
+                assertEquals(o.absoluteGapWatts(), row.gapWatts(), 1e-9, at + "gapWatts");
+                assertEquals(o.declaredIdleRatio(), row.declaredIdleRatio(), 1e-9, at + "declaredIdleRatio");
+                assertEquals(o.generatorWattsPerCore(), row.generatorWattsPerCore(), 1e-9,
+                        at + "generatorWattsPerCore");
+                assertEquals(row.engineBelievedCapacityWatts() * engineRatio, row.engineAssumedIdleWatts(), 1e-9,
+                        at + "엔진 가정은 엔진이 믿는 정격 × 유휴 비율이다");
+
+                if (BenchmarkClusters.MISRATED.equals(boardId)) {
+                    assertNotEquals(row.capacityWatts(), row.engineBelievedCapacityWatts(),
+                            at + "정격 어긋남 판인데 두 정격이 같다 — 두 열이 한 값을 두 번 싣고 있을 수 있다");
+                }
+            }
         }
     }
 
@@ -1288,6 +1321,33 @@ class PlacementBenchmarkServiceTest {
     // ── 유휴 역산 복원 점검표 ─────────────────────────────────
 
     /**
+     * 엔진에게 건네는 노드 스냅샷과 평가자의 오라클이 <b>같은 세계</b>를 본다. 둘이 갈라지면 엔진은 A 세계에서
+     * 결정하고 표는 B 세계에서 채점하게 되고, 그 차이가 알고리즘 차이로 읽힌다.
+     *
+     * <p>볼록 판에서 본다 — β=1 인 판은 스냅샷 쪽이 좌결합 원형 분기를 타서 두 경로가 <b>다른 식</b>으로 같은
+     * 값을 내지만, β≠1 판은 두 경로가 같은 {@code Math.pow} 를 타므로 어긋나면 바로 벌어진다.</p>
+     */
+    @DisplayName("엔진에게 준 노드 스냅샷의 전력이 오라클의 같은 시각 값과 같다")
+    @Test
+    void the_node_snapshot_and_the_oracle_describe_the_same_world() {
+        SyntheticCluster cluster = new BenchmarkClusters().get(BenchmarkClusters.CONVEX);
+        GroundTruthOracle oracle = new GroundTruthOracle(cluster);
+        int checked = 0;
+
+        for (long t : PlacementBenchmarkService.sweepPoints(cluster)) {
+            for (NodeResource node : PlacementBenchmarkService.nodesAt(cluster, t)) {
+                SyntheticCluster.Node n = cluster.node(node.getNodeId()).orElseThrow();
+                if (!n.ipmi()) continue;   // 미계측 노드의 스냅샷 전력은 0 — 세계가 아니라 센서의 사실이다
+                assertEquals(oracle.nodePowerWatts(n.nodeId(), cluster.cpuUsage(n, t)), node.getPowerWatts(), 1e-9,
+                        n.nodeId() + " @ " + t + "s: 엔진이 본 전력과 채점자가 쓴 전력이 다르다");
+                checked++;
+            }
+        }
+        assertEquals(BenchmarkRules.SWEEP_POINTS * 14, checked,
+                "볼록 판은 14대 전수 계측이라 12지점 × 14대를 전부 봐야 한다 — 수가 다르면 판이 바뀐 것이다");
+    }
+
+    /**
      * 엔진의 깨우기 역산을 <b>닫힌 형태 등식</b>으로 잠근다 — 부등식으로 잠그면 다른 지수·다른 어긋남도
      * 통과해 판이 무엇을 재는지가 흐려진다.
      *
@@ -1303,6 +1363,8 @@ class PlacementBenchmarkServiceTest {
         for (String boardId : clusters.boardIds()) {
             SyntheticCluster cluster = clusters.get(boardId);
             List<Long> sweep = PlacementBenchmarkService.sweepPoints(cluster);
+            assertEquals(BenchmarkRules.SWEEP_POINTS, sweep.size(),
+                    boardId + ": 훑는 지점이 사전 등록 수와 다르다 — 이 시험의 최솟값·최댓값이 응답과 다른 표본에서 나온다");
             Board board = service.compare(boardId, "heavytail").boards().get(0);
             assertFalse(board.wakeupReconstructionCheck().isEmpty(),
                     boardId + ": 점검표가 비었다 — 12지점 내내 유휴인 노드가 없으면 통합을 잴 자리도 없다");
@@ -1359,6 +1421,7 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("볼록 판에서는 역산이 선언된 유휴 전력보다 작다")
     @Test
     void on_the_convex_board_the_reconstruction_undershoots() {
+        SyntheticCluster cluster = new BenchmarkClusters().get(BenchmarkClusters.CONVEX);
         Board board = service.compare(BenchmarkClusters.CONVEX, "heavytail").boards().get(0);
         int measuredRows = 0;
         for (WakeupReconstruction row : board.wakeupReconstructionCheck()) {
@@ -1366,7 +1429,8 @@ class PlacementBenchmarkServiceTest {
             measuredRows++;
             assertTrue(row.engineWakeupMaxWatts() < row.declaredIdleWatts(),
                     row.nodeId() + ": 역산 최댓값 " + row.engineWakeupMaxWatts() + "W 가 선언값 "
-                            + row.declaredIdleWatts() + "W 보다 작지 않다 — 볼록 판인데 항등이 살아 있다");
+                            + row.declaredIdleWatts() + "W 보다 작지 않다 — 볼록 판인데 항등이 살아 있다"
+                            + " (12지점 최소 사용률 " + minSweepCpu(cluster, row.nodeId()) + "%)");
         }
         assertTrue(measuredRows > 0, "볼록 판에 계측 유휴 행이 없다");
     }
@@ -1387,14 +1451,15 @@ class PlacementBenchmarkServiceTest {
             if (!row.measured()) continue;
             SyntheticCluster.Node n = cluster.node(row.nodeId()).orElseThrow();
             String at = row.nodeId() + ": ";
+            String cpu = " (12지점 최소 사용률 " + minSweepCpu(cluster, row.nodeId()) + "%)";
             if (n.believedCapacityWatts() > n.capacityWatts()) {
                 over++;
                 assertTrue(row.engineWakeupMaxWatts() < row.declaredIdleWatts(),
-                        at + "과대 믿음 노드인데 역산이 선언값보다 작지 않다");
+                        at + "과대 믿음 노드인데 역산이 선언값보다 작지 않다" + cpu);
             } else {
                 under++;
                 assertTrue(row.engineWakeupMinWatts() > row.declaredIdleWatts(),
-                        at + "과소 믿음 노드인데 역산이 선언값보다 크지 않다");
+                        at + "과소 믿음 노드인데 역산이 선언값보다 크지 않다" + cpu);
             }
         }
         assertTrue(over > 0 && under > 0, "부호가 한쪽뿐이면 이 판은 어긋남이 아니라 정격 이동을 잰다");
@@ -1445,6 +1510,16 @@ class PlacementBenchmarkServiceTest {
                         boardId + "/" + row.nodeId() + ": 두 표의 대체값이 다르면 나란히 실은 대조가 거짓이 된다");
             }
         }
+    }
+
+    /**
+     * 12지점에서 이 노드가 지나는 <b>최소 사용률</b>(%). 역산은 그 순간의 사용률에 걸린 값이고 {@code 1−u} 로
+     * 나누므로, 부등호가 깨졌을 때 어느 사용률에서 깨졌는지가 먼저 필요하다 — 실패 메시지에 함께 싣는다.
+     */
+    private static double minSweepCpu(SyntheticCluster cluster, String nodeId) {
+        SyntheticCluster.Node n = cluster.node(nodeId).orElseThrow();
+        return PlacementBenchmarkService.sweepPoints(cluster).stream()
+                .mapToDouble(t -> cluster.cpuUsage(n, t)).min().orElseThrow();
     }
 
     /** 닫힌 형태 (β·δ 를 함께 넣은 역산). 시험이 엔진 코드를 부르지 않고 판 파일 값만으로 다시 계산한다. */

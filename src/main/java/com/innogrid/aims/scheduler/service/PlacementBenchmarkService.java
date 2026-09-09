@@ -575,15 +575,24 @@ public class PlacementBenchmarkService {
      * 총량 지표를 몇 곳에서 냈는지 밝히는 문장. 셀에 실어 두면 "몇 곳의 중앙값" 이라는 사실이 숫자와
      * 같은 자리에서 읽힌다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.
      */
+    /**
+     * 짝짓기 문장에 함께 붙는 격차 열의 단서. 이 문장이 없으면 <b>같은 셀 안에서 응답이 모순으로 읽힌다</b> —
+     * 총량 열은 "비교할 수 없다"고 적혀 있는데 격차 열에는 값이 있기 때문이다. 두 열의 짝 조건이 다르다는
+     * 사실은 지표 목록과 API 설명에만 있었고, 셀만 읽는 사람에게는 닿지 않았다.
+     */
+    private static final String GAP_PAIRING_NOTE =
+            "총전력 격차 열은 이 행과 기준 전략 둘의 건수만 맞으면 내므로 이 셀에서도 값이 있을 수 있다";
+
     private static String pairingNote(int usable, int total, Map<String, Integer> mismatchExample) {
         if (usable == 0) {
             return "전 전략의 배치 건수가 같은 시각 지점이 없어 총량과 온도 분포를 비교할 수 없다 — "
-                    + BenchmarkRules.totalsIncomparableReason(mismatchExample);
+                    + BenchmarkRules.totalsIncomparableReason(mismatchExample) + ". " + GAP_PAIRING_NOTE;
         }
         return String.format(
                 "시각 지점 %d곳 중 %d곳에서만 전 전략의 배치 건수가 같아 총량·온도 분포 지표는 그 %d곳으로 냈다 "
-                        + "(짝이 아닌 지점의 예: %s)",
-                total, usable, usable, BenchmarkRules.totalsIncomparableReason(mismatchExample));
+                        + "(짝이 아닌 지점의 예: %s). %s",
+                total, usable, usable, BenchmarkRules.totalsIncomparableReason(mismatchExample),
+                GAP_PAIRING_NOTE);
     }
 
     private static List<MetricValue> metricValues(Map<String, List<Double>> samples, Placement any,
@@ -604,7 +613,7 @@ public class PlacementBenchmarkService {
                     ? pointSeries(raw, points.size()) : null;
 
             String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere,
-                    baselinePresent);
+                    baselinePresent, !series.isEmpty());
             if (series.isEmpty()) {
                 values.add(new MetricValue(metric.key(), null, null, null, 0, pointValues, false,
                         invalid != null ? invalid : "이 셀에서 값이 나오지 않았다"));
@@ -629,8 +638,9 @@ public class PlacementBenchmarkService {
     /**
      * 지점별 값 — 길이는 <b>항상</b> 스윕 지점 수이고 인덱스가 시각 지점이다.
      *
-     * <p>선언만 되고 한 번도 담기지 않은 키(예: 기준 전략이 없는 실행의 격차)는 빈 리스트로 오므로 null 로
-     * 채워 길이를 맞춘다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
+     * <p>지점 루프가 지표마다 지점당 한 번씩 담으므로 운영 경로에서는 이미 길이가 맞는다 — 길이를 채우는
+     * 가지는 <b>방어</b>이고, 지금은 시험이 직접 부를 때만 지난다. 어떤 키가 조건부로만 담기게 되는 날
+     * 길이 불변식이 조용히 깨지는 것을 막는 자리다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
      * 성립하지 않는다 — 짝이 아닌 지점이 몇 번째였는지가 응답에 남아야 한다.</p>
      *
      * <p>응답만 보고는 이 성질을 확인할 수 없어 같은 패키지의 시험이 직접 부른다. 길이·표본 수·중앙값은
@@ -655,7 +665,7 @@ public class PlacementBenchmarkService {
      */
     private static String invalidReason(BenchmarkMetric metric, Placement any,
                                         int usablePoints, int measuredNodes, boolean placedAnywhere,
-                                        boolean baselinePresent) {
+                                        boolean baselinePresent, boolean paired) {
         String key = metric.key();
         if (BenchmarkRules.GAP_VS_PABFD.equals(key)) {
             // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0 이나 빈 값을 내면 "격차가
@@ -665,6 +675,11 @@ public class PlacementBenchmarkService {
             }
             if (PABFD_ID.equals(any.strategy().id())) {
                 return "기준 전략 자신 — 0 은 값이 아니다";
+            }
+            // 같은 행의 총량 열은 전용 사유를 다는데 격차만 "값이 나오지 않았다"로 나가면 원인을 되짚을 수
+            // 없다. 이 열이 비는 이유는 전 전략이 아니라 기준 전략 하나와 어긋났다는 것이다.
+            if (!paired) {
+                return "기준 전략과 배치 건수가 같은 시각 지점이 없다";
             }
         }
         if ((BenchmarkRules.GENERATOR_POWER.equals(key) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(key))

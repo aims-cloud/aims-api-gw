@@ -931,7 +931,6 @@ public class PlacementBenchmarkService {
                     cluster.cpuUsage(n, t), cluster.memoryUsage(n, t), cluster.diskUsage(n, t),
                     n.ipmi() ? cluster.powerWatts(n, t) : 0,
                     n.believedCapacityWatts(),   // 판 경로에서는 파일이 원장이다 — 엔진이 믿는 정격은 생성식 정격과 다를 수 있다
-
                     n.ipmi() ? cluster.temperature(n, t) : 0,
                     cluster.networkRx(n, t), cluster.networkTx(n, t))
                     .withDiskCapacityGb((long) n.diskTotalGb());

@@ -212,7 +212,9 @@ public final class GroundTruthOracle {
      * @param declaredIdleWatts      파일에 선언된 유휴 전력(W). 엔진은 이 값을 <b>모른다</b>. 실측이 아니다
      * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = <b>엔진이 믿는 정격</b> × idleRatio
      * @param declaredIdleRatio      선언 유휴 비율 = 선언 유휴 / 정격. 엔진의 idleRatio 와 견줄 수 있는 형태
-     * @param generatorWattsPerCore  코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어.
+     * @param generatorWattsPerCore  코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어 — 0→100% 구간의
+     *                               <b>평균</b>(시컨트) 값이다. 볼록 판(β&gt;1)에서 사용률 u 의 한계 기울기는
+     *                               이 값의 {@code β·u^(β−1)} 배라 이 열로 한계 비용을 읽으면 안 된다.
      *                               유휴 전력은 뺀 값이다 — 빈 노드를 깨우는 비용은
      *                               {@link GroundTruthOracle#marginalPowerWatts} 가 따로 센다
      */

@@ -253,8 +253,9 @@ public record PlacementBenchmarkResponse(
      * <p>행은 <b>판의 회계 규칙</b>으로 고른다 — 12지점 내내 통전 문턱 아래에 머무는 노드 전부이며,
      * 계측 여부는 {@code measured} 열로 밝힌다. 엔진 노브로 행을 고르면 노브를 돌리는 것만으로 표가 달라진다.</p>
      *
-     * @param measured             전력이 계측되는 노드인가. <b>거짓이면 아래 세 값이 전부 대체값</b>이고
-     *                             역산이 아니다 — 미계측 노드는 역산할 분자·분모가 없다
+     * @param measured             전력이 계측되는 노드인가. <b>거짓이면 역산 두 값(min·max)이 대체값 그대로</b>이고
+     *                             역산이 아니다 — 미계측 노드는 역산할 분자·분모가 없다. {@code declaredIdleWatts}
+     *                             는 계측 여부와 무관하게 파일 선언값이다
      * @param declaredIdleWatts    파일에 선언된 유휴 전력(W). 실측이 아니다
      * @param engineFallbackWatts  엔진의 대체값(믿는 정격 × idleRatio). {@code idleAssumptionGaps[].engineAssumedIdleWatts}
      *                             와 <b>같은 값</b>을 대조용으로 다시 싣는다 — 역산 경로를 탔는지는 엔진 안의 일이라
@@ -306,7 +307,9 @@ public record PlacementBenchmarkResponse(
      * @param engineBelievedCapacityWatts 판이 엔진에게 알려 준 정격(W). 판이 정격을 어긋나게 주지 않으면
      *                              {@code capacityWatts} 와 같다. 판 경로에서 엔진이 보는 정격은 설정이 아니라 이 값이다
      * @param declaredIdleWatts     파일에 선언된 유휴 전력(W). 실측이 아니다
-     * @param generatorWattsPerCore 생성식 기준 코어당 동적 전력(W/코어)
+     * @param generatorWattsPerCore 생성식 기준 코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어 —
+     *                              0→100% 구간의 <b>평균</b>(시컨트) 기울기다. 볼록 판(β&gt;1)에서 사용률 u 의
+     *                              한계 기울기는 이 값의 {@code β·u^(β−1)} 배라 이 열과 다르다
      */
     public record IdleGap(
             String nodeId,

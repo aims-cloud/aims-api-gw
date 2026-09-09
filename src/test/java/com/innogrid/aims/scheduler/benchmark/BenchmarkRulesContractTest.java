@@ -1,6 +1,11 @@
 package com.innogrid.aims.scheduler.benchmark;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.RecordComponent;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -11,6 +16,14 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
+
+import io.swagger.v3.oas.annotations.Operation;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,8 +93,7 @@ class BenchmarkRulesContractTest {
         assertEquals(Direction.LOWER_IS_BETTER, m.direction());
         assertFalse(m.key().toLowerCase().contains("groundtruth"), m.key());
         for (BenchmarkMetric each : BenchmarkRules.METRICS) {
-            assertFalse(each.label().contains("지상진실"),
-                    each.key() + ": 평가자도 생성식을 쓰므로 '지상진실'은 실측을 암시한다 — " + each.label());
+            assertFreeOfBannedClaims(each.label(), each.key() + " 라벨");
             assertFalse(each.label().contains("실제"),
                     each.key() + ": '실제'도 같은 암시다 — " + each.label());
         }
@@ -135,8 +147,8 @@ class BenchmarkRulesContractTest {
         assertTrue(l.contains("제약을 켠 전 전략"),
                 "온도 제약을 '전 전략'이 받는다고 쓰면 제약 해제 변종의 셀 사유와 같은 응답 안에서 모순된다");
         assertTrue(l.contains("기본 임계 75℃"), "75℃ 는 정책 기본값이지 상수가 아니다 — 같은 파일의 '기본 65℃' 와 어조를 맞춘다");
-        assertFalse(l.contains("온도 축에는 결론을 지지하는 지표가 없다"),
-                "온도 축 참가자가 우리뿐이라는 옛 문구가 남아 있으면 대조군을 넣고도 응답이 거짓을 말한다");
+        assertFreeOfBannedClaims(l,
+                "한계 문구 — 온도 축 참가자가 우리뿐이라는 옛 문구가 남아 있으면 대조군을 넣고도 응답이 거짓을 말한다");
     }
 
     /**
@@ -382,7 +394,7 @@ class BenchmarkRulesContractTest {
         assertTrue(l.contains("결론 수준으로 증명하지 않는다"),
                 "온도 축에 결론 지표가 없고 전력 이득이 반사실 판에서만 보인다는 사실을 응답이 스스로 말해야 한다 — "
                         + "말하지 않으면 불리한 지표를 조용히 내린 것으로 읽힌다: " + l);
-        assertFalse(l.contains("지상진실"), "한계 문구 자체가 실측을 암시하면 안 된다: " + l);
+        assertFreeOfBannedClaims(l, "한계 문구 자체가 실측을 암시하면 안 된다");
     }
 
     @DisplayName("부하율 분모 정의가 총 코어가 아니라 정책 상한까지의 여유다")
@@ -392,6 +404,185 @@ class BenchmarkRulesContractTest {
 
         assertTrue(d.contains("상한"), d);
         assertTrue(d.contains("min"), "노드마다 구속 자원이 달라 두 축의 최솟값을 써야 한다: " + d);
+    }
+
+    // ── 볼록·정격 어긋남 판의 사전 등록 ───────────────────────
+
+    /**
+     * 지수는 <b>결과를 보고 고를 수 없는 자리</b>에 있어야 한다. 판을 돌려 보고 β 를 조정하면 그 판은
+     * 응력 시험이 아니라 원하는 결론을 내는 장치가 된다. 값과 "1 보다 크다"는 성질을 함께 못 박는다 —
+     * 값만 잠그면 뜻이 사라지고, 성질만 잠그면 1.2 로 조용히 바꿀 수 있다.
+     */
+    @DisplayName("볼록 판의 지수가 사전 등록되어 있고 1 보다 크다")
+    @Test
+    void the_convex_exponent_is_pre_registered_and_greater_than_one() {
+        assertEquals(1.6, BenchmarkRules.CONVEX_POWER_EXPONENT, 1e-9,
+                "이 값을 바꾸면 이 판으로 뜬 기준선이 무효다 — 결과를 보고 바꿀 수 없게 여기서 고정한다");
+        assertTrue(BenchmarkRules.CONVEX_POWER_EXPONENT > 1.0,
+                "1 이하면 엔진 가정이 틀린 방향으로 기울지 않아 판이 응력 시험이 아니게 된다");
+        assertNotEquals(1.4, BenchmarkRules.CONVEX_POWER_EXPONENT, "문헌 계수와 같은 수는 '문헌 근거' 로 오독된다");
+    }
+
+    /**
+     * 어긋남 크기는 대칭이어야 한다 — 한쪽만 크면 판 전체의 정격 합이 기울어 전력 제약 여유가 함께 움직이고,
+     * 그러면 어긋남의 효과와 여유의 효과를 가를 수 없다.
+     */
+    @DisplayName("정격 어긋남 비율이 사전 등록되어 있고 0 과 1 사이다")
+    @Test
+    void the_capacity_mismatch_ratio_is_pre_registered() {
+        assertEquals(0.10, BenchmarkRules.CAPACITY_MISMATCH_RATIO, 1e-9,
+                "판 파일의 과대·과소 정격이 이 비율을 따른다 — 값을 바꾸면 판을 다시 떠야 한다");
+        assertTrue(BenchmarkRules.CAPACITY_MISMATCH_RATIO > 0 && BenchmarkRules.CAPACITY_MISMATCH_RATIO < 1,
+                "0 이면 어긋남이 없고 1 이상이면 과소 믿음 노드의 정격이 0 이하가 된다");
+    }
+
+    /**
+     * 판정 셀을 결과보다 먼저 하나로 고정한다. 셀을 나중에 고르면 열두 셀 중 유리한 칸을 뽑는 사후 선택이
+     * 되고, 그 자유도는 어떤 사전 등록 문구로도 막히지 않는다. 판 id 가 실제로 등록된 판인지는 판이 생긴
+     * 뒤의 시험이 확인한다 — 지금은 판이 없으므로 값만 고정한다.
+     */
+    @DisplayName("판정 셀의 판·부하율·전원 가정이 결과보다 먼저 고정된다")
+    @Test
+    void the_judgment_cell_is_pre_registered() {
+        assertEquals("convex-misrated", BenchmarkRules.JUDGMENT_BOARD,
+                "판정은 두 요인이 함께 걸린 판에서 한다 — 단일 요인 판은 귀속용 부록이다");
+        assertEquals(60, BenchmarkRules.JUDGMENT_LOAD_RATIO,
+                "30% 는 전 전략이 다 성공해 표가 평평하고 90·110% 는 전력 제약 문턱이 총량 열을 지운다");
+        assertTrue(BenchmarkRules.LOAD_RATIOS.contains(BenchmarkRules.JUDGMENT_LOAD_RATIO),
+                "실행하지 않는 부하율을 판정 셀로 두면 그 셀은 영원히 비어 있다");
+        assertEquals(GroundTruthOracle.PowerControl.AVAILABLE, BenchmarkRules.JUDGMENT_POWER_CONTROL,
+                "통합의 이득은 전원 제어를 가정한 판에서만 보인다 — 그래서 판정 결과는 현 시스템에서 재현되지 않는다");
+    }
+
+    /**
+     * 지수를 1 보다 크게 둔 판이 <b>실서버 근사가 아니라</b>는 사실은 응답이 스스로 말해야 한다.
+     * 말하지 않으면 "볼록 판에서 격차가 벌어졌다"가 곧 "실서버에서 벌어진다"로 읽힌다.
+     */
+    @DisplayName("한계 문구가 지수 판이 응력 시험임과 판 비교의 성립 조건을 밝힌다")
+    @Test
+    void the_limitation_declares_the_exponent_board_is_a_stress_test() {
+        String l = BenchmarkRules.LIMITATION;
+
+        assertTrue(l.contains("응력 시험"), "실서버 근사가 아니라는 사실이 문구에 있어야 한다: " + l);
+        assertTrue(l.contains("반대 방향의 보고도 있다"),
+                "지수 방향이 문헌에서 합의된 것처럼 읽히면 안 된다: " + l);
+        assertTrue(l.contains("노드 구성이 같아야 한다"),
+                "판 사이의 차이를 원인으로 읽는 조건이 없으면 다른 모집단의 판끼리 비교하게 된다: " + l);
+        assertTrue(l.contains("엔진에 알려 준 정격"),
+                "엔진이 믿는 정격도 우리가 정한 가정이라는 사실이 계수 열거에 있어야 한다: " + l);
+    }
+
+    /**
+     * 금지 조각은 <b>한 배열</b>에서만 관리한다. 조각을 시험마다 문자열로 적어 두면 어미 하나만 달라도
+     * 검사가 빠져나가고, 상수와 그 사본(Swagger 설명 등)이 조용히 갈린다.
+     */
+    @DisplayName("금지 문장 조각이 한 배열로 관리되고 한계 문구에 없다")
+    @Test
+    void the_banned_claims_are_declared_once_and_absent() {
+        assertTrue(BenchmarkRules.BANNED_CLAIMS.contains("지상진실"), "실측을 암시하는 이름이 목록에 있어야 한다");
+        assertTrue(BenchmarkRules.BANNED_CLAIMS.stream().anyMatch(c -> c.startsWith("온도 축에는 결론을 지지하는 지표가 없")),
+                "어미를 뺀 접두로 담아야 '없다'/'없습니다' 가 함께 걸린다");
+        for (String banned : BenchmarkRules.BANNED_CLAIMS) {
+            assertFalse(banned.isBlank(), "빈 조각은 모든 문자열에 걸려 시험을 무의미하게 만든다");
+            assertFalse(banned.endsWith("다."), "어미까지 적으면 사본이 어미만 바꿔 빠져나간다: " + banned);
+        }
+        assertFreeOfBannedClaims(BenchmarkRules.LIMITATION, "한계 문구");
+        for (BenchmarkMetric m : BenchmarkRules.METRICS) {
+            assertFreeOfBannedClaims(m.validity(), m.key() + " 유효성 조건");
+        }
+    }
+
+    /**
+     * 금지 조각 검사가 <b>판정 규칙의 사본 전량</b>에 걸리게 한다. 판 설명과 전제 문구도 응답에 그대로 실리는
+     * 사본이라, 한계 문구에서 지운 문장이 그쪽에 남아 있으면 읽는 사람에게는 그 문장이 여전히 살아 있다.
+     * 실제로 옛 온도 문구가 사본 쪽에 남아 있던 적이 있다.
+     */
+    @DisplayName("여섯 판의 설명과 전제 문구에도 금지 문장 조각이 없다")
+    @Test
+    void the_board_roles_and_the_assumption_notes_are_free_of_banned_claims() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+
+        assertEquals(6, clusters.boardIds().size(), "판이 늘거나 줄면 검사할 설명의 수도 달라진다");
+        for (String boardId : clusters.boardIds()) {
+            assertFreeOfBannedClaims(clusters.roleOf(boardId), boardId + " 판 설명");
+        }
+        assertFreeOfBannedClaims(Assumptions.GENERATOR_FORMULA, "전제 블록의 생성식 문구");
+        assertFreeOfBannedClaims(Assumptions.POWER_CONTROL_NOTE, "전제 블록의 전원 가정 문구");
+    }
+
+    /**
+     * Swagger 설명은 한계 문구의 <b>사본</b>이다 — 상수에서 지운 문장이 사본에 남아 있으면 문서를 읽는
+     * 사람에게는 그 문장이 여전히 살아 있다. 실제로 열 대조군이 생긴 뒤에도 옛 문구가 이 자리에 남아 있었다.
+     *
+     * <p>스프링을 띄우지 않고 애노테이션만 반사로 읽는다 — 이 검사는 요청 처리와 무관하고,
+     * 컨텍스트를 띄우면 사본이 갈라졌는지를 훨씬 비싼 시험이 뒤늦게 알려 주게 된다.</p>
+     */
+    @DisplayName("배치 비교 설명에도 금지 문장 조각이 없다")
+    @Test
+    void the_swagger_description_is_free_of_banned_claims() throws Exception {
+        Operation operation = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class);
+
+        assertNotNull(operation, "배치 비교 엔드포인트에 @Operation 설명이 없으면 사본이 갈라졌는지 볼 자리가 없다");
+        assertFreeOfBannedClaims(operation.description(), "배치 비교 Swagger 설명");
+    }
+
+    /**
+     * 판의 생성식과 엔진의 전력 모델이 <b>서로를 모른다</b>. 엔진이 판의 지수를 알게 되면 "엔진 가정과
+     * 생성식의 격차"는 정의상 0 이 되고, 이 비교가 재는 것이 사라진다.
+     *
+     * <p>구조로 이미 갈라져 있지만(양쪽에 import 0), 구조는 한 줄로 깨진다 — 그래서 선언을 반사로 읽어
+     * 못 박는다. 엔진 노브 블록에 지수 이름의 필드가 생기거나 전력 모델의 공개 메서드가 판 객체를 받으면
+     * 여기가 빨간불이 된다.</p>
+     */
+    @DisplayName("엔진의 전력 노브와 전력 모델은 판의 생성식 지수를 모른다")
+    @Test
+    void the_engine_does_not_know_the_generator_exponent() {
+        for (Field f : SchedulerProperties.Power.class.getDeclaredFields()) {
+            String name = f.getName().toLowerCase(Locale.ROOT);
+            assertFalse(name.contains("exponent") || name.contains("beta"),
+                    "엔진 노브에 생성식 지수로 읽힐 필드가 생겼다: " + f.getName()
+                            + " — 판의 지수는 판 파일이 선언하고 응답의 boards[].powerExponent 가 싣는다");
+        }
+        for (Method m : PowerModel.class.getDeclaredMethods()) {
+            if (!Modifier.isPublic(m.getModifiers())) continue;
+            for (Class<?> parameter : m.getParameterTypes()) {
+                assertNotEquals(SyntheticCluster.class, parameter,
+                        "전력 모델의 공개 메서드 " + m.getName() + " 이 판을 직접 받는다 — "
+                                + "엔진이 생성식을 읽으면 격차가 정의상 0 이 된다");
+            }
+        }
+    }
+
+    /**
+     * 판에 <b>필드를 더하면 설명도 따라오게</b> 만든다. 응답에 열이 하나 늘어도 Swagger 설명이 그대로면
+     * 읽는 사람은 그 열이 무엇인지 모른 채 숫자만 보게 되고, 실제로 지수와 역산 점검표가 응답에 먼저 실리고
+     * 설명에는 뒤늦게 들어왔다.
+     *
+     * <p>제외 목록을 두지 않는다 — "이건 자명하니 빼자"가 한 번 허용되면 그 목록이 설명의 구멍이 된다.
+     * 이름 전부를 문자열로 요구하고, 설명이 길어지면 필드를 한 문장에 나열해 통과시킨다.</p>
+     */
+    @DisplayName("판의 필드 이름이 하나도 빠짐없이 배치 비교 설명에 등장한다")
+    @Test
+    void every_board_field_is_named_in_the_swagger_description() throws Exception {
+        String description = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class)
+                .description();
+
+        for (RecordComponent component : Board.class.getRecordComponents()) {
+            assertTrue(description.contains(component.getName()),
+                    "판에 필드 " + component.getName() + " 이 늘었는데 설명이 그대로다 — "
+                            + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
+        }
+    }
+
+    /** 금지 조각이 어디에도 없는지 — 검사할 조각의 출처를 시험마다 다시 적지 않는다. */
+    private static void assertFreeOfBannedClaims(String text, String where) {
+        for (String banned : BenchmarkRules.BANNED_CLAIMS) {
+            assertFalse(text.contains(banned), where + ": 금지 조각 '" + banned + "' 가 남아 있다 — " + text);
+        }
     }
 
     private static BenchmarkMetric metric(String key) {

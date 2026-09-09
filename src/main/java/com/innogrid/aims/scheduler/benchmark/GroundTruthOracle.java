@@ -28,7 +28,8 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  *
  * <p>계산식은 클러스터 파일 머리말에 적힌 생성식 그대로다.</p>
  * <ul>
- *   <li>전력 = {@code idleWatts + (capacityWatts − idleWatts) × CPU사용률/100}</li>
+ *   <li>전력 = {@code idleWatts + (capacityWatts − idleWatts) × (CPU사용률/100)^β} — β 는 판 파일의
+ *       {@code powerExponent}(기본 1 — 선형)</li>
  *   <li>온도 = {@code baseTemperature + 0.3 × CPU사용률}</li>
  * </ul>
  *
@@ -61,10 +62,15 @@ public final class GroundTruthOracle {
 
     private final Map<String, SyntheticCluster.Node> nodesById;
     private final List<String> sortedNodeIds;
+    private final double powerExponent;
 
     public GroundTruthOracle(SyntheticCluster cluster) {
         if (cluster == null) {
             throw new IllegalStateException("지상진실 오라클에 클러스터가 없습니다");
+        }
+        this.powerExponent = cluster.powerExponent();
+        if (!(powerExponent > 0) || !Double.isFinite(powerExponent)) {
+            throw new IllegalStateException("생성식 지수는 0 보다 큰 유한한 값이어야 합니다: " + powerExponent);
         }
         Map<String, SyntheticCluster.Node> byId = new LinkedHashMap<>();
         for (SyntheticCluster.Node node : cluster.nodes()) {
@@ -86,12 +92,16 @@ public final class GroundTruthOracle {
     /**
      * 노드 한 대의 생성식 기준 소비 전력(W). {@code cpuPercent} 는 0~100. 실측이 아니다.
      *
-     * <p>생성식 그대로: {@code idleWatts + (capacityWatts − idleWatts) × cpuPercent/100}. 사용률은 물리적으로
-     * 0~100 을 벗어날 수 없으므로 범위를 벗어난 값은 잘라 쓴다 — 정격을 넘는 전력을 만들어내지 않는다.</p>
+     * <p>생성식 그대로: {@code idleWatts + (capacityWatts − idleWatts) × (cpuPercent/100)^β}. 지수 β 는
+     * 판 파일이 선언하고(기본 1 — 선형), 여기서는 분기 없이 {@link Math#pow} 를 쓴다 —
+     * {@code Math.pow(x, 1.0) == x} 이고 이 식은 이미 {@code a × (b/100)} 형이라 β=1 에서 비트까지 같다.
+     * 사용률은 물리적으로 0~100 을 벗어날 수 없으므로 범위를 벗어난 값은 잘라 쓴다 —
+     * 정격을 넘는 전력을 만들어내지 않는다.</p>
      */
     public double nodePowerWatts(String nodeId, double cpuPercent) {
         SyntheticCluster.Node node = node(nodeId);
-        return node.idleWatts() + (node.capacityWatts() - node.idleWatts()) * utilization(cpuPercent);
+        return node.idleWatts()
+                + (node.capacityWatts() - node.idleWatts()) * Math.pow(utilization(cpuPercent), powerExponent);
     }
 
     /**
@@ -141,20 +151,26 @@ public final class GroundTruthOracle {
     /**
      * 생성식 기준 배치 1건의 증분 전력(W) — 동적분 + (전원 제어가 있고 빈 노드였으면) 파일에 선언된 {@code idleWatts}.
      *
-     * <p>동적분 = {@code (capacityWatts − idleWatts) × requiredCpu/cores}. 생성식이 선형이므로 현재 부하와
-     * 무관하다 — 엔진의 볼록 곡선({@code curveAlpha})은 엔진의 모델링 선택이고, 생성식의 물리가 아니다.</p>
+     * <p>동적분 = {@code (capacityWatts − idleWatts) × (u₂^β − u₁^β)}, {@code u₁ = cpuBeforePercent/100},
+     * {@code u₂ = u₁ + requiredCpu/cores}. <b>지수가 1 이 아니면 같은 코어를 얹어도 증분이 현재 부하에 따라
+     * 다르다</b> — 곡선 위 두 점의 차이지 기울기 하나가 아니다. β=1 에서는 두 항이 상쇄해 예전처럼
+     * {@code (정격−유휴) × requiredCpu/cores} 가 된다. 두 사용률 모두 0~1 로 자른다 — 물리적으로
+     * 그 밖의 값이 없고, 자르지 않으면 정격을 넘는 전력을 만들어낸다.</p>
      *
      * <p>깨우는 비용은 {@code AVAILABLE} 판에서만 든다. {@code UNAVAILABLE} 판에서는 그 노드가 이미 통전되어
      * 유휴 전력을 먹고 있으므로 <b>새로 드는 유휴 전력이 없다</b>. 엔진은 이 자리에서 파일 선언값 대신
      * {@code 정격 × 0.3} 을 쓴다 — 그 격차가 엔진 가정과 생성식의 차이다.</p>
      */
-    public double marginalPowerWatts(String nodeId, int requiredCpu, boolean nodeWasIdle, PowerControl mode) {
+    public double marginalPowerWatts(String nodeId, double cpuBeforePercent, int requiredCpu,
+                                     boolean nodeWasIdle, PowerControl mode) {
         if (mode == null) {
             throw new IllegalStateException("증분 전력에는 전원 상태 가정이 필요합니다: " + nodeId);
         }
         SyntheticCluster.Node node = node(nodeId);
-        double share = Math.max(0, Math.min(1.0, (double) requiredCpu / node.cores()));
-        double dynamic = (node.capacityWatts() - node.idleWatts()) * share;
+        double before = utilization(cpuBeforePercent);
+        double after = Math.max(0, Math.min(1.0, before + (double) requiredCpu / node.cores()));
+        double dynamic = (node.capacityWatts() - node.idleWatts())
+                * (Math.pow(after, powerExponent) - Math.pow(before, powerExponent));
         boolean wakesNode = mode == PowerControl.AVAILABLE && nodeWasIdle;
         return wakesNode ? dynamic + node.idleWatts() : dynamic;
     }
@@ -178,8 +194,8 @@ public final class GroundTruthOracle {
         List<IdleGap> gaps = new ArrayList<>(sortedNodeIds.size());
         for (String nodeId : sortedNodeIds) {
             SyntheticCluster.Node node = nodesById.get(nodeId);
-            gaps.add(new IdleGap(nodeId, node.capacityWatts(), node.idleWatts(),
-                    node.capacityWatts() * engineIdleRatio,
+            gaps.add(new IdleGap(nodeId, node.capacityWatts(), node.believedCapacityWatts(), node.idleWatts(),
+                    node.believedCapacityWatts() * engineIdleRatio,
                     node.idleWatts() / node.capacityWatts(),
                     (node.capacityWatts() - node.idleWatts()) / node.cores()));
         }
@@ -191,14 +207,18 @@ public final class GroundTruthOracle {
      *
      * @param nodeId                 노드 id
      * @param capacityWatts          정격 전력(W) — 생성식이 쓰는 값
+     * @param engineBelievedCapacityWatts 판이 엔진에게 알려 준 정격(W). 판이 정격을 어긋나게 주지 않으면
+     *                               {@code capacityWatts} 와 같다 — 다르면 엔진의 여유·벌점 계산이 그만큼 기운다
      * @param declaredIdleWatts      파일에 선언된 유휴 전력(W). 엔진은 이 값을 <b>모른다</b>. 실측이 아니다
-     * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = 정격 × idleRatio
+     * @param engineAssumedIdleWatts 엔진이 가정하는 유휴 전력(W) = <b>엔진이 믿는 정격</b> × idleRatio
      * @param declaredIdleRatio      선언 유휴 비율 = 선언 유휴 / 정격. 엔진의 idleRatio 와 견줄 수 있는 형태
-     * @param generatorWattsPerCore  코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어.
+     * @param generatorWattsPerCore  코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어 — 0→100% 구간의
+     *                               <b>평균</b>(시컨트) 값이다. 볼록 판(β&gt;1)에서 사용률 u 의 한계 기울기는
+     *                               이 값의 {@code β·u^(β−1)} 배라 이 열로 한계 비용을 읽으면 안 된다.
      *                               유휴 전력은 뺀 값이다 — 빈 노드를 깨우는 비용은
      *                               {@link GroundTruthOracle#marginalPowerWatts} 가 따로 센다
      */
-    public record IdleGap(String nodeId, double capacityWatts,
+    public record IdleGap(String nodeId, double capacityWatts, double engineBelievedCapacityWatts,
                           double declaredIdleWatts, double engineAssumedIdleWatts,
                           double declaredIdleRatio, double generatorWattsPerCore) {
 

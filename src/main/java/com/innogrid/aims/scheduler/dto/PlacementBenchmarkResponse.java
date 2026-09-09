@@ -78,7 +78,11 @@ public record PlacementBenchmarkResponse(
      * @param benchmarkPoweredOnCpuPercent 하네스가 <b>회계</b>에 쓰는 문턱(사전 등록 상수). 위 값과 다르면
      *                                     "엔진이 믿은 비용"과 "가동 노드 증감"이 서로 다른 문턱 위에 서 있다는
      *                                     뜻이고, 그 사실이 여기서 보여야 한다
-     * @param capacityByNode               노드별 정격 원장(설정). 비어 있으면 전 노드가 {@code defaultCapacityWatts}
+     * @param capacityByNode               노드별 정격 원장(설정). 비어 있으면 전 노드가 {@code defaultCapacityWatts}.
+     *                                     <b>이 둘은 판 경로에서 쓰이지 않는다</b> — 수집 경로 전용이고, 비교판에서
+     *                                     엔진이 보는 정격은 판 파일이 준 값
+     *                                     ({@code boards[].idleAssumptionGaps[].engineBelievedCapacityWatts})이다.
+     *                                     설정 다이제스트에는 그대로 들어가므로 여기 함께 싣는다
      * @param idleFromMeasurement          계측된 유휴 노드의 깨우기 비용을 실측에서 역산하는가. 모델 <b>형태</b>를 바꾸는
      *                                     노브라 다이제스트에 들어간다 — 이 값이 다르면 표 두 장은 다른 엔진의 표다.
      *                                     {@code idleRatio} 는 진단 지표·동적 범위의 기준선으로 그대로 남고, 미계측
@@ -132,7 +136,8 @@ public record PlacementBenchmarkResponse(
      * @param periodMinutes        파동 주기
      * @param cooldownMinutes      벤치마크에서 쓴 냉각 대기(0). 히스테리시스는 시계열 운영의 성질이라 단발 비교에서 뺐다
      * @param memoryMbPerCore      워크로드 메모리 = 코어 × 이 값
-     * @param engineIdleRatio      엔진이 가정하는 유휴 전력 비율. 파일 선언값과의 차가 엔진 가정과 생성식의 격차다
+     * @param engineIdleRatio      엔진이 가정하는 유휴 전력 비율. 파일 선언값과의 차가 엔진 가정과 생성식의 격차다 —
+     *                             엔진 가정은 이 비율 × <b>엔진이 믿는 정격</b>({@code idleAssumptionGaps[].engineBelievedCapacityWatts})이다
      * @param generatorFormula     전력·온도를 만든 생성식 — 이 값들이 실측이 아니라 식의 출력임을 응답이 스스로 밝힌다
      * @param powerControlNote     전원 제어 두 판의 뜻
      * @param randomSeedCount      무작위 대조군에 쓴 시드 수
@@ -164,12 +169,16 @@ public record PlacementBenchmarkResponse(
          * 떨어져 나가지만, 전제 블록은 숫자보다 앞에 있다. 계수(유휴 전력·정격·0.3)는 실데이터 없이 정한 값이다.
          */
         public static final String GENERATOR_FORMULA =
-                "전력(W) = idleWatts + (capacityWatts − idleWatts) × CPU%/100 · 온도(℃) = baseTemperature + 0.3 × CPU% — "
+                "전력(W) = idleWatts + (capacityWatts − idleWatts) × (CPU%/100)^β · 온도(℃) = baseTemperature + 0.3 × CPU% — "
                         + "노드별 idleWatts·capacityWatts·baseTemperature 는 클러스터 파일에 선언한 값이고 실측이 아니다. "
-                        + "엔진은 idleWatts 를 모른다 — 계측된 유휴 노드의 깨우기 비용은 실측 전력에서 (P − Pmax×u)/(1−u) 로 역산하고, "
-                        + "그 외(미계측·가동)는 정격 × idleRatio 를 쓴다. idleAssumptionGaps.engineAssumedIdleWatts 는 이 대체값 기준이다. "
-                        + "생성식이 선형이고 판의 정격이 엔진 정격과 같으므로 계측된 유휴 노드에 한해 역산은 선언값을 정확히 복원한다 "
-                        + "(미계측 노드는 대체값 그대로) — 그래서 이 판에서의 격차 축소는 상한이며 알고리즘 개선의 증거가 아니다";
+                        + "β 는 판 파일이 선언하며 이 실행의 값은 boards[].powerExponent 다(1 이면 선형). "
+                        + "엔진은 idleWatts 도 β 도 모르고, 정격은 판이 준 값(boards[].idleAssumptionGaps[].engineBelievedCapacityWatts)을 믿는다 — "
+                        + "설정의 defaultCapacityWatts·capacityByNode 는 판 경로에서 쓰이지 않는다(수집 경로 전용이며 설정 다이제스트에만 실린다). "
+                        + "계측된 유휴 노드에 한해 깨우기 비용은 실측 전력에서 (P − Pmax×u)/(1−u) 로 역산하고, "
+                        + "그 외(미계측·가동)는 엔진이 믿는 정격 × idleRatio 를 쓴다. idleAssumptionGaps.engineAssumedIdleWatts 는 이 대체값 기준이다. "
+                        + "β=1 이고 판의 정격이 엔진 정격과 같은 판에서는 그 역산이 선언값을 정확히 복원하므로 "
+                        + "(미계측 노드는 대체값 그대로) 그 판에서의 격차 축소는 상한이며 알고리즘 개선의 증거가 아니다. "
+                        + "β≠1 이거나 정격이 어긋난 판에서는 복원하지 않으며, 그 차는 boards[].wakeupReconstructionCheck 에 노드별로 있다";
 
         /**
           * 정책의 출처. <b>배포된 활성 정책을 읽지 않는다</b> — 활성 정책 조회 경로는 정책이 없으면
@@ -202,9 +211,12 @@ public record PlacementBenchmarkResponse(
      * @param digest             파일 내용 해시 앞 12자 — 응답이 자기 입력을 지목한다
      * @param nodeCount          노드 수
      * @param measuredNodeCount  전력·온도가 계측되는 노드 수
+     * @param powerExponent         이 판의 생성식 지수 β. 1 이면 선형이고, 1 보다 크면 저부하에서 전력이
+     *                              선형보다 낮은 볼록 판이다. 전제 블록의 생성식이 가리키는 값이 이것이다
      * @param idleAssumptionGaps    엔진의 유휴 전력 가정과 파일 선언값의 노드별 격차
      * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식(℃·K 두 눈금)과 생성식을 나란히.
      *                              격차·비율·판정은 없다. 두 엔진 값이 다르다는 것이 척도 의존의 증거다
+     * @param wakeupReconstructionCheck 유휴 노드의 깨우기 비용 역산 — 선언값과 엔진 역산의 범위를 나란히
      * @param cells                 부하율 × 전원 상태 가정의 격자
      */
     public record Board(
@@ -214,15 +226,51 @@ public record PlacementBenchmarkResponse(
             String digest,
             int nodeCount,
             int measuredNodeCount,
+            double powerExponent,
             List<IdleGap> idleAssumptionGaps,
             List<ThermalRiseScale> thermalRiseScaleCheck,
+            List<WakeupReconstruction> wakeupReconstructionCheck,
             List<Cell> cells
     ) {
         public Board {
             idleAssumptionGaps = idleAssumptionGaps == null ? List.of() : List.copyOf(idleAssumptionGaps);
             thermalRiseScaleCheck = thermalRiseScaleCheck == null ? List.of() : List.copyOf(thermalRiseScaleCheck);
+            wakeupReconstructionCheck = wakeupReconstructionCheck == null
+                    ? List.of() : List.copyOf(wakeupReconstructionCheck);
             cells = cells == null ? List.of() : List.copyOf(cells);
         }
+    }
+
+    /**
+     * 노드 한 대의 <b>깨우기 비용 역산</b> — 선언된 유휴 전력과 엔진이 되돌린 값을 나란히.
+     *
+     * <p>{@link ThermalRiseScale} 이 열 쪽에서 하는 일을 전력 쪽에서 하되, <b>판정·비율 열을 만들지 않는다.</b>
+     * 엔진의 역산은 선형 생성식을 유휴 전력에 대해 푼 것이라, 판이 선형이고 판이 준 정격이 생성식 정격과
+     * 같을 때만 선언값을 정확히 되돌린다. 그 조건이 깨진 판에서 값이 얼마나 벌어지는지를 <b>그 판에서</b> 보이는
+     * 자리이고, 어느 쪽이 옳은지는 이 표가 말하지 않는다. 시각 12지점을 훑은 최솟값·최댓값을 주는 이유는
+     * 역산이 그 순간의 사용률에 걸린 값이라 한 시각의 숫자로는 폭을 알 수 없기 때문이다.</p>
+     *
+     * <p>행은 <b>판의 회계 규칙</b>으로 고른다 — 12지점 내내 통전 문턱 아래에 머무는 노드 전부이며,
+     * 계측 여부는 {@code measured} 열로 밝힌다. 엔진 노브로 행을 고르면 노브를 돌리는 것만으로 표가 달라진다.</p>
+     *
+     * @param measured             전력이 계측되는 노드인가. <b>거짓이면 역산 두 값(min·max)이 대체값 그대로</b>이고
+     *                             역산이 아니다 — 미계측 노드는 역산할 분자·분모가 없다. {@code declaredIdleWatts}
+     *                             는 계측 여부와 무관하게 파일 선언값이다
+     * @param declaredIdleWatts    파일에 선언된 유휴 전력(W). 실측이 아니다
+     * @param engineFallbackWatts  엔진의 대체값(믿는 정격 × idleRatio). {@code idleAssumptionGaps[].engineAssumedIdleWatts}
+     *                             와 <b>같은 값</b>을 대조용으로 다시 싣는다 — 역산 경로를 탔는지는 엔진 안의 일이라
+     *                             하네스가 셀 수 없고, 대신 값이 대체값과 같은지를 독자가 이 자리에서 바로 본다
+     * @param engineWakeupMinWatts 12지점 역산의 최솟값(W)
+     * @param engineWakeupMaxWatts 12지점 역산의 최댓값(W)
+     */
+    public record WakeupReconstruction(
+            String nodeId,
+            boolean measured,
+            double declaredIdleWatts,
+            double engineFallbackWatts,
+            double engineWakeupMinWatts,
+            double engineWakeupMaxWatts
+    ) {
     }
 
     /**
@@ -256,12 +304,17 @@ public record PlacementBenchmarkResponse(
      * 생성식 기준 전력이 엔진 점수의 재탕이 아니라는 것이 표에서 바로 보인다 — 어느 쪽이 실물에 가까운지는
      * 이 표가 말하지 않는다.</p>
      *
+     * @param engineBelievedCapacityWatts 판이 엔진에게 알려 준 정격(W). 판이 정격을 어긋나게 주지 않으면
+     *                              {@code capacityWatts} 와 같다. 판 경로에서 엔진이 보는 정격은 설정이 아니라 이 값이다
      * @param declaredIdleWatts     파일에 선언된 유휴 전력(W). 실측이 아니다
-     * @param generatorWattsPerCore 생성식 기준 코어당 동적 전력(W/코어)
+     * @param generatorWattsPerCore 생성식 기준 코어당 동적 전력(W/코어) = (정격 − 선언 유휴) / 코어 —
+     *                              0→100% 구간의 <b>평균</b>(시컨트) 기울기다. 볼록 판(β&gt;1)에서 사용률 u 의
+     *                              한계 기울기는 이 값의 {@code β·u^(β−1)} 배라 이 열과 다르다
      */
     public record IdleGap(
             String nodeId,
             double capacityWatts,
+            double engineBelievedCapacityWatts,
             double declaredIdleWatts,
             double engineAssumedIdleWatts,
             double gapWatts,
@@ -337,8 +390,11 @@ public record PlacementBenchmarkResponse(
      * @param key           지표 키. {@code metrics} 선언의 key 와 같다
      * @param median        시각 지점들의 중앙값. <b>유효하지 않으면 null</b> — 순위 근거가 아닌 칸에 숫자를
      *                      실으면 {@code valid} 를 보지 않은 인용자에게는 그냥 값이다
-     * @param min           최솟값. 유효하지 않으면 null
-     * @param max           최댓값. 유효하지 않으면 null
+     * @param min           최솟값. 유효하지 않으면 null. <b>전략별 계열에서 독립으로 뽑은 값이라 전략마다 서로 다른
+     *                      시각 지점의 숫자일 수 있다</b> — 두 전략 사이의 짝 비교(예: power.min − pabfd.min)에 쓰면
+     *                      안 되고, 짝 비교는 median 과 samples 로만 한다
+     * @param max           최댓값. 유효하지 않으면 null. min 과 같은 이유로 <b>전략 간 짝 비교에 쓰지 않는다</b> —
+     *                      두 전략의 max 가 같은 시각 지점에서 나왔다는 보장이 없다
      * @param samples       값이 나온 시각 지점 수. 무효여도 남긴다 — "지점이 없어 무효"와 "지점은 있었지만
      *                      판정이 무효"를 구분하는 유일한 자리다
      * @param valid         이 숫자를 순위 근거로 써도 되는가

@@ -41,6 +41,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PowerKnobs;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalKnobs;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalRiseScale;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WakeupReconstruction;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WorkloadClassShare;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
@@ -146,7 +147,8 @@ public class PlacementBenchmarkService {
     /**
      * 판 하나를 부하율 네 지점 × 전원 상태 두 가정으로 비교한다.
      *
-     * @param boardId      {@code main}(주 결과) · {@code adversarial}(반증) · {@code sparse}(계측 공백)
+     * @param boardId      {@code main}(주 결과) · {@code adversarial}(반증) · {@code sparse}(계측 공백) ·
+     *                     {@code convex}(볼록 생성식) · {@code misrated}(정격 어긋남) · {@code convex-misrated}(복합·판정)
      * @param distribution {@code heavytail} 또는 {@code uniform}
      */
     public PlacementBenchmarkResponse compare(String boardId, String distribution) {
@@ -216,14 +218,18 @@ public class PlacementBenchmarkService {
 
         long measured = cluster.nodes().stream().filter(SyntheticCluster.Node::ipmi).count();
         return new Board(boardId, clusters.roleOf(boardId), cluster.name(), clusters.digest(boardId),
-                cluster.nodes().size(), (int) measured, idleGaps(oracle), thermalRiseScale(oracle), cells);
+                cluster.nodes().size(), (int) measured, cluster.powerExponent(),
+                idleGaps(oracle), thermalRiseScale(oracle), wakeupReconstruction(cluster), cells);
     }
 
     /**
      * 한 주기를 고르게 훑는 시각 지점. <b>벽시계를 쓰지 않는다</b> — 절대 시각에 기대면 같은 요청이
      * 두 번 다른 숫자를 내고, 그 차이가 알고리즘 차이와 구분되지 않는다.
+     *
+     * <p>{@code private} 이 아닌 이유는 같은 패키지의 시험이 <b>같은 지점 목록</b>으로 역산을 다시 계산하기
+     * 때문이다. 시험이 사본을 두면 두 목록이 갈라져도 초록불이 된다.</p>
      */
-    private static List<Long> sweepPoints(SyntheticCluster cluster) {
+    static List<Long> sweepPoints(SyntheticCluster cluster) {
         long period = cluster.periodMinutes() * 60L;
         List<Long> points = new ArrayList<>(BenchmarkRules.SWEEP_POINTS);
         for (int i = 0; i < BenchmarkRules.SWEEP_POINTS; i++) {
@@ -234,8 +240,8 @@ public class PlacementBenchmarkService {
 
     private List<IdleGap> idleGaps(GroundTruthOracle oracle) {
         return oracle.idleAssumptionGaps(properties.getPower().getIdleRatio()).stream()
-                .map(g -> new IdleGap(g.nodeId(), g.capacityWatts(), g.declaredIdleWatts(),
-                        g.engineAssumedIdleWatts(), g.absoluteGapWatts(),
+                .map(g -> new IdleGap(g.nodeId(), g.capacityWatts(), g.engineBelievedCapacityWatts(),
+                        g.declaredIdleWatts(), g.engineAssumedIdleWatts(), g.absoluteGapWatts(),
                         g.declaredIdleRatio(), g.generatorWattsPerCore()))
                 .toList();
     }
@@ -249,6 +255,50 @@ public class PlacementBenchmarkService {
                 .map(r -> new ThermalRiseScale(r.nodeId(), r.cores(), r.baseTemperatureC(),
                         r.engineRisePerCoreC(), r.engineRisePerCoreIfKelvin(), r.generatorRisePerCoreC()))
                 .toList();
+    }
+
+    /**
+     * 유휴 노드의 깨우기 비용 역산 점검표. {@link #idleGaps} 와 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
+     * 판정·비율은 만들지 않는다. 값이 대체값과 같은지는 {@code engineFallbackWatts} 열을 나란히 실어 독자가 본다.
+     *
+     * <p>행은 <b>판의 회계 규칙</b>으로 고른다 — 시각 12지점 내내 {@link BenchmarkRules#POWERED_ON_CPU_PERCENT}
+     * 아래에 머무는 노드 전부이고, 계측 여부는 열로 밝힌다. 엔진 노브({@code activeCpuPercent})로 고르면
+     * 노브를 돌리는 것만으로 표의 행이 달라져, 판이 엔진 설정의 함수가 된다.</p>
+     *
+     * <p>지점마다 <b>배치 전 스냅샷</b>을 새로 만들어 재는 이유는 엔진의 가동 판정이 예약분까지 반영한 실효
+     * CPU 를 보기 때문이다. 배치가 얹힌 노드로 재면 같은 시각의 (P, u) 쌍이 아니게 되어 역산의 전제가 깨진다.</p>
+     */
+    private List<WakeupReconstruction> wakeupReconstruction(SyntheticCluster cluster) {
+        List<Long> sweep = sweepPoints(cluster);
+        List<SyntheticCluster.Node> rows = cluster.nodes().stream()
+                .filter(n -> sweep.stream()
+                        .allMatch(t -> cluster.cpuUsage(n, t) <= BenchmarkRules.POWERED_ON_CPU_PERCENT))
+                .toList();
+        if (rows.isEmpty()) return List.of();
+
+        Map<String, double[]> range = new LinkedHashMap<>();       // nodeId → { 최솟값, 최댓값 }
+        for (long t : sweep) {
+            Map<String, NodeResource> snapshot = new LinkedHashMap<>();
+            for (NodeResource node : nodesAt(cluster, t)) {
+                snapshot.put(node.getNodeId(), node);
+            }
+            for (SyntheticCluster.Node n : rows) {
+                double watts = powerModel.wakeupPower(snapshot.get(n.nodeId()));
+                double[] minMax = range.computeIfAbsent(n.nodeId(),
+                        id -> new double[] { Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY });
+                minMax[0] = Math.min(minMax[0], watts);
+                minMax[1] = Math.max(minMax[1], watts);
+            }
+        }
+
+        double idleRatio = properties.getPower().getIdleRatio();
+        List<WakeupReconstruction> rowsOut = new ArrayList<>(rows.size());
+        for (SyntheticCluster.Node n : rows) {
+            double[] minMax = range.get(n.nodeId());
+            rowsOut.add(new WakeupReconstruction(n.nodeId(), n.ipmi(), n.idleWatts(),
+                    n.believedCapacityWatts() * idleRatio, minMax[0], minMax[1]));
+        }
+        return rowsOut;
     }
 
     // ── 시각 지점 하나 ────────────────────────────────────────
@@ -870,17 +920,20 @@ public class PlacementBenchmarkService {
     /**
      * 클러스터 파일의 노드를 한 시각의 {@link NodeResource} 로 만든다.
      *
+     * <p>{@code private} 이 아닌 이유는 {@link #sweepPoints} 와 같다 — 같은 패키지의 시험이 이 스냅샷의
+     * 전력이 오라클의 같은 시각 값과 같은지를 본다. 시험이 사본을 두면 두 세계가 갈라져도 초록불이 된다.</p>
+     *
      * <p><b>정격 전력은 계측 여부와 무관하게 싣는다.</b> 운영에서도 정격은 원장에서 오고 IPMI 와 별개다 —
      * 계측이 없는 노드는 "지금 몇 W 인지"를 모르는 것이고 "몇 W 까지 쓸 수 있는지"를 모르는 게 아니다.
      * 이 구분이 계측 공백판의 뜻이다.</p>
      */
-    private static List<NodeResource> nodesAt(SyntheticCluster cluster, long t) {
+    static List<NodeResource> nodesAt(SyntheticCluster cluster, long t) {
         List<NodeResource> nodes = new ArrayList<>(cluster.nodes().size());
         for (SyntheticCluster.Node n : cluster.nodes()) {
             NodeResource node = new NodeResource(n.mdcId(), n.nodeId(), n.cores(), n.memoryMb(), n.gpus(),
                     cluster.cpuUsage(n, t), cluster.memoryUsage(n, t), cluster.diskUsage(n, t),
                     n.ipmi() ? cluster.powerWatts(n, t) : 0,
-                    n.capacityWatts(),
+                    n.believedCapacityWatts(),   // 판 경로에서는 파일이 원장이다 — 엔진이 믿는 정격은 생성식 정격과 다를 수 있다
                     n.ipmi() ? cluster.temperature(n, t) : 0,
                     cluster.networkRx(n, t), cluster.networkTx(n, t))
                     .withDiskCapacityGb((long) n.diskTotalGb());

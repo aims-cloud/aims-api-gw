@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.infra.dto.VirtualAssetDtos;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
@@ -64,23 +65,22 @@ public class AssetController {
         return ApiResponse.ok(assetService.ingest(items));
     }
 
-    // ── 가상화 자산 (CB-Spider 연동 퍼블릭 클라우드) ─────────────
+    // ── 가상화 자산 (OpenStack 하이퍼바이저 호스트 → VM) ─────────
 
-    /** 가상화 자산 — 호스트(배포영역) 목록 */
+    /** 가상화 자산 — 호스트(하이퍼바이저) 목록 */
     @Operation(summary = "가상화 자산 호스트 목록",
-            description = "CB-Spider 연결(배포영역)별 요약. 호스트 = 클라우드 연결(리전)")
+            description = "하이퍼바이저 호스트별 요약 (vCore/할당코어/메모리/가상서버 수). vCenter 전용 필드는 null")
     @GetMapping("/virtual/hosts")
-    public ApiResponse<List<Map<String, Object>>> listVirtualHosts() {
+    public ApiResponse<List<VirtualAssetDtos.HostSummary>> listVirtualHosts() {
         return ApiResponse.ok(virtualAssetService.listHosts());
     }
 
     /** 가상화 자산 — 호스트 하위 VM 목록 (계층 확장) */
     @Operation(summary = "가상화 자산 호스트 하위 VM 목록",
-            description = "호스트(연결) 확장 시 해당 연결의 VM 계층 조회")
-    @GetMapping("/virtual/hosts/{connectionName}/vms")
-    public ApiResponse<List<Map<String, Object>>> listVirtualHostVms(
-            @PathVariable String connectionName) {
-        return ApiResponse.ok(virtualAssetService.listHostVms(connectionName));
+            description = "hostId(하이퍼바이저 hostname) 확장 시 해당 호스트의 VM 계층 조회")
+    @GetMapping("/virtual/hosts/{hostId}/vms")
+    public ApiResponse<List<VirtualAssetDtos.HostVm>> listVirtualHostVms(@PathVariable String hostId) {
+        return ApiResponse.ok(virtualAssetService.listHostVms(hostId));
     }
 
     /** 자산 등록 */

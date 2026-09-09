@@ -74,11 +74,11 @@ public class IpAddressController {
         return ApiResponse.ok(created);
     }
 
-    @Operation(summary = "IP 주소 편집 (별칭/설명)")
+    @Operation(summary = "IP 주소 편집 (설명)")
     @PutMapping("/{ipId}")
     public ApiResponse<IpRow> update(@PathVariable Long ipId, @RequestBody UpdateIpRequest req,
                                      Principal principal, HttpServletRequest http) {
-        return ApiResponse.ok(service.update(ipId, req.alias(), req.description(),
+        return ApiResponse.ok(service.update(ipId, req.description(),
                 RequestContext.user(principal), RequestContext.clientIp(http)));
     }
 

@@ -106,12 +106,11 @@ public class IpAddressService {
         return created;
     }
 
-    /** 별칭/설명 수정. */
+    /** 설명 수정 (편집 모달은 설명만). */
     @Transactional
-    public IpRow update(Long ipId, String alias, String description, String user, String clientIp) {
+    public IpRow update(Long ipId, String description, String user, String clientIp) {
         OffsetDateTime startedAt = OffsetDateTime.now();
         IpAddress ip = findIp(ipId);
-        if (alias != null) ip.setAlias(alias);
         if (description != null) ip.setDescription(description);
         ip.setUpdatedBy(user);
         ipRepository.save(ip);

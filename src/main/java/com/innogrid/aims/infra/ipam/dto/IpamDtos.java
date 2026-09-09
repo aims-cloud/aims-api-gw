@@ -52,7 +52,8 @@ public final class IpamDtos {
     /** IP 예약 생성 (단일/범위). 범위면 ipEnd 지정. */
     public record ReserveIpRequest(Long subnetId, String ipStart, String ipEnd, String description) {}
 
-    public record UpdateIpRequest(String alias, String description) {}
+    /** IP 편집 — 설명만 수정 (별칭은 이 화면에서 편집하지 않음). */
+    public record UpdateIpRequest(String description) {}
 
     // ── 행위 이력 ───────────────────────────────────────────────
 

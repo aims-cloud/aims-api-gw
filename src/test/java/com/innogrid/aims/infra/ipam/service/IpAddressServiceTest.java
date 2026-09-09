@@ -125,13 +125,12 @@ class IpAddressServiceTest {
     }
 
     @Test
-    void update_alias_and_description() {
+    void update_description_only() {
         IpAddress ip = new IpAddress(10L, 1L, "192.168.110.50", null, "admin");
         when(ipRepository.findById(5L)).thenReturn(Optional.of(ip));
 
-        IpRow row = service.update(5L, "DB서버", "운영 DB", "admin", "ip");
+        IpRow row = service.update(5L, "운영 DB", "admin", "ip");
 
-        assertThat(row.alias()).isEqualTo("DB서버");
         assertThat(row.description()).isEqualTo("운영 DB");
     }
 }

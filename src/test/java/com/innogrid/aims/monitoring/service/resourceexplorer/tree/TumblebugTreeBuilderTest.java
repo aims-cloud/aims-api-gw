@@ -15,6 +15,8 @@ import com.innogrid.aims.infra.entity.RoleNamespace;
 import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.ResourceExplorerProperties;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
+import com.innogrid.aims.monitoring.dto.log.PortalLogResult;
+import com.innogrid.aims.monitoring.log.PortalLogService;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeType;
@@ -28,6 +30,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -48,6 +54,7 @@ class TumblebugTreeBuilderTest {
     TumblebugClient tumblebugClient = mock(TumblebugClient.class);
     RoleNamespaceRepository roleNamespaceRepository = mock(RoleNamespaceRepository.class);
     VictoriaMetricsClient metricsClient = mock(VictoriaMetricsClient.class);
+    PortalLogService portalLogService = mock(PortalLogService.class);
 
     MutableClock clock = new MutableClock(Instant.parse("2026-09-04T09:00:00Z"));
     ResourceExplorerProperties properties = new ResourceExplorerProperties();
@@ -76,7 +83,7 @@ class TumblebugTreeBuilderTest {
                 vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1", "UUID", "GPU-1111", "gpu", "0"), "1")));
 
         MonitoringCapabilityResolver resolver = new MonitoringCapabilityResolver(metricsClient, properties, clock);
-        builder = new TumblebugTreeBuilder(tumblebugClient, roleNamespaceRepository, resolver, properties, clock);
+        builder = new TumblebugTreeBuilder(tumblebugClient, roleNamespaceRepository, resolver, properties, portalLogService, clock);
         builder.setSleeper(waits::add);                                 // 재시도 대기는 기록만
     }
 
@@ -277,6 +284,40 @@ class TumblebugTreeBuilderTest {
         assertThat(result).containsOnlyKeys("ADMIN");                 // 매핑이 없는 USER 는 그래도 제외
         assertThat(result.get("ADMIN").status()).isEqualTo(TumblebugTreeBuilder.UNAVAILABLE_STATUS);
         assertThat(result.get("ADMIN").leaf()).isTrue();
+    }
+
+    @Test
+    void Tumblebug_조회_실패와_복구는_상태가_바뀔_때만_포털_로그_SYSTEM_으로_남긴다() {
+        builder.build(List.of("ADMIN"));                                                   // 정상 → 정상: 기록 없음
+        verify(portalLogService, never()).system(anyString(), anyString(), anyString(), any(), any());
+
+        when(tumblebugClient.listNamespaces()).thenThrow(new IllegalStateException("tumblebug down"));
+        clock.advance(Duration.ofSeconds(70));
+        builder.build(List.of("ADMIN"));                                                   // 정상 → 실패: FAILURE 1건
+        clock.advance(Duration.ofSeconds(70));
+        builder.build(List.of("ADMIN"));                                                   // 실패 지속: 없음
+        verify(portalLogService, times(1)).system(eq("Tumblebug 연동"), eq("장애"), eq("Namespace 목록 조회 실패"),
+                eq(PortalLogResult.FAILURE), eq("tumblebug down"));
+
+        reset(tumblebugClient);
+        stubTumblebugHealthy();
+        clock.advance(Duration.ofSeconds(70));
+        builder.build(List.of("ADMIN"));                                                   // 실패 → 정상: 복구 1건
+        verify(portalLogService, times(1)).system(eq("Tumblebug 연동"), eq("복구"), eq("Namespace 목록 조회 복구"),
+                eq(PortalLogResult.SUCCESS), isNull());
+    }
+
+    @Test
+    void Namespace_하나의_Infra_조회_실패는_그_Namespace_단위로_SYSTEM_을_남긴다() {
+        HttpClientErrorException tooMany = HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests",
+                new HttpHeaders(), new byte[0], null);
+        when(tumblebugClient.listInfra("ns-b")).thenThrow(tooMany);
+
+        builder.build(List.of("ADMIN"));
+
+        verify(portalLogService, times(1)).system(eq("Tumblebug 연동"), eq("장애"), eq("Infra 조회 (ns=ns-b) 실패"),
+                eq(PortalLogResult.FAILURE), anyString());
+        verify(portalLogService, never()).system(anyString(), anyString(), eq("Infra 조회 (ns=ns-a) 실패"), any(), any());
     }
 
     // ── 헬퍼 ────────────────────────────────────────────────────

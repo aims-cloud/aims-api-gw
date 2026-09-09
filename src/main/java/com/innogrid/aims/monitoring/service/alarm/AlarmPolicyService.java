@@ -126,7 +126,7 @@ public class AlarmPolicyService {
         List<AlarmPolicyListItemResponse> items = policies.stream()
                 .map(p -> new AlarmPolicyListItemResponse(p.getId(), p.getName(), p.getRoleName(), p.getAreaId(),
                         p.getResourceType(), targets.getOrDefault(p.getId(), List.of()).size(), p.criterion(), p.getLevel(),
-                        names.getOrDefault(p.getCreatedBy(), p.getCreatedBy()), p.getCreatedAt()))
+                        p.getChannels(), names.getOrDefault(p.getCreatedBy(), p.getCreatedBy()), p.getCreatedAt()))
                 .toList();
         return new PageResponse<>(items, page, size, result.getTotalElements(), result.getTotalPages());
     }

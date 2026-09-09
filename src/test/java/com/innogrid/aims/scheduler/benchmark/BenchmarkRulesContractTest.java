@@ -20,6 +20,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
@@ -708,6 +709,29 @@ class BenchmarkRulesContractTest {
                     "판에 필드 " + component.getName() + " 이 늘었는데 설명이 그대로다 — "
                             + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
         }
+    }
+
+    /**
+     * 지표 값 한 칸의 필드 이름도 설명에 전부 있어야 한다 — 판의 필드와 같은 이유다.
+     *
+     * <p>지점별 값(points)처럼 <b>뜻을 모르면 잘못 읽히는</b> 열이 늘었을 때, 응답에만 있고 문서에 없으면
+     * 읽는 사람은 그 배열의 인덱스가 무엇인지·null 이 무엇을 뜻하는지 알 수 없다.</p>
+     */
+    @DisplayName("지표 값의 필드 이름이 하나도 빠짐없이 배치 비교 설명에 등장한다")
+    @Test
+    void every_metric_value_field_is_named_in_the_swagger_description() throws Exception {
+        String description = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class)
+                .description();
+
+        for (RecordComponent component : MetricValue.class.getRecordComponents()) {
+            assertTrue(description.contains(component.getName()),
+                    "지표 값에 필드 " + component.getName() + " 이 늘었는데 설명이 그대로다 — "
+                            + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
+        }
+        assertTrue(description.contains(BenchmarkRules.GAP_VS_PABFD),
+                "격차 지표의 키가 설명에 없다 — 판정에 쓸 열이라 뜻이 문서에 있어야 한다");
     }
 
     /** 금지 조각이 어디에도 없는지 — 검사할 조각의 출처를 시험마다 다시 적지 않는다. */

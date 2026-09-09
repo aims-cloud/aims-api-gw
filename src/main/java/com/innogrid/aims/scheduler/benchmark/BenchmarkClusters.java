@@ -16,12 +16,17 @@ import org.springframework.stereotype.Component;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 /**
- * 비교용 가상 클러스터 세 벌 — 판(board)마다 <b>역할이 먼저 정해져 있다</b>.
+ * 비교용 가상 클러스터 여섯 벌 — 판(board)마다 <b>역할이 먼저 정해져 있다</b>.
  *
- * <p>판이 셋인 이유는 결과를 셋으로 나눠 보이기 위해서가 아니라, 한 판의 결과만으로는
+ * <p>판이 여럿인 이유는 결과를 여러 장으로 나눠 보이기 위해서가 아니라, 한 판의 결과만으로는
  * 반론을 막을 수 없기 때문이다. 주 결과판은 우리 엔진에 유리한 우연(미계측 배출구·유휴 비율
  * 0.3 가정·"큰 노드는 비효율" 편향)을 제거한 자리이고, <b>반증판은 우리 엔진이 지도록 설계</b>했고,
  * 계측 공백판은 주 결과판과 {@code ipmi} 플래그만 달라 두 판의 차이가 곧 센서 공백의 크기다.</p>
+ *
+ * <p>뒤의 세 판은 <b>엔진의 가정이 틀렸을 때</b>를 재는 자리다. 생성식 지수만 바꾼 볼록 판과 엔진에 알려 준
+ * 정격만 어긋나게 둔 판이 요인 하나씩을 귀속시키는 부록이고, 둘을 함께 건 복합 판이 다음 엔진 변경을 판정할
+ * 판이다. 셋 다 주 결과판과 <b>노드 구성이 같아</b>(그 값들을 한 글자도 바꾸지 않았다) 판 사이의 차이를
+ * 요인으로 읽을 수 있다 — 모집단이 다르면 그 읽기가 성립하지 않는다.</p>
  *
  * <p>{@link #digest(String)} 가 파일 내용의 SHA-256 앞 12자를 준다. 응답이 자기 입력을 지목하게 하려는
  * 것이다 — 표에 적힌 숫자가 어느 파일에서 나왔는지 사람이 대조할 수 없으면, 파일을 고친 뒤 같은 표를
@@ -43,16 +48,29 @@ public class BenchmarkClusters {
     /** 계측 공백판 — 주 결과판과 {@code ipmi} 플래그만 다른 판. */
     public static final String SPARSE = "sparse";
 
-    /** 다이제스트로 남길 자릿수. 12자면 세 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
+    /** 볼록 생성식판 — 주 결과판과 생성식 지수만 다른 판. */
+    public static final String CONVEX = "convex";
+
+    /** 정격 어긋남판 — 주 결과판과 엔진에 알려 준 정격만 다른 판. */
+    public static final String MISRATED = "misrated";
+
+    /** 복합판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판. 판정 셀이 여기 있다. */
+    public static final String CONVEX_MISRATED = "convex-misrated";
+
+    /** 다이제스트로 남길 자릿수. 12자면 여섯 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
     private static final int DIGEST_LENGTH = 12;
 
     /** 판 목록의 <b>고정 순서</b>. 표의 열 순서가 호출마다 달라지면 두 실행 결과를 눈으로 대조할 수 없다. */
-    private static final List<String> ORDER = List.of(MAIN, ADVERSARIAL, SPARSE);
+    private static final List<String> ORDER =
+            List.of(MAIN, ADVERSARIAL, SPARSE, CONVEX, MISRATED, CONVEX_MISRATED);
 
     private static final Map<String, String> LOCATIONS = Map.of(
             MAIN, "classpath:scheduler/benchmark-cluster-main.yml",
             ADVERSARIAL, "classpath:scheduler/benchmark-cluster-adversarial.yml",
-            SPARSE, "classpath:scheduler/benchmark-cluster-sparse.yml");
+            SPARSE, "classpath:scheduler/benchmark-cluster-sparse.yml",
+            CONVEX, "classpath:scheduler/benchmark-cluster-convex.yml",
+            MISRATED, "classpath:scheduler/benchmark-cluster-misrated.yml",
+            CONVEX_MISRATED, "classpath:scheduler/benchmark-cluster-convex-misrated.yml");
 
     private static final Map<String, String> ROLES = Map.of(
             MAIN, "주 결과판 — 노드 14대 전수 계측(유휴 5대 · 가동 9대). 미계측 배출구를 없애고, 유휴 전력 비율을 "
@@ -63,12 +81,30 @@ public class BenchmarkClusters {
                     + "정격이 큰 노드가 효율적이다(상관 -0.87). 여기서 이기면 판을 다시 설계해야 한다.",
             SPARSE, "계측 공백판(부록) — 주 결과판과 같은 14대인데 5대만 ipmi: false 다(가동 3 · 유휴 2). 다른 값은 "
                     + "하나도 다르지 않으므로 두 판의 결과 차이는 '센서가 있는가' 하나로만 설명된다. 그 차이가 센서 "
-                    + "공백의 크기이고, 계측을 요구할 정량 근거다.");
+                    + "공백의 크기이고, 계측을 요구할 정량 근거다.",
+            CONVEX, "볼록 생성식판(부록) — 주 결과판과 생성식 지수(powerExponent 1.6)만 다르다. 다른 값은 하나도 다르지 "
+                    + "않으므로 두 판의 차이는 '생성식이 볼록한가' 하나로만 설명된다. 지수를 1 보다 크게 둔 것은 실서버 "
+                    + "곡선의 근사가 아니라 엔진의 선형 가정이 틀린 방향으로 기울인 응력 시험이고, 문헌에는 반대 방향의 "
+                    + "보고도 있다. 엔진의 깨우기 비용 역산은 선형식을 푼 것이라 이 판에서는 선언된 유휴 전력을 복원하지 "
+                    + "못하고 낮게 본다 — 노드별 차는 wakeupReconstructionCheck 에 있다. 이 판에서는 낭비 점수가 유휴비가 "
+                    + "높은 노드의 중·고부하에서 포화해 변별이 좁아진다. 판의 성질로 적어 두고 고치지 않는다.",
+            MISRATED, "정격 어긋남판(부록) — 주 결과판과 엔진에게 알려 준 정격(believedCapacityWatts)만 다르다. 생성식이 쓰는 "
+                    + "정격은 그대로이고, 엔진이 믿는 정격만 노드마다 정확히 ±10% 어긋나 있다. 부호는 손으로 고르지 않는다 — "
+                    + "중립이 아니라 층마다 한 양만 맞춘 배치다: 유휴 층(깨우기 벌점이 붙는 유일한 층)은 벌점 편향을 최소로 "
+                    + "하고(0.037%, 대신 그 층의 정격 합은 25.8% 기운다), 가동 층은 정격 합 편중을 최소로 한다(0.85%). "
+                    + "한 층에서 두 양을 동시에 맞출 수 없어 층마다 하나만 최소로 하며, 계약 시험이 파일만 보고 재계산한다. "
+                    + "어긋남이 크게 흔드는 곳은 유휴 역산이 아니라 깨우기 벌점·전력 제약 여유·전력 인지 대조군의 선택이다 — "
+                    + "대조군도 판이 알려 준 정격을 읽으므로 '대조군은 그대로' 로 읽으면 안 된다.",
+            CONVEX_MISRATED, "판정판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판이고, 다음 엔진 변경의 효과를 판정할 셀"
+                    + "(부하율 60% · 전원 제어 있음)이 이 판에 있다. 두 부록판이 요인 하나씩을 귀속시키고 여기서 판정한다. "
+                    + "두 오차항은 노드에 따라 상쇄하므로(과소 믿음 노드에서는 부호가 반대다) 유휴 역산이 선언값에 가까워지는 "
+                    + "행을 '항등이 살아남았다' 로 읽으면 안 된다. 판정 셀은 현 시스템에 없는 전원 제어를 가정한 값이라 "
+                    + "배포 환경에서 재현되지 않으며, 전원 제어가 없는 같은 부하율의 셀은 보고만 하는 2차 셀이다.");
 
     private final Map<String, SyntheticCluster> loaded = new ConcurrentHashMap<>();
     private final Map<String, String> digests = new ConcurrentHashMap<>();
 
-    /** 판 목록(고정 순서: main, adversarial, sparse). */
+    /** 판 목록(고정 순서: main, adversarial, sparse, convex, misrated, convex-misrated). */
     public List<String> boardIds() {
         return ORDER;
     }

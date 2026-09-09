@@ -216,6 +216,19 @@ class PlacementBenchmarkApiTest {
                 "심은 데이터에 대한 방어는 반대로 심은 판을 함께 내는 것이다: " + role);
     }
 
+    @DisplayName("복합 판정판도 같은 경로로 돌고 자기가 판정판임을 밝힌다")
+    @Test
+    void the_judgment_board_runs_through_the_same_endpoint() throws Exception {
+        JsonNode board = body(URL + "?board=" + BenchmarkRules.JUDGMENT_BOARD).path("data").path("boards").path(0);
+
+        assertEquals(BenchmarkRules.JUDGMENT_BOARD, board.path("boardId").asString());
+        assertEquals(14, board.path("nodeCount").asInt(),
+                "판정판은 주 결과판과 같은 모집단이어야 판 사이의 차이를 요인으로 읽을 수 있다");
+        assertEquals(14, board.path("measuredNodeCount").asInt());
+        assertTrue(board.path("role").asString().contains("판정판"),
+                "이 판이 무엇을 판정하는 자리인지 응답이 스스로 밝혀야 한다: " + board.path("role").asString());
+    }
+
     @DisplayName("균일 분포로도 돌아가고 분포 이름이 응답에 실린다")
     @Test
     void the_uniform_distribution_runs_too() throws Exception {

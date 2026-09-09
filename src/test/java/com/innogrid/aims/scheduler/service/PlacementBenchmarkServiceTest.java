@@ -374,7 +374,7 @@ class PlacementBenchmarkServiceTest {
     @Test
     void an_invalid_metric_carries_no_number() {
         int invalidSeen = 0;
-        for (String board : List.of("main", "adversarial", "sparse")) {
+        for (String board : List.of("main", "adversarial", "sparse", "convex-misrated")) {
             for (Cell c : service.compare(board, "heavytail").boards().get(0).cells()) {
                 for (StrategyResult s : c.strategies()) {
                     for (MetricValue m : s.metrics()) {
@@ -424,7 +424,7 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("건당 전력의 유효성은 값이 나온 지점이 있는지와 정확히 일치한다")
     @Test
     void per_workload_power_validity_matches_whether_any_point_produced_a_value() {
-        for (String board : List.of("main", "adversarial", "sparse")) {
+        for (String board : List.of("main", "adversarial", "sparse", "convex-misrated")) {
             for (Cell c : service.compare(board, "heavytail").boards().get(0).cells()) {
                 for (StrategyResult s : c.strategies()) {
                     MetricValue m = metric(s, BenchmarkRules.PER_WORKLOAD_POWER);
@@ -964,7 +964,7 @@ class PlacementBenchmarkServiceTest {
      * 덜 배치한 전략은 CPU 를 덜 얹어 덜 뜨겁고 분포도 덜 벌어진다 — 건수가 다른 지점을 그냥 세면 열이
      * 아니라 배치량을 재게 된다. 개입 횟수는 시도당 계수라 성공률과 같이 전 지점을 센다.
      *
-     * <p>판 셋을 다 본다 — 짝이 어긋나는 셀이 어느 판에서 나올지는 판의 성질이라 하나만 보면 우연히
+     * <p>판 넷을 다 본다 — 짝이 어긋나는 셀이 어느 판에서 나올지는 판의 성질이라 하나만 보면 우연히
      * 게이트가 한 번도 작동하지 않은 채 통과할 수 있다.</p>
      */
     @DisplayName("온도 분포 두 지표는 총량과 같은 지점에서만 세고 개입 횟수는 성공률과 같이 전 지점을 센다")
@@ -972,7 +972,8 @@ class PlacementBenchmarkServiceTest {
     void the_temperature_distribution_metrics_are_paired_like_the_totals() {
         boolean anyGateFired = false;
 
-        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE,
+                BenchmarkClusters.CONVEX_MISRATED)) {
             Board board = service.compare(boardId, "heavytail").boards().get(0);
             assertTrue(board.measuredNodeCount() >= 2, boardId + ": 계측 노드가 둘 미만이면 이 시험이 게이트를 못 본다");
 
@@ -996,7 +997,7 @@ class PlacementBenchmarkServiceTest {
                 }
             }
         }
-        assertTrue(anyGateFired, "세 판 어디서도 짝이 어긋난 지점이 없다 — 게이트가 한 번도 작동하지 않아 이 시험이 아무것도 보지 않았다");
+        assertTrue(anyGateFired, "네 판 어디서도 짝이 어긋난 지점이 없다 — 게이트가 한 번도 작동하지 않아 이 시험이 아무것도 보지 않았다");
     }
 
     /**
@@ -1008,7 +1009,8 @@ class PlacementBenchmarkServiceTest {
     @Test
     void with_no_paired_point_the_temperature_distribution_metrics_carry_a_reason_and_no_number() {
         int checked = 0;
-        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE,
+                BenchmarkClusters.CONVEX_MISRATED)) {
             for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
                 for (StrategyResult s : c.strategies()) {
                     if (metric(s, BenchmarkRules.GENERATOR_POWER).samples() > 0) continue;
@@ -1024,9 +1026,9 @@ class PlacementBenchmarkServiceTest {
                 }
             }
         }
-        // 수용 불가 부하(110%)는 판정 규칙이 일부러 넣은 지점이라 세 판 모두 짝 지점 0 인 셀이 있어야 한다. 하나도 없으면
+        // 수용 불가 부하(110%)는 판정 규칙이 일부러 넣은 지점이라 네 판 모두 짝 지점 0 인 셀이 있어야 한다. 하나도 없으면
         // 위 단언이 아무것도 안 본 것이므로 통과가 아니라 실패다 — 로그로 남기면 초록불이 "확인함"으로 읽힌다.
-        assertTrue(checked > 0, "짝 지점 0 인 셀이 세 판 어디에도 없다 — 110% 부하가 전략을 구분하지 못한다는 뜻이고, 이 시험이 아무것도 보지 않았다");
+        assertTrue(checked > 0, "짝 지점 0 인 셀이 네 판 어디에도 없다 — 110% 부하가 전략을 구분하지 못한다는 뜻이고, 이 시험이 아무것도 보지 않았다");
     }
 
     /** 시각 지점을 훑었으므로 최솟값 ≤ 중앙값 ≤ 최댓값 이고, 폭이 0 이 아닌 지표가 있어야 한다. */
@@ -1131,6 +1133,55 @@ class PlacementBenchmarkServiceTest {
                         boardId + "/" + gap.nodeId() + ": 정격을 어긋나게 주지 않는 판인데 두 값이 다르다");
             }
         }
+    }
+
+    /**
+     * 판정 셀이 <b>쓸 수 있는 칸인지</b>를 본다 — 결과가 아니라 <b>판의 유효성</b>이다.
+     *
+     * <p>전력 제약의 문턱은 부하율에 비대칭이라 전략마다 배치 건수를 다르게 만들 수 있고, 그러면 총량 열이
+     * 통째로 무효가 되어 판정 셀의 주 지표가 사라진다. 그때는 결과가 나쁜 것이 아니라 <b>판을 못 쓰는 것</b>이므로,
+     * 이 시험이 빨간불이면 판을 다시 떠야 한다. 90·110% 에서 총량 열이 소실되는 것은 사전 등록한 예상 범위라
+     * 여기서 보지 않는다.</p>
+     */
+    @DisplayName("판정 셀과 같은 판의 30% 셀에서 총전력 지표가 유효하고 표본이 있다")
+    @Test
+    void the_judgment_cell_carries_a_usable_total_power_metric() {
+        Board board = service.compare(BenchmarkRules.JUDGMENT_BOARD, "heavytail").boards().get(0);
+        String powerControl = BenchmarkRules.JUDGMENT_POWER_CONTROL.name();
+
+        for (int loadRatio : List.of(30, BenchmarkRules.JUDGMENT_LOAD_RATIO)) {
+            Cell c = cell(board, loadRatio, powerControl);
+            for (StrategyResult s : c.strategies()) {
+                MetricValue m = metric(s, BenchmarkRules.GENERATOR_POWER);
+                String where = BenchmarkRules.JUDGMENT_BOARD + " " + loadRatio + "% " + powerControl
+                        + " " + s.strategyId();
+                assertTrue(m.valid(), where + ": 총전력 열이 무효다 — 판정할 지표가 없으므로 판을 다시 떠야 한다: "
+                        + m.invalidReason());
+                assertTrue(m.samples() >= 1, where + ": 표본 지점이 하나도 없다 — 판정 셀이 비었다");
+            }
+        }
+    }
+
+    /**
+     * 정격 어긋남은 우리 엔진만 흔들지 않는다 — 문헌 대조군도 <b>판이 알려 준 정격</b>을 읽는다.
+     * "대조군은 그대로"라고 읽으면 어긋남의 효과를 우리 엔진의 것으로만 돌리게 된다.
+     */
+    @DisplayName("정격을 어긋나게 준 판에서는 전력 인지 대조군이 믿은 비용도 달라진다")
+    @Test
+    void the_power_aware_baseline_reads_the_misrated_capacity() {
+        String powerControl = BenchmarkRules.JUDGMENT_POWER_CONTROL.name();
+        Cell main = cell(service.compare(BenchmarkClusters.MAIN, "heavytail").boards().get(0),
+                BenchmarkRules.JUDGMENT_LOAD_RATIO, powerControl);
+        Cell misrated = cell(service.compare(BenchmarkClusters.MISRATED, "heavytail").boards().get(0),
+                BenchmarkRules.JUDGMENT_LOAD_RATIO, powerControl);
+
+        MetricValue a = metric(strategy(main, "pabfd"), BenchmarkRules.ENGINE_BELIEVED_COST);
+        MetricValue b = metric(strategy(misrated, "pabfd"), BenchmarkRules.ENGINE_BELIEVED_COST);
+        assertNotNull(a.median(), "주 결과판의 대조군 믿은 비용이 비었다");
+        assertNotNull(b.median(), "정격 어긋남 판의 대조군 믿은 비용이 비었다");
+        assertNotEquals(a.median(), b.median(),
+                "두 판에서 대조군이 믿은 비용이 같다 — 대조군이 판의 정격을 읽지 않는다는 뜻이고, "
+                        + "그러면 정격 어긋남의 효과가 우리 엔진 쪽에만 걸린 것처럼 보인다");
     }
 
     /**

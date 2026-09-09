@@ -92,6 +92,15 @@ aims:
       interval-seconds: ${AIMS_ALARM_EVAL_INTERVAL_SECONDS:60}
       # rate() 창 — 스크레이프 간격의 4배 이상, 자원 탐색기 패널 rate 창 하한(5m)과 같게 유지
       rate-window: ${AIMS_ALARM_EVAL_RATE_WINDOW:5m}
+  portal-log:
+    retention:
+      # 포털 로그 보존 배치 (docs/08 §9) — 매일 03:30, 일반 1년 / SYSTEM 90일. 배치 단위로 별도 트랜잭션, 한 실행 최대 200배치
+      enabled: ${AIMS_PORTAL_LOG_RETENTION_ENABLED:true}
+      cron: ${AIMS_PORTAL_LOG_RETENTION_CRON:0 30 3 * * *}
+      default-days: ${AIMS_PORTAL_LOG_RETENTION_DEFAULT_DAYS:365}
+      system-days: ${AIMS_PORTAL_LOG_RETENTION_SYSTEM_DAYS:90}
+      batch-size: 5000
+      max-batches-per-run: 200
 
 # ── JWT 설정 ───────────────────────────────────────────────
 jwt:

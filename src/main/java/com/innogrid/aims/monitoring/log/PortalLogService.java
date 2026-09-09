@@ -38,11 +38,17 @@ public class PortalLogService {
                 .build());
     }
 
-    /** ALARM — 알람 발생·해소·확인 요약 행. 원장은 alarm_history, 여기엔 ref 만 */
+    /** ALARM — 알람 발생·해소·확인 요약 행. 원장은 alarm_history, 여기엔 ref 만. 시각은 지금 */
     public void alarm(String action, String content, long alarmHistoryId) {
+        alarm(action, content, alarmHistoryId, OffsetDateTime.now());
+    }
+
+    /** ALARM — 발생·해소처럼 전이 시각이 따로 있으면 그 시각을 started/completed 로 남긴다 */
+    public void alarm(String action, String content, long alarmHistoryId, OffsetDateTime at) {
         PortalLogContext ctx = contextResolver.resolve();          // 확인(ack)은 사용자가 있고, 발생·해소는 없다
+        OffsetDateTime when = at == null ? OffsetDateTime.now() : at;
         writer.write(PortalLogEntry.builder(PortalLogType.ALARM)
-                .startedAt(OffsetDateTime.now()).completedAt(OffsetDateTime.now())
+                .startedAt(when).completedAt(when)
                 .user(ctx.userId(), ctx.userName()).clientIp(ctx.clientIp()).requestId(ctx.requestId())
                 .screen("알람").action(action).content(content)
                 .ref("ALARM_HISTORY", String.valueOf(alarmHistoryId))

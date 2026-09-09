@@ -1,14 +1,19 @@
 package com.innogrid.aims.monitoring.service.alarm;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
+import com.innogrid.aims.monitoring.dto.log.PortalLogResult;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.monitoring.entity.Event;
+import com.innogrid.aims.monitoring.entity.PortalLogEntry;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.repository.EventRepository;
+import com.innogrid.aims.monitoring.repository.PortalLogRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,10 +23,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
- * 알람 전이 이벤트 → events 원장 적재 — 평가 트랜잭션 커밋 뒤에만 적재되고(롤백이면 없음), 발생은 정책 레벨·해소는 INFO,
- * 트랜잭션 밖 발행도 처리. 실제 컨텍스트에서 리스너 배선까지 확인하므로 @Transactional 없이 직접 커밋한다.
+ * 알람 전이 이벤트 → events 원장 적재 + 포털 로그 ALARM 행 — 평가 트랜잭션 커밋 뒤에만 적재되고(롤백이면 없음),
+ * 발생은 정책 레벨·해소는 INFO, 트랜잭션 밖 발행도 처리. 실제 컨텍스트에서 리스너 배선까지 확인하므로 @Transactional 없이 직접 커밋한다.
  */
 @SpringBootTest
 class AlarmEventRecorderTest {
@@ -30,17 +36,21 @@ class AlarmEventRecorderTest {
     @Autowired TransactionTemplate tx;
     @Autowired EventRepository eventRepository;
     @Autowired AlarmHistoryRepository historyRepository;
+    @Autowired PortalLogRepository portalLogRepository;
 
     List<Long> before;
+    List<Long> portalLogsBefore;
 
     @BeforeEach
     void snapshot() {
         before = eventRepository.findAll().stream().map(Event::getId).toList();
+        portalLogsBefore = portalLogRepository.findAll().stream().map(PortalLogEntry::getId).toList();
     }
 
     @AfterEach
     void cleanUp() {
         eventRepository.findAll().stream().filter(e -> !before.contains(e.getId())).forEach(eventRepository::delete);
+        portalLogRepository.findAll().stream().filter(l -> !portalLogsBefore.contains(l.getId())).forEach(portalLogRepository::delete);
         historyRepository.deleteAll();
     }
 
@@ -52,6 +62,10 @@ class AlarmEventRecorderTest {
 
     private List<Event> newEvents() {
         return eventRepository.findAll().stream().filter(e -> !before.contains(e.getId())).toList();
+    }
+
+    private List<PortalLogEntry> newPortalLogs() {
+        return portalLogRepository.findAll().stream().filter(l -> !portalLogsBefore.contains(l.getId())).toList();
     }
 
     @Test
@@ -67,11 +81,25 @@ class AlarmEventRecorderTest {
         assertThat(e.getSource()).isEqualTo("node-01");
         assertThat(e.getMessage()).isEqualTo("cpu-high: CPU Used > 80% (관측값 92.4%)");
 
+        assertThat(newPortalLogs()).singleElement().satisfies(l -> {      // 포털 로그 ALARM 발생 행 (docs/08 §3.2)
+            assertThat(l.getType()).isEqualTo(PortalLogType.ALARM);
+            assertThat(l.getScreen()).isEqualTo("알람");
+            assertThat(l.getAction()).isEqualTo("발생");
+            assertThat(l.getContent()).isEqualTo("CPU Used > 80% 발생: node-01 (92.4%)");
+            assertThat(l.getResult()).isEqualTo(PortalLogResult.SUCCESS);
+            assertThat(l.getRefType()).isEqualTo("ALARM_HISTORY");
+            assertThat(l.getRefId()).isEqualTo(String.valueOf(saved.getId()));
+            assertThat(l.getUserId()).isNull();                                    // 엔진 발생이라 사용자 없음
+            assertThat(l.getStartedAt()).isCloseTo(saved.getOccurredAt(), within(1, ChronoUnit.MILLIS));   // DB 는 µs 정밀도
+            assertThat(l.getCompletedAt()).isCloseTo(saved.getOccurredAt(), within(1, ChronoUnit.MILLIS));   // DB 는 µs 정밀도
+        });
+
         tx.executeWithoutResult(s -> {
             publisher.publishEvent(AlarmStateChangedEvent.firing(saved, 99.0));
             s.setRollbackOnly();
         });
-        assertThat(newEvents()).hasSize(1);                      // 롤백된 평가의 이벤트는 없다
+        assertThat(newEvents()).hasSize(1);                      // 롤백된 평가의 이벤트·포털 로그는 없다
+        assertThat(newPortalLogs()).hasSize(1);
     }
 
     @Test
@@ -85,6 +113,13 @@ class AlarmEventRecorderTest {
         assertThat(events).hasSize(1);
         assertThat(events.get(0).getSeverity()).isEqualTo("INFO");
         assertThat(events.get(0).getMessage()).isEqualTo("cpu-high 해소: CPU Used > 80% (관측값 55.0%)");
+
+        assertThat(newPortalLogs()).singleElement().satisfies(l -> {
+            assertThat(l.getAction()).isEqualTo("해소");
+            assertThat(l.getContent()).isEqualTo("CPU Used > 80% 해소: node-01 (55.0%)");
+            assertThat(l.getRefId()).isEqualTo(String.valueOf(saved.getId()));
+            assertThat(l.getStartedAt()).isCloseTo(saved.getResolvedAt(), within(1, ChronoUnit.MILLIS));   // DB 는 µs 정밀도
+        });
     }
 
     @Test

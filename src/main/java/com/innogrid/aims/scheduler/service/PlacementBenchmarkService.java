@@ -632,8 +632,11 @@ public class PlacementBenchmarkService {
      * <p>선언만 되고 한 번도 담기지 않은 키(예: 기준 전략이 없는 실행의 격차)는 빈 리스트로 오므로 null 로
      * 채워 길이를 맞춘다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
      * 성립하지 않는다 — 짝이 아닌 지점이 몇 번째였는지가 응답에 남아야 한다.</p>
+     *
+     * <p>응답만 보고는 이 성질을 확인할 수 없어 같은 패키지의 시험이 직접 부른다. 길이·표본 수·중앙값은
+     * 값을 앞으로 당겨 모아도 그대로라서, 정렬이 깨진 것을 응답 수준 단언이 잡지 못한다.</p>
      */
-    private static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
+    static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
         List<Double> series = new ArrayList<>(Math.max(raw.size(), sweepPoints));
         series.addAll(raw);
         while (series.size() < sweepPoints) series.add(null);

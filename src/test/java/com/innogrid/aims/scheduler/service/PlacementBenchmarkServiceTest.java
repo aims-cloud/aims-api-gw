@@ -1220,6 +1220,32 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
+     * 빈 자리를 <b>있던 자리에</b> 남기는지 — 응답 수준 단언으로는 볼 수 없는 성질이다.
+     *
+     * <p>값을 앞으로 당겨 모으고 뒤를 null 로 채워도 길이·표본 수·중앙값은 전부 그대로다. 바뀌는 것은
+     * 인덱스가 가리키는 시각뿐이고, 다음 PR 의 판정 절차는 정확히 그 인덱스로 두 실행을 맞댄다.
+     * 변이 시험에서 압축 변이가 초록불로 살아남아 이 시험을 따로 둔다.</p>
+     */
+    @DisplayName("지점별 값은 빈 자리를 있던 자리에 남긴다")
+    @Test
+    void the_point_series_keeps_the_gaps_where_they_happened() {
+        List<Double> raw = new ArrayList<>();
+        raw.add(1.0);
+        raw.add(null);
+        raw.add(2.0);
+
+        List<Double> series = PlacementBenchmarkService.pointSeries(raw, 5);
+
+        assertEquals(5, series.size(), "길이는 스윕 지점 수로 맞춘다");
+        assertEquals(1.0, series.get(0), "첫 지점의 값이 자리를 옮겼다");
+        assertNull(series.get(1), "짝이 아니던 지점이 사라지고 뒤 값이 당겨졌다 — 두 실행의 같은 인덱스가 "
+                + "다른 시각을 가리키게 된다");
+        assertEquals(2.0, series.get(2), "세 번째 지점의 값이 자리를 옮겼다");
+        assertNull(series.get(3));
+        assertNull(series.get(4));
+    }
+
+    /**
      * 지점별 값은 <b>두 실행을 지점마다 맞대는</b> 것이 목적이라 정렬이 전부다. 길이가 스윕 지점 수로
      * 고정되고 짝이 아닌 지점이 null 로 남아야 인덱스가 곧 시각이고, 값만 모아 압축하면 두 실행의
      * 3번 지점이 서로 다른 시각이 된다. 표본 수·중앙값이 그 배열과 같은 것도 함께 본다 — 셋이 갈리면

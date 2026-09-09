@@ -1,6 +1,10 @@
 package com.innogrid.aims.scheduler.benchmark;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -11,7 +15,10 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 import io.swagger.v3.oas.annotations.Operation;
 
@@ -498,6 +505,33 @@ class BenchmarkRulesContractTest {
 
         assertNotNull(operation, "배치 비교 엔드포인트에 @Operation 설명이 없으면 사본이 갈라졌는지 볼 자리가 없다");
         assertFreeOfBannedClaims(operation.description(), "배치 비교 Swagger 설명");
+    }
+
+    /**
+     * 판의 생성식과 엔진의 전력 모델이 <b>서로를 모른다</b>. 엔진이 판의 지수를 알게 되면 "엔진 가정과
+     * 생성식의 격차"는 정의상 0 이 되고, 이 비교가 재는 것이 사라진다.
+     *
+     * <p>구조로 이미 갈라져 있지만(양쪽에 import 0), 구조는 한 줄로 깨진다 — 그래서 선언을 반사로 읽어
+     * 못 박는다. 엔진 노브 블록에 지수 이름의 필드가 생기거나 전력 모델의 공개 메서드가 판 객체를 받으면
+     * 여기가 빨간불이 된다.</p>
+     */
+    @DisplayName("엔진의 전력 노브와 전력 모델은 판의 생성식 지수를 모른다")
+    @Test
+    void the_engine_does_not_know_the_generator_exponent() {
+        for (Field f : SchedulerProperties.Power.class.getDeclaredFields()) {
+            String name = f.getName().toLowerCase(Locale.ROOT);
+            assertFalse(name.contains("exponent") || name.contains("beta"),
+                    "엔진 노브에 생성식 지수로 읽힐 필드가 생겼다: " + f.getName()
+                            + " — 판의 지수는 판 파일이 선언하고 응답의 boards[].powerExponent 가 싣는다");
+        }
+        for (Method m : PowerModel.class.getDeclaredMethods()) {
+            if (!Modifier.isPublic(m.getModifiers())) continue;
+            for (Class<?> parameter : m.getParameterTypes()) {
+                assertNotEquals(SyntheticCluster.class, parameter,
+                        "전력 모델의 공개 메서드 " + m.getName() + " 이 판을 직접 받는다 — "
+                                + "엔진이 생성식을 읽으면 격차가 정의상 0 이 된다");
+            }
+        }
     }
 
     /** 금지 조각이 어디에도 없는지 — 검사할 조각의 출처를 시험마다 다시 적지 않는다. */

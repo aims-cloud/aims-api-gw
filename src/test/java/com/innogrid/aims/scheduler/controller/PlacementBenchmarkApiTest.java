@@ -216,6 +216,28 @@ class PlacementBenchmarkApiTest {
                 "심은 데이터에 대한 방어는 반대로 심은 판을 함께 내는 것이다: " + role);
     }
 
+    @DisplayName("판 전제 블록이 생성식 지수와 유휴 역산 점검표를 함께 싣는다")
+    @Test
+    void the_board_carries_its_exponent_and_the_wakeup_reconstruction_check() throws Exception {
+        JsonNode main = body(URL).path("data").path("boards").path(0);
+        assertEquals(1.0, main.path("powerExponent").asDouble(), 1e-9, "주 결과판은 선형이다");
+
+        JsonNode convex = body(URL + "?board=convex").path("data").path("boards").path(0);
+        assertEquals(BenchmarkRules.CONVEX_POWER_EXPONENT, convex.path("powerExponent").asDouble(), 1e-9,
+                "판이 실제로 쓴 지수가 응답에 없으면 전제 블록의 생성식이 가리킬 값이 없다");
+
+        JsonNode rows = convex.path("wakeupReconstructionCheck");
+        assertTrue(rows.size() > 0, "볼록 판인데 점검표가 비었다 — 역산이 항등이 아님을 보일 자리가 없다");
+        for (JsonNode row : rows) {
+            for (String field : List.of("nodeId", "measured", "declaredIdleWatts",
+                    "engineFallbackWatts", "engineWakeupMinWatts", "engineWakeupMaxWatts")) {
+                assertTrue(row.has(field), field + " 열이 없다: " + row);
+            }
+            assertFalse(row.has("gapWatts") || row.has("ratio"),
+                    "점검표는 판정·비율 열을 만들지 않는다 — 어느 쪽이 옳은지는 이 표가 말하지 않는다: " + row);
+        }
+    }
+
     @DisplayName("복합 판정판도 같은 경로로 돌고 자기가 판정판임을 밝힌다")
     @Test
     void the_judgment_board_runs_through_the_same_endpoint() throws Exception {

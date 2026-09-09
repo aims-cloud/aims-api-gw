@@ -78,7 +78,11 @@ public record PlacementBenchmarkResponse(
      * @param benchmarkPoweredOnCpuPercent 하네스가 <b>회계</b>에 쓰는 문턱(사전 등록 상수). 위 값과 다르면
      *                                     "엔진이 믿은 비용"과 "가동 노드 증감"이 서로 다른 문턱 위에 서 있다는
      *                                     뜻이고, 그 사실이 여기서 보여야 한다
-     * @param capacityByNode               노드별 정격 원장(설정). 비어 있으면 전 노드가 {@code defaultCapacityWatts}
+     * @param capacityByNode               노드별 정격 원장(설정). 비어 있으면 전 노드가 {@code defaultCapacityWatts}.
+     *                                     <b>이 둘은 판 경로에서 쓰이지 않는다</b> — 수집 경로 전용이고, 비교판에서
+     *                                     엔진이 보는 정격은 판 파일이 준 값
+     *                                     ({@code boards[].idleAssumptionGaps[].engineBelievedCapacityWatts})이다.
+     *                                     설정 다이제스트에는 그대로 들어가므로 여기 함께 싣는다
      * @param idleFromMeasurement          계측된 유휴 노드의 깨우기 비용을 실측에서 역산하는가. 모델 <b>형태</b>를 바꾸는
      *                                     노브라 다이제스트에 들어간다 — 이 값이 다르면 표 두 장은 다른 엔진의 표다.
      *                                     {@code idleRatio} 는 진단 지표·동적 범위의 기준선으로 그대로 남고, 미계측
@@ -165,12 +169,16 @@ public record PlacementBenchmarkResponse(
          * 떨어져 나가지만, 전제 블록은 숫자보다 앞에 있다. 계수(유휴 전력·정격·0.3)는 실데이터 없이 정한 값이다.
          */
         public static final String GENERATOR_FORMULA =
-                "전력(W) = idleWatts + (capacityWatts − idleWatts) × CPU%/100 · 온도(℃) = baseTemperature + 0.3 × CPU% — "
+                "전력(W) = idleWatts + (capacityWatts − idleWatts) × (CPU%/100)^β · 온도(℃) = baseTemperature + 0.3 × CPU% — "
                         + "노드별 idleWatts·capacityWatts·baseTemperature 는 클러스터 파일에 선언한 값이고 실측이 아니다. "
-                        + "엔진은 idleWatts 를 모른다 — 계측된 유휴 노드의 깨우기 비용은 실측 전력에서 (P − Pmax×u)/(1−u) 로 역산하고, "
-                        + "그 외(미계측·가동)는 정격 × idleRatio 를 쓴다. idleAssumptionGaps.engineAssumedIdleWatts 는 이 대체값 기준이다. "
-                        + "생성식이 선형이고 판의 정격이 엔진 정격과 같으므로 계측된 유휴 노드에 한해 역산은 선언값을 정확히 복원한다 "
-                        + "(미계측 노드는 대체값 그대로) — 그래서 이 판에서의 격차 축소는 상한이며 알고리즘 개선의 증거가 아니다";
+                        + "β 는 판 파일이 선언하며 이 실행의 값은 boards[].powerExponent 다(1 이면 선형). "
+                        + "엔진은 idleWatts 도 β 도 모르고, 정격은 판이 준 값(boards[].idleAssumptionGaps[].engineBelievedCapacityWatts)을 믿는다 — "
+                        + "설정의 defaultCapacityWatts·capacityByNode 는 판 경로에서 쓰이지 않는다(수집 경로 전용이며 설정 다이제스트에만 실린다). "
+                        + "계측된 유휴 노드에 한해 깨우기 비용은 실측 전력에서 (P − Pmax×u)/(1−u) 로 역산하고, "
+                        + "그 외(미계측·가동)는 엔진이 믿는 정격 × idleRatio 를 쓴다. idleAssumptionGaps.engineAssumedIdleWatts 는 이 대체값 기준이다. "
+                        + "β=1 이고 판의 정격이 엔진 정격과 같은 판에서는 그 역산이 선언값을 정확히 복원하므로 "
+                        + "(미계측 노드는 대체값 그대로) 그 판에서의 격차 축소는 상한이며 알고리즘 개선의 증거가 아니다. "
+                        + "β≠1 이거나 정격이 어긋난 판에서는 복원하지 않으며, 그 차는 boards[].wakeupReconstructionCheck 에 노드별로 있다";
 
         /**
           * 정책의 출처. <b>배포된 활성 정책을 읽지 않는다</b> — 활성 정책 조회 경로는 정책이 없으면
@@ -203,9 +211,12 @@ public record PlacementBenchmarkResponse(
      * @param digest             파일 내용 해시 앞 12자 — 응답이 자기 입력을 지목한다
      * @param nodeCount          노드 수
      * @param measuredNodeCount  전력·온도가 계측되는 노드 수
+     * @param powerExponent         이 판의 생성식 지수 β. 1 이면 선형이고, 1 보다 크면 저부하에서 전력이
+     *                              선형보다 낮은 볼록 판이다. 전제 블록의 생성식이 가리키는 값이 이것이다
      * @param idleAssumptionGaps    엔진의 유휴 전력 가정과 파일 선언값의 노드별 격차
      * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식(℃·K 두 눈금)과 생성식을 나란히.
      *                              격차·비율·판정은 없다. 두 엔진 값이 다르다는 것이 척도 의존의 증거다
+     * @param wakeupReconstructionCheck 유휴 노드의 깨우기 비용 역산 — 선언값과 엔진 역산의 범위를 나란히
      * @param cells                 부하율 × 전원 상태 가정의 격자
      */
     public record Board(
@@ -215,15 +226,50 @@ public record PlacementBenchmarkResponse(
             String digest,
             int nodeCount,
             int measuredNodeCount,
+            double powerExponent,
             List<IdleGap> idleAssumptionGaps,
             List<ThermalRiseScale> thermalRiseScaleCheck,
+            List<WakeupReconstruction> wakeupReconstructionCheck,
             List<Cell> cells
     ) {
         public Board {
             idleAssumptionGaps = idleAssumptionGaps == null ? List.of() : List.copyOf(idleAssumptionGaps);
             thermalRiseScaleCheck = thermalRiseScaleCheck == null ? List.of() : List.copyOf(thermalRiseScaleCheck);
+            wakeupReconstructionCheck = wakeupReconstructionCheck == null
+                    ? List.of() : List.copyOf(wakeupReconstructionCheck);
             cells = cells == null ? List.of() : List.copyOf(cells);
         }
+    }
+
+    /**
+     * 노드 한 대의 <b>깨우기 비용 역산</b> — 선언된 유휴 전력과 엔진이 되돌린 값을 나란히.
+     *
+     * <p>{@link ThermalRiseScale} 이 열 쪽에서 하는 일을 전력 쪽에서 하되, <b>판정·비율 열을 만들지 않는다.</b>
+     * 엔진의 역산은 선형 생성식을 유휴 전력에 대해 푼 것이라, 판이 선형이고 판이 준 정격이 생성식 정격과
+     * 같을 때만 선언값을 정확히 되돌린다. 그 조건이 깨진 판에서 값이 얼마나 벌어지는지를 <b>그 판에서</b> 보이는
+     * 자리이고, 어느 쪽이 옳은지는 이 표가 말하지 않는다. 시각 12지점을 훑은 최솟값·최댓값을 주는 이유는
+     * 역산이 그 순간의 사용률에 걸린 값이라 한 시각의 숫자로는 폭을 알 수 없기 때문이다.</p>
+     *
+     * <p>행은 <b>판의 회계 규칙</b>으로 고른다 — 12지점 내내 통전 문턱 아래에 머무는 노드 전부이며,
+     * 계측 여부는 {@code measured} 열로 밝힌다. 엔진 노브로 행을 고르면 노브를 돌리는 것만으로 표가 달라진다.</p>
+     *
+     * @param measured             전력이 계측되는 노드인가. <b>거짓이면 아래 세 값이 전부 대체값</b>이고
+     *                             역산이 아니다 — 미계측 노드는 역산할 분자·분모가 없다
+     * @param declaredIdleWatts    파일에 선언된 유휴 전력(W). 실측이 아니다
+     * @param engineFallbackWatts  엔진의 대체값(믿는 정격 × idleRatio). {@code idleAssumptionGaps[].engineAssumedIdleWatts}
+     *                             와 <b>같은 값</b>을 대조용으로 다시 싣는다 — 역산 경로를 탔는지는 엔진 안의 일이라
+     *                             하네스가 셀 수 없고, 대신 값이 대체값과 같은지를 독자가 이 자리에서 바로 본다
+     * @param engineWakeupMinWatts 12지점 역산의 최솟값(W)
+     * @param engineWakeupMaxWatts 12지점 역산의 최댓값(W)
+     */
+    public record WakeupReconstruction(
+            String nodeId,
+            boolean measured,
+            double declaredIdleWatts,
+            double engineFallbackWatts,
+            double engineWakeupMinWatts,
+            double engineWakeupMaxWatts
+    ) {
     }
 
     /**

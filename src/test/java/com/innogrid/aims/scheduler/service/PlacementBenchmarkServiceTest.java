@@ -26,12 +26,14 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PolicySnapshot
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalRiseScale;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WakeupReconstruction;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
+import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 import com.innogrid.aims.scheduler.model.NodeResource;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -1272,12 +1274,204 @@ class PlacementBenchmarkServiceTest {
         assertTrue(formula.contains("계측된 유휴 노드에 한해"), formula);
         assertTrue(formula.contains("대체값"), formula);
         assertTrue(formula.contains("상한이며 알고리즘 개선의 증거가 아니다"), formula);
+        assertTrue(formula.contains("복원하지 않"),
+                "복원이 성립하지 않는 판이 생겼는데 문구가 그 사실을 말하지 않으면, 상한 문장이 모든 판에 걸린 것으로 읽힌다: "
+                        + formula);
     }
 
     @DisplayName("응답이 실측이 아님과 노드 한 대를 스스로 밝힌다")
     @Test
     void the_response_states_its_own_limits() {
         assertEquals(BenchmarkRules.LIMITATION, service.compare("main", "heavytail").limitation());
+    }
+
+    // ── 유휴 역산 복원 점검표 ─────────────────────────────────
+
+    /**
+     * 엔진의 깨우기 역산을 <b>닫힌 형태 등식</b>으로 잠근다 — 부등식으로 잠그면 다른 지수·다른 어긋남도
+     * 통과해 판이 무엇을 재는지가 흐려진다.
+     *
+     * <p>{@code est = idle − [ (cap−idle)(u − u^β) + δ·cap·u ] / (1−u)},
+     * {@code u} 는 그 시각의 사용률, {@code δ = 엔진이 믿는 정격/생성식 정격 − 1}. β=1·δ=0 이면 우변이
+     * 선언값 그대로가 되어 항등이 되고, 그 항등이 깨지는 판이 이 PR 이 만든 판이다.</p>
+     */
+    @DisplayName("여섯 판 전 행·전 지점에서 깨우기 역산이 닫힌 형태와 같다")
+    @Test
+    void the_wakeup_reconstruction_matches_the_closed_form_on_every_board() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+
+        for (String boardId : clusters.boardIds()) {
+            SyntheticCluster cluster = clusters.get(boardId);
+            List<Long> sweep = PlacementBenchmarkService.sweepPoints(cluster);
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            assertFalse(board.wakeupReconstructionCheck().isEmpty(),
+                    boardId + ": 점검표가 비었다 — 12지점 내내 유휴인 노드가 없으면 통합을 잴 자리도 없다");
+
+            for (WakeupReconstruction row : board.wakeupReconstructionCheck()) {
+                SyntheticCluster.Node n = cluster.node(row.nodeId()).orElseThrow();
+                String at = boardId + "/" + row.nodeId() + ": ";
+
+                if (!row.measured()) {
+                    assertEquals(row.engineFallbackWatts(), row.engineWakeupMinWatts(), 1e-9,
+                            at + "미계측 노드는 역산할 분자·분모가 없어 값이 대체값이어야 한다");
+                    assertEquals(row.engineFallbackWatts(), row.engineWakeupMaxWatts(), 1e-9, at);
+                    continue;
+                }
+                double min = Double.POSITIVE_INFINITY;
+                double max = Double.NEGATIVE_INFINITY;
+                for (long t : sweep) {
+                    double expected = closedFormWakeup(cluster, n, t);
+                    min = Math.min(min, expected);
+                    max = Math.max(max, expected);
+                }
+                assertEquals(min, row.engineWakeupMinWatts(), 1e-9, at + "역산 최솟값이 닫힌 형태와 다르다");
+                assertEquals(max, row.engineWakeupMaxWatts(), 1e-9, at + "역산 최댓값이 닫힌 형태와 다르다");
+            }
+        }
+    }
+
+    /**
+     * 지수가 1 이고 판이 준 정격이 생성식 정격과 같은 판에서는 역산이 <b>선언값을 정확히 되돌린다</b> —
+     * 대수적 항등이라 코드가 깨지지 않는 한 실패하지 않는다. 이 항등이 있는 판에서 격차가 줄어드는 것은
+     * 상한이지 개선의 증거가 아니고, 그 사실을 응답의 생성식 문구가 함께 밝힌다.
+     */
+    @DisplayName("선형·정격 일치 판에서는 역산이 선언된 유휴 전력과 같다")
+    @Test
+    void on_the_linear_boards_the_reconstruction_is_an_identity() {
+        for (String boardId : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE)) {
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            int measuredRows = 0;
+            for (WakeupReconstruction row : board.wakeupReconstructionCheck()) {
+                if (!row.measured()) continue;
+                measuredRows++;
+                String at = boardId + "/" + row.nodeId() + ": ";
+                assertEquals(row.declaredIdleWatts(), row.engineWakeupMinWatts(), 1e-9, at + "최솟값");
+                assertEquals(row.declaredIdleWatts(), row.engineWakeupMaxWatts(), 1e-9, at + "최댓값");
+            }
+            assertTrue(measuredRows > 0, boardId + ": 계측 유휴 행이 없으면 이 항등이 아무것도 보지 않는다");
+        }
+    }
+
+    /**
+     * 볼록 판에서는 같은 역산이 <b>선언값보다 작다</b> — 엔진이 빈 노드를 실제보다 싸게 보고 더 자주 깨운다.
+     * 직전 PR 의 역산이 항등식이 아님을 숫자로 보이는 자리다.
+     */
+    @DisplayName("볼록 판에서는 역산이 선언된 유휴 전력보다 작다")
+    @Test
+    void on_the_convex_board_the_reconstruction_undershoots() {
+        Board board = service.compare(BenchmarkClusters.CONVEX, "heavytail").boards().get(0);
+        int measuredRows = 0;
+        for (WakeupReconstruction row : board.wakeupReconstructionCheck()) {
+            if (!row.measured()) continue;
+            measuredRows++;
+            assertTrue(row.engineWakeupMaxWatts() < row.declaredIdleWatts(),
+                    row.nodeId() + ": 역산 최댓값 " + row.engineWakeupMaxWatts() + "W 가 선언값 "
+                            + row.declaredIdleWatts() + "W 보다 작지 않다 — 볼록 판인데 항등이 살아 있다");
+        }
+        assertTrue(measuredRows > 0, "볼록 판에 계측 유휴 행이 없다");
+    }
+
+    /**
+     * 정격만 어긋난 판에서는 부호가 갈린다 — 엔진이 정격을 과대 믿으면 역산이 선언값보다 작고,
+     * 과소 믿으면 크다. 방향이 노드마다 반대라는 것이 이 판이 볼록 판과 다른 요인이라는 증거다.
+     */
+    @DisplayName("정격 어긋남 판에서는 역산이 믿음의 부호를 따라 갈린다")
+    @Test
+    void on_the_misrated_board_the_reconstruction_follows_the_sign_of_the_belief() {
+        SyntheticCluster cluster = new BenchmarkClusters().get(BenchmarkClusters.MISRATED);
+        Board board = service.compare(BenchmarkClusters.MISRATED, "heavytail").boards().get(0);
+        int over = 0;
+        int under = 0;
+
+        for (WakeupReconstruction row : board.wakeupReconstructionCheck()) {
+            if (!row.measured()) continue;
+            SyntheticCluster.Node n = cluster.node(row.nodeId()).orElseThrow();
+            String at = row.nodeId() + ": ";
+            if (n.believedCapacityWatts() > n.capacityWatts()) {
+                over++;
+                assertTrue(row.engineWakeupMaxWatts() < row.declaredIdleWatts(),
+                        at + "과대 믿음 노드인데 역산이 선언값보다 작지 않다");
+            } else {
+                under++;
+                assertTrue(row.engineWakeupMinWatts() > row.declaredIdleWatts(),
+                        at + "과소 믿음 노드인데 역산이 선언값보다 크지 않다");
+            }
+        }
+        assertTrue(over > 0 && under > 0, "부호가 한쪽뿐이면 이 판은 어긋남이 아니라 정격 이동을 잰다");
+    }
+
+    /**
+     * 행 선정이 <b>판의 회계 규칙</b>이라 엔진 노브를 돌려도 행 집합이 흔들리지 않는다. 값은 다르다 —
+     * 가동 판정 문턱을 유휴 노드 아래로 내리면 그 노드들이 "가동"으로 보여 역산을 포기하고 대체값으로
+     * 돌아간다. 두 방향을 함께 보아야 "노브 무관"이 행에 대한 말이지 값에 대한 말이 아님이 분명해진다.
+     */
+    @DisplayName("점검표의 행은 엔진 노브와 무관하고 값은 문턱 아래에서 대체값으로 돌아간다")
+    @Test
+    void the_check_rows_are_independent_of_the_engine_knob_but_the_values_are_not() {
+        List<WakeupReconstruction> base = rowsOf(service, BenchmarkClusters.CONVEX);
+        List<WakeupReconstruction> wide = rowsOf(serviceWithActiveCpuPercent(40.0), BenchmarkClusters.CONVEX);
+        List<WakeupReconstruction> narrow = rowsOf(serviceWithActiveCpuPercent(1.0), BenchmarkClusters.CONVEX);
+
+        assertEquals(nodeIds(base), nodeIds(wide), "가동 문턱을 올려도 행 집합이 달라졌다 — 행을 엔진 노브로 고르고 있다");
+        assertEquals(nodeIds(base), nodeIds(narrow), "가동 문턱을 내려도 행 집합은 그대로여야 한다");
+        assertEquals(base, wide, "유휴 노드가 여전히 문턱 아래라 값도 그대로여야 한다");
+
+        int fellBack = 0;
+        for (int i = 0; i < base.size(); i++) {
+            WakeupReconstruction a = base.get(i);
+            WakeupReconstruction b = narrow.get(i);
+            if (!a.measured()) continue;
+            if (Math.abs(b.engineWakeupMaxWatts() - b.engineFallbackWatts()) < 1e-9) fellBack++;
+        }
+        assertTrue(fellBack > 0,
+                "가동 문턱을 유휴 노드 아래로 내렸는데 대체값으로 돌아간 행이 하나도 없다 — 역산 경로가 문턱을 보지 않는다");
+        assertNotEquals(base, narrow, "문턱 아래로 내렸는데 값이 그대로다");
+    }
+
+    /**
+     * 같은 값을 두 자리에 싣는 것은 중복이지만 의도된 중복이다 — 역산 경로를 탔는지는 엔진 안의 일이라
+     * 하네스가 셀 수 없어서, 대체값을 나란히 실어 독자가 값을 대조하게 한다. 두 자리가 갈리면 그 대조가 거짓말이 된다.
+     */
+    @DisplayName("점검표의 대체값이 유휴 가정 표의 엔진 가정과 행마다 같다")
+    @Test
+    void the_fallback_column_matches_the_idle_assumption_table() {
+        for (String boardId : new BenchmarkClusters().boardIds()) {
+            Board board = service.compare(boardId, "heavytail").boards().get(0);
+            Map<String, Double> assumed = board.idleAssumptionGaps().stream()
+                    .collect(Collectors.toMap(IdleGap::nodeId, IdleGap::engineAssumedIdleWatts));
+
+            for (WakeupReconstruction row : board.wakeupReconstructionCheck()) {
+                assertEquals(assumed.get(row.nodeId()), row.engineFallbackWatts(), 1e-9,
+                        boardId + "/" + row.nodeId() + ": 두 표의 대체값이 다르면 나란히 실은 대조가 거짓이 된다");
+            }
+        }
+    }
+
+    /** 닫힌 형태 (β·δ 를 함께 넣은 역산). 시험이 엔진 코드를 부르지 않고 판 파일 값만으로 다시 계산한다. */
+    private static double closedFormWakeup(SyntheticCluster cluster, SyntheticCluster.Node n, long t) {
+        double cap = n.capacityWatts();
+        double idle = n.idleWatts();
+        double delta = n.believedCapacityWatts() / cap - 1.0;
+        double u = cluster.cpuUsage(n, t) / 100.0;
+        return idle - ((cap - idle) * (u - Math.pow(u, cluster.powerExponent())) + delta * cap * u) / (1.0 - u);
+    }
+
+    private static List<WakeupReconstruction> rowsOf(PlacementBenchmarkService target, String boardId) {
+        return target.compare(boardId, "heavytail").boards().get(0).wakeupReconstructionCheck();
+    }
+
+    private static List<String> nodeIds(List<WakeupReconstruction> rows) {
+        return rows.stream().map(WakeupReconstruction::nodeId).toList();
+    }
+
+    private static PlacementBenchmarkService serviceWithActiveCpuPercent(double activeCpuPercent) {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getPower().setActiveCpuPercent(activeCpuPercent);
+        return new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                        new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props),
+                PlacementBenchmarkService.BASELINE_ORDER);
     }
 
     // ── 도움 메서드 ───────────────────────────────────────────

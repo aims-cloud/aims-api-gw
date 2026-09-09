@@ -33,7 +33,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * - 컴퓨트/네트워크 토글: 응답 트리에서 프론트가 레이어를 표시·숨김 (재호출 불필요)
  * - 이름/IP 검색: 프론트에서 트리 필터링 (멀티 OpenStack 확장 시 서버 검색 API 추가 예정)
  */
-@Tag(name = "통합 토폴로지", description = "OpenStack 프로젝트→네트워크→서브넷→VM 트리 및 노드 상세")
+@Tag(name = "토폴로지 > 통합 토폴로지", description = "OpenStack 프로젝트→네트워크→서브넷→VM 트리 및 노드 상세")
 @RestController
 @RequestMapping("/api/v1/topology")
 public class TopologyController {

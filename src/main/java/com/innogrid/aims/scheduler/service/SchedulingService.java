@@ -340,8 +340,15 @@ public class SchedulingService {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "기간의 시작이 끝보다 뒤입니다");
         }
 
+        // 널 파라미터는 PostgreSQL 이 타입을 추론하지 못한다 — 경계값과 깃발로 바꿔 넘긴다.
+        boolean anyType = resourceType == null;
+        boolean anyPeriod = from == null && to == null;
         List<Workload> exhausted = workloadRepository.findRetryExhausted(
-                Workload.WorkloadStatus.FAILED, properties.getMaxRetryCount(), resourceType, from, to);
+                Workload.WorkloadStatus.FAILED, properties.getMaxRetryCount(),
+                anyType, anyType ? Workload.ResourceType.VM : resourceType,
+                anyPeriod,
+                from != null ? from : OffsetDateTime.parse("1970-01-01T00:00:00Z"),
+                to != null ? to : OffsetDateTime.now().plusYears(100));
         int limit = properties.getMaxWorkloadsPerRun();
         if (exhausted.size() > limit) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(

@@ -71,19 +71,27 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
      * <p>리소스 종류와 기간은 <b>선택</b>이지만 호출부가 둘 중 하나는 반드시 준다 — 조건 없는
      * 전체 일괄은 실수로 수백 건을 되살리는 사고 경로라 서비스에서 막는다.</p>
      */
+    /**
+     * <p><b>널 파라미터를 쓰지 않는다.</b> {@code (:from is null or ...)} 형태는 H2 에서는 통과하지만
+     * PostgreSQL 이 "could not determine data type of parameter" 로 거절한다 — 값이 없는 자리의 타입을
+     * 추론할 수 없기 때문이다. 그래서 호출부가 경계값과 깃발을 채워 넘기고, 여기서는 전부
+     * 값이 있는 비교만 한다.</p>
+     */
     @Query("""
            select w from Workload w
             where w.status = :status
               and w.retryCount is not null and w.retryCount >= :maxRetryCount
-              and (:resourceType is null or w.resourceType = :resourceType)
-              and (:from is null or w.lastFailedAt >= :from)
-              and (:to is null or w.lastFailedAt <= :to)
+              and (:anyType = true or w.resourceType = :resourceType)
+              and ((:anyPeriod = true and w.lastFailedAt is null)
+                   or (w.lastFailedAt >= :from and w.lastFailedAt <= :to))
             order by w.lastFailedAt asc nulls last, w.id asc
            """)
     List<Workload> findRetryExhausted(
             @Param("status") Workload.WorkloadStatus status,
             @Param("maxRetryCount") int maxRetryCount,
+            @Param("anyType") boolean anyType,
             @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("anyPeriod") boolean anyPeriod,
             @Param("from") OffsetDateTime from,
             @Param("to") OffsetDateTime to);
 

@@ -261,6 +261,59 @@ class PlacementBenchmarkServiceTest {
                 "노브 성분과 민감도 표가 어긋났다 — 새 노브를 더했으면 canonical 과 이 표에도 넣는다");
     }
 
+    /**
+     * 눈금 전환의 점수 차가 닫힌 형태와 같다 — 판의 모든 노드·지점·요구 코어에서.
+     *
+     * <p>{@code score_S = 1 − rm/S}, {@code score_pMax = 1 − rm/pMax} 이므로
+     * {@code score_S − score_pMax = rm·(1/pMax − 1/S)} 다. 이 등식이 성립하면 바뀐 것은 분모 하나뿐이고,
+     * {@code rm}(실질 한계 전력)은 그대로라는 뜻이다. 포화 구간은 등식이 성립하지 않으므로 제외하고,
+     * 제외된 수가 0 인 것도 함께 확인한다 — 기본 눈금에서는 판에 포화가 없어야 한다.</p>
+     */
+    @DisplayName("판 전체에서 눈금 전환의 점수 차가 rm·(1/정격 − 1/눈금) 과 같다")
+    @Test
+    void the_score_shift_equals_the_closed_form_on_every_board() {
+        Set<Integer> requiredCores = new TreeSet<>();
+        for (String location : List.of("classpath:scheduler/benchmark-workloads-heavytail.yml",
+                "classpath:scheduler/benchmark-workloads-uniform.yml")) {
+            BenchmarkWorkloads.load(location).classes().forEach(c -> requiredCores.add(c.cores()));
+        }
+        PowerModel scaled = new PowerModel(scaleProps(500.0));
+        PowerModel legacy = new PowerModel(scaleProps(0.0));   // 0 이하면 정격 분모(구 방식)
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        int checked = 0;
+        int saturated = 0;
+
+        for (String boardId : clusters.boardIds()) {
+            SyntheticCluster cluster = clusters.get(boardId);
+            for (long t : PlacementBenchmarkService.sweepPoints(cluster)) {
+                for (NodeResource n : PlacementBenchmarkService.nodesAt(cluster, t)) {
+                    double pMax = n.getPowerCapacityWatts();
+                    if (pMax <= 0) continue;
+                    for (int cores : requiredCores) {
+                        double rm = scaled.realMarginalPower(n, cores);
+                        assertEquals(rm, legacy.realMarginalPower(n, cores), 1e-9,
+                                "눈금이 실질 한계 전력(W)까지 바꿨다 — 분모만 바뀌어야 한다");
+                        if (rm >= 500.0 || rm >= pMax) { saturated++; continue; }
+                        assertEquals(rm * (1.0 / pMax - 1.0 / 500.0),
+                                scaled.marginalScore(n, cores) - legacy.marginalScore(n, cores), 1e-9,
+                                boardId + " " + n.getNodeId() + " " + cores + "코어 t=" + t + "s");
+                        checked++;
+                    }
+                }
+            }
+        }
+        assertEquals(0, saturated,
+                "기본 눈금에서 포화한 지점이 있다 — 판이 실제로 쓰는 요구 코어에서는 실질 한계 전력이 "
+                        + BenchmarkRules.MAX_REAL_MARGINAL_WATTS + "W 를 넘지 않아야 한다");
+        assertTrue(checked > 1_500, "확인한 조합이 " + checked + " 뿐이다 — 판을 다 훑지 못했다");
+    }
+
+    private static SchedulerProperties scaleProps(double scaleWatts) {
+        SchedulerProperties p = new SchedulerProperties();
+        p.getPower().setMarginalScaleWatts(scaleWatts);
+        return p;
+    }
+
     private static PolicySnapshot variant(EngineConfigSnapshot config, String name) {
         return config.policies().stream().filter(p -> p.variant().equals(name)).findFirst()
                 .orElseThrow(() -> new AssertionError(name + " 변종이 스냅샷에 없다"));

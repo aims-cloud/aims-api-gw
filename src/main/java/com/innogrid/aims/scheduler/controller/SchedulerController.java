@@ -116,7 +116,8 @@ public class SchedulerController {
     }
 
     @Operation(summary = "워크로드 실행 상태 전이",
-               description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다.")
+               description = "SCHEDULED → RUNNING → COMPLETED|FAILED. 종료 상태가 되면 노드 예약이 해제된다. "
+                       + "재시도 상한에 걸린 FAILED 는 PENDING 으로만 되살릴 수 있다.")
     @PatchMapping("/workloads/{workloadId}/status")
     public ApiResponse<WorkloadResponse> changeWorkloadStatus(@PathVariable Long workloadId,
                                                               @RequestBody StatusChangeRequest request) {

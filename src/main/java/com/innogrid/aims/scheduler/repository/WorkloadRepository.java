@@ -65,6 +65,28 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
      * 실행 결과 메시지에 함께 적어, 대상 0건이 "할 일이 없어서"인지
      * "전부 소진되어서"인지 구분할 수 있게 한다.
      */
+    /**
+     * 재시도 상한에 걸려 대상에서 빠진 워크로드. 일괄 재개가 되살릴 후보다.
+     *
+     * <p>리소스 종류와 기간은 <b>선택</b>이지만 호출부가 둘 중 하나는 반드시 준다 — 조건 없는
+     * 전체 일괄은 실수로 수백 건을 되살리는 사고 경로라 서비스에서 막는다.</p>
+     */
+    @Query("""
+           select w from Workload w
+            where w.status = :status
+              and w.retryCount is not null and w.retryCount >= :maxRetryCount
+              and (:resourceType is null or w.resourceType = :resourceType)
+              and (:from is null or w.lastFailedAt >= :from)
+              and (:to is null or w.lastFailedAt <= :to)
+            order by w.lastFailedAt asc nulls last, w.id asc
+           """)
+    List<Workload> findRetryExhausted(
+            @Param("status") Workload.WorkloadStatus status,
+            @Param("maxRetryCount") int maxRetryCount,
+            @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to);
+
     @Query("""
            select count(w) from Workload w
             where w.status = :status

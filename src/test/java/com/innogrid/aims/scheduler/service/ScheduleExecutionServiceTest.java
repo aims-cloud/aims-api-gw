@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,7 @@ class ScheduleExecutionServiceTest {
     @Autowired private ScheduleRunRepository runRepository;
     @Autowired private WorkloadRepository workloadRepository;
     @Autowired private SchedulerProperties properties;
+    @Autowired private SchedulingService schedulingService;
 
     @BeforeEach
     void clean() {
@@ -260,6 +263,66 @@ class ScheduleExecutionServiceTest {
         assertEquals(properties.getMaxRetryCount(), saved.resolveRetryCount());
         assertTrue(saved.transitionTo(Workload.WorkloadStatus.PENDING), "실패 → 대기는 허용된다");
         assertEquals(0, saved.resolveRetryCount(), "되살리면 재시도 횟수가 지워진다");
+    }
+
+    // ── 일괄 재개 ──────────────────────────────────────
+
+    /**
+     * 소진된 워크로드를 종류로 골라 한 번에 되살린다. 되살리면 재시도 횟수와 마지막 실패
+     * 시각이 지워져 백오프에도 걸리지 않고 곧바로 대상이 된다.
+     */
+    @DisplayName("일괄 재개는 소진된 것만 되살리고 재시도 횟수·실패 시각을 지운다")
+    @Test
+    void bulk_resume_revives_only_exhausted_workloads() {
+        Workload exhausted = new Workload("소진-일괄", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        workloadRepository.save(exhausted);
+
+        Workload stillTrying = new Workload("여유있음", 1, 1024);
+        stillTrying.setResourceType(Workload.ResourceType.VM);
+        stillTrying.markFailed("일시적");
+        workloadRepository.save(stillTrying);
+
+        List<Workload> resumed = schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null);
+
+        assertEquals(1, resumed.size(), "소진되지 않은 워크로드까지 되살렸다");
+        assertEquals("소진-일괄", resumed.get(0).getName());
+        assertEquals(0, resumed.get(0).resolveRetryCount());
+        assertNull(resumed.get(0).getLastFailedAt(), "실패 시각이 남으면 백오프가 다시 붙잡는다");
+        assertEquals(Workload.WorkloadStatus.PENDING, resumed.get(0).getStatus());
+    }
+
+    @DisplayName("조건 없는 전체 재개는 받지 않는다")
+    @Test
+    void bulk_resume_requires_a_filter() {
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> schedulingService.resumeExhausted(null, null, null));
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains("하나는 지정"), e.getMessage());
+    }
+
+    @DisplayName("기간의 시작이 끝보다 뒤면 400")
+    @Test
+    void bulk_resume_rejects_an_inverted_range() {
+        OffsetDateTime now = OffsetDateTime.now();
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> schedulingService.resumeExhausted(null, now, now.minusDays(1)));
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+    }
+
+    @DisplayName("기간 밖에서 실패한 워크로드는 되살리지 않는다")
+    @Test
+    void bulk_resume_respects_the_period() {
+        Workload exhausted = new Workload("소진-기간", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        workloadRepository.save(exhausted);
+
+        OffsetDateTime longAgo = OffsetDateTime.now().minusDays(30);
+        assertTrue(schedulingService.resumeExhausted(null, longAgo.minusDays(1), longAgo).isEmpty(),
+                "기간 밖인데 되살렸다");
+        assertEquals(1, schedulingService.resumeExhausted(null, OffsetDateTime.now().minusHours(1), null).size());
     }
 
     private Schedule scheduleOf(String key, boolean enabled, boolean autoRun) {

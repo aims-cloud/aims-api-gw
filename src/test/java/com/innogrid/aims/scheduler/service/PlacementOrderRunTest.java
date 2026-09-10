@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.when;
  * <p>테스트 환경은 메트릭 저장소가 없어 수집기를 대역으로 바꿔 배포 VM 과 같은 노드 1대(2코어, CPU 10%)를 준다. 후보가 0대면
  * 실행이 "활성 노드가 없습니다"로 끝나 결정이 기록되지 않기 때문이다. 기대 결과도 VM 과 같다 — 2코어는 자원 부족, 1코어 하나만 성공.</p>
  */
+@TestPropertySource(properties = "aims.scheduler.retry-backoff-minutes=0")   // 순서를 보는 시험이라 재시도 간격을 끈다
 @SpringBootTest
 class PlacementOrderRunTest {
 

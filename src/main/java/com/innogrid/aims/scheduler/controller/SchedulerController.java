@@ -25,6 +25,7 @@ import com.innogrid.aims.scheduler.service.SchedulingHistoryQueryService;
 import com.innogrid.aims.scheduler.service.SchedulingService;
 import com.innogrid.aims.scheduler.service.WorkloadService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -113,6 +114,27 @@ public class SchedulerController {
         return ApiResponse.ok(java.util.Arrays.stream(Workload.ResourceType.values())
                 .map(t -> Map.of("code", t.name(), "label", t.name()))
                 .toList());
+    }
+
+    @Operation(summary = "재시도 소진 워크로드 일괄 재개",
+               description = "재시도 상한에 걸려 배치 대상에서 빠진 워크로드를 한 번에 대기 상태로 되돌립니다. "
+                       + "되살리면 재시도 횟수와 마지막 실패 시각이 지워져 다음 실행의 대상이 됩니다. "
+                       + "단건은 상태 전이 API 로도 되며 이 API 는 편의입니다. "
+                       + "리소스 종류나 기간 중 하나는 반드시 주어야 하며 조건 없는 전체 재개는 받지 않습니다. "
+                       + "되살린 워크로드는 다음 실행에 한꺼번에 몰리므로, 대상이 한 실행 처리 상한을 넘으면 "
+                       + "되살리지 않고 400 으로 조건을 좁히라고 답합니다. 기간은 마지막 실패 시각 기준입니다.")
+    @PostMapping("/workloads/resume-exhausted")
+    public ApiResponse<?> resumeExhaustedWorkloads(
+            @Parameter(description = "되살릴 리소스 종류. 비우면 종류를 가리지 않는다(기간 필수)")
+            @RequestParam(required = false) Workload.ResourceType resourceType,
+            @Parameter(description = "마지막 실패 시각의 시작 (ISO-8601)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @Parameter(description = "마지막 실패 시각의 끝 (ISO-8601)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        List<Workload> resumed = schedulingService.resumeExhausted(resourceType, from, to);
+        return ApiResponse.ok(Map.of(
+                "resumedCount", resumed.size(),
+                "workloads", resumed.stream().map(WorkloadResponse::from).toList()));
     }
 
     @Operation(summary = "워크로드 실행 상태 전이",

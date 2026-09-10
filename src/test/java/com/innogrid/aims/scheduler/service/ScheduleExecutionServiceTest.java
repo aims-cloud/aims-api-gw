@@ -206,15 +206,15 @@ class ScheduleExecutionServiceTest {
     // ── 현행 동작 고정 (이 커밋 시점의 결함을 포함한다) ──────────────
 
     /**
-     * <b>재시도가 소진돼도 실행은 초록불로 끝난다.</b> 지금은 이것이 사실이라 그대로 박아 둔다.
+     * <b>전부 소진되면 실행을 실패로 마감한다.</b> 사람이 되살리기 전에는 아무 일도 못 하기 때문이다.
      *
      * <p>대상이 0건이면 "할 일이 없어서" 든 "전부 소진돼서" 든 똑같이 완료로 끝난다. 화면에서는
      * 두 상황을 구분할 수 없고, 스케줄은 영원히 성공한 것처럼 보인다. 뒤 커밋이 이 시험을
      * 뒤집는 것이 곧 고쳤다는 증거다.</p>
      */
-    @DisplayName("현행: 재시도가 소진돼도 실행 상태는 COMPLETED 다")
+    @DisplayName("전부 소진되면 실행이 실패로 끝나고 사유에 재개가 필요하다고 적힌다")
     @Test
-    void currently_exhausted_run_still_completes() {
+    void an_exhausted_run_finishes_as_failed() {
         Workload exhausted = new Workload("소진", 1, 1024);
         exhausted.setResourceType(Workload.ResourceType.VM);
         for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
@@ -223,8 +223,9 @@ class ScheduleExecutionServiceTest {
         ScheduleRun run = executionService.runNow(save(scheduleOf("exhausted-green", true, false)).getId(), "tester");
 
         assertEquals(0, run.getTargetCount());
-        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus(),
-                "소진 상태가 실행 결과로 구분되지 않는다 — 이 커밋 시점의 사실");
+        assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus(),
+                "전부 소진됐는데 초록불로 끝나면 화면에서 문제가 보이지 않는다");
+        assertTrue(run.getMessage().contains("일괄 재개"), run.getMessage());
     }
 
     /**
@@ -263,6 +264,27 @@ class ScheduleExecutionServiceTest {
         assertEquals(properties.getMaxRetryCount(), saved.resolveRetryCount());
         assertTrue(saved.transitionTo(Workload.WorkloadStatus.PENDING), "실패 → 대기는 허용된다");
         assertEquals(0, saved.resolveRetryCount(), "되살리면 재시도 횟수가 지워진다");
+    }
+
+    /**
+     * 백오프로 밀린 것은 <b>실패가 아니다</b> — 시간이 지나면 저절로 풀리므로 정상으로 적고
+     * 얼마 뒤에 다시 시도하는지 사유에 남긴다.
+     */
+    @DisplayName("재시도 대기만 남으면 실행은 정상이고 사유에 대기 건수와 간격이 적힌다")
+    @Test
+    void a_backoff_only_run_stays_completed() {
+        Workload waiting = new Workload("대기", 1, 1024);
+        waiting.setResourceType(Workload.ResourceType.VM);
+        waiting.markFailed("일시적 자원 부족");
+        workloadRepository.save(waiting);
+
+        ScheduleRun run = executionService.runNow(save(scheduleOf("backoff-wait", true, false)).getId(), "tester");
+
+        assertEquals(0, run.getTargetCount());
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus(),
+                "시간이 지나면 풀릴 일을 실패로 적으면 진짜 실패가 묻힌다");
+        assertTrue(run.getMessage().contains("재시도 대기 1건"), run.getMessage());
+        assertTrue(run.getMessage().contains(properties.getRetryBackoffMinutes() + "분"), run.getMessage());
     }
 
     // ── 일괄 재개 ──────────────────────────────────────

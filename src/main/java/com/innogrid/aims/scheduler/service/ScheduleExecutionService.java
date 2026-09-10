@@ -143,16 +143,17 @@ public class ScheduleExecutionService {
             }
 
             if (targets.isEmpty()) {
-                String message = emptyTargetMessage(schedule);
+                EmptyTargetOutcome outcome = emptyTargetOutcome(schedule);
+                String message = outcome.message();
                 if (triggerType == ScheduleRun.TriggerType.AUTO) {
                     // 5분 주기 스케줄 하나가 90일이면 "대상 없음" 행만 25,920개다.
                     // 이력은 남기지 않고 최근 실행 정보만 갱신해 화면에서 확인할 수 있게 한다.
-                    complete(schedule, ScheduleRun.RunStatus.COMPLETED, startedAt, message);
+                    complete(schedule, outcome.status(), startedAt, message);
                     return null;
                 }
                 run = startRun(schedule, triggerType, triggeredBy, engineId, policy);
                 run.recordCounts(0, 0, 0, false);
-                return finishRun(schedule, run, ScheduleRun.RunStatus.COMPLETED, startedAt, message);
+                return finishRun(schedule, run, outcome.status(), startedAt, message);
             }
 
             run = startRun(schedule, triggerType, triggeredBy, engineId, policy);
@@ -256,14 +257,34 @@ public class ScheduleExecutionService {
      * 재시도 상한에 걸려 빠진 건수를 함께 적는다 — 그러지 않으면 "할 일이 없어서"인지
      * "전부 소진되어서"인지 구분할 수 없다.
      */
-    private String emptyTargetMessage(Schedule schedule) {
+    private EmptyTargetOutcome emptyTargetOutcome(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
+        boolean matchNullType = type == Workload.ResourceType.VM;
         long exhausted = workloadRepository.countRetryExhausted(
-                Workload.WorkloadStatus.FAILED, type,
-                type == Workload.ResourceType.VM, properties.getMaxRetryCount());
-        return exhausted == 0 ? "대상 없음"
-                : String.format("대상 없음 (재시도 소진 %d건)", exhausted);
+                Workload.WorkloadStatus.FAILED, type, matchNullType, properties.getMaxRetryCount());
+        if (exhausted > 0) {
+            return new EmptyTargetOutcome(ScheduleRun.RunStatus.FAILED, String.format(
+                    "대상 없음 (재시도 소진 %d건 — 일괄 재개가 필요합니다)", exhausted));
+        }
+        long waiting = workloadRepository.countRetryWaiting(
+                TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount(), retryableBefore());
+        if (waiting > 0) {
+            return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, String.format(
+                    "대상 없음 (재시도 대기 %d건 — %d분 뒤 다시 시도합니다)",
+                    waiting, properties.getRetryBackoffMinutes()));
+        }
+        return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, "대상 없음");
     }
+
+    /**
+     * 대상이 0건일 때의 결과.
+     *
+     * <p>세 경우를 가른다. <b>소진</b>은 사람이 되살리기 전에는 이 스케줄이 아무 일도 못 하므로
+     * 실패로 적는다 — 그러지 않으면 스케줄이 영원히 초록불로 남아 화면에서 문제가 보이지 않는다.
+     * <b>재시도 대기</b>는 시간이 지나면 저절로 풀리므로 정상이고, 얼마 뒤에 다시 시도하는지 적는다.
+     * <b>할 일 없음</b>은 그냥 정상이다. 실행 상태 값 집합은 늘리지 않는다(FAILED·COMPLETED 그대로).</p>
+     */
+    private record EmptyTargetOutcome(ScheduleRun.RunStatus status, String message) {}
 
     /** 스케줄이 지정한 정책, 없으면 리소스 종류별 활성 정책. */
     private SchedulingPolicy resolvePolicy(Schedule schedule) {

@@ -87,6 +87,27 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
             @Param("from") OffsetDateTime from,
             @Param("to") OffsetDateTime to);
 
+    /**
+     * 재시도 여유는 있으나 <b>백오프가 지나지 않아</b> 이번 대상에서 빠진 워크로드 수.
+     *
+     * <p>소진과 구분하기 위해 따로 센다. 소진은 사람이 되살려야 풀리지만 이쪽은 시간이 지나면
+     * 저절로 풀리므로, 실행 결과를 실패로 적으면 안 된다.</p>
+     */
+    @Query("""
+           select count(w) from Workload w
+            where w.status in :statuses
+              and (w.resourceType = :resourceType
+                   or (:matchNullType = true and w.resourceType is null))
+              and (w.retryCount is null or w.retryCount < :maxRetryCount)
+              and w.lastFailedAt is not null and w.lastFailedAt > :retryableBefore
+           """)
+    long countRetryWaiting(
+            @Param("statuses") Collection<Workload.WorkloadStatus> statuses,
+            @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("matchNullType") boolean matchNullType,
+            @Param("maxRetryCount") int maxRetryCount,
+            @Param("retryableBefore") OffsetDateTime retryableBefore);
+
     @Query("""
            select count(w) from Workload w
             where w.status = :status

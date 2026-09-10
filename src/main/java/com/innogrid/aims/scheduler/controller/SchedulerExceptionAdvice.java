@@ -138,22 +138,14 @@ public class SchedulerExceptionAdvice {
      * 그 방어선이 보는 신호가 권한 오류처럼 생긴 것이다. 500 과 사유를 함께 주면 배포 검증에서
      * 바로 데이터베이스 문제로 좁혀진다.</p>
      *
-     * <p>사유에는 원인의 <b>첫 문장만</b> 싣는다 — 드라이버 메시지에는 질의 원문과 위치가
-     * 뒤따라 붙어, 그대로 내보내면 스키마가 응답으로 새어 나간다.</p>
+     * <p>드라이버 메시지는 첫 줄에도 제약명·테이블명 같은 내부 구조가 들어갈 수 있으므로 응답에는
+     * 싣지 않는다. 전체 원인은 서버 로그에만 남긴다.</p>
      */
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataAccess(DataAccessException ex) {
         log.error("스케줄러 데이터베이스 처리 실패", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("데이터베이스 처리에 실패했습니다 — 질의나 스키마를 확인하세요: "
-                        + firstSentence(ex.getMostSpecificCause().getMessage())));
-    }
-
-    /** 드라이버 메시지의 첫 줄만. 질의 원문·위치가 뒤에 붙어 그대로 내보내면 스키마가 샌다. */
-    private static String firstSentence(String message) {
-        if (message == null || message.isBlank()) return "원인 미상";
-        String head = message.split("\\R", 2)[0].trim();
-        return head.length() > 160 ? head.substring(0, 160) + "…" : head;
+                .body(ApiResponse.error("데이터베이스 처리에 실패했습니다. 서버 로그를 확인하세요"));
     }
 
     /** 받은 값을 사유에 실을 수 있는 길이로 줄인다. 다값 파라미터는 배열이라 그대로 찍으면 클래스 이름이 나온다. */

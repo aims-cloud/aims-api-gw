@@ -256,9 +256,23 @@ class PowerAwareScoringTest {
         }
     }
 
+    @DisplayName("정책 온도 임계가 0이어도 실측 온도는 계측값으로 표시한다")
+    @Test
+    void measured_temperature_does_not_depend_on_policy_threshold() {
+        SchedulingPolicy policy = policy();
+        policy.setMaxTemperatureCelsius(0);
+
+        NodeScore score = scheduler.schedule(workload(2),
+                List.of(node("measured", 40, 40, 250, 55)), policy).candidateScores().get(0);
+
+        assertEquals(1.0, score.details().get("온도계측"), 1e-9);
+        assertNotNull(score.details().get("배치후예상온도C"));
+    }
+
     /**
-     * 실질 한계 전력은 실측 전력을 쓰지 않는다 — 용량과 CPU 사용률만으로 구하는 증분이라
-     * 계측이 없어도 성립한다. 낼 수 있는 값까지 비우면 정보를 버리는 것이다.
+     * 가동 노드의 동적 증가분은 용량과 CPU 사용률만으로 구하므로 계측이 없어도 성립한다.
+     * 미계측 노드에서는 유휴 여부를 판단할 근거가 없어 깨우기 비용을 더하지 않는다.
+     * 낼 수 있는 값까지 비우면 정보를 버리는 것이다.
      */
     @DisplayName("계측이 없어도 한계 전력 증분은 낸다")
     @Test

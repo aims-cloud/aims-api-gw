@@ -34,3 +34,35 @@ CROSS JOIN (VALUES
 ) AS v(position, asset_name, asset_type, bmc_endpoint_id)
 WHERE r.name = '2F-27-04'
   AND NOT EXISTS (SELECT 1 FROM rack_units u WHERE u.rack_id = r.id);
+
+-- ── 3) BMC 하드웨어 스냅샷 (실시간 미도달 시 폴백) ──────────
+-- 실시간 Redfish 조회가 성공할 때마다 앱이 upsert 하며 최신값을 유지한다.
+-- 배포 VM 이 BMC 망에 못 닿는 동안 프론트가 실제 하드웨어 값을 볼 수 있도록,
+-- 개발 PC 에서 실측한 스냅샷(2026-09-10)을 초기값으로 넣어둔다.
+CREATE TABLE IF NOT EXISTS bmc_hardware_snapshots (
+    bmc_endpoint_id VARCHAR(50) PRIMARY KEY,
+    manufacturer    VARCHAR(255),
+    model           VARCHAR(255),
+    serial_number   VARCHAR(255),
+    host_name       VARCHAR(255),
+    power_state     VARCHAR(20),
+    health          VARCHAR(20),
+    cpu_model       VARCHAR(255),
+    cpu_count       INT,
+    core_count      INT,
+    thread_count    INT,
+    memory_gib      INT,
+    collected_at    TIMESTAMPTZ
+);
+
+INSERT INTO bmc_hardware_snapshots (bmc_endpoint_id, manufacturer, model, serial_number, host_name,
+                                    power_state, health, cpu_model, cpu_count, core_count, thread_count,
+                                    memory_gib, collected_at)
+VALUES
+    ('aio01', 'OEM', 'OPTIMUSiT L650', 'J90205WB', 'XCC-7D76-J90205WB', 'On', 'OK', 'Intel(R) Xeon(R) Gold 5416S', 2, NULL, 64, 192, now()),
+    ('aio02', 'OEM', 'OPTIMUSiT L650', 'J90205WC', 'XCC-7D76-J90205WC', 'On', 'OK', 'Intel(R) Xeon(R) Gold 5416S', 2, NULL, 64, 192, now()),
+    ('aio03', 'OEM', 'OPTIMUSiT L650', 'J90205WD', 'XCC-7D76-J90205WD', 'On', 'OK', 'Intel(R) Xeon(R) Gold 5416S', 2, NULL, 64, 192, now()),
+    ('gpu01', 'OEM', 'OPTIMUSiT L650', 'J901ZL3R', 'XCC-7D76-J901ZL3R', 'On', 'OK', 'Intel(R) Xeon(R) Gold 6430', 2, NULL, 128, 768, now()),
+    ('gpu02', 'Dell Inc.', 'PowerEdge R760xa', 'CNIVC0057T0109', NULL, 'On', 'OK', 'INTEL(R) XEON(R) GOLD 6548Y+', 2, 64, 128, 1024, now()),
+    ('gpu03', 'Dell Inc.', 'PowerEdge R760xa', 'CNIVC0058J0004', NULL, 'On', 'OK', 'INTEL(R) XEON(R) GOLD 6548Y+', 2, 64, 128, 1024, now())
+ON CONFLICT (bmc_endpoint_id) DO NOTHING;

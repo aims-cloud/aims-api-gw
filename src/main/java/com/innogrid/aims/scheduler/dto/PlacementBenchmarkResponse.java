@@ -89,12 +89,17 @@ public record PlacementBenchmarkResponse(
      *                                     노브라 다이제스트에 들어간다 — 이 값이 다르면 표 두 장은 다른 엔진의 표다.
      *                                     {@code idleRatio} 는 진단 지표·동적 범위의 기준선으로 그대로 남고, 미계측
      *                                     노드의 깨우기 비용 대체값이기도 하다
+     * @param marginalScaleWatts          실질 한계 전력 점수의 분모가 되는 W 눈금. 모델 <b>형태</b>를 바꾸는
+     *                                     노브라 다이제스트에 들어간다 — 깨우기 벌점을 정격으로 상대화하느냐
+     *                                     절대 W 로 보느냐가 갈리므로, 값이 다르면 표 두 장은 다른 엔진의 표다.
+     *                                     0 이하면 노드 정격을 분모로 쓴다(구 방식)
      */
     public record PowerKnobs(
             double idleRatio, double activeCpuPercent, double benchmarkPoweredOnCpuPercent,
             double curveAlpha, double peiWeight, double wasteWeight, double marginalWeight,
             double peiNormalizer, double resourceShare, double defaultCapacityWatts,
-            Map<String, Double> capacityByNode, boolean idleFromMeasurement
+            Map<String, Double> capacityByNode, boolean idleFromMeasurement,
+            double marginalScaleWatts
     ) {
         public PowerKnobs {
             capacityByNode = capacityByNode == null ? Map.of() : Map.copyOf(capacityByNode);

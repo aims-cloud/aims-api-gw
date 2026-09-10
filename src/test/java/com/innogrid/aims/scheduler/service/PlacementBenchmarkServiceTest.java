@@ -200,6 +200,67 @@ class PlacementBenchmarkServiceTest {
                 "모델 형태가 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");
     }
 
+    /**
+     * W 눈금은 <b>모델 형태</b>를 바꾸는 노브다 — 다이제스트에 들어가지 않으면 눈금이 다른 두 표가
+     * 같은 설정의 표로 보인다. 기본값은 계약 상한보다 커야 판에서 점수가 0 으로 포화하지 않는다.
+     */
+    @DisplayName("W 눈금은 다이제스트 성분이고 기본값은 계약 상한보다 크다")
+    @Test
+    void the_marginal_scale_is_part_of_the_digest_and_clears_the_contract_bound() {
+        SchedulerProperties tuned = new SchedulerProperties();
+        tuned.getPower().setMarginalScaleWatts(700.0);
+        EngineConfigSnapshot mine = service.compare("main", "heavytail").engineConfig();
+        EngineConfigSnapshot other = serviceWith(tuned).compare("main", "heavytail").engineConfig();
+
+        assertEquals(500.0, mine.power().marginalScaleWatts(), 1e-9, "출하 기본값이 바뀌면 판정 기준선도 무효다");
+        assertTrue(mine.power().marginalScaleWatts() >= BenchmarkRules.MAX_REAL_MARGINAL_WATTS,
+                "기본 눈금이 판의 실질 한계 전력 최댓값보다 작으면 점수가 0 으로 포화해 다른 결함이 섞인다");
+        assertEquals(700.0, other.power().marginalScaleWatts(), 1e-9);
+        assertNotEquals(mine.configDigest(), other.configDigest(),
+                "눈금이 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");
+    }
+
+    /**
+     * 다이제스트 성분 <b>전량</b>이 값 변경에 반응하는지 본다.
+     *
+     * <p>canonical 목록은 지역 변수라 반사로 볼 수 없다. 대신 노브 레코드의 성분마다 값을 하나씩
+     * 바꿔 다이제스트가 달라지는지 확인하고, 성분 목록을 반사로 읽어 이 표에 빠진 성분이 없는지
+     * 확인한다. 새 노브를 더하고 canonical 에 넣지 않으면 두 번째 단언이 잡는다.</p>
+     */
+    @DisplayName("전력 노브의 모든 성분이 다이제스트를 움직이고, 표에 빠진 성분이 없다")
+    @Test
+    void every_power_knob_component_moves_the_digest() {
+        Map<String, java.util.function.Consumer<SchedulerProperties.Power>> tweaks = new LinkedHashMap<>();
+        tweaks.put("idleRatio", pw -> pw.setIdleRatio(0.4));
+        tweaks.put("activeCpuPercent", pw -> pw.setActiveCpuPercent(7.5));
+        tweaks.put("curveAlpha", pw -> pw.setCurveAlpha(1.3));
+        tweaks.put("peiWeight", pw -> pw.setPeiWeight(0.31));
+        tweaks.put("wasteWeight", pw -> pw.setWasteWeight(0.26));
+        tweaks.put("marginalWeight", pw -> pw.setMarginalWeight(0.36));
+        tweaks.put("peiNormalizer", pw -> pw.setPeiNormalizer(3.5));
+        tweaks.put("resourceShare", pw -> pw.setResourceShare(0.15));
+        tweaks.put("defaultCapacityWatts", pw -> pw.setDefaultCapacityWatts(650.0));
+        tweaks.put("capacityByNode", pw -> pw.setCapacityByNode(Map.of("bm-01:9100", 700.0)));
+        tweaks.put("idleFromMeasurement", pw -> pw.setIdleFromMeasurement(false));
+        tweaks.put("marginalScaleWatts", pw -> pw.setMarginalScaleWatts(700.0));
+
+        String base = service.compare("main", "heavytail").engineConfig().configDigest();
+        tweaks.forEach((name, tweak) -> {
+            SchedulerProperties props = new SchedulerProperties();
+            tweak.accept(props.getPower());
+            assertNotEquals(base, serviceWith(props).compare("main", "heavytail").engineConfig().configDigest(),
+                    name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
+        });
+
+        Set<String> covered = new java.util.HashSet<>(tweaks.keySet());
+        covered.add("benchmarkPoweredOnCpuPercent");   // 사전 등록 상수라 설정으로 바꿀 수 없다
+        Set<String> components = java.util.Arrays.stream(
+                        PlacementBenchmarkResponse.PowerKnobs.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).collect(Collectors.toSet());
+        assertEquals(components, covered,
+                "노브 성분과 민감도 표가 어긋났다 — 새 노브를 더했으면 canonical 과 이 표에도 넣는다");
+    }
+
     private static PolicySnapshot variant(EngineConfigSnapshot config, String name) {
         return config.policies().stream().filter(p -> p.variant().equals(name)).findFirst()
                 .orElseThrow(() -> new AssertionError(name + " 변종이 스냅샷에 없다"));

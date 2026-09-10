@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -50,12 +51,14 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
               and (w.resourceType = :resourceType
                    or (:matchNullType = true and w.resourceType is null))
               and (w.retryCount is null or w.retryCount < :maxRetryCount)
+              and (w.lastFailedAt is null or w.lastFailedAt <= :retryableBefore)
            """)
     List<Workload> findSchedulingCandidates(
             @Param("statuses") Collection<Workload.WorkloadStatus> statuses,
             @Param("resourceType") Workload.ResourceType resourceType,
             @Param("matchNullType") boolean matchNullType,
-            @Param("maxRetryCount") int maxRetryCount);
+            @Param("maxRetryCount") int maxRetryCount,
+            @Param("retryableBefore") OffsetDateTime retryableBefore);
 
     /**
      * 재시도 상한에 걸려 대상에서 빠진 워크로드 수.

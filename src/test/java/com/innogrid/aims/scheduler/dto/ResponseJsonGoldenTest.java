@@ -39,7 +39,7 @@ public class ResponseJsonGoldenTest {
             "resourceType", "dataMdcId", "preferredMdcId",
             "maxPowerBudgetWatts", "maxTemperatureCelsius", "priority",
             "assignedMdcId", "assignedNodeId", "status",
-            "schedulingScore", "schedulingReason", "retryCount",
+            "schedulingScore", "schedulingReason", "retryCount", "lastFailedAt",
             "createdAt", "scheduledAt"));
 
     /** 배치 이력 응답 필드 22개. */

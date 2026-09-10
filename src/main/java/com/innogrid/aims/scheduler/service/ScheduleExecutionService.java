@@ -233,10 +233,22 @@ public class ScheduleExecutionService {
         boolean matchNullType = type == Workload.ResourceType.VM;   // 기존 행은 VM 으로 해석한다
 
         return workloadRepository.findSchedulingCandidates(
-                        TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount())
+                        TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount(),
+                        retryableBefore())
                 .stream()
                 .sorted(orderFor(schedule))
                 .toList();
+    }
+
+    /**
+     * 이 시각 이전에 실패한 워크로드만 다시 시도한다.
+     *
+     * <p>간격이 0 이하면 아주 먼 미래를 돌려주어 조건이 사실상 사라진다 — 설정 하나로 이전
+     * 동작으로 돌아간다.</p>
+     */
+    private OffsetDateTime retryableBefore() {
+        int minutes = properties.getRetryBackoffMinutes();
+        return minutes > 0 ? OffsetDateTime.now().minusMinutes(minutes) : OffsetDateTime.now().plusYears(1);
     }
 
     /**

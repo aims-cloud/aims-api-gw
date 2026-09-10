@@ -129,7 +129,7 @@ class ScheduleExecutionServiceTest {
         assertTrue(run.getMessage().contains("재시도 소진 1건"), run.getMessage());
     }
 
-    @DisplayName("재시도 여유가 있으면 대상에 남는다")
+    @DisplayName("재시도 여유가 있으면 대상에 남는다 (간격을 끈 경우)")
     @Test
     void retries_left_stays_target() {
         Workload retryable = new Workload("재시도가능", 1, 1024);
@@ -138,7 +138,14 @@ class ScheduleExecutionServiceTest {
         workloadRepository.save(retryable);
 
         Schedule schedule = save(scheduleOf("retry-ok", true, false));
-        ScheduleRun run = executionService.runNow(schedule.getId(), "tester");
+        int backoff = properties.getRetryBackoffMinutes();
+        properties.setRetryBackoffMinutes(0);   // 이 시험이 보는 것은 횟수 조건이지 간격이 아니다
+        ScheduleRun run;
+        try {
+            run = executionService.runNow(schedule.getId(), "tester");
+        } finally {
+            properties.setRetryBackoffMinutes(backoff);
+        }
 
         assertEquals(1, run.getTargetCount());
         // 테스트 환경에는 메트릭 저장소가 없어 후보 노드가 0건이다
@@ -218,14 +225,14 @@ class ScheduleExecutionServiceTest {
     }
 
     /**
-     * <b>재시도 간격이 없다.</b> 방금 실패한 워크로드도 다음 실행이 곧바로 다시 시도한다.
+     * <b>재시도에 간격을 둔다.</b> 방금 실패한 워크로드는 백오프가 지나기 전에는 대상이 아니다.
      *
      * <p>5분 주기 스케줄이면 25분에 다섯 번을 전부 태운다. 온도 초과 노드의 냉각 대기가
      * 10분이고 메트릭 지연 허용도 10분이라, 회복될 수 있는 원인조차 회복 전에 소진된다.</p>
      */
-    @DisplayName("현행: 방금 실패한 워크로드도 곧바로 다시 시도한다")
+    @DisplayName("방금 실패한 워크로드는 백오프 안에는 대상에서 빠진다")
     @Test
-    void currently_a_just_failed_workload_is_retried_immediately() {
+    void a_just_failed_workload_waits_for_the_backoff() {
         Workload justFailed = new Workload("방금실패", 1, 1024);
         justFailed.setResourceType(Workload.ResourceType.VM);
         justFailed.markFailed("일시적 자원 부족");
@@ -233,8 +240,9 @@ class ScheduleExecutionServiceTest {
 
         ScheduleRun run = executionService.runNow(save(scheduleOf("no-backoff", true, false)).getId(), "tester");
 
-        assertEquals(1, run.getTargetCount(),
-                "실패 직후인데도 대상에 들어온다 — 간격 없이 횟수만 보는 이 커밋 시점의 사실");
+        assertEquals(0, run.getTargetCount(),
+                "실패 직후인데 다시 시도한다 — 냉각 대기·메트릭 지연이 회복되기 전에 기회를 태운다");
+        assertTrue(run.getMessage().contains("대상 없음"), run.getMessage());
     }
 
     /**

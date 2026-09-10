@@ -12,6 +12,10 @@ import com.innogrid.aims.scheduler.entity.Workload;
  * 변하지 않는다 — API 형태의 주인은 이 record 다.</p>
  *
  * <p>{@code retryCount} 는 기존 행이 null 일 수 있어 {@code Integer} 로 둔다. 0 으로 바꾸면 계약 위반.</p>
+ *
+ * <p>{@code lastFailedAt} 은 마지막 배치 실패 시각이다. 재시도 백오프가 이 값을 보고 다시 시도할지
+ * 정하므로, 화면에서 "왜 아직 대상이 아닌가" 를 설명할 때 쓴다. 실패한 적이 없거나 되살린
+ * 워크로드는 null 이다.</p>
  */
 public record WorkloadResponse(
         Long id,
@@ -33,6 +37,7 @@ public record WorkloadResponse(
         Double schedulingScore,
         String schedulingReason,
         Integer retryCount,
+        OffsetDateTime lastFailedAt,
         OffsetDateTime createdAt,
         OffsetDateTime scheduledAt
 ) {
@@ -44,6 +49,6 @@ public record WorkloadResponse(
                 w.getMaxPowerBudgetWatts(), w.getMaxTemperatureCelsius(), w.getPriority(),
                 w.getAssignedMdcId(), w.getAssignedNodeId(), w.getStatus(),
                 w.getSchedulingScore(), w.getSchedulingReason(), w.getRetryCount(),
-                w.getCreatedAt(), w.getScheduledAt());
+                w.getLastFailedAt(), w.getCreatedAt(), w.getScheduledAt());
     }
 }

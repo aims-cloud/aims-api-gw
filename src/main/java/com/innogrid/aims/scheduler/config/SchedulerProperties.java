@@ -91,6 +91,20 @@ public class SchedulerProperties {
      */
     private int maxRetryCount = 5;
 
+    /**
+     * 같은 워크로드를 다시 시도하기까지 두는 최소 간격(분).
+     *
+     * <p>실패 원인 중 저절로 회복되는 것의 눈금이 10분이다 — 임계 온도를 넘긴 노드의 냉각 대기
+     * ({@code thermal.cooldown-minutes})와 메트릭 지연 허용({@code metric-lag-minutes}). 간격이 그보다
+     * 짧으면 노드가 식기 전에, 메트릭이 오기 전에 시도를 태운다. 10분은 냉각이 풀리는 순간과
+     * 겹쳐 타이밍에 좌우되므로 그 1.5배인 15분을 기본으로 둔다 — 5분 주기 스케줄에서 다섯 번을
+     * 쓰는 데 25분이 아니라 1시간 15분이 걸린다.</p>
+     *
+     * <p><b>0 이하면 간격을 보지 않는다</b>(이 설정 이전과 같은 동작). 되돌리기는 이 값 하나다.
+     * 스케줄 주기가 이 값보다 길면(예: 하루 1회) 아무 영향이 없다.</p>
+     */
+    private int retryBackoffMinutes = 15;
+
     private final Power power = new Power();
     private final Thermal thermal = new Thermal();
     private final Network network = new Network();
@@ -123,6 +137,8 @@ public class SchedulerProperties {
     public void setMaxWorkloadsPerRun(int maxWorkloadsPerRun) { this.maxWorkloadsPerRun = maxWorkloadsPerRun; }
     public int getMaxRetryCount() { return maxRetryCount; }
     public void setMaxRetryCount(int maxRetryCount) { this.maxRetryCount = maxRetryCount; }
+    public int getRetryBackoffMinutes() { return retryBackoffMinutes; }
+    public void setRetryBackoffMinutes(int v) { this.retryBackoffMinutes = v; }
     public Power getPower() { return power; }
     public Thermal getThermal() { return thermal; }
     public Network getNetwork() { return network; }

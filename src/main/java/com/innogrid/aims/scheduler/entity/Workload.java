@@ -82,6 +82,19 @@ public class Workload {
      */
     private Integer retryCount;
 
+    /**
+     * 마지막으로 배치에 실패한 시각.
+     *
+     * <p>재시도를 횟수로만 막으면 5분 주기 스케줄은 25분에 다섯 번을 전부 태운다. 그런데 실패
+     * 원인 중에는 저절로 회복되는 것이 있다 — 임계 온도를 넘긴 노드의 냉각 대기, 아직 도착하지
+     * 않은 메트릭. 둘 다 10분 눈금이라, 그보다 짧은 간격의 재시도는 회복 전에 기회를 소모한다.
+     * 이 시각을 남겨 두면 후보 질의가 "마지막 실패로부터 얼마나 지났는가" 를 함께 볼 수 있다.</p>
+     *
+     * <p>기존 행은 null 이고, null 이면 간격 제한 없이 대상이 된다 — 백오프를 도입하기 전에
+     * 실패한 워크로드를 새 규칙으로 소급해 묶어 두지 않는다.</p>
+     */
+    private OffsetDateTime lastFailedAt;
+
     private OffsetDateTime createdAt;
     private OffsetDateTime scheduledAt;
 
@@ -116,6 +129,7 @@ public class Workload {
     public Double getSchedulingScore() { return schedulingScore; }
     public String getSchedulingReason() { return schedulingReason; }
     public Integer getRetryCount() { return retryCount; }
+    public OffsetDateTime getLastFailedAt() { return lastFailedAt; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getScheduledAt() { return scheduledAt; }
 
@@ -150,6 +164,7 @@ public class Workload {
         this.status = WorkloadStatus.FAILED;
         this.schedulingReason = reason;
         this.retryCount = resolveRetryCount() + 1;
+        this.lastFailedAt = OffsetDateTime.now();
     }
 
     /**
@@ -177,6 +192,7 @@ public class Workload {
         if (status == WorkloadStatus.FAILED && target == WorkloadStatus.PENDING) {
             this.retryCount = 0;
             this.schedulingReason = null;
+            this.lastFailedAt = null;   // 되살린 워크로드를 백오프가 다시 붙잡지 않게
         }
         this.status = target;
         return true;

@@ -167,15 +167,25 @@ public class ScheduleExecutionService {
             }
 
             int success = 0;
+            int attempted = 0;
             String firstFailure = null;
-            for (Workload workload : targets) {
-                SchedulingResult result = schedulingService.dispatch(workload,
-                        placementService.place(workload, context, engineId, run.getId()), run.getId());
-                if (result.success()) {
-                    success++;
-                } else if (firstFailure == null) {
-                    firstFailure = result.reason();
+            try {
+                for (Workload workload : targets) {
+                    SchedulingResult result = schedulingService.dispatch(workload,
+                            placementService.place(workload, context, engineId, run.getId()), run.getId());
+                    attempted++;
+                    if (result.success()) {
+                        success++;
+                    } else if (firstFailure == null) {
+                        firstFailure = result.reason();
+                    }
                 }
+            } catch (RuntimeException e) {
+                // 루프 중간에 끊겨도 그때까지의 결과는 사실이다. 집계를 0 으로 두면 실제로 배치된
+                // 워크로드가 이력에서 사라져, 다음 실행이 무엇을 이어서 해야 하는지 알 수 없다.
+                run.recordCounts(targets.size(), success, attempted - success, truncated);
+                runRepository.save(run);
+                throw e;
             }
 
             int failed = targets.size() - success;

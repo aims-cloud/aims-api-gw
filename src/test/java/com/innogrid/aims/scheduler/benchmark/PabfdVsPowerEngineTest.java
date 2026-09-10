@@ -133,11 +133,13 @@ class PabfdVsPowerEngineTest {
      * <p>총점 손계산(정책 기본값 · 자원 몫 0.10):</p>
      * <pre>
      * idle-x  전력점수 .40×0.025 + .25×0.9940 + .35×0.5250 = 0.44225
-     * busy-y  전력점수 .40×0.200 + .25×1.0000 + .35×0.8250 = 0.61875
+     * busy-y  전력점수 .40×0.200 + .25×1.0000 + .35×0.6850 = 0.56975
      * 열점수  둘 다 1 − (40/75)² = 0.715556 (경고 65℃ 미만이라 감점 0)
-     * 총점    idle-x 0.5974  <  busy-y 0.6442
+     * 총점    idle-x 0.5974  <  busy-y 0.6190
      * </pre>
      * 자원 여유만 보면 빈 노드가 0.94 대 0.50 으로 앞서지만, 자원 몫이 0.10 이라 전력 판단이 이긴다.
+     * busy-y 의 한계전력 점수 0.685 는 1 − 157.5/500 이다 — 분모가 정격 900 이 아니라 W 눈금이라
+     * 정격이 큰 노드의 깨우기·증가 비용이 그만큼 크게 보인다. idle-x 는 정격이 눈금과 같아 값이 그대로다.
      */
     @DisplayName("전력 엔진은 가동 중인 노드를 고른다")
     @Test
@@ -145,7 +147,7 @@ class PabfdVsPowerEngineTest {
         SchedulingResult result = new PowerAwareScheduler().schedule(workload(), nodes(), policy());
 
         assertEquals("busy-y", result.selectedNodeId());
-        assertEquals(0.6442, result.finalScore(), 1e-4);
+        assertEquals(0.6190, result.finalScore(), 1e-4);
     }
 
     /** 같은 판·같은 워크로드에서 두 전략의 답이 다르다는 것 한 줄. 표의 두 열이 같은 숫자가 아니라는 근거다. */

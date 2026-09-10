@@ -223,13 +223,22 @@ public class PowerModel {
      * <b>일률적 통합 편향</b>으로 작동했다. 실측 역산으로 바뀐 뒤에는 선언 유휴비가 낮은 노드(0.06~0.25)의 벌점이
      * 그만큼 줄어 엔진이 빈 노드를 더 자주 깨운다 — 비교 판에서 PABFD 대비 총전력 격차가 <b>벌어진</b> 주원인이다.
      * 또 역산 유휴가 큰 노드는 {@code realMarginalPower > pMax} 가 되어 점수가 0 으로 포화해 노드를 구별하지
-     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화(분모 교체)는 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정할 후속 과제다.
-     * <b>다음 커밋에서 분모가 노드 정격에서 W 눈금으로 바뀐다.</b></p>
+     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화가 이 결함의 수정이며, 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정한다.</p>
+     *
+     * <p><b>지금은 W 눈금으로 정규화한다.</b> 분모는 노드 정격이 아니라 설정값 S
+     * ({@code aims.scheduler.power.marginal-scale-watts}, 기본 500 W)다. 같은 절대 W 의 깨우기 비용은
+     * 정격이 얼마든 같은 벌점을 받고, 정격이 큰 노드의 큰 깨우기 비용은 그만큼 크게 보인다.
+     * {@code S ≤ 0} 이면 정격 분모(구 방식)로 돌아간다 — 되돌리기는 이 값 하나다.</p>
+     *
+     * <p>남은 한계: {@code realMarginalPower > S} 이면 점수가 0 으로 포화해 노드를 구별하지 못한다.
+     * 비교 판에서는 실측 최댓값이 {@code BenchmarkRules.MAX_REAL_MARGINAL_WATTS} 라 기본값에서
+     * 발현하지 않지만, 정격이 큰 미계측 노드의 대체값은 S 를 넘을 수 있다 — 그때는 노브로 올린다.</p>
      */
     public double marginalScore(NodeResource node, int requiredCpu) {
         double pMax = node.getPowerCapacityWatts();
         if (pMax <= 0) return 0.5;
-        return 1.0 - Math.min(1.0, realMarginalPower(node, requiredCpu) / pMax);
+        double scale = props.getMarginalScaleWatts() > 0 ? props.getMarginalScaleWatts() : pMax;
+        return 1.0 - Math.min(1.0, realMarginalPower(node, requiredCpu) / scale);
     }
 
     /**

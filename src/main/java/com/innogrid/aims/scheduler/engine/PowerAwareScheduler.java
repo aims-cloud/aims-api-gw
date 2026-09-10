@@ -44,6 +44,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * <p><b>전력·온도를 수집하지 못한 노드는 중립값 0.5 를 준다.</b> 0 을 주면 판단 근거가 없는 노드가
  * 최악으로 평가되고, 감점을 아예 하지 않으면 오히려 유리해진다. IPMI 가 없는 환경에서는 모든
  * 노드가 중립이 되어 자원 여유로 결정되며, 그 사실이 {@code reason} 에 드러난다.</p>
+ * <p>실질 한계 전력 점수는 노드 정격이 아니라 W 눈금({@code marginalScaleWatts})으로 정규화한다 —
+ * 깨우기 벌점이 유휴비가 아니라 절대 W 로 총점에 들어간다.</p>
  */
 @Component
 public class PowerAwareScheduler implements SchedulingEngine {

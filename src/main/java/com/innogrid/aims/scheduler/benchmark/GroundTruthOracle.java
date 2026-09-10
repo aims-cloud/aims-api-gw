@@ -16,7 +16,7 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  * <p><b>왜 전력 모델을 쓰지 않는가 — 순환 논증이기 때문이다.</b> 배치 비교의 주 지표로 엔진의
  * 한계 전력({@code PowerModel.realMarginalPower})을 쓰면, 그것은 <b>우리 전력 엔진 총점의 한 항을
  * 그대로 합한 값</b>이다(가중치 0.35 × {@code marginalScore}, {@code marginalScore = 1 −
- * realMarginalPower / pMax}). 그 지표에서 우리 전략이 1등인 것은 발견이 아니라 <b>정의</b>다.
+ * realMarginalPower / S}(S 는 W 눈금, 기본 500)). 그 지표에서 우리 전략이 1등인 것은 발견이 아니라 <b>정의</b>다.
  * 목적 함수를 그대로 평가 함수로 쓰면 어떤 전략을 넣어도 그 목적 함수를 최대화한 전략이 이긴다.</p>
  *
  * <p><b>그래서 평가자만 다른 식을 본다.</b> 합성 클러스터 파일에는 노드별 <b>유휴 전력</b>

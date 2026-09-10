@@ -80,6 +80,38 @@ openstack:
   # 사설 인증서 HTTPS 환경(자체 구축 OpenStack)에서는 false
   verify-tls: ${OPENSTACK_VERIFY_TLS:true}
 
+# ── BMC(하드웨어 관리 컨트롤러) 연동 설정 — 랙 실장도/물리자산 ──
+# Redfish 표준 API로 서버 하드웨어(모델/시리얼/CPU/메모리/전원)를 조회한다. 읽기 전용.
+# URL·계정·비밀번호는 모두 환경변수로만 주입한다 (코드/설정에 실제 값 금지).
+# 샘플 랙(2F-27-04): AIO 3대·GPU 3대. XCC=Lenovo, IDRAC=Dell — Redfish 스키마는 공통.
+bmc:
+  verify-tls: ${BMC_VERIFY_TLS:false}
+  endpoints:
+    - id: aio01
+      url: ${BMC_AIO01_URL:}
+      username: ${BMC_AIO01_USER:}
+      password: ${BMC_AIO01_PASS:}
+    - id: aio02
+      url: ${BMC_AIO02_URL:}
+      username: ${BMC_AIO02_USER:}
+      password: ${BMC_AIO02_PASS:}
+    - id: aio03
+      url: ${BMC_AIO03_URL:}
+      username: ${BMC_AIO03_USER:}
+      password: ${BMC_AIO03_PASS:}
+    - id: gpu01
+      url: ${BMC_GPU01_URL:}
+      username: ${BMC_GPU01_USER:}
+      password: ${BMC_GPU01_PASS:}
+    - id: gpu02
+      url: ${BMC_GPU02_URL:}
+      username: ${BMC_GPU02_USER:}
+      password: ${BMC_GPU02_PASS:}
+    - id: gpu03
+      url: ${BMC_GPU03_URL:}
+      username: ${BMC_GPU03_USER:}
+      password: ${BMC_GPU03_PASS:}
+
 # ── 메트릭 조회 설정 (Thanos Query — PromQL 호환) ──────────
 victoria-metrics:
   base-url: ${METRICS_QUERY_URL}

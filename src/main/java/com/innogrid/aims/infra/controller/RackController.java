@@ -60,6 +60,15 @@ public class RackController {
         return ApiResponse.ok(rackService.getLayout(rackId));
     }
 
+    /** 실장 장비 하드웨어 상세 — BMC(Redfish) 실시간 조회 (장비 클릭 시) */
+    @Operation(summary = "실장 장비 하드웨어 상세 (Redfish)",
+            description = "BMC 연동 장비의 모델/시리얼/CPU/메모리/전원상태를 실시간 조회. 미연동 장비는 data=null")
+    @GetMapping("/{rackId}/units/{unitId}/hardware")
+    public ApiResponse<com.innogrid.aims.bmc.RedfishSystem> getUnitHardware(@PathVariable Long rackId,
+                                                                            @PathVariable Long unitId) {
+        return ApiResponse.ok(rackService.getUnitHardware(rackId, unitId));
+    }
+
     /** 랙 상세 (실장 장비 정보 포함) */
     @GetMapping("/{rackId}")
     public ApiResponse<Map<String, Object>> getRackLayout(@PathVariable Long rackId) {

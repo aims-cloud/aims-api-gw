@@ -9,6 +9,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import com.innogrid.aims.bmc.BmcProperties;
+import com.innogrid.aims.bmc.RedfishClient;
+import com.innogrid.aims.bmc.RedfishSystem;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Rack;
 import com.innogrid.aims.infra.entity.RackUnit;
@@ -26,10 +29,31 @@ public class RackService {
 
     private final RackRepository rackRepository;
     private final RackUnitRepository rackUnitRepository;
+    private final BmcProperties bmcProperties;
+    private final RedfishClient redfishClient;
 
-    public RackService(RackRepository rackRepository, RackUnitRepository rackUnitRepository) {
+    public RackService(RackRepository rackRepository, RackUnitRepository rackUnitRepository,
+                       BmcProperties bmcProperties, RedfishClient redfishClient) {
         this.rackRepository = rackRepository;
         this.rackUnitRepository = rackUnitRepository;
+        this.bmcProperties = bmcProperties;
+        this.redfishClient = redfishClient;
+    }
+
+    /**
+     * 실장 장비 하드웨어 상세 (Redfish 실시간 조회).
+     * 랙실장도에서 장비 클릭 시 호출한다. BMC 미연동 장비이거나 조회 실패 시 null.
+     */
+    public RedfishSystem getUnitHardware(Long rackId, Long unitId) {
+        RackUnit unit = rackUnitRepository.findById(unitId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "실장 장비를 찾을 수 없습니다: " + unitId));
+        if (unit.getRack() == null || !rackId.equals(unit.getRack().getId())) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "해당 랙의 장비가 아닙니다: " + unitId);
+        }
+        String endpointId = unit.getBmcEndpointId();
+        if (endpointId == null || endpointId.isBlank()) return null;
+        return redfishClient.getSystem(bmcProperties.find(endpointId));
     }
 
     /** 랙 동적 필터 조회 (분류/장소/층/구역/열/위치 + mdcId). */
@@ -81,8 +105,11 @@ public class RackService {
             RackUnit occupant = occupancy.get(u);
             if (occupant != null) {
                 slot.put("occupied", true);
+                slot.put("unitId", occupant.getId());
                 slot.put("assetName", occupant.getAssetName());
                 slot.put("assetType", occupant.getAssetType());
+                // BMC 연동 장비면 식별자를 내려 프론트가 하드웨어 상세조회 가능 여부를 판단
+                slot.put("bmcEndpointId", occupant.getBmcEndpointId());
                 used++;
             } else {
                 slot.put("occupied", false);

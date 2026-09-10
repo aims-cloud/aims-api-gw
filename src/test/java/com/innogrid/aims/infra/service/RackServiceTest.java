@@ -8,6 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
+import com.innogrid.aims.bmc.BmcProperties;
+import com.innogrid.aims.bmc.RedfishClient;
+import com.innogrid.aims.bmc.RedfishSystem;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Rack;
 import com.innogrid.aims.infra.entity.RackUnit;
@@ -18,19 +21,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class RackServiceTest {
 
     private RackRepository rackRepository;
     private RackUnitRepository rackUnitRepository;
+    private BmcProperties bmcProperties;
+    private RedfishClient redfishClient;
     private RackService service;
 
     @BeforeEach
     void setUp() {
         rackRepository = mock(RackRepository.class);
         rackUnitRepository = mock(RackUnitRepository.class);
-        service = new RackService(rackRepository, rackUnitRepository);
+        bmcProperties = mock(BmcProperties.class);
+        redfishClient = mock(RedfishClient.class);
+        service = new RackService(rackRepository, rackUnitRepository, bmcProperties, redfishClient);
     }
 
     @Test
@@ -93,6 +101,66 @@ class RackServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getStatus())
                         .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void unit_hardware_fetches_redfish_for_bmc_linked_unit() {
+        Rack rack = new Rack("mdc-1", "2F-27-04", 42, 10.0);
+        RackUnit unit = new RackUnit(rack, "U20", "aio-01", "SERVER");
+        unit.setBmcEndpointId("aio01");
+        setId(rack, 1L);
+        setId(unit, 7L);
+
+        BmcProperties.Endpoint ep = new BmcProperties.Endpoint();
+        RedfishSystem sys = new RedfishSystem("aio01", "Lenovo", "OPTIMUSiT L650",
+                "J90205WB", null, "On", "OK", "Xeon Gold 5416S", 2, 64, 128, 192);
+        when(rackUnitRepository.findById(7L)).thenReturn(Optional.of(unit));
+        when(bmcProperties.find("aio01")).thenReturn(ep);
+        when(redfishClient.getSystem(ep)).thenReturn(sys);
+
+        RedfishSystem result = service.getUnitHardware(1L, 7L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.model()).isEqualTo("OPTIMUSiT L650");
+        assertThat(result.serialNumber()).isEqualTo("J90205WB");
+    }
+
+    @Test
+    void unit_hardware_returns_null_without_bmc_link() {
+        Rack rack = new Rack("mdc-1", "2F-27-04", 42, 10.0);
+        RackUnit unit = new RackUnit(rack, "U10", "storage-01", "STORAGE");
+        setId(rack, 1L);
+        setId(unit, 9L);
+        when(rackUnitRepository.findById(9L)).thenReturn(Optional.of(unit));
+
+        RedfishSystem result = service.getUnitHardware(1L, 9L);
+
+        assertThat(result).isNull();
+        verifyNoInteractions(redfishClient);
+    }
+
+    @Test
+    void unit_hardware_rejects_unit_from_other_rack() {
+        Rack rack = new Rack("mdc-1", "2F-27-04", 42, 10.0);
+        RackUnit unit = new RackUnit(rack, "U10", "aio-01", "SERVER");
+        setId(rack, 1L);
+        setId(unit, 9L);
+        when(rackUnitRepository.findById(9L)).thenReturn(Optional.of(unit));
+
+        assertThatThrownBy(() -> service.getUnitHardware(2L, 9L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getStatus())
+                        .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    private static void setId(Object entity, Long id) {
+        try {
+            var f = entity.getClass().getDeclaredField("id");
+            f.setAccessible(true);
+            f.set(entity, id);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test

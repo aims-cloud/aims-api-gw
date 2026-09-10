@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -1547,6 +1549,50 @@ class PlacementBenchmarkServiceTest {
     }
 
     // ── 유휴 역산 복원 점검표 ─────────────────────────────────
+
+    /**
+     * 판에서 나올 수 있는 <b>실질 한계 전력의 최댓값</b>을 재서 계약 상수에 못 박는다.
+     *
+     * <p>다음 커밋이 한계 전력 점수의 분모를 노드 정격에서 고정 W 눈금 S 로 바꾼다. 그 변경이
+     * "일률 편향 하나만 고친다" 가 되려면 판 안에서 {@code realMarginalPower > S} 인 지점이 새로
+     * 생기지 않아야 한다 — 생기면 점수가 0 으로 포화해 노드를 구별하지 못하는 다른 결함이 섞인다.
+     * 그래서 결과를 보기 전에 최댓값을 재어 {@link BenchmarkRules#MAX_REAL_MARGINAL_WATTS} 로 적고,
+     * 이 시험이 그 수가 실측과 같은지 지킨다. 판·생성식·정격 원장이 바뀌면 여기가 먼저 깨진다.</p>
+     *
+     * <p>요구 코어는 상상하지 않고 <b>실제 워크로드 파일</b>이 쓰는 값만 본다 — 판에 없는 요구량으로
+     * 잰 최댓값은 판의 사실이 아니다.</p>
+     */
+    @DisplayName("여섯 판 전 지점·전 노드의 실질 한계 전력 최댓값이 계약 상수와 같다")
+    @Test
+    void the_maximum_real_marginal_power_on_the_boards_matches_the_contract_constant() {
+        PowerModel powerModel = new PowerModel(new SchedulerProperties());
+        Set<Integer> requiredCores = new TreeSet<>();
+        for (String location : List.of("classpath:scheduler/benchmark-workloads-heavytail.yml",
+                "classpath:scheduler/benchmark-workloads-uniform.yml")) {
+            BenchmarkWorkloads.load(location).classes().forEach(c -> requiredCores.add(c.cores()));
+        }
+        assertFalse(requiredCores.isEmpty(), "워크로드 파일에서 요구 코어를 하나도 읽지 못했다");
+
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        double max = 0.0;
+        String where = null;
+        for (String boardId : clusters.boardIds()) {
+            SyntheticCluster cluster = clusters.get(boardId);
+            for (long t : PlacementBenchmarkService.sweepPoints(cluster)) {
+                for (NodeResource node : PlacementBenchmarkService.nodesAt(cluster, t)) {
+                    for (int cores : requiredCores) {
+                        double w = powerModel.realMarginalPower(node, cores);
+                        if (w > max) {
+                            max = w;
+                            where = boardId + " " + node.getNodeId() + " " + cores + "코어 t=" + t + "s";
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(BenchmarkRules.MAX_REAL_MARGINAL_WATTS, max, 1e-6,
+                "판의 실질 한계 전력 최댓값이 계약 상수와 다르다 — 실측 " + max + " (" + where + ")");
+    }
 
     /**
      * 엔진에게 건네는 노드 스냅샷과 평가자의 오라클이 <b>같은 세계</b>를 본다. 둘이 갈라지면 엔진은 A 세계에서

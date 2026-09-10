@@ -223,7 +223,8 @@ public class PowerModel {
      * <b>일률적 통합 편향</b>으로 작동했다. 실측 역산으로 바뀐 뒤에는 선언 유휴비가 낮은 노드(0.06~0.25)의 벌점이
      * 그만큼 줄어 엔진이 빈 노드를 더 자주 깨운다 — 비교 판에서 PABFD 대비 총전력 격차가 <b>벌어진</b> 주원인이다.
      * 또 역산 유휴가 큰 노드는 {@code realMarginalPower > pMax} 가 되어 점수가 0 으로 포화해 노드를 구별하지
-     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화(분모 교체)는 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정할 후속 과제다.</p>
+     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화(분모 교체)는 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정할 후속 과제다.
+     * <b>다음 커밋에서 분모가 노드 정격에서 W 눈금으로 바뀐다.</b></p>
      */
     public double marginalScore(NodeResource node, int requiredCpu) {
         double pMax = node.getPowerCapacityWatts();

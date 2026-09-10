@@ -342,10 +342,12 @@ public class SchedulingService {
 
         // 널 파라미터는 PostgreSQL 이 타입을 추론하지 못한다 — 경계값과 깃발로 바꿔 넘긴다.
         boolean anyType = resourceType == null;
+        boolean matchNullType = resourceType == Workload.ResourceType.VM;
         boolean anyPeriod = from == null && to == null;
         List<Workload> exhausted = workloadRepository.findRetryExhausted(
                 Workload.WorkloadStatus.FAILED, properties.getMaxRetryCount(),
                 anyType, anyType ? Workload.ResourceType.VM : resourceType,
+                matchNullType,
                 anyPeriod,
                 from != null ? from : OffsetDateTime.parse("1970-01-01T00:00:00Z"),
                 to != null ? to : OffsetDateTime.now().plusYears(100));

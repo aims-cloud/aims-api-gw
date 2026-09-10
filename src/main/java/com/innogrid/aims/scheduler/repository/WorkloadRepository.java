@@ -81,7 +81,9 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
            select w from Workload w
             where w.status = :status
               and w.retryCount is not null and w.retryCount >= :maxRetryCount
-              and (:anyType = true or w.resourceType = :resourceType)
+              and (:anyType = true
+                   or w.resourceType = :resourceType
+                   or (:matchNullType = true and w.resourceType is null))
               and ((:anyPeriod = true and w.lastFailedAt is null)
                    or (w.lastFailedAt >= :from and w.lastFailedAt <= :to))
             order by w.lastFailedAt asc nulls last, w.id asc
@@ -91,6 +93,7 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
             @Param("maxRetryCount") int maxRetryCount,
             @Param("anyType") boolean anyType,
             @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("matchNullType") boolean matchNullType,
             @Param("anyPeriod") boolean anyPeriod,
             @Param("from") OffsetDateTime from,
             @Param("to") OffsetDateTime to);

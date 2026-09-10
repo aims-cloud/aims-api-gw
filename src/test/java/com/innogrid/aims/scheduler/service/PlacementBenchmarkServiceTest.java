@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -32,6 +34,7 @@ import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
@@ -70,13 +73,14 @@ class PlacementBenchmarkServiceTest {
      * 통전 회계는 <b>판정 규칙</b>이지 엔진 설정이 아니다. 엔진의 가동 판정 노브를 크게 흔들어도 가동 노드
      * 기준선과 증감이 그대로여야, 두 실행의 표를 나란히 놓을 수 있다. 값이 안 바뀌는 것은 우연이 아니라
      * 판의 구조다 — 유휴 5대는 3% 이하, 가동 9대는 20% 이상이라 문턱이 3~20% 어디에 있어도 집합이 같다.
+     * 문턱을 그 범위 <b>밖</b>으로 옮기면 엔진의 배치가 실제로 달라진다 — 그건 이 시험이 보는 것이 아니다.
      */
     @DisplayName("엔진의 가동 판정 문턱을 바꿔도 가동 노드 회계가 움직이지 않는다")
     @Test
     void the_powered_on_accounting_ignores_the_engine_threshold() {
         SchedulerProperties tuned = new SchedulerProperties();
-        tuned.getPower().setActiveCpuPercent(40.0);   // 기본 5.0 의 여덟 배 — 가동 9대 중 몇 대가 이 아래로 떨어진다
-        PlacementBenchmarkService other = serviceWith(tuned);
+        tuned.getPower().setActiveCpuPercent(40.0);   // 기본 5.0 의 여덟 배
+        PlacementBenchmarkService other = harnessWith(tuned);
 
         Cell base = cell(service.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
         Cell moved = cell(other.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
@@ -111,11 +115,30 @@ class PlacementBenchmarkServiceTest {
                 "하네스가 엔진의 믿음까지 대신 정해 주면 모델 가정의 크기를 잴 수 없다");
     }
 
-    private static PlacementBenchmarkService serviceWith(SchedulerProperties props) {
+    /**
+     * 하네스 설정만 바꾸고 <b>엔진은 코드 기본값</b>으로 둔다. 회계 규칙이 엔진 설정을 따르지 않는지
+     * 보려면 엔진을 고정한 채 하네스만 흔들어야 한다 — 엔진까지 함께 흔들면 배치가 달라져 회계 차이인지
+     * 배치 차이인지 구분할 수 없다.
+     */
+    private static PlacementBenchmarkService harnessWith(SchedulerProperties props) {
         return new PlacementBenchmarkService(
                 new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
                         new TemperatureAwareScheduler())),
                 props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props));
+    }
+
+    /**
+     * 설정을 <b>엔진까지</b> 넣어 조립한다. 무인자 생성자로 만들면 엔진이 코드 기본값을 쓰므로,
+     * 노브를 바꿔도 다이제스트만 달라지고 표는 그대로여서 "노브가 표를 움직인다" 를 볼 수 없다.
+     */
+    private static PlacementBenchmarkService serviceWith(SchedulerProperties props) {
+        PowerModel power = new PowerModel(props);
+        ThermalModel thermal = new ThermalModel(props);
+        return new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(power, thermal, new NetworkModel()),
+                        new PowerAwareScheduler(power, thermal, new NetworkModel(), props),
+                        new TemperatureAwareScheduler(thermal))),
+                props, new BenchmarkClusters(), power, thermal);
     }
 
     // ── 응답이 자기가 본 설정을 밝힌다 ────────────────────────
@@ -196,6 +219,160 @@ class PlacementBenchmarkServiceTest {
         assertFalse(other.power().idleFromMeasurement());
         assertNotEquals(mine.configDigest(), other.configDigest(),
                 "모델 형태가 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");
+    }
+
+    /**
+     * W 눈금은 <b>모델 형태</b>를 바꾸는 노브다 — 다이제스트에 들어가지 않으면 눈금이 다른 두 표가
+     * 같은 설정의 표로 보인다. 기본값은 계약 상한보다 커야 판에서 점수가 0 으로 포화하지 않는다.
+     */
+    @DisplayName("W 눈금은 다이제스트 성분이고 기본값은 계약 상한보다 크다")
+    @Test
+    void the_marginal_scale_is_part_of_the_digest_and_clears_the_contract_bound() {
+        SchedulerProperties tuned = new SchedulerProperties();
+        tuned.getPower().setMarginalScaleWatts(700.0);
+        EngineConfigSnapshot mine = service.compare("main", "heavytail").engineConfig();
+        EngineConfigSnapshot other = serviceWith(tuned).compare("main", "heavytail").engineConfig();
+
+        assertEquals(500.0, mine.power().marginalScaleWatts(), 1e-9, "출하 기본값이 바뀌면 판정 기준선도 무효다");
+        assertTrue(mine.power().marginalScaleWatts() >= BenchmarkRules.MAX_REAL_MARGINAL_WATTS,
+                "기본 눈금이 판의 실질 한계 전력 최댓값보다 작으면 점수가 0 으로 포화해 다른 결함이 섞인다");
+        assertEquals(700.0, other.power().marginalScaleWatts(), 1e-9);
+        assertNotEquals(mine.configDigest(), other.configDigest(),
+                "눈금이 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");
+    }
+
+    /**
+     * 다이제스트 성분 <b>전량</b>이 값 변경에 반응하는지 본다.
+     *
+     * <p>canonical 목록은 지역 변수라 반사로 볼 수 없다. 대신 노브 레코드의 성분마다 값을 하나씩
+     * 바꿔 다이제스트가 달라지는지 확인하고, 성분 목록을 반사로 읽어 이 표에 빠진 성분이 없는지
+     * 확인한다. 새 노브를 더하고 canonical 에 넣지 않으면 두 번째 단언이 잡는다.</p>
+     */
+    @DisplayName("전력 노브의 모든 성분이 다이제스트를 움직이고, 표에 빠진 성분이 없다")
+    @Test
+    void every_power_knob_component_moves_the_digest() {
+        Map<String, java.util.function.Consumer<SchedulerProperties.Power>> tweaks = new LinkedHashMap<>();
+        tweaks.put("idleRatio", pw -> pw.setIdleRatio(0.4));
+        tweaks.put("activeCpuPercent", pw -> pw.setActiveCpuPercent(7.5));
+        tweaks.put("curveAlpha", pw -> pw.setCurveAlpha(1.3));
+        tweaks.put("peiWeight", pw -> pw.setPeiWeight(0.31));
+        tweaks.put("wasteWeight", pw -> pw.setWasteWeight(0.26));
+        tweaks.put("marginalWeight", pw -> pw.setMarginalWeight(0.36));
+        tweaks.put("peiNormalizer", pw -> pw.setPeiNormalizer(3.5));
+        tweaks.put("resourceShare", pw -> pw.setResourceShare(0.15));
+        tweaks.put("defaultCapacityWatts", pw -> pw.setDefaultCapacityWatts(650.0));
+        tweaks.put("capacityByNode", pw -> pw.setCapacityByNode(Map.of("bm-01:9100", 700.0)));
+        tweaks.put("idleFromMeasurement", pw -> pw.setIdleFromMeasurement(false));
+        tweaks.put("marginalScaleWatts", pw -> pw.setMarginalScaleWatts(700.0));
+
+        String base = service.compare("main", "heavytail").engineConfig().configDigest();
+        tweaks.forEach((name, tweak) -> {
+            SchedulerProperties props = new SchedulerProperties();
+            tweak.accept(props.getPower());
+            assertNotEquals(base, serviceWith(props).compare("main", "heavytail").engineConfig().configDigest(),
+                    name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
+        });
+
+        Set<String> covered = new java.util.HashSet<>(tweaks.keySet());
+        covered.add("benchmarkPoweredOnCpuPercent");   // 사전 등록 상수라 설정으로 바꿀 수 없다
+        Set<String> components = java.util.Arrays.stream(
+                        PlacementBenchmarkResponse.PowerKnobs.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).collect(Collectors.toSet());
+        assertEquals(components, covered,
+                "노브 성분과 민감도 표가 어긋났다 — 새 노브를 더했으면 canonical 과 이 표에도 넣는다");
+    }
+
+    /**
+     * 눈금 전환의 점수 차가 닫힌 형태와 같다 — 판의 모든 노드·지점·요구 코어에서.
+     *
+     * <p>{@code score_S = 1 − rm/S}, {@code score_pMax = 1 − rm/pMax} 이므로
+     * {@code score_S − score_pMax = rm·(1/pMax − 1/S)} 다. 이 등식이 성립하면 바뀐 것은 분모 하나뿐이고,
+     * {@code rm}(실질 한계 전력)은 그대로라는 뜻이다. 포화 구간은 등식이 성립하지 않으므로 제외하고,
+     * 제외된 수가 0 인 것도 함께 확인한다 — 기본 눈금에서는 판에 포화가 없어야 한다.</p>
+     */
+    @DisplayName("판 전체에서 눈금 전환의 점수 차가 rm·(1/정격 − 1/눈금) 과 같다")
+    @Test
+    void the_score_shift_equals_the_closed_form_on_every_board() {
+        Set<Integer> requiredCores = new TreeSet<>();
+        for (String location : List.of("classpath:scheduler/benchmark-workloads-heavytail.yml",
+                "classpath:scheduler/benchmark-workloads-uniform.yml")) {
+            BenchmarkWorkloads.load(location).classes().forEach(c -> requiredCores.add(c.cores()));
+        }
+        double scale = new SchedulerProperties().getPower().getMarginalScaleWatts();
+        PowerModel scaled = new PowerModel(scaleProps(scale));
+        PowerModel legacy = new PowerModel(scaleProps(0.0));   // 0 이하면 정격 분모(구 방식)
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        int checked = 0;
+        int saturatedByScale = 0;
+        int saturatedByNameplate = 0;
+
+        for (String boardId : clusters.boardIds()) {
+            SyntheticCluster cluster = clusters.get(boardId);
+            for (long t : PlacementBenchmarkService.sweepPoints(cluster)) {
+                for (NodeResource n : PlacementBenchmarkService.nodesAt(cluster, t)) {
+                    double pMax = n.getPowerCapacityWatts();
+                    if (pMax <= 0) continue;
+                    for (int cores : requiredCores) {
+                        double rm = scaled.realMarginalPower(n, cores);
+                        assertEquals(rm, legacy.realMarginalPower(n, cores), 1e-9,
+                                "눈금이 실질 한계 전력(W)까지 바꿨다 — 분모만 바뀌어야 한다");
+                        if (rm >= scale) { saturatedByScale++; continue; }
+                        if (rm >= pMax) { saturatedByNameplate++; continue; }
+                        assertEquals(rm * (1.0 / pMax - 1.0 / scale),
+                                scaled.marginalScore(n, cores) - legacy.marginalScore(n, cores), 1e-9,
+                                boardId + " " + n.getNodeId() + " " + cores + "코어 t=" + t + "s");
+                        checked++;
+                    }
+                }
+            }
+        }
+        assertEquals(0, saturatedByScale,
+                "출하 눈금 " + scale + "W 에서 포화한 지점이 있다 — 판이 실제로 쓰는 요구 코어에서 실질 한계 "
+                        + "전력이 " + BenchmarkRules.MAX_REAL_MARGINAL_WATTS + "W 를 넘지 않아야 한다");
+        assertEquals(0, saturatedByNameplate,
+                "정격 분모 쪽에서 포화한 지점이 있다 — 구 방식과의 비교가 성립하지 않는 자리다");
+        int expected = clusters.boardIds().stream()
+                .mapToInt(id -> PlacementBenchmarkService.nodesAt(clusters.get(id), 0L).size()).sum()
+                * BenchmarkRules.SWEEP_POINTS * requiredCores.size();
+        assertEquals(expected, checked,
+                "훑은 조합 수가 판·지점·노드·요구 코어의 곱과 다르다 — 판이나 코어가 줄면 여기서 잡는다");
+    }
+
+    /**
+     * <b>대조군의 총전력은 눈금과 무관하다</b> — 격차 지표의 분모가 우리 변경에 흔들리지 않는다는 뜻이고,
+     * 그것이 "격차가 줄었다" 를 우리 엔진의 변화로 읽을 수 있는 근거다.
+     *
+     * <p>구조상으로는 자명하다(대조군 어느 것도 한계 전력 점수를 부르지 않는다). 그러나 자명함은
+     * 시험이 아니다 — 나중에 대조군이 우리 점수를 쓰게 되면 이 전제가 조용히 깨지고, 그때 격차의
+     * 해석이 통째로 바뀐다. 눈금을 크게 벌린 두 설정으로 같은 판을 돌려 대조군 열이 한 자리도
+     * 움직이지 않는지 본다 — 대비는 이 PR 의 변경 자체(W 눈금 vs 정격 분모)다.</p>
+     */
+    @DisplayName("눈금을 바꿔도 대조군 총전력은 한 자리도 움직이지 않는다")
+    @Test
+    void the_baselines_do_not_move_with_the_scale() {
+        Cell mine = cell(service.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
+        Cell other = cell(serviceWith(scaleProps(0.0)).compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
+
+        int compared = 0;
+        for (StrategyResult s : mine.strategies()) {
+            if (s.strategyId().equals("power")) continue;   // 유일하게 움직여야 하는 열
+            StrategyResult t = other.strategies().stream()
+                    .filter(x -> x.strategyId().equals(s.strategyId())).findFirst()
+                    .orElseThrow(() -> new AssertionError(s.strategyId() + " 열이 사라졌다"));
+            assertEquals(median(s, BenchmarkRules.GENERATOR_POWER), median(t, BenchmarkRules.GENERATOR_POWER),
+                    s.strategyId() + " 총전력이 눈금을 따라 움직였다 — 격차의 분모가 흔들린다");
+            compared++;
+        }
+        assertTrue(compared >= 5, "대조군 열이 " + compared + " 개뿐이다 — 비교가 성립하지 않는다");
+        assertNotEquals(median(strategy(mine, "power"), BenchmarkRules.GENERATOR_POWER),
+                median(strategy(other, "power"), BenchmarkRules.GENERATOR_POWER),
+                "우리 전력 엔진 열까지 그대로면 분모 교체가 아무 일도 하지 않은 것이다");
+    }
+
+    private static SchedulerProperties scaleProps(double scaleWatts) {
+        SchedulerProperties p = new SchedulerProperties();
+        p.getPower().setMarginalScaleWatts(scaleWatts);
+        return p;
     }
 
     private static PolicySnapshot variant(EngineConfigSnapshot config, String name) {
@@ -1547,6 +1724,50 @@ class PlacementBenchmarkServiceTest {
     }
 
     // ── 유휴 역산 복원 점검표 ─────────────────────────────────
+
+    /**
+     * 판에서 나올 수 있는 <b>실질 한계 전력의 최댓값</b>을 재서 계약 상수에 못 박는다.
+     *
+     * <p>다음 커밋이 한계 전력 점수의 분모를 노드 정격에서 고정 W 눈금 S 로 바꾼다. 그 변경이
+     * "일률 편향 하나만 고친다" 가 되려면 판 안에서 {@code realMarginalPower > S} 인 지점이 새로
+     * 생기지 않아야 한다 — 생기면 점수가 0 으로 포화해 노드를 구별하지 못하는 다른 결함이 섞인다.
+     * 그래서 결과를 보기 전에 최댓값을 재어 {@link BenchmarkRules#MAX_REAL_MARGINAL_WATTS} 로 적고,
+     * 이 시험이 그 수가 실측과 같은지 지킨다. 판·생성식·정격 원장이 바뀌면 여기가 먼저 깨진다.</p>
+     *
+     * <p>요구 코어는 상상하지 않고 <b>실제 워크로드 파일</b>이 쓰는 값만 본다 — 판에 없는 요구량으로
+     * 잰 최댓값은 판의 사실이 아니다.</p>
+     */
+    @DisplayName("여섯 판 전 지점·전 노드의 실질 한계 전력 최댓값이 계약 상수와 같다")
+    @Test
+    void the_maximum_real_marginal_power_on_the_boards_matches_the_contract_constant() {
+        PowerModel powerModel = new PowerModel(new SchedulerProperties());
+        Set<Integer> requiredCores = new TreeSet<>();
+        for (String location : List.of("classpath:scheduler/benchmark-workloads-heavytail.yml",
+                "classpath:scheduler/benchmark-workloads-uniform.yml")) {
+            BenchmarkWorkloads.load(location).classes().forEach(c -> requiredCores.add(c.cores()));
+        }
+        assertFalse(requiredCores.isEmpty(), "워크로드 파일에서 요구 코어를 하나도 읽지 못했다");
+
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        double max = 0.0;
+        String where = null;
+        for (String boardId : clusters.boardIds()) {
+            SyntheticCluster cluster = clusters.get(boardId);
+            for (long t : PlacementBenchmarkService.sweepPoints(cluster)) {
+                for (NodeResource node : PlacementBenchmarkService.nodesAt(cluster, t)) {
+                    for (int cores : requiredCores) {
+                        double w = powerModel.realMarginalPower(node, cores);
+                        if (w > max) {
+                            max = w;
+                            where = boardId + " " + node.getNodeId() + " " + cores + "코어 t=" + t + "s";
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(BenchmarkRules.MAX_REAL_MARGINAL_WATTS, max, 1e-6,
+                "판의 실질 한계 전력 최댓값이 계약 상수와 다르다 — 실측 " + max + " (" + where + ")");
+    }
 
     /**
      * 엔진에게 건네는 노드 스냅샷과 평가자의 오라클이 <b>같은 세계</b>를 본다. 둘이 갈라지면 엔진은 A 세계에서

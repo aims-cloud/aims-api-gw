@@ -94,6 +94,8 @@ class PlacementBenchmarkApiTest {
         assertEquals(12, config.path("configDigest").asString().length());
         assertEquals(3, config.path("engineIds").size());
         assertEquals(3, config.path("policies").size());
+        assertTrue(config.path("power").has("marginalScaleWatts"),
+                "한계 전력 점수의 분모가 응답에 없으면 두 표의 눈금이 같은지 알 수 없다");
         assertTrue(config.path("power").has("benchmarkPoweredOnCpuPercent"),
                 "회계 문턱과 엔진 문턱을 나란히 실어야 둘이 갈렸는지 보인다");
         assertTrue(config.path("thermal").has("inertiaK"));

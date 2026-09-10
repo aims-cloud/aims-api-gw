@@ -209,6 +209,21 @@ public class SchedulerProperties {
          */
         private double activeCpuPercent = 5.0;
 
+        /**
+         * 실질 한계 전력 점수의 분모가 되는 <b>W 눈금</b>.
+         *
+         * <p>깨우기 벌점을 노드 정격으로 나누면 유휴비로 상대화되어, 절대 W 가 다른 노드가 같은
+         * 벌점을 받는다. 고정 W 로 나누면 벌점이 절대 W 로 총점에 들어간다.</p>
+         *
+         * <p>기본 500 W 는 (i) 정격 500 W 노드의 점수를 그대로 두고 (ii) 비교 판 실측 최댓값
+         * 316 W 를 넘어 점수가 0 으로 포화하지 않게 하는 값이다. <b>0 이하면 정격 분모(구 방식)</b>
+         * 로 돌아간다 — 되돌리기는 이 값 하나다.</p>
+         *
+         * <p>가중치와 마찬가지로 <b>바뀔 수 있는 값</b>이다. 바꾸면 배치 결정과 이력에 저장되는
+         * 점수의 눈금이 새 행부터 달라지므로, 비교 응답의 configDigest 에 성분으로 실어 둔다.</p>
+         */
+        private double marginalScaleWatts = 500.0;
+
         // ── 통합 가능성 진단 상한 ──────────────────────────────────
 
         /**
@@ -270,6 +285,8 @@ public class SchedulerProperties {
         public void setCurveAlpha(double v) { this.curveAlpha = v; }
         public double getActiveCpuPercent() { return activeCpuPercent; }
         public void setActiveCpuPercent(double v) { this.activeCpuPercent = v; }
+        public double getMarginalScaleWatts() { return marginalScaleWatts; }
+        public void setMarginalScaleWatts(double v) { this.marginalScaleWatts = v; }
         public int getMaxConsolidationCandidates() { return maxConsolidationCandidates; }
         public void setMaxConsolidationCandidates(int v) { this.maxConsolidationCandidates = v; }
         public int getMaxRelocationsPerNode() { return maxRelocationsPerNode; }

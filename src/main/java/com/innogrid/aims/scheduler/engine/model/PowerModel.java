@@ -216,19 +216,29 @@ public class PowerModel {
 
     /**
      * 실질 한계 전력 점수 (0~1). 배치로 전력이 적게 느는 노드일수록 높다.
-     * 용량 대비로 정규화한다 — 깨우는 비용까지 더하면 동적 범위를 넘을 수 있기 때문이다.
+     * <b>W 눈금</b>으로 정규화한다 — 깨우기 벌점이 유휴비가 아니라 절대 W 로 총점에 들어간다.
      *
-     * <p><b>알려진 한계 — 분모가 상대화라 깨우기 벌점이 유휴비로 고정된다.</b> 빈 노드의 벌점은
+     * <p><b>고친 결함 — 분모가 상대화라 깨우기 벌점이 유휴비로 고정되던 것.</b> 빈 노드의 벌점은
      * {@code wakeupPower / pMax} 인데, 깨우기 비용이 대체값(정격 × 0.3)일 때 이 값은 전 노드 0.3 으로 같아
-     * <b>일률적 통합 편향</b>으로 작동했다. 실측 역산으로 바뀐 뒤에는 선언 유휴비가 낮은 노드(0.06~0.25)의 벌점이
+     * <b>일률적 통합 편향</b>으로 작동했다(아래 눈금 전환 이전의 이야기다). 실측 역산으로 바뀐 뒤에는 선언 유휴비가 낮은 노드(0.06~0.25)의 벌점이
      * 그만큼 줄어 엔진이 빈 노드를 더 자주 깨운다 — 비교 판에서 PABFD 대비 총전력 격차가 <b>벌어진</b> 주원인이다.
      * 또 역산 유휴가 큰 노드는 {@code realMarginalPower > pMax} 가 되어 점수가 0 으로 포화해 노드를 구별하지
-     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화(분모 교체)는 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정할 후속 과제다.</p>
+     * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화가 이 결함의 수정이며, 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정한다.</p>
+     *
+     * <p><b>지금은 W 눈금으로 정규화한다.</b> 분모는 노드 정격이 아니라 설정값 S
+     * ({@code aims.scheduler.power.marginal-scale-watts}, 기본 500 W)다. 같은 절대 W 의 깨우기 비용은
+     * 정격이 얼마든 같은 벌점을 받고, 정격이 큰 노드의 큰 깨우기 비용은 그만큼 크게 보인다.
+     * {@code S ≤ 0} 이면 정격 분모(구 방식)로 돌아간다 — 되돌리기는 이 값 하나다.</p>
+     *
+     * <p>남은 한계: {@code realMarginalPower > S} 이면 점수가 0 으로 포화해 노드를 구별하지 못한다.
+     * 비교 판에서는 실측 최댓값이 {@code BenchmarkRules.MAX_REAL_MARGINAL_WATTS} 라 기본값에서
+     * 발현하지 않지만, 정격이 큰 미계측 노드의 대체값은 S 를 넘을 수 있다 — 그때는 노브로 올린다.</p>
      */
     public double marginalScore(NodeResource node, int requiredCpu) {
         double pMax = node.getPowerCapacityWatts();
         if (pMax <= 0) return 0.5;
-        return 1.0 - Math.min(1.0, realMarginalPower(node, requiredCpu) / pMax);
+        double scale = props.getMarginalScaleWatts() > 0 ? props.getMarginalScaleWatts() : pMax;
+        return 1.0 - Math.min(1.0, realMarginalPower(node, requiredCpu) / scale);
     }
 
     /**

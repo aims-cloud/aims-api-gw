@@ -193,6 +193,67 @@ class ScheduleExecutionServiceTest {
         assertEquals("tester", run.getTriggeredBy());
     }
 
+    // ── 현행 동작 고정 (이 커밋 시점의 결함을 포함한다) ──────────────
+
+    /**
+     * <b>재시도가 소진돼도 실행은 초록불로 끝난다.</b> 지금은 이것이 사실이라 그대로 박아 둔다.
+     *
+     * <p>대상이 0건이면 "할 일이 없어서" 든 "전부 소진돼서" 든 똑같이 완료로 끝난다. 화면에서는
+     * 두 상황을 구분할 수 없고, 스케줄은 영원히 성공한 것처럼 보인다. 뒤 커밋이 이 시험을
+     * 뒤집는 것이 곧 고쳤다는 증거다.</p>
+     */
+    @DisplayName("현행: 재시도가 소진돼도 실행 상태는 COMPLETED 다")
+    @Test
+    void currently_exhausted_run_still_completes() {
+        Workload exhausted = new Workload("소진", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        workloadRepository.save(exhausted);
+
+        ScheduleRun run = executionService.runNow(save(scheduleOf("exhausted-green", true, false)).getId(), "tester");
+
+        assertEquals(0, run.getTargetCount());
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus(),
+                "소진 상태가 실행 결과로 구분되지 않는다 — 이 커밋 시점의 사실");
+    }
+
+    /**
+     * <b>재시도 간격이 없다.</b> 방금 실패한 워크로드도 다음 실행이 곧바로 다시 시도한다.
+     *
+     * <p>5분 주기 스케줄이면 25분에 다섯 번을 전부 태운다. 온도 초과 노드의 냉각 대기가
+     * 10분이고 메트릭 지연 허용도 10분이라, 회복될 수 있는 원인조차 회복 전에 소진된다.</p>
+     */
+    @DisplayName("현행: 방금 실패한 워크로드도 곧바로 다시 시도한다")
+    @Test
+    void currently_a_just_failed_workload_is_retried_immediately() {
+        Workload justFailed = new Workload("방금실패", 1, 1024);
+        justFailed.setResourceType(Workload.ResourceType.VM);
+        justFailed.markFailed("일시적 자원 부족");
+        workloadRepository.save(justFailed);
+
+        ScheduleRun run = executionService.runNow(save(scheduleOf("no-backoff", true, false)).getId(), "tester");
+
+        assertEquals(1, run.getTargetCount(),
+                "실패 직후인데도 대상에 들어온다 — 간격 없이 횟수만 보는 이 커밋 시점의 사실");
+    }
+
+    /**
+     * <b>소진된 워크로드를 되살리는 길은 한 건씩뿐이다.</b> 단건 상태 변경은 이미 되고,
+     * 되살리면 재시도 횟수가 0 으로 지워진다. 없는 것은 여러 건을 한 번에 되살리는 길이다.
+     */
+    @DisplayName("현행: 소진 재개는 단건으로만 되고 재시도 횟수가 지워진다")
+    @Test
+    void currently_only_one_by_one_resume_is_possible() {
+        Workload exhausted = new Workload("소진2", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        Workload saved = workloadRepository.save(exhausted);
+
+        assertEquals(properties.getMaxRetryCount(), saved.resolveRetryCount());
+        assertTrue(saved.transitionTo(Workload.WorkloadStatus.PENDING), "실패 → 대기는 허용된다");
+        assertEquals(0, saved.resolveRetryCount(), "되살리면 재시도 횟수가 지워진다");
+    }
+
     private Schedule scheduleOf(String key, boolean enabled, boolean autoRun) {
         Schedule schedule = new Schedule(key, "테스트 " + key, "0 0 2 * * ?");
         schedule.setResourceType(Workload.ResourceType.VM);

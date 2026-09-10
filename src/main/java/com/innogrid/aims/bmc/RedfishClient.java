@@ -5,11 +5,13 @@ import java.util.Map;
 import javax.net.ssl.SSLContext;
 
 import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
 import org.apache.hc.core5.ssl.SSLContexts;
+import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -133,9 +135,16 @@ public class RedfishClient {
                 .build();
     }
 
+    // BMC 가 느리거나 도달 불가여도 API 스레드가 무한 대기하지 않도록 타임아웃을 강제한다.
+    private static final RequestConfig REQUEST_CONFIG = RequestConfig.custom()
+            .setConnectTimeout(Timeout.ofSeconds(5))            // TCP 연결
+            .setConnectionRequestTimeout(Timeout.ofSeconds(5))  // 커넥션 풀 대기
+            .setResponseTimeout(Timeout.ofSeconds(8))           // 응답(소켓 read)
+            .build();
+
     private HttpClient httpClient() {
         if (verifyTls) {
-            return HttpClients.createDefault();
+            return HttpClients.custom().setDefaultRequestConfig(REQUEST_CONFIG).build();
         }
         try {
             SSLContext sslContext = SSLContexts.custom()
@@ -147,7 +156,10 @@ public class RedfishClient {
                             .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
                             .build())
                     .build();
-            return HttpClients.custom().setConnectionManager(cm).build();
+            return HttpClients.custom()
+                    .setConnectionManager(cm)
+                    .setDefaultRequestConfig(REQUEST_CONFIG)
+                    .build();
         } catch (Exception e) {
             throw new IllegalStateException("Redfish TLS 우회 클라이언트 생성 실패", e);
         }

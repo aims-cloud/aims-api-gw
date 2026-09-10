@@ -34,6 +34,7 @@ import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
@@ -72,13 +73,14 @@ class PlacementBenchmarkServiceTest {
      * 통전 회계는 <b>판정 규칙</b>이지 엔진 설정이 아니다. 엔진의 가동 판정 노브를 크게 흔들어도 가동 노드
      * 기준선과 증감이 그대로여야, 두 실행의 표를 나란히 놓을 수 있다. 값이 안 바뀌는 것은 우연이 아니라
      * 판의 구조다 — 유휴 5대는 3% 이하, 가동 9대는 20% 이상이라 문턱이 3~20% 어디에 있어도 집합이 같다.
+     * 문턱을 그 범위 <b>밖</b>으로 옮기면 엔진의 배치가 실제로 달라진다 — 그건 이 시험이 보는 것이 아니다.
      */
     @DisplayName("엔진의 가동 판정 문턱을 바꿔도 가동 노드 회계가 움직이지 않는다")
     @Test
     void the_powered_on_accounting_ignores_the_engine_threshold() {
         SchedulerProperties tuned = new SchedulerProperties();
-        tuned.getPower().setActiveCpuPercent(40.0);   // 기본 5.0 의 여덟 배 — 가동 9대 중 몇 대가 이 아래로 떨어진다
-        PlacementBenchmarkService other = serviceWith(tuned);
+        tuned.getPower().setActiveCpuPercent(40.0);   // 기본 5.0 의 여덟 배
+        PlacementBenchmarkService other = harnessWith(tuned);
 
         Cell base = cell(service.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
         Cell moved = cell(other.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
@@ -113,11 +115,30 @@ class PlacementBenchmarkServiceTest {
                 "하네스가 엔진의 믿음까지 대신 정해 주면 모델 가정의 크기를 잴 수 없다");
     }
 
-    private static PlacementBenchmarkService serviceWith(SchedulerProperties props) {
+    /**
+     * 하네스 설정만 바꾸고 <b>엔진은 코드 기본값</b>으로 둔다. 회계 규칙이 엔진 설정을 따르지 않는지
+     * 보려면 엔진을 고정한 채 하네스만 흔들어야 한다 — 엔진까지 함께 흔들면 배치가 달라져 회계 차이인지
+     * 배치 차이인지 구분할 수 없다.
+     */
+    private static PlacementBenchmarkService harnessWith(SchedulerProperties props) {
         return new PlacementBenchmarkService(
                 new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
                         new TemperatureAwareScheduler())),
                 props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props));
+    }
+
+    /**
+     * 설정을 <b>엔진까지</b> 넣어 조립한다. 무인자 생성자로 만들면 엔진이 코드 기본값을 쓰므로,
+     * 노브를 바꿔도 다이제스트만 달라지고 표는 그대로여서 "노브가 표를 움직인다" 를 볼 수 없다.
+     */
+    private static PlacementBenchmarkService serviceWith(SchedulerProperties props) {
+        PowerModel power = new PowerModel(props);
+        ThermalModel thermal = new ThermalModel(props);
+        return new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(power, thermal, new NetworkModel()),
+                        new PowerAwareScheduler(power, thermal, new NetworkModel(), props),
+                        new TemperatureAwareScheduler(thermal))),
+                props, new BenchmarkClusters(), power, thermal);
     }
 
     // ── 응답이 자기가 본 설정을 밝힌다 ────────────────────────
@@ -277,11 +298,13 @@ class PlacementBenchmarkServiceTest {
                 "classpath:scheduler/benchmark-workloads-uniform.yml")) {
             BenchmarkWorkloads.load(location).classes().forEach(c -> requiredCores.add(c.cores()));
         }
-        PowerModel scaled = new PowerModel(scaleProps(500.0));
+        double scale = new SchedulerProperties().getPower().getMarginalScaleWatts();
+        PowerModel scaled = new PowerModel(scaleProps(scale));
         PowerModel legacy = new PowerModel(scaleProps(0.0));   // 0 이하면 정격 분모(구 방식)
         BenchmarkClusters clusters = new BenchmarkClusters();
         int checked = 0;
-        int saturated = 0;
+        int saturatedByScale = 0;
+        int saturatedByNameplate = 0;
 
         for (String boardId : clusters.boardIds()) {
             SyntheticCluster cluster = clusters.get(boardId);
@@ -293,8 +316,9 @@ class PlacementBenchmarkServiceTest {
                         double rm = scaled.realMarginalPower(n, cores);
                         assertEquals(rm, legacy.realMarginalPower(n, cores), 1e-9,
                                 "눈금이 실질 한계 전력(W)까지 바꿨다 — 분모만 바뀌어야 한다");
-                        if (rm >= 500.0 || rm >= pMax) { saturated++; continue; }
-                        assertEquals(rm * (1.0 / pMax - 1.0 / 500.0),
+                        if (rm >= scale) { saturatedByScale++; continue; }
+                        if (rm >= pMax) { saturatedByNameplate++; continue; }
+                        assertEquals(rm * (1.0 / pMax - 1.0 / scale),
                                 scaled.marginalScore(n, cores) - legacy.marginalScore(n, cores), 1e-9,
                                 boardId + " " + n.getNodeId() + " " + cores + "코어 t=" + t + "s");
                         checked++;
@@ -302,10 +326,47 @@ class PlacementBenchmarkServiceTest {
                 }
             }
         }
-        assertEquals(0, saturated,
-                "기본 눈금에서 포화한 지점이 있다 — 판이 실제로 쓰는 요구 코어에서는 실질 한계 전력이 "
-                        + BenchmarkRules.MAX_REAL_MARGINAL_WATTS + "W 를 넘지 않아야 한다");
-        assertTrue(checked > 1_500, "확인한 조합이 " + checked + " 뿐이다 — 판을 다 훑지 못했다");
+        assertEquals(0, saturatedByScale,
+                "출하 눈금 " + scale + "W 에서 포화한 지점이 있다 — 판이 실제로 쓰는 요구 코어에서 실질 한계 "
+                        + "전력이 " + BenchmarkRules.MAX_REAL_MARGINAL_WATTS + "W 를 넘지 않아야 한다");
+        assertEquals(0, saturatedByNameplate,
+                "정격 분모 쪽에서 포화한 지점이 있다 — 구 방식과의 비교가 성립하지 않는 자리다");
+        int expected = clusters.boardIds().stream()
+                .mapToInt(id -> PlacementBenchmarkService.nodesAt(clusters.get(id), 0L).size()).sum()
+                * BenchmarkRules.SWEEP_POINTS * requiredCores.size();
+        assertEquals(expected, checked,
+                "훑은 조합 수가 판·지점·노드·요구 코어의 곱과 다르다 — 판이나 코어가 줄면 여기서 잡는다");
+    }
+
+    /**
+     * <b>대조군의 총전력은 눈금과 무관하다</b> — 격차 지표의 분모가 우리 변경에 흔들리지 않는다는 뜻이고,
+     * 그것이 "격차가 줄었다" 를 우리 엔진의 변화로 읽을 수 있는 근거다.
+     *
+     * <p>구조상으로는 자명하다(대조군 어느 것도 한계 전력 점수를 부르지 않는다). 그러나 자명함은
+     * 시험이 아니다 — 나중에 대조군이 우리 점수를 쓰게 되면 이 전제가 조용히 깨지고, 그때 격차의
+     * 해석이 통째로 바뀐다. 눈금을 크게 벌린 두 설정으로 같은 판을 돌려 대조군 열이 한 자리도
+     * 움직이지 않는지 본다 — 대비는 이 PR 의 변경 자체(W 눈금 vs 정격 분모)다.</p>
+     */
+    @DisplayName("눈금을 바꿔도 대조군 총전력은 한 자리도 움직이지 않는다")
+    @Test
+    void the_baselines_do_not_move_with_the_scale() {
+        Cell mine = cell(service.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
+        Cell other = cell(serviceWith(scaleProps(0.0)).compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
+
+        int compared = 0;
+        for (StrategyResult s : mine.strategies()) {
+            if (s.strategyId().equals("power")) continue;   // 유일하게 움직여야 하는 열
+            StrategyResult t = other.strategies().stream()
+                    .filter(x -> x.strategyId().equals(s.strategyId())).findFirst()
+                    .orElseThrow(() -> new AssertionError(s.strategyId() + " 열이 사라졌다"));
+            assertEquals(median(s, BenchmarkRules.GENERATOR_POWER), median(t, BenchmarkRules.GENERATOR_POWER),
+                    s.strategyId() + " 총전력이 눈금을 따라 움직였다 — 격차의 분모가 흔들린다");
+            compared++;
+        }
+        assertTrue(compared >= 5, "대조군 열이 " + compared + " 개뿐이다 — 비교가 성립하지 않는다");
+        assertNotEquals(median(strategy(mine, "power"), BenchmarkRules.GENERATOR_POWER),
+                median(strategy(other, "power"), BenchmarkRules.GENERATOR_POWER),
+                "우리 전력 엔진 열까지 그대로면 분모 교체가 아무 일도 하지 않은 것이다");
     }
 
     private static SchedulerProperties scaleProps(double scaleWatts) {

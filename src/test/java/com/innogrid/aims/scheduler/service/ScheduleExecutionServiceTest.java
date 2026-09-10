@@ -347,6 +347,36 @@ class ScheduleExecutionServiceTest {
         assertEquals(1, schedulingService.resumeExhausted(null, OffsetDateTime.now().minusHours(1), null).size());
     }
 
+    // ── 소진 → 재개 한 바퀴 ────────────────────────────
+
+    /**
+     * <b>반복 실패 → 소진 → 일괄 재개 → 다시 대상</b> 한 바퀴를 그대로 돈다.
+     *
+     * <p>각 단계를 따로 본 시험은 위에 있지만, 이어 붙였을 때 상태가 맞물리는지는 여기서만 보인다.
+     * 특히 재개가 마지막 실패 시각까지 지우지 않으면 되살린 워크로드가 백오프에 다시 걸려,
+     * 사람이 재개를 눌러도 아무 일이 일어나지 않는다.</p>
+     */
+    @DisplayName("반복 실패로 소진되면 실행이 실패로 끝나고, 일괄 재개 뒤 곧바로 다시 대상이 된다")
+    @Test
+    void a_workload_goes_from_exhausted_to_target_again() {
+        Workload workload = new Workload("한바퀴", 1, 1024);
+        workload.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) workload.markFailed("자원 부족");
+        workloadRepository.save(workload);
+
+        Schedule schedule = save(scheduleOf("round-trip", true, false));
+
+        ScheduleRun exhaustedRun = executionService.runNow(schedule.getId(), "tester");
+        assertEquals(0, exhaustedRun.getTargetCount(), "소진된 워크로드가 대상에 남았다");
+        assertEquals(ScheduleRun.RunStatus.FAILED, exhaustedRun.getStatus());
+
+        assertEquals(1, schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null).size());
+
+        ScheduleRun afterResume = executionService.runNow(schedule.getId(), "tester");
+        assertEquals(1, afterResume.getTargetCount(),
+                "재개했는데 대상이 아니다 — 마지막 실패 시각이 남아 백오프가 다시 붙잡았을 수 있다");
+    }
+
     private Schedule scheduleOf(String key, boolean enabled, boolean autoRun) {
         Schedule schedule = new Schedule(key, "테스트 " + key, "0 0 2 * * ?");
         schedule.setResourceType(Workload.ResourceType.VM);

@@ -39,7 +39,7 @@ class DataAccessErrorVisibilityTest {
 
     @MockitoBean NodeResourceCollector collector;
 
-    @DisplayName("데이터베이스 오류는 403 이 아니라 500 과 사유로 나온다")
+    @DisplayName("데이터베이스 오류는 403 이 아니라 500 과 고정 사유로 나온다")
     @Test
     void a_database_failure_surfaces_as_500_with_a_reason() throws Exception {
         when(collector.collect()).thenThrow(new InvalidDataAccessResourceUsageException(
@@ -49,20 +49,20 @@ class DataAccessErrorVisibilityTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value(containsString("데이터베이스 처리에 실패했습니다")))
-                .andExpect(jsonPath("$.message").value(containsString("could not determine data type")));
+                .andExpect(jsonPath("$.message").value(not(containsString("could not determine data type"))));
     }
 
-    @DisplayName("사유에는 드라이버 메시지의 첫 줄만 실어 질의 원문이 새지 않는다")
+    @DisplayName("사유에는 드라이버 메시지의 첫 줄도 싣지 않아 제약명과 질의 원문이 새지 않는다")
     @Test
-    void the_reason_carries_only_the_first_line() throws Exception {
+    void the_reason_hides_driver_details() throws Exception {
         when(collector.collect()).thenThrow(new InvalidDataAccessResourceUsageException(
-                "ERROR: syntax error at or near \"select\"\n  Position: 42\n  Query: select w from workloads w where secret_column = 1"));
+                "ERROR: violates check constraint \"workloads_status_check\"\n  Query: select secret_column from workloads"));
 
         mockMvc.perform(get("/api/v1/scheduler/nodes"))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.message").value(containsString("syntax error")))
+                .andExpect(jsonPath("$.message").value(not(containsString("workloads_status_check"))))
                 .andExpect(jsonPath("$.message").value(not(containsString("secret_column"))))
-                .andExpect(jsonPath("$.message").value(not(containsString("Position"))));
+                .andExpect(jsonPath("$.message").value("데이터베이스 처리에 실패했습니다. 서버 로그를 확인하세요"));
     }
 
     @DisplayName("업무 예외는 그대로 자기 상태 코드로 나온다 — 이 처리기가 가로채지 않는다")

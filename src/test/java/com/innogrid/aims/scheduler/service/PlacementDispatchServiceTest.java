@@ -171,6 +171,26 @@ class PlacementDispatchServiceTest {
         assertNotNull(after.getAssignedNodeId(), "실행 중 실패는 어디서 실패했는지 배정을 남긴다");
     }
 
+    @DisplayName("사유 없는 FAILED 콜백도 실패 횟수와 백오프 시각을 남긴다")
+    @Test
+    void callback_failed_without_message_still_records_retry() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-cbf-empty");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+
+        service.applyResult(d.getId(), "FAILED", null, null);
+
+        Workload after = workloadRepository.findById(w.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertEquals(1, after.resolveRetryCount());
+        assertNotNull(after.getLastFailedAt());
+        assertEquals("실행 실패", after.getSchedulingReason());
+
+        service.applyResult(d.getId(), "FAILED", null, null);
+        assertEquals(1, workloadRepository.findById(w.getId()).orElseThrow().resolveRetryCount(),
+                "같은 결과 재보고는 실패 횟수를 두 번 올리지 않는다");
+    }
+
     @DisplayName("운영자가 상태 변경 API 로 먼저 바꿔 워크로드 전이가 안 되면 디스패치만 갱신하고 그 사실을 message 에 남긴다")
     @Test
     void callback_when_workload_already_moved() {

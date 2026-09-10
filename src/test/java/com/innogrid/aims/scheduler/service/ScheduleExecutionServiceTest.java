@@ -315,6 +315,32 @@ class ScheduleExecutionServiceTest {
         assertEquals(Workload.WorkloadStatus.PENDING, resumed.get(0).getStatus());
     }
 
+    @DisplayName("VM 일괄 재개는 리소스 종류가 없는 기존 행도 VM으로 해석한다")
+    @Test
+    void bulk_resume_vm_includes_legacy_null_resource_type() {
+        Workload legacy = new Workload("소진-기존-VM", 1, 1024);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) legacy.markFailed("자원 부족");
+        workloadRepository.save(legacy);
+
+        List<Workload> resumed = schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null);
+
+        assertEquals(1, resumed.size());
+        assertEquals("소진-기존-VM", resumed.get(0).getName());
+        assertEquals(Workload.WorkloadStatus.PENDING, resumed.get(0).getStatus());
+    }
+
+    @DisplayName("VM이 아닌 종류의 일괄 재개는 리소스 종류가 없는 기존 행을 가져오지 않는다")
+    @Test
+    void bulk_resume_non_vm_excludes_legacy_null_resource_type() {
+        Workload legacy = new Workload("소진-기존-비VM", 1, 1024);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) legacy.markFailed("자원 부족");
+        workloadRepository.save(legacy);
+
+        assertTrue(schedulingService.resumeExhausted(Workload.ResourceType.GPU, null, null).isEmpty());
+        assertEquals(Workload.WorkloadStatus.FAILED,
+                workloadRepository.findById(legacy.getId()).orElseThrow().getStatus());
+    }
+
     @DisplayName("조건 없는 전체 재개는 받지 않는다")
     @Test
     void bulk_resume_requires_a_filter() {

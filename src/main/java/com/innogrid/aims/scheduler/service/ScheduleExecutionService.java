@@ -1,8 +1,11 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,12 +17,14 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
+import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
+import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -81,6 +86,7 @@ public class ScheduleExecutionService {
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
+    private final SchedulingHistoryRepository historyRepository;
     private final WorkloadRepository workloadRepository;
     private final SchedulingPolicyRepository policyRepository;
     private final SchedulingService schedulingService;
@@ -91,6 +97,7 @@ public class ScheduleExecutionService {
 
     public ScheduleExecutionService(ScheduleRepository scheduleRepository,
                                     ScheduleRunRepository runRepository,
+                                    SchedulingHistoryRepository historyRepository,
                                     WorkloadRepository workloadRepository,
                                     SchedulingPolicyRepository policyRepository,
                                     SchedulingService schedulingService,
@@ -100,6 +107,7 @@ public class ScheduleExecutionService {
                                     SchedulerProperties properties) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
+        this.historyRepository = historyRepository;
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.schedulingService = schedulingService;
@@ -396,7 +404,10 @@ public class ScheduleExecutionService {
         if (stuck.isEmpty()) return 0;
 
         List<Long> ids = stuck.stream().map(Schedule::getId).toList();
-        finishStuckRuns(ids);
+        List<ScheduleRun> runs = runRepository.findByScheduleIdInAndStatus(
+                ids, ScheduleRun.RunStatus.RUNNING);
+        recoverStuckWorkloads(runs);
+        finishStuckRuns(runs);
 
         int recovered = 0;
         for (Schedule schedule : stuck) {
@@ -413,11 +424,34 @@ public class ScheduleExecutionService {
         return recovered;
     }
 
-    /** 끝나지 않은 실행 이력을 마무리한다. 실패해도 스케줄 권한 회수는 계속한다. */
-    private void finishStuckRuns(List<Long> scheduleIds) {
+    /** 중단된 실행이 배치한 워크로드의 예약을 풀어 다시 시도할 수 있게 한다. */
+    private void recoverStuckWorkloads(List<ScheduleRun> runs) {
+        if (runs.isEmpty()) return;
         try {
-            List<ScheduleRun> runs = runRepository.findByScheduleIdInAndStatus(
-                    scheduleIds, ScheduleRun.RunStatus.RUNNING);
+            List<Long> runIds = runs.stream().map(ScheduleRun::getId).toList();
+            LinkedHashSet<Long> workloadIds = historyRepository.findByScheduleRunIdIn(runIds).stream()
+                    .filter(history -> Boolean.TRUE.equals(history.getSuccess()))
+                    .map(SchedulingHistory::getWorkloadId)
+                    .filter(Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            List<Workload> recovered = new ArrayList<>();
+            for (Workload workload : workloadRepository.findAllById(workloadIds)) {
+                if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) continue;
+                workload.failDispatch(RECOVERED_MESSAGE);
+                recovered.add(workload);
+            }
+            workloadRepository.saveAll(recovered);
+            if (!recovered.isEmpty()) {
+                log.warn("기동 회수: 중단된 실행에 배치된 워크로드 {}건을 실패로 되돌렸습니다", recovered.size());
+            }
+        } catch (RuntimeException e) {
+            log.error("중단된 실행의 워크로드 복구 실패(실행 이력과 스케줄 권한 회수는 계속한다)", e);
+        }
+    }
+
+    /** 끝나지 않은 실행 이력을 마무리한다. 실패해도 스케줄 권한 회수는 계속한다. */
+    private void finishStuckRuns(List<ScheduleRun> runs) {
+        try {
             runs.forEach(run -> run.finish(ScheduleRun.RunStatus.FAILED, RECOVERED_MESSAGE));
             runRepository.saveAll(runs);
         } catch (RuntimeException e) {

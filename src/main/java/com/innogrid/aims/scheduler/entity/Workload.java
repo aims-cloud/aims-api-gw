@@ -153,11 +153,14 @@ public class Workload {
         this.schedulingReason = reason;
         this.status = WorkloadStatus.SCHEDULED;
         this.scheduledAt = OffsetDateTime.now();
-        this.retryCount = 0;   // 배치에 성공했으므로 실패 누적을 지운다
+        if (this.retryCount == null) this.retryCount = 0;   // 기존 행의 응답 계약(null → 0)은 유지하되 실패 누적은 지우지 않는다
     }
 
     public void markRunning() { this.status = WorkloadStatus.RUNNING; }
-    public void markCompleted() { this.status = WorkloadStatus.COMPLETED; }
+    public void markCompleted() {
+        this.status = WorkloadStatus.COMPLETED;
+        clearRetryAccounting();
+    }
 
     /** 배치에 실패했다. 재시도 횟수를 누적해 무한 재시도를 막는다. */
     public void markFailed(String reason) {
@@ -190,12 +193,17 @@ public class Workload {
     public boolean transitionTo(WorkloadStatus target) {
         if (target == null || !status.canTransitionTo(target)) return false;
         if (status == WorkloadStatus.FAILED && target == WorkloadStatus.PENDING) {
-            this.retryCount = 0;
+            clearRetryAccounting();
             this.schedulingReason = null;
-            this.lastFailedAt = null;   // 되살린 워크로드를 백오프가 다시 붙잡지 않게
         }
         this.status = target;
+        if (target == WorkloadStatus.COMPLETED) clearRetryAccounting();
         return true;
+    }
+
+    private void clearRetryAccounting() {
+        this.retryCount = 0;
+        this.lastFailedAt = null;
     }
 
     /** 값이 없으면 VM 으로 해석한 리소스 종류. */

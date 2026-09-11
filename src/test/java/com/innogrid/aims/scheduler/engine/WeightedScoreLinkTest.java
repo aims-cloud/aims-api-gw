@@ -47,7 +47,24 @@ class WeightedScoreLinkTest {
         double first = by.get("a").totalScore();
         assertTrue(by.values().stream().allMatch(s -> Math.abs(s.totalScore() - first) < EPS), "4대 동일");
         assertTrue(by.values().stream().noneMatch(s -> s.details().containsKey("링크품질")), "기존 응답 키 불변");
+        assertTrue(by.values().stream().noneMatch(s -> s.details().containsKey("링크등록")), "진단 키도 게이트 off 면 없다");
         assertEquals(1.0, by.get("b").networkScore(), EPS);
+    }
+
+    @DisplayName("게이트가 켜지면 모든 후보가 링크등록 키를 갖고 같은 MDC 와 등록 링크는 1 미등록은 0 이다")
+    @Test
+    void gate_on_marks_link_registration_on_every_candidate() {
+        SchedulingResult r = scheduler.schedule(workload("a"), ctx(true));
+        Map<String, NodeScore> by = byMdc(r);
+
+        assertTrue(by.values().stream().allMatch(s -> s.details().containsKey("링크등록")), "키 집합이 노드마다 같다");
+        assertEquals(1.0, by.get("a").details().get("링크등록"), "같은 MDC — 링크를 타지 않으므로 등록과 같이 본다");
+        assertEquals(1.0, by.get("b").details().get("링크등록"), "a-b 등록");
+        assertEquals(1.0, by.get("d").details().get("링크등록"), "DOWN 도 원장에는 있다 — 제외 사유는 C5 가 따로 말한다");
+
+        Map<String, NodeScore> unknown = byMdc(scheduler.schedule(workload("z"), ctx(true)));
+        assertTrue(unknown.values().stream().allMatch(s -> s.details().get("링크등록") == 0.0), "z 와 어떤 쌍도 원장에 없다");
+        assertTrue(unknown.values().stream().allMatch(s -> Math.abs(s.details().get("링크품질") - 0.5) < EPS), "그래서 링크품질은 기본값");
     }
 
     @DisplayName("게이트가 켜지면 같은 MDC UP DEGRADED 순으로 갈리고 DOWN 은 제외된다")
@@ -75,6 +92,7 @@ class WeightedScoreLinkTest {
         Map<String, NodeScore> by = byMdc(r);
 
         assertTrue(by.values().stream().noneMatch(s -> s.details().containsKey("링크품질")));
+        assertTrue(by.values().stream().noneMatch(s -> s.details().containsKey("링크등록")));
         assertTrue(by.get("d").eligible());
         assertEquals(1.0, by.get("c").networkScore(), EPS);
     }

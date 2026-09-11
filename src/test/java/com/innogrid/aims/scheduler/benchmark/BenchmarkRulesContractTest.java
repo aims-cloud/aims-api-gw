@@ -20,6 +20,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
@@ -40,7 +41,8 @@ class BenchmarkRulesContractTest {
             "placementRatePercent", "generatorPowerW", "perWorkloadPowerW",
             "engineBelievedCostW", "activeNodeDelta", "warnZoneNodeCount",
             "c3InterventionCount", "measuredTempStdDev",
-            "unmeasuredPlacementRate", "unmeasuredRateSpreadPercentPoints"));
+            "unmeasuredPlacementRate", "unmeasuredRateSpreadPercentPoints",
+            "gapVsPabfdPercent"));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다")
     @Test
@@ -175,6 +177,10 @@ class BenchmarkRulesContractTest {
      * 주 지표가 어떤 것들인지 목록으로 못 박는다 — 조용히 늘거나 줄면 결론의 근거가 바뀐 것이다.
      * 온도 축이 여기 없는 것은 의도다: 대조군이 열을 점수에 넣지 않아 온도 축에 참가자가 우리뿐이고,
      * 그 사실은 {@link BenchmarkRules#LIMITATION} 이 밝힌다.
+     *
+     * <p>격차 지표가 여기 <b>다섯째</b>로 들어 있는 것도 의도다 — 다음 PR 의 판정이 읽는 값이라 보조로 두면,
+     * 판정에 쓰이는 순간 조용한 승격이 된다. 문헌 기준선을 분모로 삼고 전 전략 행에 같은 식으로 실으며
+     * 좋은 방향이 낮은 쪽이라, 주 지표로 올린다고 우리 열이 유리해지지 않는다.</p>
      */
     @DisplayName("주 지표는 성공률과 전력·가동 계열뿐이고 온도 축에는 없다")
     @Test
@@ -184,7 +190,8 @@ class BenchmarkRulesContractTest {
                 .map(BenchmarkMetric::key).collect(Collectors.toCollection(TreeSet::new));
 
         assertEquals(new TreeSet<>(Set.of(BenchmarkRules.PLACEMENT_RATE, BenchmarkRules.GENERATOR_POWER,
-                BenchmarkRules.PER_WORKLOAD_POWER, BenchmarkRules.ACTIVE_NODE_DELTA)), primary);
+                BenchmarkRules.PER_WORKLOAD_POWER, BenchmarkRules.ACTIVE_NODE_DELTA,
+                BenchmarkRules.GAP_VS_PABFD)), primary);
         assertTrue(BenchmarkRules.LIMITATION.contains("열 지표는 헤드라인이 아니"),
                 "주 지표에서 온도를 내렸으면 응답이 그 사실을 스스로 말해야 한다 — 아니면 조용한 강등이다");
     }
@@ -310,15 +317,16 @@ class BenchmarkRulesContractTest {
 
     /**
      * <b>좋은 방향</b>은 표를 읽는 사람이 승패를 정하는 축이다. 결과를 보고 이것을 뒤집으면 사전 등록이
-     * 아무것도 고정하지 못하므로, 열 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
+     * 아무것도 고정하지 못하므로, 열한 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
      * 셋(성공률·건당 전력·가동 노드 증감)의 방향이 뚫려 있었다.
      */
-    @DisplayName("지표 열 개의 좋은 방향이 전부 고정된다")
+    @DisplayName("지표 열한 개의 좋은 방향이 전부 고정된다")
     @Test
     void every_metric_direction_is_pinned() {
         Map<String, Direction> expected = Map.ofEntries(
                 Map.entry(BenchmarkRules.PLACEMENT_RATE, Direction.HIGHER_IS_BETTER),
                 Map.entry(BenchmarkRules.GENERATOR_POWER, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.GAP_VS_PABFD, Direction.LOWER_IS_BETTER),
                 Map.entry(BenchmarkRules.PER_WORKLOAD_POWER, Direction.LOWER_IS_BETTER),
                 Map.entry(BenchmarkRules.ENGINE_BELIEVED_COST, Direction.CONTEXT_ONLY),
                 Map.entry(BenchmarkRules.ACTIVE_NODE_DELTA, Direction.LOWER_IS_BETTER),
@@ -454,6 +462,145 @@ class BenchmarkRulesContractTest {
                 "통합의 이득은 전원 제어를 가정한 판에서만 보인다 — 그래서 판정 결과는 현 시스템에서 재현되지 않는다");
     }
 
+    // ── 격차 지표의 판정 문턱 ─────────────────────────────────
+
+    /**
+     * 문턱은 <b>결과를 보기 전</b>에만 정할 수 있다. 값 자체보다 값이 있을 수 있는 범위를 잠근다 —
+     * 비율이 1 을 넘으면 어떤 실행도 만족할 수 없는 조건이 되고, 짝 하한이 스윕 지점 수를 넘으면
+     * 판정이 영원히 불가가 되며, 축소 폭이 0 이면 부호만으로 성공이 되어 잡음이 결론이 된다.
+     */
+    @DisplayName("격차 판정 문턱 넷이 결과보다 먼저 고정되고 쓸 수 있는 범위 안에 있다")
+    @Test
+    void the_gap_judgment_thresholds_are_pre_registered() {
+        assertEquals(10, BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS,
+                "짝 하한을 바꾸면 판정 가능·불가의 경계가 움직인다 — 결과를 보고 바꿀 수 없게 여기서 고정한다");
+        assertEquals(2.0, BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, 1e-9);
+        assertEquals(10.0 / 12, BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, 1e-9,
+                "개수가 아니라 비율이다 — 교집합이 하한과 같을 때 전 지점 축소를 요구하는 더 센 기준이 조용히 생기지 않게");
+
+        assertTrue(BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO > 0
+                        && BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO <= 1.0,
+                "0 이면 축소 조건이 없고 1 을 넘으면 만족할 수 있는 실행이 없다");
+        assertTrue(BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP > 0,
+                "0 이면 부호만으로 성공이 되어 잡음이 곧 결론이 된다");
+        assertTrue(BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS > 0
+                        && BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS <= BenchmarkRules.SWEEP_POINTS,
+                "스윕이 낼 수 있는 지점보다 많은 짝을 요구하면 어떤 실행도 영원히 판정 불가다");
+    }
+
+    /**
+     * 상수 넷만으로는 "무엇을 무엇과 견주는가"가 사람의 기억에 남는다. 교집합을 먼저 잡는 것·중앙값을
+     * 같은 집합에서 내는 것·축소의 부호·두 판이 어긋났을 때의 처리를 문장이 들고 있어야 하고, 그 네 조각이
+     * 문장을 다시 써도 빠지지 않게 여기서 못 박는다.
+     */
+    @DisplayName("격차 판정 규칙이 판정 불가·같은 집합·축소의 부호·방향 일치를 문장으로 밝힌다")
+    @Test
+    void the_gap_judgment_rule_states_its_four_moving_parts() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+
+        assertTrue(r.contains("판정 불가"),
+                "짝이 모자란 실행을 실패로 적으면 판을 못 쓴 것과 진 것이 같은 칸에 들어간다: " + r);
+        assertTrue(r.contains("같은 집합"),
+                "두 중앙값을 다른 지점 집합에서 내면 차이가 개선이 아니라 표본 차이일 수 있다: " + r);
+        assertTrue(r.contains("부호 있는 값"),
+                "축소를 절댓값으로 읽으면 더 나빠진 지점이 축소로 세어진다: " + r);
+        assertTrue(r.contains("방향 일치"),
+                "판정판만 좋아진 결과를 어떻게 적을지가 없으면 결과를 보고 정하게 된다: " + r);
+        assertTrue(r.contains("엄격히"),
+                "같은 값을 축소로 세면 아무것도 바뀌지 않은 지점이 성공 쪽에 들어간다: " + r);
+        assertTrue(r.contains(BenchmarkRules.GAP_VS_PABFD),
+                "어느 지표를 읽는지가 문장에 있어야 다음 PR 이 다른 열을 골라 올 수 없다: " + r);
+        // 어휘만 보면 문장을 통째로 갈아치우는 변경이 통과한다. 문턱 셋의 이름과 올림·실패 처리까지
+        // 요구해, 절차의 뼈대가 빠진 문장은 빨간불이 되게 한다.
+        for (String part : List.of("JUDGMENT_MIN_PAIRED_POINTS", "JUDGMENT_MEDIAN_REDUCTION_PP",
+                "JUDGMENT_REDUCED_POINT_RATIO", "ceil", "실패로 기록")) {
+            assertTrue(r.contains(part),
+                    "판정 절차에서 '" + part + "' 가 사라졌다 — 문턱을 어떻게 쓰는지가 문장에 없으면 "
+                            + "다음 PR 이 같은 상수로 다른 절차를 만든다: " + r);
+        }
+        assertFreeOfBannedClaims(r,
+                "격차 판정 규칙 — 금지 조각 순회는 한계 문구와 지표 유효성 조건만 보므로 이 상수는 여기서 따로 본다");
+    }
+
+    /**
+     * 판정은 <b>한 판</b>에서만 한다 — 진실 원본이 둘이 되면 유리한 판을 고르는 자유도가 생긴다.
+     * 그래서 방향 확인판은 판정판과 달라야 하고, 둘 다 실제로 등록된 판이어야 한다. 등록되지 않은 판을
+     * 적어 두면 그 확인은 영원히 수행되지 않는다.
+     */
+    @DisplayName("방향 확인판은 판정판이 아니고 둘 다 등록된 판이다")
+    @Test
+    void the_direction_check_board_differs_from_the_judgment_board() {
+        List<String> boards = new BenchmarkClusters().boardIds();
+
+        assertNotEquals(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.DIRECTION_CHECK_BOARD,
+                "같은 판이면 방향 확인이 판정을 한 번 더 하는 것일 뿐이라 아무것도 배제하지 못한다");
+        assertTrue(boards.contains(BenchmarkRules.JUDGMENT_BOARD), boards.toString());
+        assertTrue(boards.contains(BenchmarkRules.DIRECTION_CHECK_BOARD),
+                "등록되지 않은 판을 방향 확인판으로 적으면 그 확인은 영원히 수행되지 않는다: " + boards);
+        // 값도 못 박는다. "다른 판이고 등록돼 있다"만 보면 결과를 본 뒤 유리한 판으로 갈아 끼워도
+        // 초록불이라, 사전 등록이 절반만 지켜진다. 방향 확인은 정격도 지수도 어긋나지 않은 판에서 한다.
+        assertEquals(BenchmarkClusters.MAIN, BenchmarkRules.DIRECTION_CHECK_BOARD,
+                "방향 확인판이 주 결과판이 아니다 — 두 판 모두 우리 엔진에 기운 판이면 방향 일치는 근거가 아니다");
+    }
+
+    /**
+     * 격차의 <b>분모가 무엇인지</b>가 라벨에 있어야 한다. "총전력 격차"만 적으면 무엇 대비인지가 표에서
+     * 사라지고, 그러면 이 열은 기준 없이 인용된다. 대조군 라벨을 반사로 읽어 맞춰 둔다 — 그쪽 이름이
+     * 바뀌면 여기가 빨간불이 되어 두 이름이 조용히 갈리지 않는다.
+     */
+    @DisplayName("격차 지표의 라벨이 분모가 되는 대조군의 이름을 그대로 담는다")
+    @Test
+    void the_gap_metric_label_names_the_baseline_in_its_denominator() {
+        String baselineLabel = BaselinePlacers.pabfd(new PowerModel(new SchedulerProperties())).label();
+        int paren = baselineLabel.indexOf('(');
+        assertTrue(paren > 0, "대조군 라벨의 형태가 바뀌어 이름 부분을 잘라낼 수 없다: " + baselineLabel);
+        String namePart = baselineLabel.substring(0, paren);
+
+        assertFalse(namePart.isBlank(), "대조군 라벨의 이름 부분이 비었다: " + baselineLabel);
+        assertTrue(metric(BenchmarkRules.GAP_VS_PABFD).label().contains(namePart),
+                "격차 라벨이 대조군 이름 '" + namePart + "' 을 담지 않는다 — 무엇 대비인지 없이 인용된다: "
+                        + metric(BenchmarkRules.GAP_VS_PABFD).label());
+    }
+
+    @DisplayName("배치 건수가 다른 지점에는 격차가 없다")
+    @Test
+    void paired_gap_is_null_when_the_two_rows_placed_different_counts() {
+        assertNull(BenchmarkRules.pairedGapPercent(19, 20, 5000.0, 4500.0),
+                "적게 배치하고 전력을 덜 쓴 것을 격차로 세면 전력이 아니라 배치량을 재게 된다");
+        assertNull(BenchmarkRules.pairedGapPercent(21, 20, 5000.0, 4500.0));
+        assertNotNull(BenchmarkRules.pairedGapPercent(20, 20, 5000.0, 4500.0),
+                "건수가 같은 지점까지 버리면 이 지표는 값을 낼 자리가 없다");
+    }
+
+    @DisplayName("기준 전략의 전력이 0 이하면 격차를 내지 않는다")
+    @Test
+    void paired_gap_is_null_when_the_baseline_power_is_not_positive() {
+        assertNull(BenchmarkRules.pairedGapPercent(20, 20, 5000.0, 0.0),
+                "0 으로 나누면 무한대가 나오고, 무한대는 반올림에서 0 이 되어 '가장 좋은 값'으로 읽힌다");
+        assertNull(BenchmarkRules.pairedGapPercent(20, 20, 5000.0, -1.0),
+                "음수 전력은 생성식이 낼 수 없는 값이라 비의 부호가 뒤집힌다");
+    }
+
+    @DisplayName("격차는 기준 전략의 전력을 분모로 한 백분율이다")
+    @Test
+    void paired_gap_divides_by_the_baseline_power() {
+        assertEquals(10.0, BenchmarkRules.pairedGapPercent(20, 20, 110.0, 100.0), 1e-9);
+        assertEquals(100.0, BenchmarkRules.pairedGapPercent(20, 20, 200.0, 100.0), 1e-9,
+                "분모를 이 행의 전력으로 바꾸면 50 이 나온다 — 분모는 기준 전략이다");
+        assertEquals(0.0, BenchmarkRules.pairedGapPercent(20, 20, 100.0, 100.0), 1e-9,
+                "같은 전력이면 격차는 0 이다");
+    }
+
+    /** 좋은 방향이 낮은 쪽인 지표라, 기준보다 덜 쓴 행은 <b>음수</b>여야 한다. 절댓값을 실으면 개선이 악화로 읽힌다. */
+    @DisplayName("기준보다 전력을 덜 쓴 행의 격차는 음수다")
+    @Test
+    void paired_gap_is_negative_when_the_row_uses_less_power_than_the_baseline() {
+        assertEquals(-10.0, BenchmarkRules.pairedGapPercent(20, 20, 90.0, 100.0), 1e-9,
+                "부호를 뒤집으면 개선한 전략이 나쁜 쪽에 실린다");
+        assertTrue(BenchmarkRules.pairedGapPercent(20, 20, 90.0, 100.0) < 0);
+        assertTrue(BenchmarkRules.pairedGapPercent(20, 20, 110.0, 100.0) > 0);
+    }
+
     /**
      * 지수를 1 보다 크게 둔 판이 <b>실서버 근사가 아니라</b>는 사실은 응답이 스스로 말해야 한다.
      * 말하지 않으면 "볼록 판에서 격차가 벌어졌다"가 곧 "실서버에서 벌어진다"로 읽힌다.
@@ -576,6 +723,29 @@ class BenchmarkRulesContractTest {
                     "판에 필드 " + component.getName() + " 이 늘었는데 설명이 그대로다 — "
                             + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
         }
+    }
+
+    /**
+     * 지표 값 한 칸의 필드 이름도 설명에 전부 있어야 한다 — 판의 필드와 같은 이유다.
+     *
+     * <p>지점별 값(points)처럼 <b>뜻을 모르면 잘못 읽히는</b> 열이 늘었을 때, 응답에만 있고 문서에 없으면
+     * 읽는 사람은 그 배열의 인덱스가 무엇인지·null 이 무엇을 뜻하는지 알 수 없다.</p>
+     */
+    @DisplayName("지표 값의 필드 이름이 하나도 빠짐없이 배치 비교 설명에 등장한다")
+    @Test
+    void every_metric_value_field_is_named_in_the_swagger_description() throws Exception {
+        String description = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class)
+                .description();
+
+        for (RecordComponent component : MetricValue.class.getRecordComponents()) {
+            assertTrue(description.contains(component.getName()),
+                    "지표 값에 필드 " + component.getName() + " 이 늘었는데 설명이 그대로다 — "
+                            + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
+        }
+        assertTrue(description.contains(BenchmarkRules.GAP_VS_PABFD),
+                "격차 지표의 키가 설명에 없다 — 판정에 쓸 열이라 뜻이 문서에 있어야 한다");
     }
 
     /** 금지 조각이 어디에도 없는지 — 검사할 조각의 출처를 시험마다 다시 적지 않는다. */

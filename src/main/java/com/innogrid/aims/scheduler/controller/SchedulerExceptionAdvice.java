@@ -7,6 +7,9 @@ import com.innogrid.aims.common.dto.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,6 +47,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  */
 @RestControllerAdvice(basePackages = "com.innogrid.aims.scheduler")
 public class SchedulerExceptionAdvice {
+
+    private static final Logger log = LoggerFactory.getLogger(SchedulerExceptionAdvice.class);
 
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ApiResponse<Void>> handleParameterValidation(
@@ -119,6 +124,28 @@ public class SchedulerExceptionAdvice {
     public ResponseEntity<ApiResponse<Void>> handleMissingParameter(MissingServletRequestParameterException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ex.getParameterName() + "은(는) 필수입니다"));
+    }
+
+    /**
+     * 데이터베이스 처리 실패 — <b>403 으로 위장되지 않게</b> 스케줄러가 직접 잡는다.
+     *
+     * <p>잡는 곳이 없으면 예외가 오류 처리 경로로 넘어가는데, 그 경로가 인증을 요구해
+     * 호출자에게는 <b>403</b> 으로 보인다. 파라미터를 빠뜨린 것인지 권한이 없는 것인지
+     * 데이터베이스가 거절한 것인지 구분할 수 없어, 원인을 알려면 서버 로그를 봐야 한다.</p>
+     *
+     * <p>실제로 겪은 예: 질의의 널 파라미터를 PostgreSQL 이 타입 추론하지 못해 거절했는데
+     * 응답은 403 이었다. 시험 환경은 H2 라 같은 질의가 통과해, 배포 검증이 유일한 방어선인데
+     * 그 방어선이 보는 신호가 권한 오류처럼 생긴 것이다. 500 과 사유를 함께 주면 배포 검증에서
+     * 바로 데이터베이스 문제로 좁혀진다.</p>
+     *
+     * <p>드라이버 메시지는 첫 줄에도 제약명·테이블명 같은 내부 구조가 들어갈 수 있으므로 응답에는
+     * 싣지 않는다. 전체 원인은 서버 로그에만 남긴다.</p>
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataAccess(DataAccessException ex) {
+        log.error("스케줄러 데이터베이스 처리 실패", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("데이터베이스 처리에 실패했습니다. 서버 로그를 확인하세요"));
     }
 
     /** 받은 값을 사유에 실을 수 있는 길이로 줄인다. 다값 파라미터는 배열이라 그대로 찍으면 클래스 이름이 나온다. */

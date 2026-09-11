@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmMetricCatalogResponse;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmResourceType;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 
 /**
@@ -26,7 +27,7 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector
  */
 public enum AlarmMetric {
 
-    CPU_USED_PERCENT(Type.CPU, "CPU Used", "%", Set.of("node", "vm"), Set.of("cpu_usage")) {
+    CPU_USED_PERCENT(Type.CPU, "CPU Used", "%", Set.of(AlarmResourceType.NODE, AlarmResourceType.VM), Set.of("cpu_usage")) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "100 - (avg by (" + groupBy + ") (rate(node_cpu_seconds_total"
@@ -34,7 +35,7 @@ public enum AlarmMetric {
         }
     },
 
-    MEMORY_USED_PERCENT(Type.MEMORY, "Memory Used", "%", Set.of("node", "vm"), Set.of("mem_usage")) {
+    MEMORY_USED_PERCENT(Type.MEMORY, "Memory Used", "%", Set.of(AlarmResourceType.NODE, AlarmResourceType.VM), Set.of("mem_usage")) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "(1 - avg by (" + groupBy + ") (node_memory_MemAvailable_bytes" + braces(null, matchers)
@@ -42,14 +43,14 @@ public enum AlarmMetric {
         }
     },
 
-    MEMORY_AVAILABLE_GB(Type.MEMORY, "Memory Available", "GB", Set.of("node", "vm"), Set.of()) {
+    MEMORY_AVAILABLE_GB(Type.MEMORY, "Memory Available", "GB", Set.of(AlarmResourceType.NODE, AlarmResourceType.VM), Set.of()) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "avg by (" + groupBy + ") (node_memory_MemAvailable_bytes" + braces(null, matchers) + ") / " + GB;
         }
     },
 
-    FS_USED_PERCENT(Type.FILE_SYSTEM, "FS Used", "%", Set.of("node", "vm"), Set.of("disk_usage")) {
+    FS_USED_PERCENT(Type.FILE_SYSTEM, "FS Used", "%", Set.of(AlarmResourceType.NODE, AlarmResourceType.VM), Set.of("disk_usage")) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "(1 - sum by (" + groupBy + ") (node_filesystem_avail_bytes" + braces(FS_FILTER, matchers)
@@ -57,7 +58,7 @@ public enum AlarmMetric {
         }
     },
 
-    INODE_USED_PERCENT(Type.FILE_SYSTEM, "Inode Used", "%", Set.of("node", "vm"), Set.of()) {
+    INODE_USED_PERCENT(Type.FILE_SYSTEM, "Inode Used", "%", Set.of(AlarmResourceType.NODE, AlarmResourceType.VM), Set.of()) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "(1 - sum by (" + groupBy + ") (node_filesystem_files_free" + braces(FS_FILTER, matchers)
@@ -65,14 +66,14 @@ public enum AlarmMetric {
         }
     },
 
-    GPU_UTIL(Type.GPU, "GPU Util", "%", Set.of("node", "gpu"), Set.of()) {
+    GPU_UTIL(Type.GPU, "GPU Util", "%", Set.of(AlarmResourceType.NODE, AlarmResourceType.GPU), Set.of()) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "avg by (" + groupBy + ") (DCGM_FI_DEV_GPU_UTIL" + braces(null, matchers) + ")";
         }
     },
 
-    GPU_MEMORY_USED_PERCENT(Type.GPU, "GPU Mem", "%", Set.of("node", "gpu"), Set.of()) {
+    GPU_MEMORY_USED_PERCENT(Type.GPU, "GPU Mem", "%", Set.of(AlarmResourceType.NODE, AlarmResourceType.GPU), Set.of()) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             String used = "sum by (" + groupBy + ") (DCGM_FI_DEV_FB_USED" + braces(null, matchers) + ")";
@@ -81,7 +82,7 @@ public enum AlarmMetric {
         }
     },
 
-    GPU_TEMP(Type.GPU, "GPU Temperature", "°C", Set.of("node", "gpu"), Set.of("gpu_temperature")) {
+    GPU_TEMP(Type.GPU, "GPU Temperature", "°C", Set.of(AlarmResourceType.NODE, AlarmResourceType.GPU), Set.of("gpu_temperature")) {
         @Override
         public String promql(String groupBy, String matchers, String window) {
             return "max by (" + groupBy + ") (DCGM_FI_DEV_GPU_TEMP" + braces(null, matchers) + ")";
@@ -103,9 +104,6 @@ public enum AlarmMetric {
         }
     }
 
-    /** 정책 대상 자원 유형 코드 — 마법사 RESOURCE_TYPE_OPTIONS 와 동일 */
-    public static final Set<String> RESOURCE_TYPES = Set.of("node", "vm", "gpu");
-
     /** 자원 탐색기 File System 패널과 같은 파일시스템 제외 필터 */
     static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
     static final long GB = 1L << 30;
@@ -113,10 +111,10 @@ public enum AlarmMetric {
     private final Type type;
     private final String displayName;
     private final String unit;
-    private final Set<String> resourceTypes;
+    private final Set<AlarmResourceType> resourceTypes;
     private final Set<String> aliases;
 
-    AlarmMetric(Type type, String displayName, String unit, Set<String> resourceTypes, Set<String> aliases) {
+    AlarmMetric(Type type, String displayName, String unit, Set<AlarmResourceType> resourceTypes, Set<String> aliases) {
         this.type = type;
         this.displayName = displayName;
         this.unit = unit;
@@ -136,9 +134,9 @@ public enum AlarmMetric {
         return unit;
     }
 
-    /** 이 메트릭을 해당 자원 유형(node|vm|gpu)의 정책에 쓸 수 있는가 */
+    /** 이 메트릭을 해당 자원 유형 코드({@link AlarmResourceType})의 정책에 쓸 수 있는가. 모르는 유형·null 은 false */
     public boolean appliesTo(String resourceType) {
-        return resourceType != null && resourceTypes.contains(resourceType.toLowerCase(Locale.ROOT));
+        return AlarmResourceType.fromCode(resourceType).map(resourceTypes::contains).orElse(false);
     }
 
     /**

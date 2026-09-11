@@ -1,6 +1,6 @@
 # 10. 알람 API 프론트 계약 — 관측 > 알람 (발생 이력 · 정책)
 
-- 작성일: 2026-09-08
+- 작성일: 2026-09-08 (최신화 2026-09-09)
 - 대상: 프론트 `src/features/alarm/api/{alarmApi,alarmMapper,alarmQueries}.ts` (specs/010-alarm-management)
 - 기준 코드: 백엔드 `feat/event-alarm` — `AlarmHistoryController`, `AlarmPolicyController`
 - 관련 문서: docs/09 알람 설계(D부 구현 현황), docs/06 자원 탐색기 트리 설계(역할·자원 영역 식별자)
@@ -21,13 +21,14 @@
 | 8 | 정책 목록 필터 `roleId`·`deploymentId`·`keyword` | `roleName`, `areaId`, `resourceType`, `resourceId`, `level`, `keyword`(정책명) | 필터 UI 에 있는 만큼 전달 |
 | 9 | 조직 트리 3단(DIFF-023) | 1단 — 조직 노드(`orgId` = 조직명 문자열, `children` 빈 배열) → `members[{userId, name}]`. 조직 없는 사용자는 `미지정` | `mapCandidates` 의 1단 렌더 유지. `children` 필드가 응답에 추가됐지만 비어 있다 |
 | 10 | 확인 후 재확인 시 처리 없음 | 이미 확인된 알람에 `POST …/acknowledge` → **409** | 409 는 "이미 확인됨"으로 안내 후 확인 내역 재조회 |
-| 11 | 이력 행 `deliveryCount` 클릭 → 전송 이력 조회 | `GET …/deliveries`, `…/message` 는 **501**(전송 원장 미구현). `deliveryCount` 는 항상 0 | 501 은 "준비 중" 상태로 표시. 전송 구현 시 스키마 확정 후 재공지 |
+| 11 | 이력 행 `deliveryCount` 클릭 → 전송 이력 조회 | `GET …/deliveries`, `…/message` **구현 완료(2026-09-09)**. `deliveryCount` 는 전송 행 수(대상 × 채널) | `AlarmDeliveryResponse`·`AlarmMessageDetailResponse` 를 §3.4 스키마로 재작성. 채널마다 `deliveryId` 가 다르고 `channel` 파라미터는 선택 |
+| 12 | 정책 목록에 알림 방식 없음(DIFF-013) | 목록 응답에 `channels[]`(`EMAIL`\|`SMS`) 추가(2026-09-09) | 목록 열에 바로 표시 가능. 상세 재조회 불필요 |
 
 ## 2. 공통
 
 - 기본 경로 `/api/v1/monitoring/alarms`, 인증 Bearer JWT.
 - 응답 래퍼 `ApiResponse<T> { success, data, message }`. 목록은 `data` 가 `PageResponse<T> { items, page, size, totalElements, totalPages }`, **page 는 1부터**, size 1~100.
-- enum 은 전부 대문자 문자열: `level` `INFO|WARNING|CRITICAL`, `operator` `GT|GTE|LT|LTE|EQ`, `channel` `EMAIL|SMS`, `targetType` `INDIVIDUAL|ORGANIZATION`, `targetScope` `ALL|INDIVIDUAL`, `alarmType` `METRIC|LOG`, `source` `POLICY|SYSTEM|EXTERNAL|EVENT`, `status` `OPEN|ACKNOWLEDGED|RESOLVED`, `areaKind` `MDC|NAMESPACE`, `searchField` `ALL|RESOURCE_NAME|POLICY_NAME`.
+- enum 은 전부 대문자 문자열: `level` `INFO|WARNING|CRITICAL`, `operator` `GT|GTE|LT|LTE|EQ`, `channel` `EMAIL|SMS`, `targetType` `INDIVIDUAL|ORGANIZATION`, `targetScope` `ALL|INDIVIDUAL`, `alarmType` `METRIC|LOG`, `source` `POLICY|SYSTEM|EXTERNAL|EVENT`, `status` `OPEN|ACKNOWLEDGED|RESOLVED`, `areaKind` `MDC|NAMESPACE`, `searchField` `ALL|RESOURCE_NAME|POLICY_NAME`, 전송 결과 `SUCCESS|SENDING|FAILED`.
 - 정렬 `sort={필드},{asc|desc}`. 허용 필드 밖이면 400(메시지에 가능한 값 나열).
 - 오류 상태: 400 검증 실패(메시지 한글), 404 없음 또는 **역할 스코프 밖**(존재를 드러내지 않음), 409 이미 확인된 알람, 501 미구현.
 - 역할 스코프: 이력·정책 모두 **토큰에 있는 역할**의 행만 보인다. 이력은 역할 없는 행(시스템·외부 알람)도 보인다. `roleName` 필터에 토큰에 없는 역할을 주면 빈 페이지.
@@ -70,7 +71,7 @@
 | `roleName` | string | |
 | `areaId`, `areaKind`, `areaName` | string, enum, string | 표시는 `areaName`(MDC 는 mdcId, Namespace 는 Tumblebug 표시명) |
 | `policyId`, `policyName` | long, string | |
-| `deliveryCount` | long | 전송 원장 전까지 0 |
+| `deliveryCount` | long | 전송 행 수(대상 × 채널). 발생 직후 전송 계획과 함께 올라간다 |
 | `acknowledged` | boolean | |
 | `inhibited` | boolean | 상위 알람에 눌려 전송 억제된 행(억제 구현 전까지 false) |
 
@@ -87,7 +88,35 @@
 
 ### 3.4 `GET /histories/{alarmId}/deliveries`, `GET …/deliveries/{deliveryId}/message?channel=`
 
-- **501**. 전송 원장·발송기 구현 후 스키마 확정. 현재 프론트 `AlarmDeliveryResponse`·`AlarmMessageDetailResponse` 는 옛 Swagger 기준이며, 구현 시 수신자별 주소·결과·전송 일시·실패 사유(DIFF-009 지적 사항)를 포함하는 방향으로 다시 낸다.
+전송 원장(`alarm_deliveries`)은 **알람 × 전송 대상(개인/조직) × 채널** 이 1행이라 채널마다 `deliveryId` 가 다르다. 전송 이력은 대상 단위로 묶어 내려주고, 메시지 상세는 채널 행의 `deliveryId` 로 연다. 전송은 **발생** 전이 때만 만들어지고(해소·확인은 전송 없음) 수신자 행은 `SENDING` 으로 시작해 발송 결과로 `SUCCESS`/`FAILED` 가 된다. 스코프 밖·없는 알람은 404, 전송이 없는 알람은 빈 배열.
+
+`GET /histories/{alarmId}/deliveries` → `AlarmDeliveryResponse[]`
+
+| 필드 | 형식 | 비고 |
+|---|---|---|
+| `targetType`, `targetId`, `targetName` | enum, string, string | 개인 = users.id·이름(삭제됐으면 `(삭제된 사용자)`), 조직 = 조직명 |
+| `channels[]` | `ChannelSummary[]` | 정책 채널 순서(EMAIL, SMS) |
+| `channels[].deliveryId` | long | 메시지 상세용 |
+| `channels[].channel` | `EMAIL`\|`SMS` | |
+| `channels[].status` | `SUCCESS`\|`SENDING`\|`FAILED` | **개인만**(조직은 null) |
+| `channels[].successCount`, `sendingCount`, `failedCount` | long | **조직만**(개인은 null) |
+| `channels[].recipientCount` | int | 전개된 수신자 수(개인은 1) |
+| `channels[].sentAt` | date-time | 수신자 중 마지막 시도 시각. 아직 시도 전이면 null |
+
+`GET /histories/{alarmId}/deliveries/{deliveryId}/message?channel=` → `AlarmMessageDetailResponse`
+
+- `channel` 은 **선택**. 주면 전송 행의 채널과 같아야 하고 다르면 400. `deliveryId` 가 이 알람의 것이 아니면 404.
+
+| 필드 | 형식 | 비고 |
+|---|---|---|
+| `policyName`, `resourceName` | string | 알람 이력 스냅샷 |
+| `channel`, `targetType`, `targetName` | | |
+| `totalRecipientCount` | int | 조직만(개인은 null) |
+| `resultSummary { successCount, failedCount }` | | 조직만(개인은 null). SENDING 은 두 수에 들어가지 않는다 |
+| `subject`, `messageBody` | string | 발송 시점 치환 스냅샷. SMS 는 본문만 쓴다 |
+| `recipients[] { name, id, address, status, failReason, sentAt }` | | `id` 는 users.id 문자열(삭제된 사용자 null), `address` 는 EMAIL 이메일 / SMS 전화번호(현재 항상 null) |
+
+`failReason` 값: `연락처 없음`(SMS — `users.phone` 도입 전 전부), `삭제된 사용자`, `비활성 사용자`, `IllegalStateException: 메일 서버 미구성 (SPRING_MAIL_HOST)`, 그 외 메일 서버 오류(`MailSendException: …`). 재시도는 수신자당 최대 3회이며 사유는 마지막 시도 기준.
 
 ## 4. 정책
 
@@ -101,7 +130,7 @@
 | `keyword` | string | 정책명 부분 일치 |
 | `page`, `size`, `sort` | | `sort` 허용: `policyName`, `roleName`, `areaId`, `resourceType`, `level`, `createdBy`, `createdAt`(기본 desc). `targetResourceCount` 는 정렬 불가(계산값) |
 
-응답 항목 `AlarmPolicyListItemResponse`: `policyId, policyName, roleName, areaId, resourceType, targetResourceCount, criterion, level, createdBy(표시명), createdAt`. 알림 방식(`channels`)은 목록에 없고 상세에만(DIFF-013 유지).
+응답 항목 `AlarmPolicyListItemResponse`: `policyId, policyName, roleName, areaId, resourceType, targetResourceCount, criterion, level, createdBy(표시명), createdAt`. 알림 방식 `channels[]`(`EMAIL`\|`SMS`)도 목록 응답에 포함된다(2026-09-09 추가 — DIFF-013 해소).
 
 ### 4.2 `GET /policies/{policyId}`
 
@@ -212,11 +241,11 @@ body 없음. `"{이름} (복제)"` 로 새 정책, 복제한 사용자가 생성
 
 | # | 항목 | 백엔드 입장 |
 |---|---|---|
-| 1 | fixture 의 `CPU Utilization` 메트릭 | `CPU Used(%)` 와 구별되는 정의가 없어 카탈로그에서 제외. 필요하면 정의(예: load 기반)를 알려 주면 추가 |
+| 1 | fixture 의 `CPU Utilization` 메트릭 | **확정: 카탈로그 제외.** `CPU Used(%)` 와 구별되는 정의가 없다. fixture 에서 지우면 되고, 다른 정의(load 기반 등)가 필요해지면 그때 코드 추가 |
 | 2 | VM 정책의 GPU 메트릭 | VM↔GPU 할당 원장이 없어 `vm` 에는 GPU 유형이 오지 않는다. 자원 탐색기 VM GPU 패널도 501 |
-| 3 | 이력 신규 필드 `source`·`status`·`inhibited`·`areaName` | 컬럼 추가 여부는 화면 판단. `areaName` 은 배포영역 열에 쓰는 것을 권장 |
-| 4 | 정책 목록에 `channels` 열 | 필요하면 목록 응답에 추가 가능(현재는 상세만) |
+| 3 | 이력 신규 필드 `source`·`status`·`inhibited`·`areaName` | **백엔드 작업 없음.** 필드는 이미 응답에 있으므로 컬럼 추가 여부는 화면 판단. `areaName` 은 배포영역 열에 쓰는 것을 권장 |
+| 4 | 정책 목록에 `channels` 열 | **완료(2026-09-09).** 목록 응답에 `channels[]` 추가(§1 #12, §4.1) |
 | 5 | 확인(acknowledge) 409 처리 | "이미 확인됨" 안내 후 확인 내역 재조회 |
-| 6 | 미인증 응답 코드 | 현재 403(Spring 기본). 401 로 바꾸면 apiClient 의 토큰 갱신 분기가 명확해진다 — 백엔드가 변경 검토 |
-| 7 | 전송 이력·메시지 상세 스키마 | 전송 원장 구현 시 재공지. 수신자별 주소·결과·일시·실패 사유 포함 예정 |
+| 6 | 미인증 응답 코드 | 현재 403(Spring 기본). 401 로 바꾸면 apiClient 의 토큰 갱신 분기가 명확해진다 — **알람 범위 밖**(전역 Security 엔트리포인트). 인증·RBAC 공통 작업으로 이관 |
+| 7 | 전송 이력·메시지 상세 스키마 | **완료(2026-09-09).** §3.4 로 확정 — 수신자별 주소·결과·일시·실패 사유 포함. `channel` 파라미터는 선택으로 완화 |
 | 8 | 조직 트리 3단 | 조직 원장(organizations)이 계정 도메인에 생기면 `children` 을 채운다. 그때까지 1단 |

@@ -24,6 +24,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-aspectj")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-security")
+	// 알람 Email 전송 (docs/09 A.5.4) — 메일 서버는 spring.mail.* 환경 변수로만 넣는다
+	implementation("org.springframework.boot:spring-boot-starter-mail")
 	runtimeOnly("org.postgresql:postgresql")
 	runtimeOnly("com.h2database:h2")
 	// H2 웹 콘솔 (Boot 4 에서 별도 모듈로 분리) — 로컬 프로파일에서만 spring.h2.console.enabled 로 활성화

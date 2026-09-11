@@ -188,10 +188,10 @@ public class PlacementDispatchService {
         workloadRepository.findById(dispatch.getWorkloadId()).ifPresent(w -> {
             if (w.getStatus() == workloadTarget) return;
             if (w.transitionTo(workloadTarget)) {
-                if (workloadTarget == Workload.WorkloadStatus.FAILED && message != null) {
-                    // 실패 사유를 남긴다(transitionTo 는 사유를 건드리지 않는다). markFailed 는 재시도 횟수도 1 올린다 —
-                    // 실행 실패가 배치 재시도 상한을 함께 쓰는 것은 의도다(반복 실패 워크로드가 영영 재배치되지 않게). 사유 길이는 500 안.
-                    String reason = "실행 실패: " + message;
+                if (workloadTarget == Workload.WorkloadStatus.FAILED) {
+                    // message 는 실행 계층 계약에서 선택값이다. 사유가 없어도 실패 회계와 백오프 시각은 반드시 남긴다.
+                    // 실행 실패가 배치 재시도 상한을 함께 쓰는 것은 의도다(반복 실패 워크로드가 영영 재배치되지 않게).
+                    String reason = message == null || message.isBlank() ? "실행 실패" : "실행 실패: " + message;
                     w.markFailed(reason.length() > PlacementDispatch.MESSAGE_MAX ? reason.substring(0, PlacementDispatch.MESSAGE_MAX) : reason);
                 }
                 workloadRepository.save(w);

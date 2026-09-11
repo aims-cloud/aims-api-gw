@@ -15,16 +15,23 @@ import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgeRequest;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgementResponse;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmDeliveryResponse;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmDeliveryStatus;
+import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmMessageDetailResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryListItemResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryStatus;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistorySearchField;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmSource;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmChannel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmTargetType;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.role.RoleAreaListItemResponse.AreaKind;
+import com.innogrid.aims.monitoring.entity.AlarmDelivery;
 import com.innogrid.aims.monitoring.entity.AlarmHistory;
 import com.innogrid.aims.monitoring.log.PortalLogContext;
 import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
 import com.innogrid.aims.monitoring.log.PortalLogService;
+import com.innogrid.aims.monitoring.repository.AlarmDeliveryRepository;
 import com.innogrid.aims.monitoring.repository.AlarmHistoryRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
@@ -59,6 +66,8 @@ class AlarmHistoryServiceTest {
 
     @Autowired
     AlarmHistoryRepository repository;
+    @Autowired
+    AlarmDeliveryRepository deliveryRepository;
     @MockitoBean
     AuthService authService;
     @MockitoBean
@@ -75,8 +84,8 @@ class AlarmHistoryServiceTest {
     @BeforeEach
     void setUp() {
         repository.deleteAll();
-        service = new AlarmHistoryService(repository, authService, tumblebugTreeBuilder, contextResolver, portalLogService,
-                ZoneId.of("Asia/Seoul"));
+        service = new AlarmHistoryService(repository, deliveryRepository, authService, tumblebugTreeBuilder, contextResolver,
+                portalLogService, ZoneId.of("Asia/Seoul"));
         when(authService.currentUserRoleIds()).thenReturn(new LinkedHashSet<>(List.of("ADMIN")));
         when(contextResolver.resolve()).thenReturn(new PortalLogContext("admin@innogrid.com", "관리자", "10.0.0.9", "req-1", "POST", "/x"));
         when(tumblebugTreeBuilder.snapshot(anyCollection())).thenReturn(new TbSnapshot(Instant.now(),
@@ -263,5 +272,70 @@ class AlarmHistoryServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
         assertThatThrownBy(() -> service.getHistories(null, null, null, null, null, null, null, null, LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 8), 1, 10, null))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 전송_이력은_대상별로_묶여_개인은_단일_상태_조직은_카운트로_내려오고_없으면_빈_목록() {
+        AlarmDelivery kimEmail = deliveryRepository.save(new AlarmDelivery(openId, 1L, AlarmTargetType.INDIVIDUAL, "3", "김철수",
+                AlarmChannel.EMAIL, "제목", "이메일 본문", BASE));
+        kimEmail.addPending(3L, "김철수", "kim@innogrid.com").markSuccess(1, BASE.plusSeconds(3));
+        AlarmDelivery kimSms = deliveryRepository.save(new AlarmDelivery(openId, 1L, AlarmTargetType.INDIVIDUAL, "3", "김철수",
+                AlarmChannel.SMS, "제목", "SMS 본문", BASE));
+        kimSms.addFailed(3L, "김철수", null, "연락처 없음", BASE);
+        AlarmDelivery org = deliveryRepository.save(new AlarmDelivery(openId, 1L, AlarmTargetType.ORGANIZATION, "플랫폼팀", "플랫폼팀",
+                AlarmChannel.EMAIL, "제목", "이메일 본문", BASE));
+        org.addPending(4L, "이영희", "lee@innogrid.com").markSuccess(1, BASE.plusSeconds(5));
+        org.addPending(5L, "박민수", "park@innogrid.com").markFailed(3, "MailSendException: 550", BASE.plusSeconds(9));
+        org.addPending(6L, "최지우", "choi@innogrid.com");
+        repository.flush();
+
+        List<AlarmDeliveryResponse> rows = service.getDeliveries(openId);
+
+        assertThat(rows).hasSize(2);
+        AlarmDeliveryResponse kim = rows.get(0);
+        assertThat(kim.targetType()).isEqualTo(AlarmTargetType.INDIVIDUAL);
+        assertThat(kim.targetName()).isEqualTo("김철수");
+        assertThat(kim.channels()).extracting(AlarmDeliveryResponse.ChannelSummary::channel).containsExactly(AlarmChannel.EMAIL, AlarmChannel.SMS);
+        assertThat(kim.channels().get(0).deliveryId()).isEqualTo(kimEmail.getId());
+        assertThat(kim.channels().get(0).status()).isEqualTo(AlarmDeliveryStatus.SUCCESS);
+        assertThat(kim.channels().get(0).successCount()).isNull();
+        assertThat(kim.channels().get(0).sentAt()).isEqualTo(BASE.plusSeconds(3));
+        assertThat(kim.channels().get(1).status()).isEqualTo(AlarmDeliveryStatus.FAILED);
+
+        AlarmDeliveryResponse team = rows.get(1);
+        assertThat(team.targetType()).isEqualTo(AlarmTargetType.ORGANIZATION);
+        AlarmDeliveryResponse.ChannelSummary teamEmail = team.channels().get(0);
+        assertThat(teamEmail.status()).isNull();
+        assertThat(teamEmail.successCount()).isEqualTo(1);
+        assertThat(teamEmail.failedCount()).isEqualTo(1);
+        assertThat(teamEmail.sendingCount()).isEqualTo(1);
+        assertThat(teamEmail.recipientCount()).isEqualTo(3);
+        assertThat(teamEmail.sentAt()).isEqualTo(BASE.plusSeconds(9));
+
+        assertThat(service.getDeliveries(ackedId)).isEmpty();
+        assertThatThrownBy(() -> service.getDeliveries(userScopedId))
+                .isInstanceOf(BusinessException.class).extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
+
+        AlarmMessageDetailResponse detail = service.getMessageDetail(openId, org.getId(), AlarmChannel.EMAIL);
+        assertThat(detail.policyName()).isEqualTo("cpu-high");
+        assertThat(detail.resourceName()).isEqualTo("node-01");
+        assertThat(detail.targetType()).isEqualTo(AlarmTargetType.ORGANIZATION);
+        assertThat(detail.totalRecipientCount()).isEqualTo(3);
+        assertThat(detail.resultSummary().successCount()).isEqualTo(1);
+        assertThat(detail.resultSummary().failedCount()).isEqualTo(1);
+        assertThat(detail.subject()).isEqualTo("제목");
+        assertThat(detail.messageBody()).isEqualTo("이메일 본문");
+        assertThat(detail.recipients()).extracting(AlarmMessageDetailResponse.Recipient::name).containsExactly("이영희", "박민수", "최지우");
+        assertThat(detail.recipients().get(1).failReason()).isEqualTo("MailSendException: 550");
+        assertThat(detail.recipients().get(1).id()).isEqualTo("5");
+
+        AlarmMessageDetailResponse individual = service.getMessageDetail(openId, kimEmail.getId(), null);
+        assertThat(individual.totalRecipientCount()).isNull();
+        assertThat(individual.resultSummary()).isNull();
+
+        assertThatThrownBy(() -> service.getMessageDetail(openId, kimEmail.getId(), AlarmChannel.SMS))
+                .isInstanceOf(BusinessException.class).extracting("status").isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThatThrownBy(() -> service.getMessageDetail(ackedId, kimEmail.getId(), null))          // 다른 알람의 deliveryId
+                .isInstanceOf(BusinessException.class).extracting("status").isEqualTo(HttpStatus.NOT_FOUND);
     }
 }

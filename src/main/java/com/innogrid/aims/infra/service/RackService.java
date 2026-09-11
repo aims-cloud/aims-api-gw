@@ -9,6 +9,14 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
+
+import com.innogrid.aims.bmc.BmcHardwareSnapshot;
+import com.innogrid.aims.bmc.BmcHardwareSnapshotRepository;
+import com.innogrid.aims.bmc.BmcProperties;
+import com.innogrid.aims.bmc.RedfishClient;
+import com.innogrid.aims.bmc.RedfishSystem;
+import com.innogrid.aims.bmc.UnitHardware;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Rack;
 import com.innogrid.aims.infra.entity.RackUnit;
@@ -26,10 +34,52 @@ public class RackService {
 
     private final RackRepository rackRepository;
     private final RackUnitRepository rackUnitRepository;
+    private final BmcProperties bmcProperties;
+    private final RedfishClient redfishClient;
+    private final BmcHardwareSnapshotRepository snapshotRepository;
 
-    public RackService(RackRepository rackRepository, RackUnitRepository rackUnitRepository) {
+    public RackService(RackRepository rackRepository, RackUnitRepository rackUnitRepository,
+                       BmcProperties bmcProperties, RedfishClient redfishClient,
+                       BmcHardwareSnapshotRepository snapshotRepository) {
         this.rackRepository = rackRepository;
         this.rackUnitRepository = rackUnitRepository;
+        this.bmcProperties = bmcProperties;
+        this.redfishClient = redfishClient;
+        this.snapshotRepository = snapshotRepository;
+    }
+
+    /**
+     * 실장 장비 하드웨어 상세.
+     * BMC 에 실시간으로 닿으면 Redfish 조회 후 스냅샷을 갱신(live=true)하고,
+     * 닿지 못하면 마지막으로 저장된 스냅샷(live=false)을 내린다.
+     * BMC 미연동 장비이거나 스냅샷도 없으면 null.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public UnitHardware getUnitHardware(Long rackId, Long unitId) {
+        RackUnit unit = rackUnitRepository.findById(unitId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "실장 장비를 찾을 수 없습니다: " + unitId));
+        if (unit.getRack() == null || !rackId.equals(unit.getRack().getId())) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "해당 랙의 장비가 아닙니다: " + unitId);
+        }
+        String endpointId = unit.getBmcEndpointId();
+        if (endpointId == null || endpointId.isBlank()) return null;
+
+        // 1) 실시간 조회 시도
+        RedfishSystem live = redfishClient.getSystem(bmcProperties.find(endpointId));
+        if (live != null) {
+            OffsetDateTime now = OffsetDateTime.now();
+            BmcHardwareSnapshot snap = snapshotRepository.findById(endpointId)
+                    .orElseGet(() -> new BmcHardwareSnapshot(endpointId));
+            snap.apply(live, now);
+            snapshotRepository.save(snap);          // 최신값으로 스냅샷 갱신
+            return UnitHardware.live(live, now);
+        }
+
+        // 2) 실패 시 저장된 스냅샷 폴백
+        return snapshotRepository.findById(endpointId)
+                .map(s -> UnitHardware.cached(s.toRedfishSystem(), s.getCollectedAt()))
+                .orElse(null);
     }
 
     /** 랙 동적 필터 조회 (분류/장소/층/구역/열/위치 + mdcId). */
@@ -81,8 +131,11 @@ public class RackService {
             RackUnit occupant = occupancy.get(u);
             if (occupant != null) {
                 slot.put("occupied", true);
+                slot.put("unitId", occupant.getId());
                 slot.put("assetName", occupant.getAssetName());
                 slot.put("assetType", occupant.getAssetType());
+                // BMC 연동 장비면 식별자를 내려 프론트가 하드웨어 상세조회 가능 여부를 판단
+                slot.put("bmcEndpointId", occupant.getBmcEndpointId());
                 used++;
             } else {
                 slot.put("occupied", false);

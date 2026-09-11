@@ -25,6 +25,14 @@ spring:
     console:
       enabled: true
       path: /h2-console
+  mail:
+    # 로컬 가짜 SMTP(Mailpit) — 실제 발송 없이 수신함(http://localhost:8025)에서 확인
+    #   docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
 cloud-barista:
   spider:
     base-url: http://localhost:1024/spider
@@ -38,5 +46,8 @@ aims:
   admin:
     email: ${AIMS_ADMIN_EMAIL:admin@aims.local}
     password: ${AIMS_ADMIN_PASSWORD}
+  alarm:
+    notification:
+      from: ${AIMS_ALARM_MAIL_FROM:aims-alarm@localhost}
 jwt:
   secret: ${JWT_SECRET}

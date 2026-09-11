@@ -97,15 +97,32 @@ class WorkloadStatusTransitionTest {
         assertEquals(2, workload.resolveRetryCount());
     }
 
-    @DisplayName("배치에 성공하면 재시도 횟수가 지워진다")
+    @DisplayName("배치에 성공해도 실행이 끝나기 전에는 재시도 횟수를 유지한다")
     @Test
-    void successful_placement_clears_retry() {
+    void successful_placement_keeps_retry_until_completion() {
         Workload workload = new Workload("job", 1, 1024);
         workload.markFailed("자원 부족");
 
         workload.assignTo("mdc-01", "node-1", 0.9, "배치됨");
 
-        assertEquals(0, workload.resolveRetryCount());
+        assertEquals(1, workload.resolveRetryCount(), "배치 판단만 성공하고 실행이 실패할 수 있다");
+
+        workload.transitionTo(WorkloadStatus.RUNNING);
+        workload.transitionTo(WorkloadStatus.COMPLETED);
+        assertEquals(0, workload.resolveRetryCount(), "실제 실행 완료에서만 실패 누적을 지운다");
+        assertNull(workload.getLastFailedAt());
+    }
+
+    @DisplayName("배치 성공과 실행 실패를 반복해도 재시도 횟수가 다섯 번까지 누적된다")
+    @Test
+    void repeated_dispatch_failures_reach_retry_limit() {
+        Workload workload = new Workload("job", 1, 1024);
+
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            workload.assignTo("mdc-01", "node-1", 0.9, "배치됨");
+            workload.failDispatch("실행 실패");
+            assertEquals(attempt, workload.resolveRetryCount());
+        }
     }
 
     @DisplayName("실패한 워크로드는 대기로 되돌릴 수 있다")

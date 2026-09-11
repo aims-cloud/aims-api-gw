@@ -1,9 +1,9 @@
 package com.innogrid.aims.monitoring.service.alarm;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmResourceType;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmTargetScope;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
@@ -34,21 +34,20 @@ public final class AlarmPolicyTargets {
     }
 
     public static List<Target> resolve(AlarmPolicy policy, Scope scope) {
-        String type = policy.getResourceType() == null ? "" : policy.getResourceType().toLowerCase(Locale.ROOT);
+        AlarmResourceType type = AlarmResourceType.fromCode(policy.getResourceType()).orElse(null);
         String areaId = policy.getAreaId();
         Set<String> picked = policy.getTargetScope() == AlarmTargetScope.INDIVIDUAL ? policy.getTargetResourceIds() : null;
 
-        List<Target> targets = switch (type) {
-            case "vm" -> scope.vmsOf(policy.getRoleName()).stream()
+        List<Target> targets = type == null ? List.of() : switch (type) {
+            case VM -> scope.vmsOf(policy.getRoleName()).stream()
                     .filter(v -> v.resourceId() != null && v.resourceId().startsWith("TB:"))
                     .filter(v -> areaId == null || areaId.equals("TB:" + v.nsId()))
                     .map(AlarmPolicyTargets::of)
                     .toList();
-            case "node", "gpu" -> scope.hostsOf(policy.getRoleName()).stream()
+            case NODE, GPU -> scope.hostsOf(policy.getRoleName()).stream()
                     .filter(h -> areaId == null || areaId.equals(h.mdcId()))
-                    .map(h -> of(h, type))
+                    .map(h -> of(h, type.code()))
                     .toList();
-            default -> List.of();
         };
         if (picked == null) return targets;
         return targets.stream().filter(t -> picked.contains(t.resourceId())).toList();
@@ -59,6 +58,6 @@ public final class AlarmPolicyTargets {
     }
 
     private static Target of(ScopedVm v) {
-        return new Target(v.resourceId(), v.name(), null, "vm", null, v.nsId(), null);
+        return new Target(v.resourceId(), v.name(), null, AlarmResourceType.VM.code(), null, v.nsId(), null);
     }
 }

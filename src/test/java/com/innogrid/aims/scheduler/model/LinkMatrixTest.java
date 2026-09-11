@@ -10,7 +10,7 @@ import com.innogrid.aims.scheduler.entity.MdcLink;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 링크 스냅샷 — 방향 없는 조회, 같은 MDC·미등록·null 은 비어 있음(중립).
+ * 링크 스냅샷 — 방향 없는 조회, 같은 MDC·미등록·null 은 비어 있음(해석은 호출자 몫 — 제약은 통과, 점수는 같은 MDC 1.0 · 미등록 기본 0.5).
  */
 class LinkMatrixTest {
 
@@ -26,7 +26,7 @@ class LinkMatrixTest {
         assertEquals(1, m.size());
     }
 
-    @DisplayName("같은 MDC 미등록 null 은 비어 있다 중립")
+    @DisplayName("같은 MDC 미등록 null 은 비어 있다 — 구분은 호출자가 한다")
     @Test
     void same_mdc_and_null_are_empty() {
         LinkMatrix m = LinkMatrix.of(List.of(new MdcLink("a", "b", 1)));

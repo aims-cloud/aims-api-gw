@@ -49,7 +49,7 @@ class ConstraintEvaluatorLinkTest {
     void same_mdc_and_unlabeled_pass() {
         assertNull(evaluator.exclusionReason(workload("data"), node("data"), ctx(true)), "같은 MDC");
         assertNull(evaluator.exclusionReason(workload("data"), node("elsewhere"), ctx(true)), "미등록");
-        assertNull(evaluator.exclusionReason(workload("data"), node("unknown"), ctx(true)), "라벨 없음도 미등록으로 중립");
+        assertNull(evaluator.exclusionReason(workload("data"), node("unknown"), ctx(true)), "라벨 없음도 미등록처럼 통과");
         assertNull(evaluator.exclusionReason(workload("data"), node(null), ctx(true)), "MDC null");
     }
 

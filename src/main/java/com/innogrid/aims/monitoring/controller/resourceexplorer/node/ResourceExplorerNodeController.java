@@ -1,5 +1,9 @@
 package com.innogrid.aims.monitoring.controller.resourceexplorer.node;
 
+import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.common.exception.BusinessException;
+import org.springframework.http.HttpStatus;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -171,7 +175,9 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "수집 서비스 추가",
-            description = "서비스 추가 위저드 3단계 '생성' — 선택한 탐지 서비스와 로그·트레이스 수집 설정을 등록합니다.")
+            description = "수집 희망 설정을 원장에 저장합니다. 수집기 설정에는 반영되지 않습니다. 탐지·호스트 검증은 미지원입니다.")
+    @PortalLog(screen = "노드 수집 서비스", action = "생성", content = "'수집 서비스 생성: ' + #request.serviceName",
+            refType = "COLLECT_SERVICE", refId = "#result.data.serviceId")
     @PostMapping("/services")
     public ApiResponse<CollectServiceResponse> createCollectService(
             @PathVariable String nodeId,
@@ -180,6 +186,8 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "수집 서비스 편집")
+    @PortalLog(screen = "노드 수집 서비스", action = "수정", content = "'수집 서비스 수정: ' + #serviceId",
+            refType = "COLLECT_SERVICE", refId = "#serviceId")
     @PutMapping("/services/{serviceId}")
     public ApiResponse<CollectServiceResponse> updateCollectService(
             @PathVariable String nodeId,
@@ -189,6 +197,8 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "수집 서비스 삭제")
+    @PortalLog(screen = "노드 수집 서비스", action = "삭제", content = "'수집 서비스 삭제: ' + #serviceId",
+            refType = "COLLECT_SERVICE", refId = "#serviceId")
     @DeleteMapping("/services/{serviceId}")
     public ApiResponse<Void> deleteCollectService(
             @PathVariable String nodeId,
@@ -204,8 +214,11 @@ public class ResourceExplorerNodeController {
     @GetMapping("/services/{serviceId}/logs/files")
     public ApiResponse<List<ServiceLogFileResponse>> getServiceLogFiles(
             @PathVariable String nodeId,
-            @PathVariable String serviceId) {
-        return ApiResponse.ok(resourceExplorerNodeLogService.getLogFiles(nodeId, serviceId));
+            @PathVariable String serviceId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.getLogFiles(nodeId, serviceId,
+                parseLogTime(from, todayStart()), parseLogTime(to, Instant.now())));
     }
 
     @Operation(summary = "서비스 로그 KPI",
@@ -218,8 +231,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String file,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeLogService.getLogSummary(
                 nodeId, serviceId, file, fromInstant, toInstant));
     }
@@ -236,8 +249,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "1h") String interval) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeLogService.getLogTrend(
                 nodeId, serviceId, files, fromInstant, toInstant, interval));
     }
@@ -256,8 +269,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeLogService.searchLogs(
                 nodeId, serviceId, files, levels, keyword, fromInstant, toInstant, limit));
     }
@@ -273,8 +286,8 @@ public class ResourceExplorerNodeController {
             @PathVariable String serviceId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceSummary(
                 nodeId, serviceId, fromInstant, toInstant));
     }
@@ -289,8 +302,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "1h") String interval) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceTrend(
                 nodeId, serviceId, fromInstant, toInstant, interval));
     }
@@ -303,8 +316,8 @@ public class ResourceExplorerNodeController {
             @PathVariable String serviceId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getMethodDistribution(
                 nodeId, serviceId, fromInstant, toInstant));
     }
@@ -318,8 +331,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "5") @Min(1) @Max(50) int limit) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTopEndpoints(
                 nodeId, serviceId, fromInstant, toInstant, limit));
     }
@@ -348,8 +361,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = parseLogTime(to, Instant.now());
+        Instant fromInstant = parseLogTime(from, todayStart());
         return ApiResponse.ok(resourceExplorerNodeTraceService.searchTraces(
                 nodeId, serviceId, ports, statusClasses, keyword, minDurationMs,
                 fromInstant, toInstant, limit));
@@ -382,6 +395,14 @@ public class ResourceExplorerNodeController {
     /** from 기본값: 오늘 00:00:00 (서버 타임존) */
     private static Instant todayStart() {
         return LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant();
+    }
+
+    private static Instant parseLogTime(String value, Instant fallback) {
+        if (value == null) return fallback;
+        try { return Instant.parse(value); }
+        catch (java.time.format.DateTimeParseException e) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "from/to는 ISO-8601 시각이어야 합니다.");
+        }
     }
 }
 

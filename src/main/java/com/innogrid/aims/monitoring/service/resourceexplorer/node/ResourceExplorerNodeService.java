@@ -57,21 +57,18 @@ public class ResourceExplorerNodeService {
     /** 가상머신 탭 사용률의 집계 윈도우 */
     static final NodeMetricInterval VM_LIST_INTERVAL = NodeMetricInterval.LAST_10M;
 
-    private final ResourceScopeService scopeService;
-    private final AssetRepository assetRepository;
+    private final NodeAccessService nodeAccess;
     private final MonitoringTargetRepository monitoringTargetRepository;
     private final Sebu1VirtualResourceProvider virtualResourceProvider;
     private final HostDetailMetricsQueryService detailMetrics;
     private final HostMetricsQueryService hostMetrics;
 
-    public ResourceExplorerNodeService(ResourceScopeService scopeService,
-                                       AssetRepository assetRepository,
+    public ResourceExplorerNodeService(NodeAccessService nodeAccess,
                                        MonitoringTargetRepository monitoringTargetRepository,
                                        Sebu1VirtualResourceProvider virtualResourceProvider,
                                        HostDetailMetricsQueryService detailMetrics,
                                        HostMetricsQueryService hostMetrics) {
-        this.scopeService = scopeService;
-        this.assetRepository = assetRepository;
+        this.nodeAccess = nodeAccess;
         this.monitoringTargetRepository = monitoringTargetRepository;
         this.virtualResourceProvider = virtualResourceProvider;
         this.detailMetrics = detailMetrics;
@@ -181,17 +178,10 @@ public class ResourceExplorerNodeService {
 
     /** nodeId(assets.id)가 현재 사용자 토큰의 역할 스코프에 있는 물리 호스트일 때만 컨텍스트를 만든다. 아니면 404. */
     private NodeContext accessibleNode(String nodeId) {
-        long assetId;
-        try {
-            assetId = Long.parseLong(nodeId);
-        } catch (NumberFormatException e) {
-            throw notFound(nodeId);
-        }
-        ScopedHost host = scopeService.currentUserScope().distinctHosts().stream()
-                .filter(h -> h.assetId() == assetId)
-                .findFirst()
-                .orElseThrow(() -> notFound(nodeId));
-        Asset asset = assetRepository.findById(assetId).orElseThrow(() -> notFound(nodeId));
+        NodeAccessService.AccessibleNode accessible = nodeAccess.require(nodeId);
+        ScopedHost host = accessible.host();
+        Asset asset = accessible.asset();
+        long assetId = host.assetId();
         String dcgmInstance = monitoringTargetRepository.findByAsset_IdIn(List.of(assetId)).stream()
                 .filter(t -> t.getExporterType() == ExporterType.DCGM_EXPORTER)
                 .map(MonitoringTarget::getScrapeEndpoint)

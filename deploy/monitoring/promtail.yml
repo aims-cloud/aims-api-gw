@@ -6,6 +6,14 @@ positions:
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
+    # 이 노드에서 나가는 모든 로그 스트림에 붙는 식별 라벨.
+    # instance 는 Prometheus 가 이 노드의 node_exporter 를 긁는 주소와 글자까지 같아야
+    # 메트릭과 로그를 같은 키로 묶을 수 있다(자원 탐색기 노드 조회의 조인 키).
+    # 값은 노드마다 다르므로 이 파일은 전 노드 공통으로 두고 compose 의 environment 로 주입한다
+    # (compose 의 -config.expand-env=true 가 있어야 치환된다).
+    external_labels:
+      instance: ${NODE_INSTANCE:-localhost:9100}
+      mdc_id: ${MDC_ID:-mdc-local}
 
 scrape_configs:
   # 시스템 로그 (syslog)
@@ -36,14 +44,16 @@ scrape_configs:
           __path__: /var/log/kern.log
 
   # AIMS 애플리케이션 로그
+  # 파일이 생기려면 백엔드에 LOGGING_FILE_NAME=/var/log/aims/app.log 설정이 필요하다.
   - job_name: aims-app
     static_configs:
       - targets:
           - localhost
         labels:
           job: aims-app
-          mdc_id: ${MDC_ID:-mdc-local}
           __path__: /var/log/aims/*.log
+    # 주의: -config.expand-env=true 는 이 파일 전체에서 $ 를 치환한다.
+    # 정규식에 $ 종료 앵커를 쓸 때는 $$ 로 이스케이프한다.
     pipeline_stages:
       - multiline:
           firstline: '^\d{4}-\d{2}-\d{2}'

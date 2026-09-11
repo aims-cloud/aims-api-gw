@@ -145,7 +145,13 @@ services:
   promtail:
     image: grafana/promtail:3.5.0
     container_name: promtail
-    command: -config.file=/etc/promtail/promtail.yml
+    # -config.expand-env=true 가 있어야 promtail.yml 의 ${...} 가 치환된다.
+    command: -config.file=/etc/promtail/promtail.yml -config.expand-env=true
+    # 노드 식별 라벨. 노드마다 값이 다르므로 배포할 때 아래 기본값을 그 노드에 맞게 바꾼다.
+    # NODE_INSTANCE 는 Prometheus 가 이 노드의 node_exporter 를 긁는 주소와 글자까지 같아야 한다.
+    environment:
+      - NODE_INSTANCE=localhost:9100
+      - MDC_ID=mdc-01
     volumes:
       - ./promtail.yml:/etc/promtail/promtail.yml
       - /var/log:/var/log:ro

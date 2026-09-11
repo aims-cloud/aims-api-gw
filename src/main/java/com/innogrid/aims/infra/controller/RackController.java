@@ -1,40 +1,33 @@
 package com.innogrid.aims.infra.controller;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.bmc.UnitHardware;
 import com.innogrid.aims.common.dto.ApiResponse;
-import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.entity.Rack;
-import com.innogrid.aims.infra.entity.RackUnit;
-import com.innogrid.aims.infra.repository.RackRepository;
-import com.innogrid.aims.infra.repository.RackUnitRepository;
 import com.innogrid.aims.infra.service.RackService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 랙실장도 대시보드 API (MDC 전용).
+ * 랙실장도 대시보드 API (MDC 전용) — 조회 전용.
  * [요구사항 #36] 랙실장도 대시보드 — MDC별 랙 단위 장비 실장 현황 도식화
- * 랙/실장 데이터의 원본은 1세부 하드웨어 데이터 (자산 수신 시 동기화).
+ * 랙/실장 데이터의 원본은 1세부 하드웨어 데이터(자산 수신 시 동기화)이며, 포털에서 생성/편집하지 않는다.
  */
 @Tag(name = "랙실장도", description = "랙 단위 장비 실장 현황 (2D/3D 뷰)")
 @RestController
 @RequestMapping("/api/v1/racks")
 public class RackController {
 
-    private final RackRepository rackRepository;
-    private final RackUnitRepository rackUnitRepository;
     private final RackService rackService;
 
-    public RackController(RackRepository rackRepository,
-                          RackUnitRepository rackUnitRepository,
-                          RackService rackService) {
-        this.rackRepository = rackRepository;
-        this.rackUnitRepository = rackUnitRepository;
+    public RackController(RackService rackService) {
         this.rackService = rackService;
     }
 
@@ -65,59 +58,8 @@ public class RackController {
             description = "BMC 연동 장비의 모델/시리얼/CPU/메모리/전원상태. BMC 실시간 조회 성공 시 live=true 이며 "
                     + "스냅샷을 갱신하고, 미도달 시 마지막 저장 스냅샷(live=false, collectedAt)을 반환. 미연동 장비는 data=null")
     @GetMapping("/{rackId}/units/{unitId}/hardware")
-    public ApiResponse<com.innogrid.aims.bmc.UnitHardware> getUnitHardware(@PathVariable Long rackId,
-                                                                           @PathVariable Long unitId) {
+    public ApiResponse<UnitHardware> getUnitHardware(@PathVariable Long rackId,
+                                                     @PathVariable Long unitId) {
         return ApiResponse.ok(rackService.getUnitHardware(rackId, unitId));
-    }
-
-    /** 랙 상세 (실장 장비 정보 포함) */
-    @GetMapping("/{rackId}")
-    public ApiResponse<Map<String, Object>> getRackLayout(@PathVariable Long rackId) {
-        Rack rack = findRack(rackId);
-        List<RackUnit> units = rackUnitRepository.findByRackId(rackId);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("rack", rack);
-        response.put("units", units);
-        return ApiResponse.ok(response);
-    }
-
-    /** 랙 등록 */
-    @PostMapping
-    public ApiResponse<Rack> createRack(@RequestBody Map<String, Object> request) {
-        String mdcId = (String) request.get("mdcId");
-        String name = (String) request.get("name");
-        int totalUnits = request.containsKey("totalUnits") ? ((Number) request.get("totalUnits")).intValue() : 42;
-        double powerCapacityKw = request.containsKey("powerCapacityKw") ? ((Number) request.get("powerCapacityKw")).doubleValue() : 0.0;
-
-        Rack rack = new Rack(mdcId, name, totalUnits, powerCapacityKw);
-        if (request.containsKey("category")) rack.setCategory((String) request.get("category"));
-        if (request.containsKey("location")) rack.setLocation((String) request.get("location"));
-        if (request.containsKey("floorNo")) rack.setFloorNo((String) request.get("floorNo"));
-        if (request.containsKey("zoneName")) rack.setZoneName((String) request.get("zoneName"));
-        if (request.containsKey("rowNo")) rack.setRowNo((String) request.get("rowNo"));
-        if (request.containsKey("positionNo")) rack.setPositionNo((String) request.get("positionNo"));
-        rackRepository.save(rack);
-        return ApiResponse.ok(rack);
-    }
-
-    /** 랙에 장비 배치 */
-    @PostMapping("/{rackId}/units")
-    public ApiResponse<RackUnit> assignUnitToRack(@PathVariable Long rackId,
-                                                   @RequestBody Map<String, Object> request) {
-        Rack rack = findRack(rackId);
-
-        String position = (String) request.get("position");
-        String assetName = (String) request.get("assetName");
-        String assetType = (String) request.get("assetType");
-
-        RackUnit unit = new RackUnit(rack, position, assetName, assetType);
-        rackUnitRepository.save(unit);
-        return ApiResponse.ok(unit);
-    }
-
-    private Rack findRack(Long id) {
-        return rackRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "랙을 찾을 수 없습니다"));
     }
 }

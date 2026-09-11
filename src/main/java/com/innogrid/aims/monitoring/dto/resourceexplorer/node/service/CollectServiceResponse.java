@@ -1,6 +1,7 @@
 package com.innogrid.aims.monitoring.dto.resourceexplorer.node.service;
 
 import java.util.List;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.LogStatus;
 
 /**
  * 수집 서비스 1건 — 목록 행과 추가/편집 응답에 공용.
@@ -9,11 +10,12 @@ import java.util.List;
 public record CollectServiceResponse(
         String serviceId,
         String serviceName,
-        String status,                  // TODO:: 상태 값 체계 확정 후 enum 전환 (정상 등)
+        String status,                  // 실행 상태는 미관측(null)
+        LogStatus logStatus,
         Integer port,
-        Integer pid,                    // 미기동 시 null
+        Integer pid,                    // 미관측(null)
         String description,
-        List<CollectCapability> capabilities,
+        List<CollectCapability> capabilities, // 지원 여부 미확정: 빈 목록. 희망 설정은 아래 필드 사용
         CollectServiceRequest.LogCollection logCollection,
         CollectServiceRequest.TraceCollection traceCollection
 ) {

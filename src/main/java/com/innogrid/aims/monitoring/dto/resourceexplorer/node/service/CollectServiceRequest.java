@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * 수집 서비스 추가/편집 요청 — 서비스 추가 위저드(서비스 선택 → 수집 설정 → 요약) 기준.
- * 로그·트레이스 수집 중 하나 이상 enabled 여야 하며, 생성 전 유효성 검증은 validate API 로 수행한다.
+ * 원장 희망 설정이며 전체 비활성화도 가능하다. CRUD에서 형식을 검증하고 호스트 검증 API는 501이다.
  */
 public record CollectServiceRequest(
         String serviceName,             // 위저드 1단계에서 선택한 탐지 서비스 이름

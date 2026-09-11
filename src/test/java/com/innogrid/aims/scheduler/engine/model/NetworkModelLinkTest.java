@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 지연 100ms UP               → cost 1.0 (상한)   → 0.5
  * 지연 0 손실 10% UP           → cost 0.1          → 0.909
  * DOWN                        → 0 (C5 가 제외하므로 실제로는 쓰이지 않음)
- * 같은 MDC · 미등록            → 1.0 (중립)
+ * 같은 MDC                    → 1.0
+ * 미등록 원격 · 라벨 없는 노드 · 빈 스냅샷 → unknownLinkScore (기본 0.5 = 50ms UP 과 같다)
  * </pre>
  */
 class NetworkModelLinkTest {
@@ -41,15 +42,51 @@ class NetworkModelLinkTest {
         assertEquals(0.0, model.linkScore(q(1, 0, MdcLink.LinkStatus.DOWN)), EPS);
     }
 
-    @DisplayName("같은 MDC 와 미등록 쌍은 중립 1_0")
+    @DisplayName("같은 MDC 는 1_0 이고 미등록 원격은 기본 0_5 라 등록된 20ms 링크 아래에 선다")
     @Test
-    void same_mdc_and_unregistered_neutral() {
+    void same_mdc_1_0_unregistered_remote_0_5() {
         LinkMatrix m = LinkMatrix.of(List.of(new MdcLink("a", "b", 20)));
 
-        assertEquals(1.0, model.linkScore("a", "a", m), EPS);
-        assertEquals(1.0, model.linkScore("a", "z", m), EPS);
-        assertEquals(1.0, model.linkScore("a", "b", null), EPS, "매트릭스가 없으면 중립");
+        assertEquals(1.0, model.linkScore("a", "a", m), EPS, "같은 MDC");
+        assertEquals(0.5, model.linkScore("a", "z", m), EPS, "원장에 없는 원격");
+        assertEquals(0.5, model.linkScore("a", null, m), EPS, "MDC 라벨이 없는 노드");
+        assertEquals(0.5, model.linkScore("a", "b", null), EPS, "행렬이 없으면 등록 여부를 알 수 없다");
+        assertEquals(0.5, model.linkScore("a", "b", LinkMatrix.EMPTY), EPS, "빈 스냅샷도 같다");
+        assertEquals(1.0, model.linkScore("a", "a", null), EPS, "같은 MDC 판정은 행렬보다 먼저");
         assertEquals(0.714, model.linkScore("b", "a", m), EPS, "방향 무관");
+        assertTrue(model.linkScore("a", "b", m) > model.linkScore("a", "z", m), "측정된 양호 링크가 미등록을 이긴다");
+    }
+
+    @DisplayName("등록 여부 조회는 점수와 같은 행렬을 본다")
+    @Test
+    void registered_lookup_matches_score_lookup() {
+        LinkMatrix m = LinkMatrix.of(List.of(new MdcLink("a", "b", 20)));
+
+        assertTrue(model.isRegistered("a", "b", m));
+        assertTrue(model.isRegistered("b", "a", m), "방향 무관");
+        assertFalse(model.isRegistered("a", "z", m));
+        assertFalse(model.isRegistered("a", "a", m), "같은 MDC 는 등록 대상이 아니다");
+        assertFalse(model.isRegistered("a", "b", null));
+    }
+
+    @DisplayName("미등록 점수 설정은 0과 1 사이로 잘리고 유한하지 않으면 기본값이다")
+    @Test
+    void unknown_link_score_is_clamped_and_finite() {
+        assertEquals(0.5, model.unknownLinkScore(), EPS, "기본값");
+        assertEquals(0.0, withUnknown(-1).unknownLinkScore(), EPS);
+        assertEquals(0.0, withUnknown(0).unknownLinkScore(), EPS);
+        assertEquals(0.3, withUnknown(0.3).unknownLinkScore(), EPS);
+        assertEquals(1.0, withUnknown(1).unknownLinkScore(), EPS, "1.0 이면 예전 동작(같은 MDC 와 동점)");
+        assertEquals(1.0, withUnknown(2).unknownLinkScore(), EPS);
+        assertEquals(0.5, withUnknown(Double.NaN).unknownLinkScore(), EPS, "NaN 은 min/max 를 그대로 통과하므로 따로 막는다");
+        assertEquals(0.5, withUnknown(Double.POSITIVE_INFINITY).unknownLinkScore(), EPS);
+        assertEquals(1.0, withUnknown(1).linkScore("a", "z", LinkMatrix.EMPTY), EPS, "설정 1.0 → 미등록도 1.0");
+    }
+
+    private static NetworkModel withUnknown(double v) {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getNetwork().setUnknownLinkScore(v);
+        return new NetworkModel(props);
     }
 
     @DisplayName("혼합은 설정 가중치를 따르고 0 이면 트래픽 점수 그대로")

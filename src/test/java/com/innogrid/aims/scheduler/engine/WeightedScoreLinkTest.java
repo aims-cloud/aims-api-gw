@@ -79,15 +79,17 @@ class WeightedScoreLinkTest {
         assertEquals(1.0, by.get("c").networkScore(), EPS);
     }
 
-    @DisplayName("미등록 MDC 의 노드는 중립 1_0 으로 같은 MDC 와 동점이다")
+    @DisplayName("데이터 MDC 가 원장에 없으면 모든 원격 후보가 0_5 로 같고 제외되지 않는다")
     @Test
-    void unregistered_mdc_neutral_1_0() {
-        Workload w = workload("z");   // z 는 원장에 없다
+    void unregistered_data_mdc_scores_all_remote_0_5() {
+        Workload w = workload("z");   // z 는 원장에 없다 — 후보 a·b·c·d 전부 원격이고 전부 미등록
         SchedulingResult r = scheduler.schedule(w, ctx(true));
         Map<String, NodeScore> by = byMdc(r);
 
-        assertTrue(by.values().stream().allMatch(s -> Math.abs(s.details().get("링크품질") - 1.0) < EPS));
-        assertTrue(by.values().stream().allMatch(NodeScore::eligible));
+        assertTrue(by.values().stream().allMatch(s -> Math.abs(s.details().get("링크품질") - 0.5) < EPS));
+        assertEquals(0.75, by.get("a").networkScore(), EPS, "0.5×1.0 + 0.5×0.5");
+        assertTrue(by.values().stream().allMatch(NodeScore::eligible), "미등록은 점수이지 제약이 아니다");
+        assertTrue(r.success(), "전부 미등록이어도 배치는 된다");
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

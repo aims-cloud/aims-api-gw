@@ -113,7 +113,7 @@ public class WeightedScoreScheduler implements SchedulingEngine {
                                                  policy.getMaxTemperatureCelsius());
             double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
             // 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜졌을 때만 데이터 MDC ↔ 노드 MDC 링크 품질을 섞는다.
-            // 같은 MDC·미등록 쌍은 1.0(중립)이라 순위를 바꾸지 않고, DOWN 은 C5 가 이미 제외했다.
+            // 같은 MDC 는 1.0, 미등록 원격은 설정값(기본 0.5)이라 등록된 양호 링크 아래로 간다. DOWN 은 C5 가 이미 제외했다.
             Double linkScore = null;
             if (context.linkAware(workload)) {
                 linkScore = networkModel.linkScore(workload.getDataMdcId(), node.getMdcId(), context.linkMatrix());

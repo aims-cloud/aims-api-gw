@@ -116,7 +116,15 @@ public class BenchmarkClusters {
         return ROLES.get(require(boardId));
     }
 
-    /** 파일 내용의 SHA-256 앞 12자 — 응답이 자기 입력을 지목한다. */
+    /**
+     * 파일 내용의 SHA-256 앞 12자 — 응답이 자기 입력을 지목한다.
+     *
+     * <p><b>개행을 LF 로 정규화한 뒤</b> 해시한다. 저장소는 LF 로 보관하지만 {@code core.autocrlf=true} 인 Windows
+     * 체크아웃은 작업 트리와 jar 안의 yml 을 CRLF 로 만들어, 정규화가 없으면 같은 판이 빌드 OS 에 따라 다른
+     * 다이제스트를 냈다(main: Windows 빌드 {@code add880e1f395} ↔ LF {@code fb011848258b}). 정규화한 값은 저장소
+     * 바이트의 해시와 같으므로 LF 로 빌드한 기록과는 그대로 이어진다. {@code .gitattributes} 도 같은 경로를 LF 로
+     * 고정하지만, 다이제스트는 체크아웃 설정에 기대지 않고 코드에서 보장한다.</p>
+     */
     public String digest(String boardId) {
         return digests.computeIfAbsent(require(boardId), id -> sha256Prefix(LOCATIONS.get(id)));
     }
@@ -136,10 +144,16 @@ public class BenchmarkClusters {
         return prefixOf(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
+    /** 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 시험이 같은 식으로 기대값을 만든다. */
+    public static String digestOfContent(byte[] fileBytes) {
+        String normalized = new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8).replace("\r\n", "\n");
+        return prefixOf(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     private static String sha256Prefix(String location) {
         Resource resource = new DefaultResourceLoader().getResource(location);
         try (InputStream in = resource.getInputStream()) {
-            return prefixOf(in.readAllBytes());
+            return digestOfContent(in.readAllBytes());
         } catch (IOException e) {
             throw new IllegalArgumentException("비교판 파일을 읽을 수 없습니다: " + location, e);
         }

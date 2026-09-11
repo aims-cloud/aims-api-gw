@@ -43,7 +43,6 @@ class BenchmarkClustersTest {
         assertEquals(List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE,
                         BenchmarkClusters.CONVEX, BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED),
                 clusters.boardIds(), "판 순서는 고정 — 표의 열 순서가 호출마다 달라지면 두 실행을 대조할 수 없다");
-        assertEquals(6, clusters.boardIds().size());
         for (String boardId : clusters.boardIds()) {
             SyntheticCluster board = clusters.get(boardId);
             assertTrue(board.nodes().size() > 0, boardId + " 판에 노드가 없다");

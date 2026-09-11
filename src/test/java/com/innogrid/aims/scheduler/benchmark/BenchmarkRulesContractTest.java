@@ -649,7 +649,7 @@ class BenchmarkRulesContractTest {
     void the_board_roles_and_the_assumption_notes_are_free_of_banned_claims() {
         BenchmarkClusters clusters = new BenchmarkClusters();
 
-        assertEquals(6, clusters.boardIds().size(), "판이 늘거나 줄면 검사할 설명의 수도 달라진다");
+        assertFalse(clusters.boardIds().isEmpty(), "판 목록은 판 등록부가 정한다 — 판 수를 여기 다시 적지 않는다");
         for (String boardId : clusters.boardIds()) {
             assertFreeOfBannedClaims(clusters.roleOf(boardId), boardId + " 판 설명");
         }

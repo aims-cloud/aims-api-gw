@@ -353,12 +353,24 @@ public class SchedulerProperties {
          */
         private double linkWeight = 0.5;
 
+        /**
+         * 데이터 MDC 와 노드 MDC 가 다른데 원장에 링크가 없을 때의 링크 점수(0~1).
+         *
+         * <p>같은 MDC 는 항상 1.0 이다. 미등록 원격 쌍을 같은 1.0 으로 두면 원장을 채운 MDC 가 채우지 않은
+         * MDC 보다 불리해진다 — 측정된 20ms 링크(0.714)가 측정되지 않은 경로에 진다. 기본 0.5 는 지연 기준값
+         * (50ms) UP 링크와 같은 점수라 "양호한 등록 링크보다는 낮고, 등록 여부만으로 후보를 버리지는 않는다".
+         * 예전 동작으로 되돌리려면 1.0. 범위 밖은 계산 시 0~1 로 자르고, 유한하지 않으면(NaN·무한) 기본값으로 본다.</p>
+         */
+        private double unknownLinkScore = 0.5;
+
         public double getLatencyScaleMs() { return latencyScaleMs; }
         public void setLatencyScaleMs(double v) { this.latencyScaleMs = v; }
         public double getDegradedPenalty() { return degradedPenalty; }
         public void setDegradedPenalty(double v) { this.degradedPenalty = v; }
         public double getLinkWeight() { return linkWeight; }
         public void setLinkWeight(double v) { this.linkWeight = v; }
+        public double getUnknownLinkScore() { return unknownLinkScore; }
+        public void setUnknownLinkScore(double v) { this.unknownLinkScore = v; }
     }
 
     /**

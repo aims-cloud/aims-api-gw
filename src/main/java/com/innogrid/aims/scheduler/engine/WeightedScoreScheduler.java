@@ -113,11 +113,18 @@ public class WeightedScoreScheduler implements SchedulingEngine {
                                                  policy.getMaxTemperatureCelsius());
             double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
             // 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜졌을 때만 데이터 MDC ↔ 노드 MDC 링크 품질을 섞는다.
-            // 같은 MDC·미등록 쌍은 1.0(중립)이라 순위를 바꾸지 않고, DOWN 은 C5 가 이미 제외했다.
+            // 같은 MDC 는 1.0, 미등록 원격은 설정값(기본 0.5)이라 등록된 양호 링크 아래로 간다. DOWN 은 C5 가 이미 제외했다.
             Double linkScore = null;
+            Double linkRegistered = null;
             if (context.linkAware(workload)) {
-                linkScore = networkModel.linkScore(workload.getDataMdcId(), node.getMdcId(), context.linkMatrix());
+                String dataMdc = workload.getDataMdcId();
+                linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix());
                 netScore = networkModel.blend(netScore, linkScore);
+                // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC 는 링크를 타지
+                // 않으므로 "등록됨" 과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.
+                boolean sameMdc = dataMdc.equals(node.getMdcId());
+                linkRegistered = sameMdc || networkModel.isRegistered(dataMdc, node.getMdcId(), context.linkMatrix())
+                        ? 1.0 : 0.0;
             }
 
             // ── 3단계: 가중합 ────────────────────────────────────
@@ -144,7 +151,10 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             details.put("전력여유", round(powerScore));
             details.put("온도여유", round(tempScore));
             details.put("네트워크한산도", round(netScore));
-            if (linkScore != null) details.put("링크품질", round(linkScore));   // 게이트 on 일 때만 — 기존 응답 키 불변
+            if (linkScore != null) {   // 게이트 on 일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
+                details.put("링크품질", round(linkScore));
+                details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)
+            }
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),

@@ -16,7 +16,9 @@ import com.innogrid.aims.scheduler.entity.MdcLink;
  * 같은 실행 안에서는 같은 링크 품질을 본다.</p>
  *
  * <p>키는 {@link MdcLink.Pair} 로 정렬된 쌍이라 방향이 없다. 같은 MDC·미등록 쌍은 {@link #between} 이
- * 비어 있고, 호출자는 이를 <b>중립</b>(점수 1.0, 제약 통과)으로 해석한다 — 모르는 값으로 배치를 막지 않는다.</p>
+ * 비어 있다 — 행렬은 둘을 구분하지 않으므로 <b>같은 MDC 판정은 호출자가 행렬을 보기 전에</b> 한다.
+ * 제약(C5)은 빈 값을 통과시키고, 점수({@code NetworkModel})는 같은 MDC 1.0 · 미등록 원격은 설정값(기본 0.5)을
+ * 준다 — 모르는 값으로 배치를 막지는 않되, 모르는 경로가 측정된 양호 경로를 이기지도 않게.</p>
  */
 public final class LinkMatrix {
 
@@ -57,7 +59,7 @@ public final class LinkMatrix {
     }
 
     /**
-     * 두 MDC 사이 링크. 같은 MDC·null·미등록이면 비어 있다(중립).
+     * 두 MDC 사이 링크. 같은 MDC·null·미등록이면 비어 있다 — 셋을 구분하지 않으므로 해석은 호출자 몫이다.
      * 노드 MDC 가 {@code unknown} 이라도 특별 취급하지 않는다 — 원장에 없으면 그냥 비어 있다.
      */
     public Optional<Quality> between(String mdcX, String mdcY) {

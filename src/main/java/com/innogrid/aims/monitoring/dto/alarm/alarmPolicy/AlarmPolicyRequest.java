@@ -9,9 +9,9 @@ import java.util.List;
 public record AlarmPolicyRequest(
         AlarmPolicyType alarmType,
         String policyName,
-        String roleId,                  // 적용 범위 — 역할
-        String deploymentId,            // 적용 범위 — 배포영역
-        String resourceType,            // 대상 자원 유형 (노드 등) — TODO:: 값 체계 확정 후 enum 전환
+        String roleName,                  // 적용 범위 — 역할
+        String areaId,            // 적용 범위 — 자원 영역 (MDC: mdcId, Namespace: TB:{nsId}, 역할 패널 areaId 와 동일)
+        String resourceType,            // 대상 자원 유형 코드 node|vm|gpu (AlarmResourceType) — 한글 검증 메시지를 위해 문자열로 받아 서비스에서 판정
         AlarmTargetScope targetScope,
         List<String> targetResourceIds, // targetScope=INDIVIDUAL 일 때 대상 자원
         String description,

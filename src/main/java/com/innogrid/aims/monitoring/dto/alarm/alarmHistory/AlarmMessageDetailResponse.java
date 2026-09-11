@@ -18,6 +18,7 @@ public record AlarmMessageDetailResponse(
         String targetName,
         Integer totalRecipientCount,
         ResultSummary resultSummary,
+        String subject,                 // 발송 시점에 치환된 제목 (SMS 는 본문만 쓰지만 같은 값)
         String messageBody,             // 발송 시점에 치환된 메시지 본문
         List<Recipient> recipients
 ) {

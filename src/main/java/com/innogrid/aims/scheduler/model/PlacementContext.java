@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -159,9 +160,19 @@ public class PlacementContext {
      * 실측으로 두면 균형 점수의 두 피연산자가 다른 시점을 보게 된다 — 예약이 쌓일수록 노드만
      * 뜨거워지고 기준선은 그대로라 "0.5 = 평균 수준"이라는 의미가 흐려진다. 순위를 바꾸는
      * 수정은 아니고 기준점의 일관성을 지키는 것이다.</p>
+     *
+     * <p><b>온도를 수집하지 못한 노드(0°C)는 평균에서 뺀다.</b> 0 은 "0도로 측정됐다"가 아니라
+     * "모른다"인데, 그것을 표본으로 세면 기준선이 통째로 내려간다. 균형 점수가
+     * {@code 1 − 0.5 × T / 평균} 이라 <b>0 으로 잘리는 지점(평균의 두 배)까지 함께 내려와</b>,
+     * 정상 범위의 계측 노드가 없는 근거 때문에 감점을 받는다 — 모의 8대(계측 5·미계측 3)에서
+     * 평균이 52.2°C → 32.6°C 로, 잘림 임계가 104.4°C → 65.3°C 로 내려갔다.</p>
+     *
+     * <p>계측된 노드가 하나도 없으면 0 이다. 그때는 엔진이 노드마다 이미 중립값을 쓰므로 이 값이
+     * 점수에 닿지 않는다({@code TemperatureAwareScheduler} 의 미계측 가드).</p>
      */
     public double averageTemperature(ThermalModel thermalModel) {
         return nodes.stream()
+                .filter(n -> n.getTemperatureCelsius() > 0)
                 .mapToDouble(thermalModel::effectiveTemperature)
                 .average().orElse(0);
     }
@@ -204,11 +215,14 @@ public class PlacementContext {
      * <b>실현된 절감이 아니라 "통합했다면 아낄 수 있었을 양"</b>이다. 실현 불가능한 절감을
      * 주장하지 않으면서 알고리즘 효과를 재기 위한 지표이며, 나중에 전원 제어가 생기면 그대로
      * 실현 값이 된다.</p>
+     *
+     * <p>노드별 유휴 전력은 {@code PowerModel.wakeupPower} 가 정한다 — 비율 인자를 받으면
+     * 모델과 갈라진다.</p>
      */
-    public double reclaimableIdleWatts(double activeCpuPercent, double idleRatio) {
+    public double reclaimableIdleWatts(double activeCpuPercent, PowerModel powerModel) {
         return nodes.stream()
                 .filter(n -> n.effectiveCpuUsagePercent() <= activeCpuPercent)   // activeNodeCount 와 같은 기준
-                .mapToDouble(n -> n.getPowerCapacityWatts() * idleRatio)
+                .mapToDouble(powerModel::wakeupPower)
                 .sum();
     }
 

@@ -20,6 +20,8 @@ import com.innogrid.aims.cloudbarista.tumblebug.TumblebugClient;
 import com.innogrid.aims.infra.entity.RoleNamespace;
 import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.ResourceExplorerProperties;
+import com.innogrid.aims.monitoring.log.IntegrationHealth;
+import com.innogrid.aims.monitoring.log.PortalLogService;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeNodeType;
@@ -115,11 +117,16 @@ public class TumblebugTreeBuilder {
         }
     }
 
+    /** 포털 로그 SYSTEM 화면명·장애 단위 키 (docs/08 §6) — Namespace 목록 {@code ns}, Namespace 별 Infra {@code infra:{nsId}} */
+    static final String HEALTH_SCREEN = "Tumblebug 연동";
+    static final String HEALTH_NS_KEY = "ns";
+
     private final TumblebugClient tumblebugClient;
     private final RoleNamespaceRepository roleNamespaceRepository;
     private final MonitoringCapabilityResolver capabilityResolver;
     private final ResourceExplorerProperties properties;
     private final Clock clock;
+    private final IntegrationHealth health;
     /** 재시도 대기 — 테스트에서 교체 */
     private LongConsumer sleeper = TumblebugTreeBuilder::sleep;
 
@@ -129,20 +136,27 @@ public class TumblebugTreeBuilder {
     public TumblebugTreeBuilder(TumblebugClient tumblebugClient,
                                 RoleNamespaceRepository roleNamespaceRepository,
                                 MonitoringCapabilityResolver capabilityResolver,
-                                ResourceExplorerProperties properties) {
-        this(tumblebugClient, roleNamespaceRepository, capabilityResolver, properties, Clock.systemUTC());
+                                ResourceExplorerProperties properties,
+                                PortalLogService portalLogService) {
+        this(tumblebugClient, roleNamespaceRepository, capabilityResolver, properties, portalLogService, Clock.systemUTC());
     }
 
     public TumblebugTreeBuilder(TumblebugClient tumblebugClient,
                                 RoleNamespaceRepository roleNamespaceRepository,
                                 MonitoringCapabilityResolver capabilityResolver,
                                 ResourceExplorerProperties properties,
+                                PortalLogService portalLogService,
                                 Clock clock) {
         this.tumblebugClient = tumblebugClient;
         this.roleNamespaceRepository = roleNamespaceRepository;
         this.capabilityResolver = capabilityResolver;
         this.properties = properties;
         this.clock = clock;
+        this.health = new IntegrationHealth(portalLogService, HEALTH_SCREEN);
+    }
+
+    static String healthInfraKey(String nsId) {
+        return "infra:" + nsId;
     }
 
     void setSleeper(LongConsumer sleeper) {
@@ -322,7 +336,7 @@ public class TumblebugTreeBuilder {
     private TbSnapshot load(TbSnapshot previous, Set<String> scope) {
         Instant now = clock.instant();
 
-        // 1) Namespace 목록 — 여기가 실패하면 전체를 이전 값(또는 빈 값)으로 두고 degraded
+        // 1) Namespace 목록 — 여기가 실패하면 전체를 이전 값(또는 빈 값)으로 두고 degraded. 정상↔실패 전이는 포털 로그 SYSTEM
         Map<String, String> names = new LinkedHashMap<>();
         try {
             for (Map<String, Object> ns : listOfMaps(withRetry("GET /ns", tumblebugClient::listNamespaces), "ns")) {
@@ -331,7 +345,9 @@ public class TumblebugTreeBuilder {
                     names.put(id, str(ns, "name") == null ? id : str(ns, "name"));
                 }
             }
+            health.recovered(HEALTH_NS_KEY, "Namespace 목록 조회");
         } catch (RuntimeException e) {
+            health.failed(HEALTH_NS_KEY, "Namespace 목록 조회", e);
             if (previous != null) {
                 log.warn("Tumblebug Namespace 조회 실패 — 마지막 정상 결과를 유지합니다: {}", e.getMessage());
                 return new TbSnapshot(now, previous.namespaceNames(), previous.infrasByNamespace(),
@@ -350,7 +366,9 @@ public class TumblebugTreeBuilder {
             }
             try {
                 infras.put(nsId, parseInfras(withRetry("GET /ns/" + nsId + "/infra", () -> tumblebugClient.listInfra(nsId))));
+                health.recovered(healthInfraKey(nsId), "Infra 조회 (ns=" + nsId + ")");
             } catch (RuntimeException e) {
+                health.failed(healthInfraKey(nsId), "Infra 조회 (ns=" + nsId + ")", e);
                 failed.add(nsId);
                 List<TbInfra> kept = previous == null ? null : previous.infrasByNamespace().get(nsId);
                 if (kept != null) {

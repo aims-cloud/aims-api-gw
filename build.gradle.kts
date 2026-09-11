@@ -21,13 +21,18 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
+	implementation("org.springframework.boot:spring-boot-starter-aspectj")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-security")
+	// 알람 Email 전송 (docs/09 A.5.4) — 메일 서버는 spring.mail.* 환경 변수로만 넣는다
+	implementation("org.springframework.boot:spring-boot-starter-mail")
 	runtimeOnly("org.postgresql:postgresql")
 	runtimeOnly("com.h2database:h2")
 	// H2 웹 콘솔 (Boot 4 에서 별도 모듈로 분리) — 로컬 프로파일에서만 spring.h2.console.enabled 로 활성화
 	implementation("org.springframework.boot:spring-boot-h2console")
 	implementation("com.fasterxml.jackson.core:jackson-databind")
+	// OpenStack 연동용 HTTP 클라이언트 — JDK HttpClient 의 chunked 전송(411 Length Required) 회피 및 사설 TLS 지원
+	implementation("org.apache.httpcomponents.client5:httpclient5")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
 	implementation("io.jsonwebtoken:jjwt-api:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")

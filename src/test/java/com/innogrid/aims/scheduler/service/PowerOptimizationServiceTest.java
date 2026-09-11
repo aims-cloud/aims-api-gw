@@ -54,8 +54,12 @@ class PowerOptimizationServiceTest {
                 node("idle-1", 2, 150),
                 node("idle-2", 1, 150)));
 
-        // 500W × 0.3 × 2대
-        assertEquals(300.0, result.cluster().reclaimableIdleWatts(), 1e-9);
+        // 반납분은 wakeupPower — 두 유휴 노드 다 계측돼 실측에서 역산한다:
+        // idle-1(P=150,u=0.02,Pmax=500): (150-500*0.02)/0.98 = 140/0.98 ≈ 142.8571
+        // idle-2(P=150,u=0.01,Pmax=500): (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646
+        // 합 ≈ 289.3218 → round 289.32
+        assertEquals(PowerOptimizationService.round((150 - 500 * 0.02) / 0.98) + PowerOptimizationService.round((150 - 500 * 0.01) / 0.99),
+                result.cluster().reclaimableIdleWatts(), 1e-6);
     }
 
     // ── 진단 항목 ──────────────────────────────────────────────
@@ -68,7 +72,10 @@ class PowerOptimizationServiceTest {
         Finding f = find(result, "IDLE_NODE");
         assertNotNull(f);
         assertEquals("HIGH", f.severity());
-        assertEquals(150.0, f.estimatedSavingWatts(), 1e-9, "반납하면 유휴 전력을 통째로 아낀다");
+        // 반납분은 wakeupPower — 계측된 유휴 노드(P=150,u=0.02,Pmax=500)라 실측에서 역산한다:
+        // (150-500*0.02)/0.98 = 140/0.98 ≈ 142.8571 → round 142.86
+        assertEquals(PowerOptimizationService.round((150 - 500 * 0.02) / 0.98), f.estimatedSavingWatts(), 1e-6,
+                "반납하면 유휴 전력을 통째로 아낀다");
         assertTrue(f.detail().contains("2.0%"), f.detail());
     }
 
@@ -162,8 +169,30 @@ class PowerOptimizationServiceTest {
                 node("busy", 60, 300),
                 node("idle", 2, 150)));
 
-        // 유휴 150W 반납 / 총 450W
-        assertEquals(33.33, result.summary().savingPercent(), 0.1);
+        // 반납분은 wakeupPower — 유휴 노드(P=150,u=0.02,Pmax=500): (150-500*0.02)/0.98 ≈ 142.8571
+        // 142.8571 / 총 450W × 100 ≈ 31.75%
+        assertEquals(PowerOptimizationService.round((150 - 500 * 0.02) / 0.98 / 450 * 100),
+                result.summary().savingPercent(), 0.1);
+    }
+
+    /**
+     * 플래그를 끄면 서비스 층까지 대체값 고정이 배선돼야 한다 — PowerModel 단위 시험만으로는
+     * PowerOptimizationService 생성 경로에 플래그가 실제로 닿는지 보장하지 않는다.
+     */
+    @DisplayName("플래그를 끄면 반납 가능 전력이 대체값으로 돌아간다")
+    @Test
+    void the_flag_off_returns_the_reclaimable_power_to_the_fallback() {
+        SchedulerProperties offProps = new SchedulerProperties();
+        offProps.getPower().setIdleFromMeasurement(false);
+        PowerOptimizationService offService = new PowerOptimizationService(
+                null, new PowerModel(offProps), offProps);
+
+        var result = offService.diagnose(List.of(
+                node("busy", 60, 300),
+                node("idle-1", 2, 150),
+                node("idle-2", 1, 150)));
+
+        assertEquals(300.0, result.cluster().reclaimableIdleWatts(), 1e-6, "500×0.3×2 = 300");
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

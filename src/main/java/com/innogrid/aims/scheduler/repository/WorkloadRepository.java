@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -50,18 +51,74 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long> {
               and (w.resourceType = :resourceType
                    or (:matchNullType = true and w.resourceType is null))
               and (w.retryCount is null or w.retryCount < :maxRetryCount)
+              and (w.lastFailedAt is null or w.lastFailedAt <= :retryableBefore)
            """)
     List<Workload> findSchedulingCandidates(
             @Param("statuses") Collection<Workload.WorkloadStatus> statuses,
             @Param("resourceType") Workload.ResourceType resourceType,
             @Param("matchNullType") boolean matchNullType,
-            @Param("maxRetryCount") int maxRetryCount);
+            @Param("maxRetryCount") int maxRetryCount,
+            @Param("retryableBefore") OffsetDateTime retryableBefore);
 
     /**
      * 재시도 상한에 걸려 대상에서 빠진 워크로드 수.
      * 실행 결과 메시지에 함께 적어, 대상 0건이 "할 일이 없어서"인지
      * "전부 소진되어서"인지 구분할 수 있게 한다.
      */
+    /**
+     * 재시도 상한에 걸려 대상에서 빠진 워크로드. 일괄 재개가 되살릴 후보다.
+     *
+     * <p>리소스 종류와 기간은 <b>선택</b>이지만 호출부가 둘 중 하나는 반드시 준다 — 조건 없는
+     * 전체 일괄은 실수로 수백 건을 되살리는 사고 경로라 서비스에서 막는다.</p>
+     */
+    /**
+     * <p><b>널 파라미터를 쓰지 않는다.</b> {@code (:from is null or ...)} 형태는 H2 에서는 통과하지만
+     * PostgreSQL 이 "could not determine data type of parameter" 로 거절한다 — 값이 없는 자리의 타입을
+     * 추론할 수 없기 때문이다. 그래서 호출부가 경계값과 깃발을 채워 넘기고, 여기서는 전부
+     * 값이 있는 비교만 한다.</p>
+     */
+    @Query("""
+           select w from Workload w
+            where w.status = :status
+              and w.retryCount is not null and w.retryCount >= :maxRetryCount
+              and (:anyType = true
+                   or w.resourceType = :resourceType
+                   or (:matchNullType = true and w.resourceType is null))
+              and ((:anyPeriod = true and w.lastFailedAt is null)
+                   or (w.lastFailedAt >= :from and w.lastFailedAt <= :to))
+            order by w.lastFailedAt asc nulls last, w.id asc
+           """)
+    List<Workload> findRetryExhausted(
+            @Param("status") Workload.WorkloadStatus status,
+            @Param("maxRetryCount") int maxRetryCount,
+            @Param("anyType") boolean anyType,
+            @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("matchNullType") boolean matchNullType,
+            @Param("anyPeriod") boolean anyPeriod,
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to);
+
+    /**
+     * 재시도 여유는 있으나 <b>백오프가 지나지 않아</b> 이번 대상에서 빠진 워크로드 수.
+     *
+     * <p>소진과 구분하기 위해 따로 센다. 소진은 사람이 되살려야 풀리지만 이쪽은 시간이 지나면
+     * 저절로 풀리므로, 실행 결과를 실패로 적으면 안 된다.</p>
+     */
+    @Query("""
+           select count(w) from Workload w
+            where w.status in :statuses
+              and (w.resourceType = :resourceType
+                   or (:matchNullType = true and w.resourceType is null))
+              and (w.retryCount is null or w.retryCount < :maxRetryCount)
+              and w.lastFailedAt is not null and w.lastFailedAt > :retryableBefore
+           """)
+    long countRetryWaiting(
+            @Param("statuses") Collection<Workload.WorkloadStatus> statuses,
+            @Param("resourceType") Workload.ResourceType resourceType,
+            @Param("matchNullType") boolean matchNullType,
+            @Param("maxRetryCount") int maxRetryCount,
+            @Param("retryableBefore") OffsetDateTime retryableBefore);
+
     @Query("""
            select count(w) from Workload w
             where w.status = :status

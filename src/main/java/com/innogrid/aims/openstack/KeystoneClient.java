@@ -8,10 +8,12 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.innogrid.aims.common.exception.BusinessException;
 
 /**
@@ -24,6 +26,8 @@ public class KeystoneClient {
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {};
 
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     /** 만료 시각보다 이만큼 먼저 토큰을 갱신한다. */
     private static final Duration REFRESH_MARGIN = Duration.ofSeconds(60);
 
@@ -35,10 +39,7 @@ public class KeystoneClient {
 
     @Autowired
     public KeystoneClient(OpenStackProperties props) {
-        this(props, RestClient.builder()
-                .baseUrl(props.getAuthUrl() == null ? "" : props.getAuthUrl())
-                .defaultHeader("Content-Type", "application/json")
-                .build());
+        this(props, OpenStackRestClients.build(props.getAuthUrl(), props.isVerifyTls()));
     }
 
     KeystoneClient(OpenStackProperties props, RestClient rest) {
@@ -69,6 +70,27 @@ public class KeystoneClient {
         tokenExpiresAt = Instant.EPOCH;
     }
 
+    /**
+     * 현재 토큰으로 접근 가능한 프로젝트 목록.
+     * GET /auth/projects — 토폴로지 트리의 최상위(프로젝트) 계층에 사용한다.
+     */
+    public Map<String, Object> listProjects() {
+        return rest.get()
+                .uri("/auth/projects")
+                .header("X-Auth-Token", getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
+    /** 프로젝트 상세 (도메인/상태/생성일) — 프로젝트 노드 상세에 사용. */
+    public Map<String, Object> getProject(String projectId) {
+        return rest.get()
+                .uri("/projects/{id}", projectId)
+                .header("X-Auth-Token", getToken())
+                .retrieve()
+                .body(MAP_TYPE);
+    }
+
     private boolean isTokenValid() {
         return cachedToken != null
                 && Instant.now().isBefore(tokenExpiresAt.minus(REFRESH_MARGIN));
@@ -90,9 +112,15 @@ public class KeystoneClient {
                         "name", props.getProjectName(),
                         "domain", Map.of("name", domain)))));
 
+        // 본문을 byte[]로 직렬화해 Content-Length를 명시한다.
+        // Map을 그대로 넘기면 RestClient가 chunked로 스트리밍하여, Content-Length를 요구하는
+        // Keystone 앞단(Apache httpd)이 411 Length Required로 거부한다.
+        byte[] payload = serialize(body);
+
         ResponseEntity<Map<String, Object>> response = rest.post()
                 .uri("/auth/tokens")
-                .body(body)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
                 .retrieve()
                 .toEntity(MAP_TYPE);
 
@@ -113,6 +141,15 @@ public class KeystoneClient {
 
         this.cachedToken = token;
         this.tokenExpiresAt = expiresAt;
+    }
+
+    private static byte[] serialize(Map<String, Object> body) {
+        try {
+            return JSON.writeValueAsBytes(body);
+        } catch (Exception e) {
+            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Keystone 인증 요청 직렬화 실패");
+        }
     }
 
     private void requireConfigured() {

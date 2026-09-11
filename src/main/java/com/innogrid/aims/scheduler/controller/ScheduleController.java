@@ -84,11 +84,10 @@ public class ScheduleController {
     // ── 생성·수정·삭제 ─────────────────────────────────────────
 
     @Operation(summary = "스케줄 생성",
-            description = "스케줄 ID·스케줄명·리소스 종류·실행 주기가 필수입니다. "
+            description = "스케줄 ID·스케줄명·실행 주기가 필수입니다. 리소스 종류는 비우면 실행 때 VM 으로 해석합니다. "
                     + "엔진·정책·전력/온도 파라미터는 선택이며, 비우면 리소스 종류별 활성 정책을 따릅니다. "
                     + "스케줄 ID 가 중복되면 409, 실행 주기가 잘못되면 400 입니다. "
-                    + "placementOrder 는 대상 워크로드의 배치 순서 — PRIORITY_THEN_AGE(기본: 우선순위 → 등록 순) 또는 "
-                    + "PRIORITY_THEN_SIZE(우선순위 → 요구 CPU·메모리가 큰 것부터, 전력 통합에 유리). 'size'/'age' 로 줘도 됩니다.")
+                    + "배치 순서(placementOrder)의 선택지와 뜻은 요청 스키마의 필드 설명을 따릅니다.")
     @PostMapping
     public ApiResponse<ScheduleResponse> createSchedule(@RequestBody ScheduleRequest request) {
         return ApiResponse.ok(scheduleService.create(request));
@@ -151,7 +150,7 @@ public class ScheduleController {
     // ── 실행 주기 검증 ──────────────────────────────────────────
 
     @Operation(summary = "실행 주기 검증",
-            description = "Quartz 표기 cron 을 검증하고 다음 5회 실행 시각을 요일 이름과 함께 돌려줍니다. "
+            description = "요청 본문의 cronExpression(Quartz 표기)을 검증하고 다음 5회 실행 시각을 요일 이름과 함께 돌려줍니다. "
                     + "입력은 한국 시간(UTC+9) 기준으로 해석하며 응답 시각은 UTC 입니다. "
                     + "연도 필드(7번째), 특수문자 C, 일·요일 동시 지정은 지원하지 않습니다.")
     @PostMapping("/cron/validate")

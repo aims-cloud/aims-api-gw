@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -315,6 +316,56 @@ public class SchedulingService {
         return resolvePolicy(null);
     }
 
+    /**
+     * 재시도 상한에 걸린 워크로드를 <b>여러 건 한 번에</b> 되살린다.
+     *
+     * <p>단건 재개는 이미 {@link #changeStatus} 로 된다 — 실패에서 대기로 바꾸면 재시도 횟수와
+     * 마지막 실패 시각이 지워진다. 이 메서드가 더하는 것은 <b>편의</b>이지 새 능력이 아니다.</p>
+     *
+     * <p>조건 없는 전체 일괄은 받지 않는다. 되살린 워크로드는 다음 실행에 한꺼번에 몰리는데,
+     * 한 실행이 처리하는 상한이 {@code max-workloads-per-run} 이라 그보다 많이 되살리면 나머지가
+     * 밀려 상태가 어긋난다. 그래서 리소스 종류·기간 중 하나는 반드시 받고, 대상이 상한을 넘으면
+     * 되살리지 않고 조건을 좁히라고 답한다.</p>
+     *
+     * @return 되살린 워크로드 목록 (호출부가 건수를 센다)
+     */
+    @Transactional
+    public List<Workload> resumeExhausted(Workload.ResourceType resourceType,
+                                          OffsetDateTime from, OffsetDateTime to) {
+        if (resourceType == null && from == null && to == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST,
+                    "리소스 종류나 기간 중 하나는 지정해야 합니다 — 조건 없는 전체 재개는 받지 않습니다");
+        }
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "기간의 시작이 끝보다 뒤입니다");
+        }
+
+        // 널 파라미터는 PostgreSQL 이 타입을 추론하지 못한다 — 경계값과 깃발로 바꿔 넘긴다.
+        boolean anyType = resourceType == null;
+        boolean matchNullType = resourceType == Workload.ResourceType.VM;
+        boolean anyPeriod = from == null && to == null;
+        List<Workload> exhausted = workloadRepository.findRetryExhausted(
+                Workload.WorkloadStatus.FAILED, properties.getMaxRetryCount(),
+                anyType, anyType ? Workload.ResourceType.VM : resourceType,
+                matchNullType,
+                anyPeriod,
+                from != null ? from : OffsetDateTime.parse("1970-01-01T00:00:00Z"),
+                to != null ? to : OffsetDateTime.now().plusYears(100));
+        int limit = properties.getMaxWorkloadsPerRun();
+        if (exhausted.size() > limit) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
+                    "조건에 걸린 워크로드가 %d건으로 한 번에 되살릴 수 있는 %d건을 넘습니다 — 기간이나 리소스 종류로 좁히세요",
+                    exhausted.size(), limit));
+        }
+
+        List<Workload> resumed = new ArrayList<>();
+        for (Workload workload : exhausted) {
+            if (workload.transitionTo(Workload.WorkloadStatus.PENDING)) {
+                resumed.add(workloadRepository.save(workload));
+            }
+        }
+        return resumed;
+    }
     /**
      * 워크로드의 실행 상태를 전이한다.
      * 배치 이후의 흐름(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,

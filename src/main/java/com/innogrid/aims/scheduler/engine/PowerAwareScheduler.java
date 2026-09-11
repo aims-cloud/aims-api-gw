@@ -44,6 +44,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * <p><b>전력·온도를 수집하지 못한 노드는 중립값 0.5 를 준다.</b> 0 을 주면 판단 근거가 없는 노드가
  * 최악으로 평가되고, 감점을 아예 하지 않으면 오히려 유리해진다. IPMI 가 없는 환경에서는 모든
  * 노드가 중립이 되어 자원 여유로 결정되며, 그 사실이 {@code reason} 에 드러난다.</p>
+ * <p>실질 한계 전력 점수는 노드 정격이 아니라 W 눈금({@code marginalScaleWatts})으로 정규화한다 —
+ * 깨우기 벌점이 유휴비가 아니라 절대 W 로 총점에 들어간다.</p>
  */
 @Component
 public class PowerAwareScheduler implements SchedulingEngine {
@@ -99,7 +101,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
             boolean eligible = (exclusionReason == null);
 
             boolean hasPower = node.getPowerWatts() > 0 && node.getPowerCapacityWatts() > 0;
-            boolean hasThermal = node.getTemperatureCelsius() > 0 && policy.getMaxTemperatureCelsius() > 0;
+            boolean hasThermal = node.getTemperatureCelsius() > 0;
             anyPowerMetric |= hasPower;
 
             // ── 전력 복합 점수 ──────────────────────────────────
@@ -131,9 +133,9 @@ public class PowerAwareScheduler implements SchedulingEngine {
             // 넣으면 "측정했더니 그 값" 으로 읽혀, 판단 근거가 없다는 사실이 가려진다.
             // 전력 효율 평가 API 도 같은 방식을 쓴다(PowerEfficiencyResponse 주석).
             //
-            // 다만 실질 한계 전력은 실측 전력을 쓰지 않는다 — 용량과 CPU 사용률만으로 계산하는
-            // 증분이라 계측이 없어도 성립한다. 반대로 배치 후 예상 전력은 실측값을 기준으로
-            // 더하는 절대값이라 기준을 모르면 의미가 없다.
+            // 실질 한계 전력은 가동 노드에서는 용량과 CPU 사용률로 동적 증가분을 계산하지만,
+            // 유휴 노드의 깨우기 비용은 설정에 따라 실측 전력에서 유휴 전력을 역산할 수 있다.
+            // 반대로 배치 후 예상 전력은 실측값을 기준으로 더하는 절대값이라 기준을 모르면 의미가 없다.
             Map<String, Double> details = new LinkedHashMap<>();
             details.put("전력계측", hasPower ? 1.0 : 0.0);
             details.put("온도계측", hasThermal ? 1.0 : 0.0);
@@ -230,7 +232,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
                 best.totalScore(), best.powerScore(), best.temperatureScore(), candidateCount,
                 context.totalPowerWatts(),
                 context.activeNodeCount(props.getActiveCpuPercent()),
-                context.reclaimableIdleWatts(props.getActiveCpuPercent(), props.getIdleRatio()));
+                context.reclaimableIdleWatts(props.getActiveCpuPercent(), powerModel));
     }
 
     /**
@@ -249,7 +251,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
      * 통합 판정의 여유 — 가동 중 후보의 최고 총점 − 빈 후보의 최고 총점(적격 후보만).
      *
      * <p>양수면 통합 쪽(가동 노드)을 골랐고, 값이 작으면 노드 조건이 조금만 달라져도 빈 노드를 깨우는 선택으로
-     * 뒤집힌다는 뜻이다. 시나리오 4 에서 0.0015 였다(12장 T11). 점수·순위·선택은 바꾸지 않고 <b>보이게만</b> 한다 —
+     * 뒤집힌다는 뜻이다. 기준 시나리오에서 0.0002 였다. 점수·순위·선택은 바꾸지 않고 <b>보이게만</b> 한다 —
      * 어느 쪽으로 얼마나 밀어야 하는지는 노드 2대 이상 실환경의 이 값이 쌓인 뒤에 정한다(단계 16 재판단).
      * 한쪽 집단이 없으면 키를 넣지 않는다.</p>
      */

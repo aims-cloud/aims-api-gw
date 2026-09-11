@@ -12,6 +12,16 @@ spring:
     password: ${AIMS_DB_PASSWORD}
     driver-class-name: ${AIMS_DB_DRIVER:org.postgresql.Driver}
 
+  # ── 알람 Email 발송 (docs/09 A.5.4) ─────────────────────────
+  # host 는 환경 변수(SPRING_MAIL_HOST)로만 넣는다. host 가 없으면 JavaMailSender 빈이 만들어지지 않고 Email 전송은 "미구성" FAILED.
+  mail:
+    properties:
+      mail.smtp.auth: ${AIMS_MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${AIMS_MAIL_SMTP_STARTTLS:true}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -28,6 +38,10 @@ server:
   shutdown: graceful
 
 management:
+  health:
+    mail:
+      # 메일 서버 연결 검사를 백엔드 헬스에서 뺀다 — SMTP 가 죽어도 포털 API 는 정상이고, 전송 실패는 알람 전송 원장(FAILED 사유)에 남는다
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -54,12 +68,49 @@ cloud-barista:
 # 최종 연동 대상은 1세부 OpenStack. 구축 전까지 자체 구축 OpenStack 사용.
 # 환경변수만 바꾸면 전환되도록 코드에 기본값을 두지 않는다.
 openstack:
+  zone-name: ${OPENSTACK_ZONE_NAME:openstack-default}
   auth-url: ${OPENSTACK_AUTH_URL:}
   network-url: ${OPENSTACK_NETWORK_URL:}
+  compute-url: ${OPENSTACK_COMPUTE_URL:}
+  image-url: ${OPENSTACK_IMAGE_URL:}
   username: ${OPENSTACK_USERNAME:}
   password: ${OPENSTACK_PASSWORD:}
   project-name: ${OPENSTACK_PROJECT:}
   domain-name: ${OPENSTACK_DOMAIN:Default}
+  # 사설 인증서 HTTPS 환경(자체 구축 OpenStack)에서는 false
+  verify-tls: ${OPENSTACK_VERIFY_TLS:true}
+
+# ── BMC(하드웨어 관리 컨트롤러) 연동 설정 — 랙 실장도/물리자산 ──
+# Redfish 표준 API로 서버 하드웨어(모델/시리얼/CPU/메모리/전원)를 조회한다. 읽기 전용.
+# URL·계정·비밀번호는 모두 환경변수로만 주입한다 (코드/설정에 실제 값 금지).
+# 샘플 랙(2F-27-04): AIO 3대·GPU 3대. XCC=Lenovo, IDRAC=Dell — Redfish 스키마는 공통.
+bmc:
+  verify-tls: ${BMC_VERIFY_TLS:false}
+  endpoints:
+    - id: aio01
+      url: ${BMC_AIO01_URL:}
+      username: ${BMC_AIO01_USER:}
+      password: ${BMC_AIO01_PASS:}
+    - id: aio02
+      url: ${BMC_AIO02_URL:}
+      username: ${BMC_AIO02_USER:}
+      password: ${BMC_AIO02_PASS:}
+    - id: aio03
+      url: ${BMC_AIO03_URL:}
+      username: ${BMC_AIO03_USER:}
+      password: ${BMC_AIO03_PASS:}
+    - id: gpu01
+      url: ${BMC_GPU01_URL:}
+      username: ${BMC_GPU01_USER:}
+      password: ${BMC_GPU01_PASS:}
+    - id: gpu02
+      url: ${BMC_GPU02_URL:}
+      username: ${BMC_GPU02_USER:}
+      password: ${BMC_GPU02_PASS:}
+    - id: gpu03
+      url: ${BMC_GPU03_URL:}
+      username: ${BMC_GPU03_USER:}
+      password: ${BMC_GPU03_PASS:}
 
 # ── 메트릭 조회 설정 (Thanos Query — PromQL 호환) ──────────
 victoria-metrics:
@@ -81,6 +132,30 @@ aims:
   gpu-dashboard:
     # TODO:: 실제 Thanos 연동이 완료되면 Mock 설정 제거
     mock-enabled: ${AIMS_GPU_DASHBOARD_MOCK_ENABLED:false}
+  alarm:
+    evaluation:
+      # 정책 평가 주기(초) — 메트릭당 Thanos 즉시 쿼리 1회. 기동 시 고정되어 변경은 재기동 후 반영 (docs/09 A.6 #6)
+      interval-seconds: ${AIMS_ALARM_EVAL_INTERVAL_SECONDS:60}
+      # rate() 창 — 스크레이프 간격의 4배 이상, 자원 탐색기 패널 rate 창 하한(5m)과 같게 유지
+      rate-window: ${AIMS_ALARM_EVAL_RATE_WINDOW:5m}
+    notification:
+      # 알람 전송 (docs/09 A.5.4) — 발생 알람을 정책 수신자에게 Email 로 보낸다. 메일 서버는 SPRING_MAIL_HOST 등 환경 변수로.
+      # 서버가 없으면 전송 원장에 "메일 서버 미구성" FAILED 로만 남고 평가·이력은 그대로 동작한다.
+      enabled: ${AIMS_ALARM_NOTIFICATION_ENABLED:true}
+      from: ${AIMS_ALARM_MAIL_FROM:}
+      subject-prefix: "[AIMS]"
+      max-attempts: 3
+      retry-backoff: 2s
+      threads: 2
+  portal-log:
+    retention:
+      # 포털 로그 보존 배치 (docs/08 §9) — 매일 03:30, 일반 1년 / SYSTEM 90일. 배치 단위로 별도 트랜잭션, 한 실행 최대 200배치
+      enabled: ${AIMS_PORTAL_LOG_RETENTION_ENABLED:true}
+      cron: ${AIMS_PORTAL_LOG_RETENTION_CRON:0 30 3 * * *}
+      default-days: ${AIMS_PORTAL_LOG_RETENTION_DEFAULT_DAYS:365}
+      system-days: ${AIMS_PORTAL_LOG_RETENTION_SYSTEM_DAYS:90}
+      batch-size: 5000
+      max-batches-per-run: 200
 
 # ── JWT 설정 ───────────────────────────────────────────────
 jwt:

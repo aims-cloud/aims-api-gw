@@ -65,7 +65,10 @@ class PowerAwareScoringTest {
         SchedulingResult result = scheduler.schedule(workload(2), nodes, policy());
 
         assertEquals(87.5, detail(result, "running", "실질한계전력W"), 1e-4);
-        assertEquals(237.5, detail(result, "parked", "실질한계전력W"), 1e-4, "150W 유휴 전력이 더해진다");
+        // parked 는 계측(250W)·유휴(2%)라 깨우기 비용을 실측에서 역산한다: (250 − 500×0.02)/(1−0.02) = 244.9W.
+        // 대체값 150W(정격×0.3)가 아니다 — 이 픽스처는 놀면서 250W 를 쓰는 노드라 깨우는 값도 그만큼이다.
+        assertEquals(87.5 + (250 - 500 * 0.02) / 0.98, detail(result, "parked", "실질한계전력W"), 1e-4,
+                "실측에서 역산한 유휴 전력 244.9W 가 더해진다");
         assertEquals(1.0, detail(result, "running", "가동중"), 1e-9);
         assertEquals(0.0, detail(result, "parked", "가동중"), 1e-9);
     }
@@ -253,9 +256,23 @@ class PowerAwareScoringTest {
         }
     }
 
+    @DisplayName("정책 온도 임계가 0이어도 실측 온도는 계측값으로 표시한다")
+    @Test
+    void measured_temperature_does_not_depend_on_policy_threshold() {
+        SchedulingPolicy policy = policy();
+        policy.setMaxTemperatureCelsius(0);
+
+        NodeScore score = scheduler.schedule(workload(2),
+                List.of(node("measured", 40, 40, 250, 55)), policy).candidateScores().get(0);
+
+        assertEquals(1.0, score.details().get("온도계측"), 1e-9);
+        assertNotNull(score.details().get("배치후예상온도C"));
+    }
+
     /**
-     * 실질 한계 전력은 실측 전력을 쓰지 않는다 — 용량과 CPU 사용률만으로 구하는 증분이라
-     * 계측이 없어도 성립한다. 낼 수 있는 값까지 비우면 정보를 버리는 것이다.
+     * 가동 노드의 동적 증가분은 용량과 CPU 사용률만으로 구하므로 계측이 없어도 성립한다.
+     * 미계측 노드에서는 유휴 여부를 판단할 근거가 없어 깨우기 비용을 더하지 않는다.
+     * 낼 수 있는 값까지 비우면 정보를 버리는 것이다.
      */
     @DisplayName("계측이 없어도 한계 전력 증분은 낸다")
     @Test

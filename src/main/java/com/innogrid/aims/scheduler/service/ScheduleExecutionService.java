@@ -1,8 +1,11 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,12 +17,14 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
+import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
+import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -81,6 +86,7 @@ public class ScheduleExecutionService {
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
+    private final SchedulingHistoryRepository historyRepository;
     private final WorkloadRepository workloadRepository;
     private final SchedulingPolicyRepository policyRepository;
     private final SchedulingService schedulingService;
@@ -91,6 +97,7 @@ public class ScheduleExecutionService {
 
     public ScheduleExecutionService(ScheduleRepository scheduleRepository,
                                     ScheduleRunRepository runRepository,
+                                    SchedulingHistoryRepository historyRepository,
                                     WorkloadRepository workloadRepository,
                                     SchedulingPolicyRepository policyRepository,
                                     SchedulingService schedulingService,
@@ -100,6 +107,7 @@ public class ScheduleExecutionService {
                                     SchedulerProperties properties) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
+        this.historyRepository = historyRepository;
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.schedulingService = schedulingService;
@@ -143,16 +151,17 @@ public class ScheduleExecutionService {
             }
 
             if (targets.isEmpty()) {
-                String message = emptyTargetMessage(schedule);
+                EmptyTargetOutcome outcome = emptyTargetOutcome(schedule);
+                String message = outcome.message();
                 if (triggerType == ScheduleRun.TriggerType.AUTO) {
                     // 5분 주기 스케줄 하나가 90일이면 "대상 없음" 행만 25,920개다.
                     // 이력은 남기지 않고 최근 실행 정보만 갱신해 화면에서 확인할 수 있게 한다.
-                    complete(schedule, ScheduleRun.RunStatus.COMPLETED, startedAt, message);
+                    complete(schedule, outcome.status(), startedAt, message);
                     return null;
                 }
                 run = startRun(schedule, triggerType, triggeredBy, engineId, policy);
                 run.recordCounts(0, 0, 0, false);
-                return finishRun(schedule, run, ScheduleRun.RunStatus.COMPLETED, startedAt, message);
+                return finishRun(schedule, run, outcome.status(), startedAt, message);
             }
 
             run = startRun(schedule, triggerType, triggeredBy, engineId, policy);
@@ -166,15 +175,25 @@ public class ScheduleExecutionService {
             }
 
             int success = 0;
+            int attempted = 0;
             String firstFailure = null;
-            for (Workload workload : targets) {
-                SchedulingResult result = schedulingService.dispatch(workload,
-                        placementService.place(workload, context, engineId, run.getId()), run.getId());
-                if (result.success()) {
-                    success++;
-                } else if (firstFailure == null) {
-                    firstFailure = result.reason();
+            try {
+                for (Workload workload : targets) {
+                    SchedulingResult result = schedulingService.dispatch(workload,
+                            placementService.place(workload, context, engineId, run.getId()), run.getId());
+                    attempted++;
+                    if (result.success()) {
+                        success++;
+                    } else if (firstFailure == null) {
+                        firstFailure = result.reason();
+                    }
                 }
+            } catch (RuntimeException e) {
+                // 루프 중간에 끊겨도 그때까지의 결과는 사실이다. 집계를 0 으로 두면 실제로 배치된
+                // 워크로드가 이력에서 사라져, 다음 실행이 무엇을 이어서 해야 하는지 알 수 없다.
+                run.recordCounts(targets.size(), success, attempted - success, truncated);
+                runRepository.save(run);
+                throw e;
             }
 
             int failed = targets.size() - success;
@@ -233,10 +252,22 @@ public class ScheduleExecutionService {
         boolean matchNullType = type == Workload.ResourceType.VM;   // 기존 행은 VM 으로 해석한다
 
         return workloadRepository.findSchedulingCandidates(
-                        TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount())
+                        TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount(),
+                        retryableBefore())
                 .stream()
                 .sorted(orderFor(schedule))
                 .toList();
+    }
+
+    /**
+     * 이 시각 이전에 실패한 워크로드만 다시 시도한다.
+     *
+     * <p>간격이 0 이하면 아주 먼 미래를 돌려주어 조건이 사실상 사라진다 — 설정 하나로 이전
+     * 동작으로 돌아간다.</p>
+     */
+    private OffsetDateTime retryableBefore() {
+        int minutes = properties.getRetryBackoffMinutes();
+        return minutes > 0 ? OffsetDateTime.now().minusMinutes(minutes) : OffsetDateTime.now().plusYears(1);
     }
 
     /**
@@ -244,14 +275,34 @@ public class ScheduleExecutionService {
      * 재시도 상한에 걸려 빠진 건수를 함께 적는다 — 그러지 않으면 "할 일이 없어서"인지
      * "전부 소진되어서"인지 구분할 수 없다.
      */
-    private String emptyTargetMessage(Schedule schedule) {
+    private EmptyTargetOutcome emptyTargetOutcome(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
+        boolean matchNullType = type == Workload.ResourceType.VM;
         long exhausted = workloadRepository.countRetryExhausted(
-                Workload.WorkloadStatus.FAILED, type,
-                type == Workload.ResourceType.VM, properties.getMaxRetryCount());
-        return exhausted == 0 ? "대상 없음"
-                : String.format("대상 없음 (재시도 소진 %d건)", exhausted);
+                Workload.WorkloadStatus.FAILED, type, matchNullType, properties.getMaxRetryCount());
+        if (exhausted > 0) {
+            return new EmptyTargetOutcome(ScheduleRun.RunStatus.FAILED, String.format(
+                    "대상 없음 (재시도 소진 %d건 — 일괄 재개가 필요합니다)", exhausted));
+        }
+        long waiting = workloadRepository.countRetryWaiting(
+                TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount(), retryableBefore());
+        if (waiting > 0) {
+            return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, String.format(
+                    "대상 없음 (재시도 대기 %d건 — %d분 뒤 다시 시도합니다)",
+                    waiting, properties.getRetryBackoffMinutes()));
+        }
+        return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, "대상 없음");
     }
+
+    /**
+     * 대상이 0건일 때의 결과.
+     *
+     * <p>세 경우를 가른다. <b>소진</b>은 사람이 되살리기 전에는 이 스케줄이 아무 일도 못 하므로
+     * 실패로 적는다 — 그러지 않으면 스케줄이 영원히 초록불로 남아 화면에서 문제가 보이지 않는다.
+     * <b>재시도 대기</b>는 시간이 지나면 저절로 풀리므로 정상이고, 얼마 뒤에 다시 시도하는지 적는다.
+     * <b>할 일 없음</b>은 그냥 정상이다. 실행 상태 값 집합은 늘리지 않는다(FAILED·COMPLETED 그대로).</p>
+     */
+    private record EmptyTargetOutcome(ScheduleRun.RunStatus status, String message) {}
 
     /** 스케줄이 지정한 정책, 없으면 리소스 종류별 활성 정책. */
     private SchedulingPolicy resolvePolicy(Schedule schedule) {
@@ -353,7 +404,10 @@ public class ScheduleExecutionService {
         if (stuck.isEmpty()) return 0;
 
         List<Long> ids = stuck.stream().map(Schedule::getId).toList();
-        finishStuckRuns(ids);
+        List<ScheduleRun> runs = runRepository.findByScheduleIdInAndStatus(
+                ids, ScheduleRun.RunStatus.RUNNING);
+        recoverStuckWorkloads(runs);
+        finishStuckRuns(runs);
 
         int recovered = 0;
         for (Schedule schedule : stuck) {
@@ -370,11 +424,34 @@ public class ScheduleExecutionService {
         return recovered;
     }
 
-    /** 끝나지 않은 실행 이력을 마무리한다. 실패해도 스케줄 권한 회수는 계속한다. */
-    private void finishStuckRuns(List<Long> scheduleIds) {
+    /** 중단된 실행이 배치한 워크로드의 예약을 풀어 다시 시도할 수 있게 한다. */
+    private void recoverStuckWorkloads(List<ScheduleRun> runs) {
+        if (runs.isEmpty()) return;
         try {
-            List<ScheduleRun> runs = runRepository.findByScheduleIdInAndStatus(
-                    scheduleIds, ScheduleRun.RunStatus.RUNNING);
+            List<Long> runIds = runs.stream().map(ScheduleRun::getId).toList();
+            LinkedHashSet<Long> workloadIds = historyRepository.findByScheduleRunIdIn(runIds).stream()
+                    .filter(history -> Boolean.TRUE.equals(history.getSuccess()))
+                    .map(SchedulingHistory::getWorkloadId)
+                    .filter(Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            List<Workload> recovered = new ArrayList<>();
+            for (Workload workload : workloadRepository.findAllById(workloadIds)) {
+                if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) continue;
+                workload.failDispatch(RECOVERED_MESSAGE);
+                recovered.add(workload);
+            }
+            workloadRepository.saveAll(recovered);
+            if (!recovered.isEmpty()) {
+                log.warn("기동 회수: 중단된 실행에 배치된 워크로드 {}건을 실패로 되돌렸습니다", recovered.size());
+            }
+        } catch (RuntimeException e) {
+            log.error("중단된 실행의 워크로드 복구 실패(실행 이력과 스케줄 권한 회수는 계속한다)", e);
+        }
+    }
+
+    /** 끝나지 않은 실행 이력을 마무리한다. 실패해도 스케줄 권한 회수는 계속한다. */
+    private void finishStuckRuns(List<ScheduleRun> runs) {
+        try {
             runs.forEach(run -> run.finish(ScheduleRun.RunStatus.FAILED, RECOVERED_MESSAGE));
             runRepository.saveAll(runs);
         } catch (RuntimeException e) {

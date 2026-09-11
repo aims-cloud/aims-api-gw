@@ -11,8 +11,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
+import com.innogrid.aims.scheduler.entity.SchedulingHistory;
+import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
+import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
+import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -30,10 +34,18 @@ class ScheduleStartupRecoveryTest {
     @Autowired ScheduleExecutionService executionService;
     @Autowired ScheduleRepository scheduleRepository;
     @Autowired ScheduleRunRepository runRepository;
+    @Autowired SchedulingHistoryRepository historyRepository;
+    @Autowired WorkloadRepository workloadRepository;
     @Autowired ScheduleService scheduleService;
 
     @AfterEach
     void clean() {
+        historyRepository.findAll().stream()
+                .filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith("rec-"))
+                .forEach(historyRepository::delete);
+        workloadRepository.findAll().stream()
+                .filter(w -> w.getName().startsWith("rec-"))
+                .forEach(workloadRepository::delete);
         scheduleRepository.findAll().stream()
                 .filter(s -> s.getScheduleId().startsWith("rec-"))
                 .forEach(s -> {
@@ -103,6 +115,48 @@ class ScheduleStartupRecoveryTest {
         assertEquals(ScheduleRun.RunStatus.FAILED, after.getStatus());
         assertEquals(ScheduleExecutionService.RECOVERED_MESSAGE, after.getMessage());
         assertNotNull(after.getFinishedAt());
+    }
+
+    @DisplayName("중단된 실행이 배치한 워크로드도 실패로 되돌려 다음 재시도에서 회수한다")
+    @Test
+    void recovers_workload_placed_by_dangling_run() {
+        Schedule schedule = stuck("rec-workload");
+        ScheduleRun dangling = runRepository.save(
+                new ScheduleRun(schedule.getId(), schedule.getScheduleId(),
+                        ScheduleRun.TriggerType.AUTO, "system"));
+        Workload workload = new Workload("rec-placed", 2, 1024);
+        workload.assignTo("mdc-01", "node-1", 0.8, "배치 성공");
+        workload = workloadRepository.save(workload);
+        SchedulingHistory history = new SchedulingHistory(workload.getId(), workload.getName(),
+                "mdc-01", "node-1", 0.8, "배치 성공", "weighted", "default");
+        history.linkToRun(dangling.getId(), true);
+        historyRepository.save(history);
+
+        executionService.recoverStuckRuns();
+
+        Workload after = workloadRepository.findById(workload.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertNull(after.getAssignedMdcId());
+        assertNull(after.getAssignedNodeId());
+        assertEquals(1, after.resolveRetryCount());
+        assertNotNull(after.getLastFailedAt());
+        assertEquals(ScheduleExecutionService.RECOVERED_MESSAGE, after.getSchedulingReason());
+    }
+
+    @DisplayName("중단된 실행과 관계없는 배치 워크로드는 기동 회수가 건드리지 않는다")
+    @Test
+    void leaves_unrelated_scheduled_workload_alone() {
+        stuck("rec-unrelated-run");
+        Workload unrelated = new Workload("rec-unrelated-workload", 2, 1024);
+        unrelated.assignTo("mdc-02", "node-2", 0.7, "다른 실행의 배치");
+        unrelated = workloadRepository.save(unrelated);
+
+        executionService.recoverStuckRuns();
+
+        Workload after = workloadRepository.findById(unrelated.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals("node-2", after.getAssignedNodeId());
+        assertEquals(0, after.resolveRetryCount());
     }
 
     @DisplayName("실행 중이 아닌 스케줄은 건드리지 않는다 — 꺼진 사이 지난 예정을 몰아 돌리지 않는 계약 유지")

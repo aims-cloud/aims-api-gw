@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,7 @@ class ScheduleExecutionServiceTest {
     @Autowired private ScheduleRunRepository runRepository;
     @Autowired private WorkloadRepository workloadRepository;
     @Autowired private SchedulerProperties properties;
+    @Autowired private SchedulingService schedulingService;
 
     @BeforeEach
     void clean() {
@@ -129,7 +132,7 @@ class ScheduleExecutionServiceTest {
         assertTrue(run.getMessage().contains("재시도 소진 1건"), run.getMessage());
     }
 
-    @DisplayName("재시도 여유가 있으면 대상에 남는다")
+    @DisplayName("재시도 여유가 있으면 대상에 남는다 (간격을 끈 경우)")
     @Test
     void retries_left_stays_target() {
         Workload retryable = new Workload("재시도가능", 1, 1024);
@@ -138,7 +141,14 @@ class ScheduleExecutionServiceTest {
         workloadRepository.save(retryable);
 
         Schedule schedule = save(scheduleOf("retry-ok", true, false));
-        ScheduleRun run = executionService.runNow(schedule.getId(), "tester");
+        int backoff = properties.getRetryBackoffMinutes();
+        properties.setRetryBackoffMinutes(0);   // 이 시험이 보는 것은 횟수 조건이지 간격이 아니다
+        ScheduleRun run;
+        try {
+            run = executionService.runNow(schedule.getId(), "tester");
+        } finally {
+            properties.setRetryBackoffMinutes(backoff);
+        }
 
         assertEquals(1, run.getTargetCount());
         // 테스트 환경에는 메트릭 저장소가 없어 후보 노드가 0건이다
@@ -191,6 +201,206 @@ class ScheduleExecutionServiceTest {
         assertEquals("weighted", run.getEngineId(), "지정하지 않으면 기본 엔진");
         assertNotNull(run.getPolicyName());
         assertEquals("tester", run.getTriggeredBy());
+    }
+
+    // ── 현행 동작 고정 (이 커밋 시점의 결함을 포함한다) ──────────────
+
+    /**
+     * <b>전부 소진되면 실행을 실패로 마감한다.</b> 사람이 되살리기 전에는 아무 일도 못 하기 때문이다.
+     *
+     * <p>대상이 0건이면 "할 일이 없어서" 든 "전부 소진돼서" 든 똑같이 완료로 끝난다. 화면에서는
+     * 두 상황을 구분할 수 없고, 스케줄은 영원히 성공한 것처럼 보인다. 뒤 커밋이 이 시험을
+     * 뒤집는 것이 곧 고쳤다는 증거다.</p>
+     */
+    @DisplayName("전부 소진되면 실행이 실패로 끝나고 사유에 재개가 필요하다고 적힌다")
+    @Test
+    void an_exhausted_run_finishes_as_failed() {
+        Workload exhausted = new Workload("소진", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        workloadRepository.save(exhausted);
+
+        ScheduleRun run = executionService.runNow(save(scheduleOf("exhausted-green", true, false)).getId(), "tester");
+
+        assertEquals(0, run.getTargetCount());
+        assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus(),
+                "전부 소진됐는데 초록불로 끝나면 화면에서 문제가 보이지 않는다");
+        assertTrue(run.getMessage().contains("일괄 재개"), run.getMessage());
+    }
+
+    /**
+     * <b>재시도에 간격을 둔다.</b> 방금 실패한 워크로드는 백오프가 지나기 전에는 대상이 아니다.
+     *
+     * <p>5분 주기 스케줄이면 25분에 다섯 번을 전부 태운다. 온도 초과 노드의 냉각 대기가
+     * 10분이고 메트릭 지연 허용도 10분이라, 회복될 수 있는 원인조차 회복 전에 소진된다.</p>
+     */
+    @DisplayName("방금 실패한 워크로드는 백오프 안에는 대상에서 빠진다")
+    @Test
+    void a_just_failed_workload_waits_for_the_backoff() {
+        Workload justFailed = new Workload("방금실패", 1, 1024);
+        justFailed.setResourceType(Workload.ResourceType.VM);
+        justFailed.markFailed("일시적 자원 부족");
+        workloadRepository.save(justFailed);
+
+        ScheduleRun run = executionService.runNow(save(scheduleOf("no-backoff", true, false)).getId(), "tester");
+
+        assertEquals(0, run.getTargetCount(),
+                "실패 직후인데 다시 시도한다 — 냉각 대기·메트릭 지연이 회복되기 전에 기회를 태운다");
+        assertTrue(run.getMessage().contains("대상 없음"), run.getMessage());
+    }
+
+    /**
+     * <b>소진된 워크로드를 되살리는 길은 한 건씩뿐이다.</b> 단건 상태 변경은 이미 되고,
+     * 되살리면 재시도 횟수가 0 으로 지워진다. 없는 것은 여러 건을 한 번에 되살리는 길이다.
+     */
+    @DisplayName("현행: 소진 재개는 단건으로만 되고 재시도 횟수가 지워진다")
+    @Test
+    void currently_only_one_by_one_resume_is_possible() {
+        Workload exhausted = new Workload("소진2", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        Workload saved = workloadRepository.save(exhausted);
+
+        assertEquals(properties.getMaxRetryCount(), saved.resolveRetryCount());
+        assertTrue(saved.transitionTo(Workload.WorkloadStatus.PENDING), "실패 → 대기는 허용된다");
+        assertEquals(0, saved.resolveRetryCount(), "되살리면 재시도 횟수가 지워진다");
+    }
+
+    /**
+     * 백오프로 밀린 것은 <b>실패가 아니다</b> — 시간이 지나면 저절로 풀리므로 정상으로 적고
+     * 얼마 뒤에 다시 시도하는지 사유에 남긴다.
+     */
+    @DisplayName("재시도 대기만 남으면 실행은 정상이고 사유에 대기 건수와 간격이 적힌다")
+    @Test
+    void a_backoff_only_run_stays_completed() {
+        Workload waiting = new Workload("대기", 1, 1024);
+        waiting.setResourceType(Workload.ResourceType.VM);
+        waiting.markFailed("일시적 자원 부족");
+        workloadRepository.save(waiting);
+
+        ScheduleRun run = executionService.runNow(save(scheduleOf("backoff-wait", true, false)).getId(), "tester");
+
+        assertEquals(0, run.getTargetCount());
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus(),
+                "시간이 지나면 풀릴 일을 실패로 적으면 진짜 실패가 묻힌다");
+        assertTrue(run.getMessage().contains("재시도 대기 1건"), run.getMessage());
+        assertTrue(run.getMessage().contains(properties.getRetryBackoffMinutes() + "분"), run.getMessage());
+    }
+
+    // ── 일괄 재개 ──────────────────────────────────────
+
+    /**
+     * 소진된 워크로드를 종류로 골라 한 번에 되살린다. 되살리면 재시도 횟수와 마지막 실패
+     * 시각이 지워져 백오프에도 걸리지 않고 곧바로 대상이 된다.
+     */
+    @DisplayName("일괄 재개는 소진된 것만 되살리고 재시도 횟수·실패 시각을 지운다")
+    @Test
+    void bulk_resume_revives_only_exhausted_workloads() {
+        Workload exhausted = new Workload("소진-일괄", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        workloadRepository.save(exhausted);
+
+        Workload stillTrying = new Workload("여유있음", 1, 1024);
+        stillTrying.setResourceType(Workload.ResourceType.VM);
+        stillTrying.markFailed("일시적");
+        workloadRepository.save(stillTrying);
+
+        List<Workload> resumed = schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null);
+
+        assertEquals(1, resumed.size(), "소진되지 않은 워크로드까지 되살렸다");
+        assertEquals("소진-일괄", resumed.get(0).getName());
+        assertEquals(0, resumed.get(0).resolveRetryCount());
+        assertNull(resumed.get(0).getLastFailedAt(), "실패 시각이 남으면 백오프가 다시 붙잡는다");
+        assertEquals(Workload.WorkloadStatus.PENDING, resumed.get(0).getStatus());
+    }
+
+    @DisplayName("VM 일괄 재개는 리소스 종류가 없는 기존 행도 VM으로 해석한다")
+    @Test
+    void bulk_resume_vm_includes_legacy_null_resource_type() {
+        Workload legacy = new Workload("소진-기존-VM", 1, 1024);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) legacy.markFailed("자원 부족");
+        workloadRepository.save(legacy);
+
+        List<Workload> resumed = schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null);
+
+        assertEquals(1, resumed.size());
+        assertEquals("소진-기존-VM", resumed.get(0).getName());
+        assertEquals(Workload.WorkloadStatus.PENDING, resumed.get(0).getStatus());
+    }
+
+    @DisplayName("VM이 아닌 종류의 일괄 재개는 리소스 종류가 없는 기존 행을 가져오지 않는다")
+    @Test
+    void bulk_resume_non_vm_excludes_legacy_null_resource_type() {
+        Workload legacy = new Workload("소진-기존-비VM", 1, 1024);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) legacy.markFailed("자원 부족");
+        workloadRepository.save(legacy);
+
+        assertTrue(schedulingService.resumeExhausted(Workload.ResourceType.GPU, null, null).isEmpty());
+        assertEquals(Workload.WorkloadStatus.FAILED,
+                workloadRepository.findById(legacy.getId()).orElseThrow().getStatus());
+    }
+
+    @DisplayName("조건 없는 전체 재개는 받지 않는다")
+    @Test
+    void bulk_resume_requires_a_filter() {
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> schedulingService.resumeExhausted(null, null, null));
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains("하나는 지정"), e.getMessage());
+    }
+
+    @DisplayName("기간의 시작이 끝보다 뒤면 400")
+    @Test
+    void bulk_resume_rejects_an_inverted_range() {
+        OffsetDateTime now = OffsetDateTime.now();
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> schedulingService.resumeExhausted(null, now, now.minusDays(1)));
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+    }
+
+    @DisplayName("기간 밖에서 실패한 워크로드는 되살리지 않는다")
+    @Test
+    void bulk_resume_respects_the_period() {
+        Workload exhausted = new Workload("소진-기간", 1, 1024);
+        exhausted.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
+        workloadRepository.save(exhausted);
+
+        OffsetDateTime longAgo = OffsetDateTime.now().minusDays(30);
+        assertTrue(schedulingService.resumeExhausted(null, longAgo.minusDays(1), longAgo).isEmpty(),
+                "기간 밖인데 되살렸다");
+        assertEquals(1, schedulingService.resumeExhausted(null, OffsetDateTime.now().minusHours(1), null).size());
+    }
+
+    // ── 소진 → 재개 한 바퀴 ────────────────────────────
+
+    /**
+     * <b>반복 실패 → 소진 → 일괄 재개 → 다시 대상</b> 한 바퀴를 그대로 돈다.
+     *
+     * <p>각 단계를 따로 본 시험은 위에 있지만, 이어 붙였을 때 상태가 맞물리는지는 여기서만 보인다.
+     * 특히 재개가 마지막 실패 시각까지 지우지 않으면 되살린 워크로드가 백오프에 다시 걸려,
+     * 사람이 재개를 눌러도 아무 일이 일어나지 않는다.</p>
+     */
+    @DisplayName("반복 실패로 소진되면 실행이 실패로 끝나고, 일괄 재개 뒤 곧바로 다시 대상이 된다")
+    @Test
+    void a_workload_goes_from_exhausted_to_target_again() {
+        Workload workload = new Workload("한바퀴", 1, 1024);
+        workload.setResourceType(Workload.ResourceType.VM);
+        for (int i = 0; i < properties.getMaxRetryCount(); i++) workload.markFailed("자원 부족");
+        workloadRepository.save(workload);
+
+        Schedule schedule = save(scheduleOf("round-trip", true, false));
+
+        ScheduleRun exhaustedRun = executionService.runNow(schedule.getId(), "tester");
+        assertEquals(0, exhaustedRun.getTargetCount(), "소진된 워크로드가 대상에 남았다");
+        assertEquals(ScheduleRun.RunStatus.FAILED, exhaustedRun.getStatus());
+
+        assertEquals(1, schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null).size());
+
+        ScheduleRun afterResume = executionService.runNow(schedule.getId(), "tester");
+        assertEquals(1, afterResume.getTargetCount(),
+                "재개했는데 대상이 아니다 — 마지막 실패 시각이 남아 백오프가 다시 붙잡았을 수 있다");
     }
 
     private Schedule scheduleOf(String key, boolean enabled, boolean autoRun) {

@@ -27,7 +27,15 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
  * ({@link SchedulerProperties#getTimezone()}), 결과는 UTC {@code OffsetDateTime} 으로 돌려준다.
  * 저장·응답은 전부 UTC 이며 표출 변환은 프런트가 한다.</p>
  *
- * <p><b>왜 변환이 필요한가</b> — 프런트 도움말 모달은 Quartz 규약을 안내하는데 런타임은
+ * <p><b>내부에서만 {@code ZonedDateTime} 을 쓰는 이유</b> — 표면(입력·반환·저장)은 전부 UTC
+ * {@code OffsetDateTime} 이고, {@code ZonedDateTime} 은 이 클래스 안에서 cron 을 진행시킬 때만 쓴다.
+ * Spring 의 {@code CronExpression.next()} 는 넘겨받은 Temporal 자신의 규칙으로 필드를 올리므로,
+ * 같은 지역 시각을 고정 오프셋으로 넣으면 시간대 전환 규칙이 사라진다. {@code Asia/Seoul} 은
+ * 서머타임이 없어 결과가 같지만, 해석 시간대를 서머타임이 있는 지역으로 바꾸면 미리보기는
+ * 커서를 이어 가므로 전환 이후 목록 전체가 한 시간 어긋난다. Spring 의 {@code CronTrigger} 도
+ * {@code next()} 에 넘기기 전에 {@code ZonedDateTime} 으로 바꾼다.</p>
+ *
+ * <p><b>왜 요일 변환이 필요한가</b> — 프런트 도움말 모달은 Quartz 규약을 안내하는데 런타임은
  * Spring 이다. 요일 번호 규약이 서로 하나씩 어긋나고, 이 차이는 예외로 드러나지 않고
  * <b>조용히 다른 날 실행</b>되는 형태로 나타난다. 아래는 Spring 7.0.8 로 직접 확인한 값이다.</p>
  *

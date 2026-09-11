@@ -66,7 +66,8 @@ public record PowerOptimizationResponse(
      * 클러스터 전력 현황.
      *
      * @param reclaimableIdleWatts 비어 있는 노드들의 유휴 전력 합. 통합했다면 아낄 수 있었을 양이다.
-     *                             워크로드를 옮길 수단이 없어 <b>실현된 절감이 아니다</b>
+     *                             워크로드를 옮길 수단이 없어 <b>실현된 절감이 아니다</b>.
+     *                             계측된 유휴 노드는 실측에서 역산, 그 외 정격 × idleRatio 다
      * @param measured             전력을 수집한 노드가 하나라도 있는지
      * @param unmeasuredReason     수집하지 못했을 때의 사유. 화면에 그대로 띄운다
      * @param excludedNodes        핵심 메트릭을 알 수 없어 수집 단계에서 뺀 노드 수.

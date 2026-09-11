@@ -161,13 +161,14 @@ class PlacementDispatchApiTest {
         assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(ids[0]).isEmpty());
     }
 
-    @DisplayName("기존 워크로드 응답은 21필드 그대로이고, 미인증은 403")
+    @DisplayName("워크로드 응답은 22필드(마지막 실패 시각 추가)이고, 미인증은 403")
     @Test
     void workload_contract_unchanged_and_auth() throws Exception {
         bigNode();
         long[] ids = placed("dpapi-contract");
         JsonNode w = data(mockMvc.perform(get(BASE + "/workloads/" + ids[0])).andReturn());
-        assertEquals(21, w.propertyNames().size());
+        assertEquals(22, w.propertyNames().size(),
+                "워크로드 응답 필드 수가 바뀌었다 — 의도한 변경이면 프런트 계약 문서의 변경 이력에도 적는다");
         mockMvc.perform(get(BASE + "/dispatches").with(anonymous())).andExpect(status().isForbidden());
         mockMvc.perform(post(BASE + "/dispatches/" + ids[1] + "/result").with(anonymous())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RUNNING\"}")).andExpect(status().isForbidden());

@@ -91,6 +91,20 @@ public class SchedulerProperties {
      */
     private int maxRetryCount = 5;
 
+    /**
+     * 같은 워크로드를 다시 시도하기까지 두는 최소 간격(분).
+     *
+     * <p>실패 원인 중 저절로 회복되는 것의 눈금이 10분이다 — 임계 온도를 넘긴 노드의 냉각 대기
+     * ({@code thermal.cooldown-minutes})와 메트릭 지연 허용({@code metric-lag-minutes}). 간격이 그보다
+     * 짧으면 노드가 식기 전에, 메트릭이 오기 전에 시도를 태운다. 10분은 냉각이 풀리는 순간과
+     * 겹쳐 타이밍에 좌우되므로 그 1.5배인 15분을 기본으로 둔다 — 5분 주기 스케줄에서 다섯 번을
+     * 쓰는 데 25분이 아니라 1시간 15분이 걸린다.</p>
+     *
+     * <p><b>0 이하면 간격을 보지 않는다</b>(이 설정 이전과 같은 동작). 되돌리기는 이 값 하나다.
+     * 스케줄 주기가 이 값보다 길면(예: 하루 1회) 아무 영향이 없다.</p>
+     */
+    private int retryBackoffMinutes = 15;
+
     private final Power power = new Power();
     private final Thermal thermal = new Thermal();
     private final Network network = new Network();
@@ -123,6 +137,8 @@ public class SchedulerProperties {
     public void setMaxWorkloadsPerRun(int maxWorkloadsPerRun) { this.maxWorkloadsPerRun = maxWorkloadsPerRun; }
     public int getMaxRetryCount() { return maxRetryCount; }
     public void setMaxRetryCount(int maxRetryCount) { this.maxRetryCount = maxRetryCount; }
+    public int getRetryBackoffMinutes() { return retryBackoffMinutes; }
+    public void setRetryBackoffMinutes(int v) { this.retryBackoffMinutes = v; }
     public Power getPower() { return power; }
     public Thermal getThermal() { return thermal; }
     public Network getNetwork() { return network; }
@@ -140,8 +156,18 @@ public class SchedulerProperties {
         /** 노드별 전력 용량 override. key 는 노드 식별자(instance). */
         private Map<String, Double> capacityByNode = new HashMap<>();
 
-        /** 유휴 전력 비율. P_idle = P_max × idleRatio */
+        /** 유휴 전력 비율. P_idle = P_max × idleRatio — 진단 지표·동적 범위의 기준선이고, 계측이 없을 때 깨우기 비용의 대체값 */
         private double idleRatio = 0.3;
+
+        /**
+         * 계측된 유휴 노드의 깨우기 비용을 실측 전력에서 역산하는가.
+         *
+         * <p>끄면 전 노드가 {@code P_max × idleRatio} 로 돌아간다 — 되돌리기는 이 값 하나다(팀 관례대로
+         * 환경변수 바인딩 한 줄). 유휴 판정은 {@code isActive}(실효 CPU)와 같은 기준이고, 역산 입력은 같은 순간의
+         * 실측 CPU 다. 이 값은 비교 API 의 설정 스냅샷과 다이제스트에 들어간다 — 모델 형태가 바뀌었는데
+         * 다이제스트가 같으면 어제 표와 오늘 표가 같은 설정으로 보인다.</p>
+         */
+        private boolean idleFromMeasurement = true;
 
         /** PEI 정규화 기준(%/W). 이 값을 1.0 으로 본다. */
         private double peiNormalizer = 0.5;
@@ -158,8 +184,8 @@ public class SchedulerProperties {
          *
          * <p><b>0.10 을 쓰는 이유는 실측으로 정했다.</b> 빈 노드는 "비어 있다"는 사실 하나로
          * 자원 여유와 온도 <b>양쪽에서</b> 보상을 받는다 — 부하가 없으니 여유도 많고 온도도 낮다.
-         * 전력 항 하나가 그 둘을 상대하는 구조라, 자원 몫이 0.12 이상이면 유휴 전력 150W 를
-         * 새로 쓰면서까지 빈 노드를 깨우는 판단이 나온다. 0.10 이하에서 전력 판단이 이긴다.</p>
+         * 전력 항 하나가 그 둘을 상대하는 구조라, 기준 시나리오에서는 자원 몫 0.10045 부근에서
+         * 빈 노드를 깨우는 판단으로 뒤집힌다. 기본값 0.10 은 그 경계에 가깝다.</p>
          *
          * <p>0.30 까지 올리면 기존 판단(가동 중 서버 선호)도 뒤집힌다. 반대로 0 으로 두면 자원
          * 여유를 전혀 보지 않아 한 노드에 몰리는데, 그건 사용률 임계 제약이 막는다.</p>
@@ -198,6 +224,21 @@ public class SchedulerProperties {
          * <p>5% 는 OS·에이전트만 도는 상태와 실제 워크로드가 도는 상태를 가르는 값이다.</p>
          */
         private double activeCpuPercent = 5.0;
+
+        /**
+         * 실질 한계 전력 점수의 분모가 되는 <b>W 눈금</b>.
+         *
+         * <p>깨우기 벌점을 노드 정격으로 나누면 유휴비로 상대화되어, 절대 W 가 다른 노드가 같은
+         * 벌점을 받는다. 고정 W 로 나누면 벌점이 절대 W 로 총점에 들어간다.</p>
+         *
+         * <p>기본 500 W 는 (i) 정격 500 W 노드의 점수를 그대로 두고 (ii) 비교 판 실측 최댓값
+         * 316 W 를 넘어 점수가 0 으로 포화하지 않게 하는 값이다. <b>0 이하면 정격 분모(구 방식)</b>
+         * 로 돌아간다 — 되돌리기는 이 값 하나다.</p>
+         *
+         * <p>가중치와 마찬가지로 <b>바뀔 수 있는 값</b>이다. 바꾸면 배치 결정과 이력에 저장되는
+         * 점수의 눈금이 새 행부터 달라지므로, 비교 응답의 configDigest 에 성분으로 실어 둔다.</p>
+         */
+        private double marginalScaleWatts = 500.0;
 
         // ── 통합 가능성 진단 상한 ──────────────────────────────────
 
@@ -244,6 +285,8 @@ public class SchedulerProperties {
         public void setCapacityByNode(Map<String, Double> v) { this.capacityByNode = v; }
         public double getIdleRatio() { return idleRatio; }
         public void setIdleRatio(double v) { this.idleRatio = v; }
+        public boolean isIdleFromMeasurement() { return idleFromMeasurement; }
+        public void setIdleFromMeasurement(boolean v) { this.idleFromMeasurement = v; }
         public double getPeiNormalizer() { return peiNormalizer; }
         public void setPeiNormalizer(double v) { this.peiNormalizer = v; }
         public double getResourceShare() { return resourceShare; }
@@ -258,6 +301,8 @@ public class SchedulerProperties {
         public void setCurveAlpha(double v) { this.curveAlpha = v; }
         public double getActiveCpuPercent() { return activeCpuPercent; }
         public void setActiveCpuPercent(double v) { this.activeCpuPercent = v; }
+        public double getMarginalScaleWatts() { return marginalScaleWatts; }
+        public void setMarginalScaleWatts(double v) { this.marginalScaleWatts = v; }
         public int getMaxConsolidationCandidates() { return maxConsolidationCandidates; }
         public void setMaxConsolidationCandidates(int v) { this.maxConsolidationCandidates = v; }
         public int getMaxRelocationsPerNode() { return maxRelocationsPerNode; }

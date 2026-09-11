@@ -7,6 +7,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.core.io.DefaultResourceLoader;
@@ -97,6 +98,15 @@ public class BenchmarkClusters {
                     + "노드에 따라 상쇄하므로(과소 믿음 노드에서는 부호가 반대다) 유휴 역산이 선언값에 가까워지는 행을 '항등이 "
                     + "살아남았다' 로 읽으면 안 된다. 판정 셀은 현 시스템에 없는 전원 제어를 가정한 값이라 배포 환경에서 "
                     + "재현되지 않는다.");
+
+    static {
+        // 등록부 셋(순서·파일·역할)의 판 집합이 어긋나면 판이 응답에서 조용히 빠지거나 역할이 null 로 나간다.
+        // 판을 더하거나 뺄 때 한 곳만 고친 실수를 클래스 적재 시점에 잡는다 — 시험이 판 수를 다시 적지 않는 대신이다.
+        if (!Set.copyOf(ORDER).equals(LOCATIONS.keySet()) || !Set.copyOf(ORDER).equals(ROLES.keySet())) {
+            throw new IllegalStateException("판 등록부가 어긋난다 — 순서 " + ORDER + " · 파일 " + LOCATIONS.keySet()
+                    + " · 역할 " + ROLES.keySet());
+        }
+    }
 
     private final Map<String, SyntheticCluster> loaded = new ConcurrentHashMap<>();
     private final Map<String, String> digests = new ConcurrentHashMap<>();

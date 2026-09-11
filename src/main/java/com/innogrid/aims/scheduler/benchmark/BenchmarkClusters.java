@@ -28,7 +28,7 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  * 판이다. 셋 다 주 결과판과 <b>노드 구성이 같아</b>(그 값들을 한 글자도 바꾸지 않았다) 판 사이의 차이를
  * 요인으로 읽을 수 있다 — 모집단이 다르면 그 읽기가 성립하지 않는다.</p>
  *
- * <p>{@link #digest(String)} 가 파일 내용의 SHA-256 앞 12자를 준다. 응답이 자기 입력을 지목하게 하려는
+ * <p>{@link #digest(String)} 가 파일 내용(개행을 LF 로 정규화)의 SHA-256 앞 12자를 준다. 응답이 자기 입력을 지목하게 하려는
  * 것이다 — 표에 적힌 숫자가 어느 파일에서 나왔는지 사람이 대조할 수 없으면, 파일을 고친 뒤 같은 표를
  * 다시 내놓아도 아무도 알 수 없다.</p>
  *
@@ -137,14 +137,21 @@ public class BenchmarkClusters {
     }
 
     /**
-     * 임의의 정규화 문자열의 SHA-256 앞 12자. 클러스터 파일과 <b>같은 규칙</b>으로 계산한다 — 응답에 실린
-     * 두 다이제스트(입력 파일 · 엔진 설정)를 사람이 같은 자로 대조할 수 있어야 한다.
+     * 임의의 정규화 문자열의 SHA-256 앞 12자 — 응답에 실린 두 다이제스트(입력 파일 · 엔진 설정)를 사람이 같은
+     * 자(길이 12, 같은 해시)로 대조할 수 있어야 한다. 파일 다이제스트와 달리 <b>개행을 정규화하지 않는다</b> —
+     * 입력이 개행 없는 정규 문자열이라 대상이 없고, 엔진 설정 다이제스트의 과거 값을 그대로 잇기 위해서다.
      */
     public static String digestOf(String canonical) {
         return prefixOf(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    /** 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 시험이 같은 식으로 기대값을 만든다. */
+    /**
+     * 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 시험이 같은 식으로 기대값을 만든다.
+     *
+     * <p><b>정규화 대상은 {@code \r\n} 개행만이다.</b> UTF-8 BOM·단독 {@code \r}·파일 끝 개행 유무는 내용의 일부로
+     * 해시된다 — 지금 판 파일 아홉 장은 BOM 없음·단독 CR 없음·끝 개행 1개다. BOM 을 붙이는 편집기로 저장하면 값이
+     * 조용히 바뀌므로 리터럴 시험이 그것을 잡는다.</p>
+     */
     public static String digestOfContent(byte[] fileBytes) {
         String normalized = new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8).replace("\r\n", "\n");
         return prefixOf(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8));

@@ -69,6 +69,9 @@ public class BenchmarkClusters {
     /** 판정판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
     public static final String CONVEX_MISRATED_INDEPENDENT = "convex-misrated-independent";
 
+    /** 오목 생성식판 — 주 결과판과 생성식 지수(0.625 = 1/1.6)만 다른 판. {@code BenchmarkRules.CONCAVE_BOARD} 와 같은 문자열. */
+    public static final String CONCAVE = "concave";
+
     /** 다이제스트로 남길 자릿수. 12자면 등록된 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
     private static final int DIGEST_LENGTH = 12;
 
@@ -129,7 +132,12 @@ public class BenchmarkClusters {
             new Board(CONVEX_MISRATED_INDEPENDENT, "classpath:scheduler/benchmark-cluster-convex-misrated-independent.yml",
                     "판정판의 위상 독립 짝(부록) — 노드 블록(엔진에 알려 준 정격 포함)과 생성식 지수는 판정판과 같고 phaseMode: independent 와 "
                     + "seeds 3 만 다르다. 판정 자격은 여전히 convex-misrated 에만 있고, 이 판은 판정 셀의 값이 위상 구성 3벌에서 어느 폭으로 "
-                    + "흔들리는지를 보는 자리다(중앙값 3값과 범위, 검정 아님). Board 사이의 지점을 합쳐 세지 않는다."));
+                    + "흔들리는지를 보는 자리다(중앙값 3값과 범위, 검정 아님). Board 사이의 지점을 합쳐 세지 않는다."),
+            new Board(CONCAVE, "classpath:scheduler/benchmark-cluster-concave.yml",
+                    "오목 생성식판(부록) — 주 결과판과 생성식 지수(powerExponent 0.625 = 1/1.6)만 다르다. 볼록 판 지수의 역수라는 대칭이 "
+                    + "근거의 전부이고 물리적 근거는 없다. 저부하에서 전력이 선형보다 높아 엔진의 유휴 역산이 선언값보다 높게 본다. 생성 전력·"
+                    + "역산 유휴·오라클 세 경로가 함께 바뀌는 판이라 원인을 지목하지 않고 결론 적용 범위가 β<1 까지 뻗는지만 서술한다 — "
+                    + "역산 경로의 기여는 power-idle-fixed 열이 분리한다. 판정·방향 판정 자격 없음. seed 하나(legacy 위상)."));
 
     private static final Map<String, Board> BY_ID = BOARDS.stream()
             .collect(Collectors.toMap(Board::id, Function.identity(),

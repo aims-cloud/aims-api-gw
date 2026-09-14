@@ -547,7 +547,7 @@ public final class BenchmarkRules {
      * 판정 전제가 걸리는 고정값은 {@link #MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT} 다. 갱신값이 기본 {@code marginalScaleWatts}(500W)를
      * 넘으면 포화가 기본 설정에서 발현한다는 뜻이므로 그 판의 도입을 보류하고, 기본 S 변경은 판정 규칙 개정으로 별도 처리한다.</p>
      */
-    public static final double MAX_REAL_MARGINAL_WATTS = 316.0;
+    public static final double MAX_REAL_MARGINAL_WATTS = 345.5437131040917;   // 오목 판(β=0.625) bm-14 4코어 t=2400s. 오목 판 이전 316.0
 
     /**
      * 미계측 비율의 전략 간 격차가 이 값(%p)을 넘으면 전력·온도 비교의 유효성을 의심한다.

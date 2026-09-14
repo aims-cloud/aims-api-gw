@@ -43,9 +43,9 @@ public class PlacementBenchmarkController {
                        + "strategies[].engineConfigOverride 가 바뀐 노브를 밝히고 그 값은 설정 다이제스트에 들어갑니다)을 "
                        + "**같은 노드 스냅샷·같은 워크로드 표본·같은 제약 파이프라인**에서 "
                        + "돌린 결과입니다. **저장소에는 아무것도 쓰지 않습니다.** 같은 입력(판·분포·판 파일 다이제스트·워크로드 파일 "
-                       + "다이제스트·설정 다이제스트)의 두 번째 호출은 메모리 캐시에서 나오며 evaluatedAt 만 새로 찍힙니다. 계산은 한 번에 한 건만 "
+                       + "다이제스트·설정 다이제스트·판정 규칙 다이제스트)의 두 번째 호출은 메모리 캐시에서 나오며 evaluatedAt 만 새로 찍힙니다. 계산은 한 번에 한 건만 "
                        + "돌고, 계산 중 들어온 호출 중 **캐시에 없는 입력**만 기다리지 않고 **429** 와 사유를 받습니다(캐시에 있는 "
-                       + "입력은 계산 중에도 200). 수 초~수십 초 뒤 다시 호출하세요(위상 독립 판은 Board 3장이라 더 걸립니다). Retry-After 헤더는 주지 않습니다.\n\n"
+                       + "입력은 계산 중에도 200). 보통 5~10초, 오래 걸리는 판은 20초까지 기다린 뒤 다시 호출하세요. Retry-After 헤더는 주지 않습니다.\n\n"
                        + "**주 지표는 엔진이 믿은 값이 아닙니다.** engineBelievedCostW 는 전력 엔진 총점의 한 항을 "
                        + "그대로 합한 값이라 그것으로 순위를 매기면 그 목적함수를 최대화한 전략이 정의상 이깁니다. "
                        + "총전력의 주 지표(generatorPowerW)는 클러스터 파일 생성식의 **선언된 유휴 전력**으로 계산하며 "
@@ -94,7 +94,7 @@ public class PlacementBenchmarkController {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비교 결과(캐시 적중 포함)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "모르는 판·분포"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "다른 계산이 실행 중이고 이 입력은 캐시에 없음 — 수 초~수십 초 뒤 재호출")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "다른 계산이 실행 중이고 이 입력은 캐시에 없음 — 보통 5~10초, 오래 걸리는 판은 20초까지 기다린 뒤 재호출")
     })
     @GetMapping("/placement")
     public ApiResponse<PlacementBenchmarkResponse> comparePlacement(

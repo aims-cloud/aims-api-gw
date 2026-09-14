@@ -120,7 +120,8 @@ public final class SyntheticCluster {
      * 돌리려면 사본이 필요하다. 등록부는 판당 인스턴스 하나를 캐시하므로 사본은 호출자가 든다.
      */
     public SyntheticCluster withSeed(long newSeed) {
-        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds, phaseMode, seeds);
+        // 사본의 seeds 는 자기 seed 하나 — "seed 는 seeds 의 첫 항목" 불변식을 사본에서도 지킨다. 원본의 seeds 목록은 하네스가 원본에서 읽는다
+        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds, phaseMode, List.of(newSeed));
     }
 
     // ── 로딩 ──────────────────────────────────────────────────
@@ -168,7 +169,10 @@ public final class SyntheticCluster {
         if (!(many instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("seeds 는 비어 있지 않은 목록이어야 합니다: " + location);
         LinkedHashSet<Long> out = new LinkedHashSet<>();
         for (Object o : list) {
-            long s = num(o, 0).longValue();
+            if (!(o instanceof Number n) || n.doubleValue() != Math.rint(n.doubleValue())) {
+                throw new IllegalArgumentException("seeds 항목은 정수여야 합니다: " + o + " (" + location + ")");
+            }
+            long s = n.longValue();
             if (!out.add(s)) throw new IllegalArgumentException("seeds 중복: " + s + " (" + location + ")");
         }
         return List.copyOf(out);

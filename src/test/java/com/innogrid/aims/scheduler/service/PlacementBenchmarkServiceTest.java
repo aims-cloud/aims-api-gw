@@ -345,9 +345,11 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("weighted-affinity 는 링크 없는 판에서 weighted 와 값이 같고 링크 판에서만 다르다")
     @Test
     void the_affinity_column_differs_from_weighted_only_on_the_link_board() {
-        for (String board : List.of("main", "convex-misrated", "concave")) {
-            var b = service.compare(board, "heavytail").boards().get(0);
-            assertEquals(columnOf(b, "weighted"), columnOf(b, "weighted-affinity"), board + " — 게이트가 꺼진 판인데 두 열이 다르다");
+        for (String board : new BenchmarkClusters().boardIds()) {
+            if (BenchmarkClusters.LINK.equals(board)) continue;
+            for (var b : service.compare(board, "heavytail").boards()) {
+                assertEquals(columnOf(b, "weighted"), columnOf(b, "weighted-affinity"), board + " seed " + b.phaseSeed() + " — 데이터 MDC 를 배정하지 않은 판인데 두 열이 다르다");
+            }
         }
         var link = service.compare("link", "heavytail").boards().get(0);
         assertNotEquals(columnOf(link, "weighted"), columnOf(link, "weighted-affinity"), "링크 판에서 게이트 on/off 열이 같다 — netScore 경로가 작동하지 않는다");
@@ -361,7 +363,7 @@ class PlacementBenchmarkServiceTest {
     @Test
     void the_sensitivity_columns_actually_differ() {
         var main = service.compare("main", "heavytail").boards().get(0);
-        Map<String, Double> s250 = columnOf(main, "power-s250"), s1000 = columnOf(main, "power-s1000"), s0 = columnOf(main, "power-s0");
+        Map<String, String> s250 = columnOf(main, "power-s250"), s1000 = columnOf(main, "power-s1000"), s0 = columnOf(main, "power-s0");
         assertNotEquals(s250, s1000, "250W 눈금 열이 1000W 열과 같다 — 포화가 발현하지 않거나 눈금이 적용되지 않았다");
         assertNotEquals(s0, s1000, "정격 분모 열이 1000W 열과 같다 — 구 방식이 적용되지 않았다");
         assertNotEquals(columnOf(main, "power-idle-fixed"), columnOf(main, "power"), "역산 차단 열이 power 와 같다 — 계측 유휴 노드가 있는 판에서는 역산이 값을 바꿔야 한다");
@@ -401,12 +403,41 @@ class PlacementBenchmarkServiceTest {
         assertTrue(plain.stream().allMatch(w -> w.getDataMdcId() == null), "링크 없는 판은 dataMdcId 를 부여하지 않는다");
     }
 
-    private static Map<String, Double> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
-        Map<String, Double> out = new LinkedHashMap<>();
+    /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */
+    private static Map<String, String> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
+        Map<String, String> out = new LinkedHashMap<>();
         for (var cell : board.cells()) for (var s : cell.strategies()) if (s.strategyId().equals(strategyId)) for (var m : s.metrics()) {
-            out.put(cell.loadRatioPercent() + "/" + cell.powerControl() + "/" + m.key(), m.median());
+            out.put(cell.loadRatioPercent() + "/" + cell.powerControl() + "/" + m.key(), m.median() + "|" + m.samples() + "|" + m.valid());
         }
         return out;
+    }
+
+    /**
+     * override 열이 기준 집합과 건수가 다른 지점에서 총량을 내지 못하면 그 사실이 응답에 보인다 — PAIRING_RULE 의 표기 의무.
+     * 등록 판 전부를 훑어 그런 셀을 찾고, 있으면 셀 문장에 열 이름과 지점 수가 적혀 있는지 본다(없으면 규칙이 검증 불가다).
+     */
+    @DisplayName("override 열의 총량 표본이 기준 집합보다 적은 셀은 그 사실을 셀 문장에 적는다")
+    @Test
+    void dropped_override_points_are_reported_in_the_cell() {
+        int found = 0;
+        for (String board : new BenchmarkClusters().boardIds()) {
+            for (var b : service.compare(board, "heavytail").boards()) {
+                for (var cell : b.cells()) {
+                    int core = strategy(cell, "power").metrics().stream().filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow().samples();
+                    for (var s : cell.strategies()) {
+                        if (s.engineConfigOverride().isEmpty()) continue;
+                        int mine = s.metrics().stream().filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow().samples();
+                        if (mine < core) {
+                            found++;
+                            assertNotNull(cell.totalsIncomparableReason(), board + " " + cell.loadRatioPercent() + " " + s.strategyId() + " — 표본이 줄었는데 셀 문장이 없다");
+                            assertTrue(cell.totalsIncomparableReason().contains(s.strategyId() + " " + (core - mine) + "곳"),
+                                    board + " " + cell.loadRatioPercent() + " — 셀 문장에 열과 지점 수가 없다: " + cell.totalsIncomparableReason());
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(found > 0, "표본이 줄어든 override 열이 한 곳도 없다 — 이 시험이 아무것도 보지 않는다(판 구성이 바뀌었으면 시험을 다시 본다)");
     }
 
     private static Map<String, Double> flattenBoard(PlacementBenchmarkResponse.Board board) {

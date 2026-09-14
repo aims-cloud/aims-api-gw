@@ -117,7 +117,7 @@ class SyntheticClusterPhaseModeTest {
     @Test
     void rejects_malformed_phase_declarations() {
         String nodes = "name: t\nnodes:\n  - { mdcId: a, nodeId: \"n-a:9100\", cores: 8, memoryMb: 32768, idleWatts: 100, capacityWatts: 400 }\n";
-        for (String bad : List.of("seed: 7\nseeds: [7, 11]\n", "seeds: [7, 7]\n", "seeds: []\n", "phaseMode: random\n")) {
+        for (String bad : List.of("seed: 7\nseeds: [7, 11]\n", "seeds: [7, 7]\n", "seeds: []\n", "phaseMode: random\n", "seeds: [7, 1.5]\n", "seeds: [7, x]\n")) {
             Object root = new Yaml().load(nodes + bad);
             assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(root, "test"), bad);
         }
@@ -125,5 +125,6 @@ class SyntheticClusterPhaseModeTest {
         assertEquals(11L, c.seed(), "seeds 의 첫 항목이 seed 다");
         assertEquals(SyntheticCluster.PhaseMode.INDEPENDENT, c.phaseMode());
         assertEquals(c.nodes(), c.withSeed(99).nodes(), "withSeed 는 노드를 그대로 든다");
+        assertEquals(List.of(99L), c.withSeed(99).seeds(), "사본의 seeds 는 자기 seed 하나 — 불변식 유지");
     }
 }

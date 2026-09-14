@@ -230,7 +230,7 @@ public class PlacementBenchmarkService {
         if (!running.tryAcquire()) {
             log.warn("배치 비교 동시 호출 거절(429): board={} distribution={}", board, dist);
             throw new BusinessException(HttpStatus.TOO_MANY_REQUESTS,
-                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(수 초~수십 초 — 위상 독립 판은 Board 3장) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
+                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(보통 5~10초, 오래 걸리는 판은 20초까지) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
         }
         try {
             hit = cache.get(key);   // 첫 조회가 빗나간 뒤 슬롯을 잡기 전 같은 키가 끝났을 수 있다(좁은 경합 창)
@@ -591,6 +591,8 @@ public class PlacementBenchmarkService {
         List<String> coreIds = strategyIds.stream().filter(id -> !overrides.containsKey(id)).toList();
         int usablePoints = 0;
         Map<String, Integer> mismatchExample = Map.of();
+        // override 열이 기준 집합과 건수가 달라 총량을 내지 못한 지점 수 — PAIRING_RULE 이 응답 표기를 요구한다
+        Map<String, Integer> droppedByRow = new LinkedHashMap<>();
 
         for (PointOutcome point : points) {
             Map<String, Double> unmeasuredRates = new LinkedHashMap<>();
@@ -623,6 +625,7 @@ public class PlacementBenchmarkService {
                 Map<String, List<Double>> into = samples.get(id);
                 // override 열은 기준 집합의 마스크를 받되 자기 건수가 기준 건수와 같아야 총량을 낸다
                 boolean rowComparable = pointComparable && (coreIds.contains(id) || coreCount.equals(p.placed()));
+                if (pointComparable && !rowComparable) droppedByRow.merge(id, 1, Integer::sum);
 
                 add(into, BenchmarkRules.PLACEMENT_RATE,
                         p.requested() == 0 ? null : round(100.0 * p.placed() / p.requested()));
@@ -664,13 +667,20 @@ public class PlacementBenchmarkService {
         boolean comparable = usablePoints == points.size();
         String incomparable = comparable ? null
                 : pairingNote(usablePoints, points.size(), mismatchExample);
+        if (!droppedByRow.isEmpty()) {
+            List<String> parts = new ArrayList<>();
+            droppedByRow.forEach((id, n) -> parts.add(id + " " + n + "곳"));
+            String note = "override 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", parts)
+                    + " — 그 열의 총량 표본(samples)은 그만큼 적다";
+            incomparable = incomparable == null ? note : incomparable + " " + note;
+        }
 
         List<StrategyResult> results = new ArrayList<>(strategyIds.size());
         for (String id : strategyIds) {
             Placement any = points.get(0).byStrategy().get(id);
             results.add(new StrategyResult(id, any.strategy().label(), any.strategy().kind().name(),
                     any.strategy().policy().name(), overrides.getOrDefault(id, Map.of()),
-                    metricValues(samples.get(id), any, usablePoints, points)));
+                    metricValues(samples.get(id), any, usablePoints, points, droppedByRow.getOrDefault(id, 0))));
         }
 
         return new Cell(loadRatio, mode.name(),
@@ -725,7 +735,7 @@ public class PlacementBenchmarkService {
     }
 
     private static List<MetricValue> metricValues(Map<String, List<Double>> samples, Placement any,
-                                                  int usablePoints, List<PointOutcome> points) {
+                                                  int usablePoints, List<PointOutcome> points, int droppedPoints) {
         int measuredNodes = points.get(0).measuredNodeCount();
         String strategyId = any.strategy().id();
         boolean placedAnywhere = points.stream()
@@ -744,6 +754,11 @@ public class PlacementBenchmarkService {
             String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere,
                     baselinePresent, !series.isEmpty());
             if (series.isEmpty()) {
+                boolean totals = BenchmarkRules.GENERATOR_POWER.equals(metric.key()) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(metric.key())
+                        || BenchmarkRules.WARN_ZONE_NODES.equals(metric.key()) || BenchmarkRules.TEMP_STDDEV.equals(metric.key());
+                if (totals && droppedPoints > 0 && droppedPoints == usablePoints) {
+                    invalid = "기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + droppedPoints + "곳)";
+                }
                 values.add(new MetricValue(metric.key(), null, null, null, 0, pointValues, false,
                         invalid != null ? invalid : "이 셀에서 값이 나오지 않았다"));
                 continue;
@@ -813,11 +828,11 @@ public class PlacementBenchmarkService {
         }
         if ((BenchmarkRules.GENERATOR_POWER.equals(key) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(key))
                 && usablePoints == 0) {
-            return "전 전략의 배치 건수가 같은 시각 지점이 없다 — 적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다";
+            return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다";
         }
         if ((BenchmarkRules.TEMP_STDDEV.equals(key) || BenchmarkRules.WARN_ZONE_NODES.equals(key))
                 && usablePoints == 0) {
-            return "전 전략의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 "
+            return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 "
                     + "열 성능이 아니다";
         }
         if (BenchmarkRules.PER_WORKLOAD_POWER.equals(key) && !placedAnywhere) {
@@ -1099,13 +1114,6 @@ public class PlacementBenchmarkService {
     private Map<String, Map<String, String>> overrides() {
         Map<String, Map<String, String>> out = new LinkedHashMap<>();
         for (EngineVariant v : engineVariants()) if (!v.override().isEmpty()) out.put(v.strategy().id(), v.override());
-        return out;
-    }
-
-    /** 열별 "엔진이 믿은 비용" 모델 — 전력 모델 형태를 바꾼 열만 자기 모델을 갖는다. */
-    private Map<String, PowerModel> believedCostModels() {
-        Map<String, PowerModel> out = new LinkedHashMap<>();
-        for (EngineVariant v : engineVariants()) if (v.believedCostModel() != powerModel) out.put(v.strategy().id(), v.believedCostModel());
         return out;
     }
 

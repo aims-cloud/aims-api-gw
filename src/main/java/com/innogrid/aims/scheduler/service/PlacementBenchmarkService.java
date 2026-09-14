@@ -102,7 +102,7 @@ public class PlacementBenchmarkService {
     private static final String RANDOM_ID = "random";
 
     /**
-     * 격차 지표의 <b>분모가 되는 대조군</b>. 문헌 기준선이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
+     * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 모델 절제(깨우기항 제외) 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
      * 값이 없다. 시험 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
      */
     private static final String PABFD_ID = "pabfd";

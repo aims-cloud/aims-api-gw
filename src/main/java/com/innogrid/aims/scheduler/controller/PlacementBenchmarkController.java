@@ -24,7 +24,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 접두어를 {@code /benchmark} 로 갈라 두면 그 경합이 생기지 않는다.</p>
  */
 @Tag(name = "스케줄러 (배치 전략 비교)",
-     description = "우리 엔진과 문헌 기준선을 같은 판·같은 워크로드·같은 제약에서 비교")
+     description = "우리 엔진과 대조군(엔진 모델 절제·단순 규칙·무작위)을 같은 판·같은 워크로드·같은 제약에서 비교")
 @RestController
 @RequestMapping("/api/v1/scheduler/benchmark")
 public class PlacementBenchmarkController {
@@ -58,7 +58,7 @@ public class PlacementBenchmarkController {
                        + "의미를 갖는지 함께 줍니다 — 배치 건수가 다르면 총량 열은 짝지어진 시각 지점만으로 내고 그 "
                        + "사실을 totalsIncomparableReason 에 적습니다. 시각 지점 12곳을 훑어 median·min·max 를 함께 주니, "
                        + "지점 간 폭이 전략 간 차이보다 크면 그 차이는 주장할 수 없다는 뜻입니다.\n\n"
-                       + "**총전력 격차 열(gapVsPabfdPercent)** — 문헌 기준선인 전력 인지 최적적합 대비 총전력 "
+                       + "**총전력 격차 열(gapVsPabfdPercent)** — 엔진 모델 절제 대조군인 전력 인지 최적적합 대비 총전력 "
                        + "격차(%)를 시각 지점마다 짝지어 냅니다. 짝 조건이 총량 열보다 느슨해(이 행과 기준 전략 "
                        + "둘만 봅니다) samples 가 총량 열보다 클 수 있고, 지점별 비의 중앙값이라 두 전략의 총전력 "
                        + "중앙값을 나눈 수와는 다른 숫자입니다. 기준 전략 자신의 행은 0 이 아니라 무효입니다. "

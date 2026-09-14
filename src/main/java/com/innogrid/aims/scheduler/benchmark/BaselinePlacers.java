@@ -120,7 +120,9 @@ public final class BaselinePlacers {
     }
 
     /**
-     * 전력 인지 최적적합(PABFD) — <b>문헌 기준선</b>. 배치로 늘어나는 전력이 가장 적은 노드를 고른다.
+     * 전력 인지 최적적합(PABFD) — <b>엔진 모델 절제 대조군</b>. 배치로 늘어나는 전력이 가장 적은 노드를 고른다.
+     * 우리 {@code PowerModel} 의 한 메서드를 그대로 쓰는 절제(ablation)이므로 "문헌 기준선" 이라 부르지 않는다 —
+     * 인용할 문헌 구현이 없고, 유휴비 노브({@code idleRatio})를 엔진과 공유한다.
      *
      * <p><b>반드시 {@link PowerModel#marginalPower} 를 쓴다</b> — 정격과 요구 코어 비율만 보는 고전
      * 선형 모델이라 <b>빈 노드를 깨우는 비용이 없다</b>. {@link PowerModel#realMarginalPower} 를 쓰면
@@ -129,7 +131,7 @@ public final class BaselinePlacers {
      * 그대로 지켜야 한다.</p>
      */
     public static PlacementStrategy pabfd(PowerModel powerModel) {
-        String label = "전력 인지 최적적합(문헌 기준선)";
+        String label = "전력 인지 최적적합(엔진 모델 절제 · 깨우기항 제외)";
         return new PlacementStrategy("pabfd", label, Kind.BASELINE, PolicyVariant.BASE,
                 BY_SIZE_DESC, (workload, context) -> placePabfd(workload, context, powerModel, label));
     }
@@ -168,7 +170,8 @@ public final class BaselinePlacers {
     }
 
     /**
-     * 최저 온도 우선(재평가 없음) — <b>문헌 열 대조군</b>. 큰 작업부터, 적격 후보 중 실측 온도가 가장 낮은 노드에 놓는다.
+     * 최저 온도 우선(재평가 없음) — <b>단순 규칙 열 대조군</b>. 큰 작업부터, 적격 후보 중 실측 온도가 가장 낮은 노드에 놓는다.
+     * 문헌(TASA 계열)에서 착안했지만 재평가 단계가 없어 그 구현이 아니므로 "문헌 기준선" 이라 부르지 않는다.
      *
      * <p>Wang·von Laszewski 등의 TASA(2009) 계열이다 — "가장 뜨거운 작업을 가장 시원한 노드에". 발열의 대리로
      * 요구 코어를 쓰므로 워크로드 순서는 {@link #BY_SIZE_DESC} 다. 문헌의 TASA 는 배치마다 자기 열 모델로 노드 온도를
@@ -188,7 +191,7 @@ public final class BaselinePlacers {
      * 다른 전략과 벌어져 셀의 미계측 격차 경고가 켜지는 것은 결함이 아니라 그 판이 재려던 값이다.</p>
      */
     public static PlacementStrategy coolestFirst() {
-        String label = "최저 온도 우선(문헌 기준선 · 재평가 없음)";
+        String label = "최저 온도 우선(단순 규칙 · 재평가 없음)";
         return new PlacementStrategy("coolest-first", label, Kind.BASELINE, PolicyVariant.BASE,
                 BY_SIZE_DESC, (workload, context) -> placeCoolestFirst(workload, context, label));
     }

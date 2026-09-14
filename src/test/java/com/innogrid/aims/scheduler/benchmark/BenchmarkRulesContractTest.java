@@ -179,7 +179,7 @@ class BenchmarkRulesContractTest {
      * 그 사실은 {@link BenchmarkRules#LIMITATION} 이 밝힌다.
      *
      * <p>격차 지표가 여기 <b>다섯째</b>로 들어 있는 것도 의도다 — 다음 PR 의 판정이 읽는 값이라 보조로 두면,
-     * 판정에 쓰이는 순간 조용한 승격이 된다. 문헌 기준선을 분모로 삼고 전 전략 행에 같은 식으로 실으며
+     * 판정에 쓰이는 순간 조용한 승격이 된다. ΔP 단독 대조군(pabfd)을 분모로 삼고 전 전략 행에 같은 식으로 실으며
      * 좋은 방향이 낮은 쪽이라, 주 지표로 올린다고 우리 열이 유리해지지 않는다.</p>
      */
     @DisplayName("주 지표는 성공률과 전력·가동 계열뿐이고 온도 축에는 없다")
@@ -632,6 +632,18 @@ class BenchmarkRulesContractTest {
         for (String banned : BenchmarkRules.BANNED_CLAIMS) {
             assertFalse(banned.isBlank(), "빈 조각은 모든 문자열에 걸려 시험을 무의미하게 만든다");
             assertFalse(banned.endsWith("다."), "어미까지 적으면 사본이 어미만 바꿔 빠져나간다: " + banned);
+        }
+        // 심사자가 인용할 과잉 주장 조각 — 실제 문장이 걸리는지 양성 확인(조각이 빠지면 여기서 잡힌다)
+        for (String sentence : List.of(
+                "실제 서버의 전력 곡선이 볼록하기 때문이다",
+                "시원한 노드를 선호해 핫스팟을 막는다",
+                "전력 인지 최적적합(문헌 기준선)",
+                "후보 중 최적의 노드를 선택한다",
+                "워크로드를 최적 노드에 배치한다",
+                "열적 균형으로 핫스팟 방지",   // 괄호 삽입형 "핫스팟(hot spot) 방지" 는 조각이 못 잡는다 — 원문은 이미 회피 목표 어투로 고쳤다
+                "냉각 비용이 비선형적으로 증가")) {
+            assertThrows(AssertionError.class, () -> assertFreeOfBannedClaims(sentence, "표본 문장"),
+                    "금지 조각이 이 문장을 잡아야 한다: " + sentence);
         }
         assertFreeOfBannedClaims(BenchmarkRules.LIMITATION, "한계 문구");
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {

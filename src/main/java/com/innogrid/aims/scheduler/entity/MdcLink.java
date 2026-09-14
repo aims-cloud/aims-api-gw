@@ -8,7 +8,8 @@ import jakarta.persistence.*;
  * MDC 두 곳 사이의 연결 품질 원장 — 지연·대역폭·손실·상태.
  *
  * <p>배치 엔진이 "데이터가 있는 MDC 와 노드가 있는 MDC 사이가 얼마나 좋은가"를 물을 때 읽는 표다.
- * 이 PR 에서는 저장·조회만 하고 <b>아무도 읽지 않는다</b>. 반영은 다음 PR 에서 한다.</p>
+ * 정책 {@code affinityEnabled} 와 워크로드 {@code dataMdcId} 가 모두 있을 때 제약 C5(DOWN 제외, 전 엔진 공통)와
+ * weighted 엔진의 링크 점수가 읽는다. 대역폭은 저장·응답만 하고 아직 점수에 쓰지 않는다.</p>
  *
  * <p><b>쌍은 방향이 없다.</b> A→B 와 B→A 를 따로 두면 매트릭스가 비대칭이 되고 한쪽만 갱신되는 사고가 난다.
  * 그래서 저장할 때 두 식별자를 <b>사전순으로 정렬</b>해 작은 쪽을 {@code mdcA} 에 둔다. 유니크 제약은
@@ -27,7 +28,7 @@ import jakarta.persistence.*;
        })
 public class MdcLink {
 
-    /** 링크 상태. DOWN 은 다음 PR 에서 배치 제약(C5)으로 쓰인다. */
+    /** 링크 상태. DOWN 은 배치 제약 C5(전 엔진 공통)가 후보 제외에 쓰고, DEGRADED 는 weighted 엔진의 링크 점수에만 가산 비용으로 반영된다. */
     public enum LinkStatus { UP, DEGRADED, DOWN }
 
     /** 값의 출처. PROBE 는 자동 측정용으로 예약만 해 두었다 — 측정기는 아직 없다. */

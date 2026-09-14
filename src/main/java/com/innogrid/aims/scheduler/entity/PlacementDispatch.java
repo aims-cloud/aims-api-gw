@@ -32,7 +32,8 @@ public class PlacementDispatch {
      *      │            └──────────────────▶ FAILED
      *      ├─▶ REJECTED     실행 계층이 거부 (워크로드는 FAILED + 배정 해제)
      *      ├─▶ UNAVAILABLE  실행 계층에 닿지 못함 (워크로드는 FAILED + 배정 해제)
-     *      └─▶ TIMED_OUT    원격 모드에서 응답 시간 상한 초과 (이번 PR 에서는 판정하지 않음)
+     *      └─▶ TIMED_OUT    원격 모드에서 응답 시간 상한 초과 — <b>record 모드에서는 도달하지 않는다</b>
+     *                       (판정하는 코드가 아직 없다. 값은 계약·CHECK 제약에 있으므로 유지)
      * </pre>
      * Postgres 는 이 값 목록으로 CHECK 제약을 만든다 — 값을 더할 때는 DDL 스크립트도 고친다.
      */

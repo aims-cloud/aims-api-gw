@@ -87,7 +87,7 @@ public final class GroundTruthOracle {
         this.sortedNodeIds = byId.keySet().stream().sorted().toList();
     }
 
-    // ── 노드 단위 물리량 ──────────────────────────────────────
+    // ── 노드 단위 모델 계산값 (생성식 기준) ────────────────────
 
     /**
      * 노드 한 대의 생성식 기준 소비 전력(W). {@code cpuPercent} 는 0~100. 실측이 아니다.

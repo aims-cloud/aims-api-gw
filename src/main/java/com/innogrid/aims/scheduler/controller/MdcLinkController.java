@@ -20,7 +20,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  *
  * <p>{@code /matrix} 는 {@code /{linkId}} 보다 리터럴 경로라 먼저 매칭된다 — {@code MdcLinkApiContractTest} 가 고정.</p>
  */
-@Tag(name = "MDC 링크", description = "MDC 간 연결 품질(지연·대역폭·손실·상태) 원장. 배치 반영은 다음 단계")
+@Tag(name = "MDC 링크", description = "MDC 간 연결 품질(지연·대역폭·손실·상태) 원장. 정책 affinityEnabled + 워크로드 dataMdcId 가 있을 때 "
+        + "DOWN 링크 제외는 모든 엔진에 공통 적용되고, 링크 품질 점수는 weighted 엔진에서만 반영됩니다(대역폭은 저장만, 아직 점수에 쓰지 않습니다)")
 @RestController
 @RequestMapping("/api/v1/scheduler/mdc-links")
 public class MdcLinkController {

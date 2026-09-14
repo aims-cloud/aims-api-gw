@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 대상 화면: 지능형 예측 진단 > 스케줄러, 지능형 예측 진단 > 전력 최적화 진단
-- 기준 코드: `com.innogrid.aims.scheduler` (develop `3962ce9`), 엔드포인트 58개
+- 기준 코드: `com.innogrid.aims.scheduler` (develop `e12d665` + 문구 정정 PR), 엔드포인트 59개
 - 관련 문서: docs/10 알람 API 프론트 계약(같은 형식), docs/06 자원 탐색기 트리 설계(역할 스코프)
 
 **필드 하나하나의 진실은 Swagger(`/swagger-ui/index.html`, `/v3/api-docs`)입니다.** 이 문서는 필드를 전수로 옮기지 않습니다. 대신 화면을 붙일 때 Swagger 만으로는 알기 어려운 것 — 경로 묶음, 공통 규칙, 값이 비는 조건, 오류가 나는 조건, 그리고 앞으로 바뀔 예정 — 을 적습니다. 필드 목록이 필요하면 Swagger 를 보고, 이 문서와 다르면 코드가 맞습니다.
@@ -37,7 +37,7 @@
 |---|---|
 | 워크로드 | `PENDING` `SCHEDULED` `RUNNING` `COMPLETED` `FAILED` |
 | 실행 | `RUNNING` `COMPLETED` `FAILED` · 실행 주체 `AUTO` `MANUAL` |
-| 배치 결정 전달 | `REQUESTED` `ACCEPTED` `RUNNING` `COMPLETED` `FAILED` `REJECTED` `UNAVAILABLE` `TIMED_OUT` |
+| 배치 결정 전달 | `REQUESTED` `ACCEPTED` `RUNNING` `COMPLETED` `FAILED` `REJECTED` `UNAVAILABLE` `TIMED_OUT`(원격 모드 전용 — 지금의 record 모드에서는 나오지 않음) |
 | 리소스 종류 | `VM` `GPU` `NPU` `CONTAINER` |
 | 배치 순서 | `PRIORITY_THEN_AGE` `PRIORITY_THEN_SIZE` |
 | 엔진 | `weighted` `power` `temperature` (소문자 — 엔진 식별자라 예외) |
@@ -71,7 +71,7 @@
 
 ---
 
-## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (18)
+## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (20)
 
 진단 화면과 스케줄 화면이 함께 씁니다.
 
@@ -173,7 +173,7 @@
 
 ## 8. 배치 전략 비교 — `/api/v1/scheduler/benchmark/placement` (1)
 
-우리 엔진과 문헌 대조군을 같은 입력으로 비교한 결과입니다. **연구 검증·성능 보고용이며 화면 연동 대상이 아닙니다.**
+우리 엔진과 대조군(엔진 전력식 공유 ΔP 단독 · 자원 최밀집 · 단순 규칙 · 무작위)을 같은 입력으로 비교한 결과입니다. **연구 검증·성능 보고용이며 화면 연동 대상이 아닙니다.**
 
 응답의 `board.digest` 는 판 파일 내용(개행을 LF 로 정규화)의 SHA-256 앞 12자, `engineConfig.digest` 는 엔진 설정 정규 문자열의 해시입니다. 두 값이 같으면 같은 입력으로 계산된 표입니다. 판 다이제스트는 빌드 OS 와 무관하며 `git show HEAD:파일 | sha256sum` 으로 재계산할 수 있습니다. 2026-09-11 이전 Windows 빌드가 낸 표는 10장 변경 이력의 옛→새 대응표로 대조합니다. 재현 대조 시에는 `evaluatedAt`(응답 생성 시각)만 제외하고 본문을 비교합니다 — 그 외 비결정 필드는 없습니다(난수 시드 고정).
 
@@ -189,6 +189,7 @@
 | 전력·온도 | 0 | IPMI 수집 대상 미등록 |
 | GPU | 0 | DCGM 수집 대상 미등록 |
 | 원장 3종 | 0건 | 운영자 입력 전 |
+| 링크 원장 | 0건 | 운영자 입력 전. 그래서 배치 후보 상세에 `링크품질`·`링크등록` 키가 나오지 않는다(정책 `affinityEnabled` 도 꺼져 있음) |
 | 통합 권고 | 후보가 적음 | 노드가 1대라 옮길 곳이 없음 |
 
 ---
@@ -203,6 +204,7 @@
 | #51 | 2026-09-10 | 워크로드 | `lastFailedAt` 추가(21 → 22필드), 일괄 재개 엔드포인트 신설(58 → 59) | 필드 추가. 키 집합을 고정한 화면은 한 번 조정 필요 |
 | #53 | 2026-09-11 | 배치 결과 후보 상세 | `affinityEnabled` 정책 + `dataMdcId` 워크로드 배치에서 `details.링크등록` 추가 · 원장에 없는 원격 MDC 의 `링크품질` 1.0 → 0.5(설정 `aims.scheduler.network.unknown-link-score`) | 필드 추가. 게이트를 켜지 않은 배치는 응답·점수 불변. 켠 배치는 미등록 원격 후보 총점 −0.0375(기본 가중치·NORMAL 우선순위·선호 보너스 없음 기준. CRITICAL 은 ×1.2, 정책 가중치·설정값에 비례) |
 | (이번) | 2026-09-11 | 배치 전략 비교 | `board.digest` 를 개행 정규화한 내용의 해시로. 판 yml·판정 규칙·계산은 무변경. Windows 빌드 jar 의 여섯 판 값이 저장소(LF) 기준값으로 바뀜 — main `add880e1f395`→`fb011848258b` · adversarial `4ce3ca80c771`→`b89c82edff1c` · sparse `cecd68498459`→`f2109dcf47e1` · convex `84f26146719d`→`5e71beea2592` · misrated `a1d780187595`→`e935750a1637` · convex-misrated `bdbbfd0f5b06`→`d199d46fa3b0`. LF 체크아웃 빌드는 불변 | 필드·형태 변경 없음. 값만 변경. 화면 연동 대상 아님 |
+| (이번) | 2026-09-14 | 배치 전략 비교 | 대조군 라벨 값 변경 — `pabfd` `전력 인지 최적적합(문헌 기준선)` → `전력 인지 최적적합(엔진 전력식 공유 · ΔP 단독 · 깨우기항 없음)`, `coolest-first` `최저 온도 우선(문헌 기준선 · 재평가 없음)` → `최저 온도 우선(단순 규칙 · 재평가 없음)`. Swagger 설명 문구 정정. 전략 id·지표 키·다이제스트 불변 | 필드·형태 변경 없음. `strategies[].label` 값만 변경 — 라벨을 키로 쓰는 화면은 조정 |
 | — | — | (예정) 실행 이력 | 실행 전후 클러스터 지표 추가 | 필드 추가 |
 | — | — | (예정) 배치 이력 | 제외 사유 코드 추가 | 필드 추가 |
 | — | — | (예정) 노드 | GPU 온도·전력 추가 | 필드 추가 |

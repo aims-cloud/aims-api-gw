@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_placement_dispatches_status   ON placement_dispat
 -- (ddl-auto=update 는 기존 CHECK 를 수정하지 않는다).
 --   REQUESTED → ACCEPTED → RUNNING → COMPLETED / FAILED
 --   REJECTED · UNAVAILABLE : 실행 계층이 거부·불가 (워크로드 FAILED + 배정 해제)
---   TIMED_OUT              : 원격 모드 응답 시간 상한 초과 (이번 단계에서는 판정하지 않음)
+--   TIMED_OUT              : 원격 모드 응답 시간 상한 초과 (판정하는 코드가 아직 없음 — record 모드에서는 도달하지 않음)
 ALTER TABLE placement_dispatches DROP CONSTRAINT IF EXISTS placement_dispatches_status_check;
 ALTER TABLE placement_dispatches ADD CONSTRAINT placement_dispatches_status_check
     CHECK (status IN ('REQUESTED', 'ACCEPTED', 'RUNNING', 'COMPLETED', 'FAILED', 'REJECTED', 'UNAVAILABLE', 'TIMED_OUT'));

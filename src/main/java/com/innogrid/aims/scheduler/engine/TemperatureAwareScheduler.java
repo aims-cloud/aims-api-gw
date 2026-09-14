@@ -30,14 +30,14 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *    → 전체 노드의 평균 온도 계산
  *    → 평균보다 낮은 노드에 보너스, 높은 노드에 패널티
  *    → balance_factor = (T_avg - T_current) / T_avg
- *    → 핫스팟(hot spot) 방지
+ *    → 핫스팟(hot spot) 회피가 목표 (효과는 배치 후 온도 관측으로만 확인 가능)
  *
  * 3. 열관성(Thermal Inertia) 예측
  *    → 워크로드 배치 후 예상 온도 상승량 추정 (ConstraintEvaluator 가 제외 판정)
  *    → ΔT = k × (requiredCPU / totalCPU) × T_current
  *
  * 4. 냉각 비용 최소화
- *    → 높은 온도의 서버에 워크로드를 추가하면 냉각 비용이 비선형적으로 증가
+ *    → 높은 온도의 서버에 워크로드를 추가하면 냉각 비용이 더 가파르게 늘어난다고 가정
  *    → cooling_cost = (T / T_max)^2 (제곱 비용 모델)
  *
  * <p><b>온도·자원 점수는 예약분까지 반영한 실효값으로 계산한다.</b> 한 실행에서 워크로드를
@@ -46,6 +46,9 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 점수만 실측이었다. 열적 균형의 기준인 <b>클러스터 평균도 실효 온도의 평균</b>으로 맞춘다.
  * 두 피연산자가 다른 시점을 보면 "0.5 = 평균 수준"이라는 기준점의 의미가 흐려진다.
  * 예약이 없으면 실효=실측이므로 단건 배치의 결과는 달라지지 않는다.</p>
+ *
+ * <p><b>우선순위 배수·선호 MDC 보너스·MDC 링크 점수는 이 엔진에 적용하지 않는다.</b> 셋은 {@code weighted}
+ * 엔진에만 있고, 이 엔진의 네 가중치는 정책이 아니라 상수다. 링크는 DOWN 제외(C5)만 공유한다.</p>
  *
  * <p><b>온도를 수집하지 못한 노드(0°C)는 열 점수를 중립 0.5 로 둔다.</b> 0 을 그대로 계산하면
  * 열적 여유와 냉각이 만점이 되고 균형도 상한에 붙어, 판단 근거가 없는 노드가 <b>가중치 0.75 를

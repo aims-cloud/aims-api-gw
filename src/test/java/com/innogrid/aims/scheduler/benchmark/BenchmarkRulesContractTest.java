@@ -633,6 +633,16 @@ class BenchmarkRulesContractTest {
             assertFalse(banned.isBlank(), "빈 조각은 모든 문자열에 걸려 시험을 무의미하게 만든다");
             assertFalse(banned.endsWith("다."), "어미까지 적으면 사본이 어미만 바꿔 빠져나간다: " + banned);
         }
+        // 심사자가 인용할 과잉 주장 조각 — 실제 문장이 걸리는지 양성 확인(조각이 빠지면 여기서 잡힌다)
+        for (String sentence : List.of(
+                "실제 서버의 전력 곡선이 볼록하기 때문이다",
+                "시원한 노드를 선호해 핫스팟을 막는다",
+                "전력 인지 최적적합(문헌 기준선)",
+                "후보 중 최적의 노드를 선택한다",
+                "냉각 비용이 비선형적으로 증가")) {
+            assertThrows(AssertionError.class, () -> assertFreeOfBannedClaims(sentence, "표본 문장"),
+                    "금지 조각이 이 문장을 잡아야 한다: " + sentence);
+        }
         assertFreeOfBannedClaims(BenchmarkRules.LIMITATION, "한계 문구");
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {
             assertFreeOfBannedClaims(m.validity(), m.key() + " 유효성 조건");

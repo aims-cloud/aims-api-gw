@@ -88,10 +88,11 @@ class PlacementBenchmarkServiceTest {
         assertTrue(base.activeNodesBefore() > 0, "가동 노드가 0 이면 이 시험이 아무것도 보지 않는다");
         assertEquals(base.activeNodesBefore(), moved.activeNodesBefore(), 1e-9,
                 "기준선이 설정을 따라 움직이면 증감이 알고리즘이 아니라 설정의 함수가 된다");
-        assertEquals(medians(base, BenchmarkRules.ACTIVE_NODE_DELTA),
-                medians(moved, BenchmarkRules.ACTIVE_NODE_DELTA), "가동 노드 증감이 엔진 노브를 따라 움직였다");
-        assertEquals(medians(base, BenchmarkRules.GENERATOR_POWER),
-                medians(moved, BenchmarkRules.GENERATOR_POWER),
+        // 전력 엔진 변종 4열은 하네스가 설정 사본으로 새로 조립하는 엔진이라 노브를 따라 배치가 달라진다 — 이 시험의 대상이 아니다
+        assertEquals(mediansExcept(base, BenchmarkRules.ACTIVE_NODE_DELTA, "power-"),
+                mediansExcept(moved, BenchmarkRules.ACTIVE_NODE_DELTA, "power-"), "가동 노드 증감이 엔진 노브를 따라 움직였다");
+        assertEquals(mediansExcept(base, BenchmarkRules.GENERATOR_POWER, "power-"),
+                mediansExcept(moved, BenchmarkRules.GENERATOR_POWER, "power-"),
                 "전원 제어 판의 통전 집합이 엔진 노브를 따라 움직이면 주 지표가 설정의 함수다");
     }
 
@@ -328,6 +329,37 @@ class PlacementBenchmarkServiceTest {
                 "seed 별 Board 의 값이 전부 같다 — 위상이 seed 에 반응하지 않는다");
     }
 
+    /**
+     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·변종 7 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
+     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762} 였다.
+     */
+    @DisplayName("기본 설정의 configDigest 리터럴이 고정된다 — 바뀌면 계약 §10 행이 따른다")
+    @Test
+    void the_default_config_digest_is_pinned() {
+        assertEquals("1487c10f4e97", service.compare("main", "heavytail").engineConfig().configDigest(),
+                "설정 다이제스트가 바뀌었다 — canonical 성분·열·노브가 바뀐 것이며 계약 §10 에 옛 → 새 행을 적는다");
+    }
+
+    /** 링크 게이트 열은 링크 판에서만 weighted 와 갈린다 — 링크 없는 판에서는 게이트가 켜질 수 없어 같은 값이다(구조적 사실). */
+    @DisplayName("weighted-affinity 는 링크 없는 판에서 weighted 와 값이 같고 링크 판에서만 다르다")
+    @Test
+    void the_affinity_column_differs_from_weighted_only_on_the_link_board() {
+        for (String board : List.of("main", "convex-misrated", "concave")) {
+            var b = service.compare(board, "heavytail").boards().get(0);
+            assertEquals(columnOf(b, "weighted"), columnOf(b, "weighted-affinity"), board + " — 게이트가 꺼진 판인데 두 열이 다르다");
+        }
+        var link = service.compare("link", "heavytail").boards().get(0);
+        assertNotEquals(columnOf(link, "weighted"), columnOf(link, "weighted-affinity"), "링크 판에서 게이트 on/off 열이 같다 — netScore 경로가 작동하지 않는다");
+    }
+
+    private static Map<String, Double> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
+        Map<String, Double> out = new LinkedHashMap<>();
+        for (var cell : board.cells()) for (var s : cell.strategies()) if (s.strategyId().equals(strategyId)) for (var m : s.metrics()) {
+            out.put(cell.loadRatioPercent() + "/" + cell.powerControl() + "/" + m.key(), m.median());
+        }
+        return out;
+    }
+
     private static Map<String, Double> flattenBoard(PlacementBenchmarkResponse.Board board) {
         Map<String, Double> out = new LinkedHashMap<>();
         for (var cell : board.cells()) for (var s : cell.strategies()) for (var m : s.metrics()) {
@@ -340,14 +372,17 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("엔진 변종 열 순서가 고정되고 기본 설정 열은 override 가 비어 있다")
     @Test
     void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
-        assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+        assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity",
+                "power-s250", "power-s1000", "power-s0", "power-idle-fixed"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+        Map<String, Map<String, String>> expected = Map.of(
+                "weighted-affinity", Map.of("affinityEnabled", "true"),
+                "power-s250", Map.of("marginalScaleWatts", "250.0"),
+                "power-s1000", Map.of("marginalScaleWatts", "1000.0"),
+                "power-s0", Map.of("marginalScaleWatts", "0.0"),
+                "power-idle-fixed", Map.of("idleFromMeasurement", "false"));
         var cell = service.compare("main", "heavytail").boards().get(0).cells().get(0);
         for (var s : cell.strategies()) {
-            if ("weighted-affinity".equals(s.strategyId())) {
-                assertEquals(Map.of("affinityEnabled", "true"), s.engineConfigOverride());
-            } else {
-                assertTrue(s.engineConfigOverride().isEmpty(), s.strategyId() + " — 기본 설정 열인데 override 가 있다");
-            }
+            assertEquals(expected.getOrDefault(s.strategyId(), Map.of()), s.engineConfigOverride(), s.strategyId());
         }
     }
 
@@ -424,7 +459,8 @@ class PlacementBenchmarkServiceTest {
 
         int compared = 0;
         for (StrategyResult s : mine.strategies()) {
-            if (s.strategyId().equals("power")) continue;   // 유일하게 움직여야 하는 열
+            // 전력 엔진 계열(power·눈금 변종·역산 차단)만 움직여야 한다 — 변종 열은 기본 설정 사본이라 눈금을 고정하지 않은 열은 따라간다
+            if (s.strategyId().equals("power") || s.strategyId().startsWith("power-")) continue;
             StrategyResult t = other.strategies().stream()
                     .filter(x -> x.strategyId().equals(s.strategyId())).findFirst()
                     .orElseThrow(() -> new AssertionError(s.strategyId() + " 열이 사라졌다"));
@@ -2227,6 +2263,13 @@ class PlacementBenchmarkServiceTest {
     private static List<Double> medians(Cell cell, String key) {
         List<Double> values = new ArrayList<>();
         for (StrategyResult s : cell.strategies()) values.add(median(s, key));
+        return values;
+    }
+
+    /** 접두가 맞는 열(전력 엔진 변종)은 제외한 중앙값 목록. */
+    private static List<Double> mediansExcept(Cell cell, String key, String excludedPrefix) {
+        List<Double> values = new ArrayList<>();
+        for (StrategyResult s : cell.strategies()) if (!s.strategyId().startsWith(excludedPrefix)) values.add(median(s, key));
         return values;
     }
 }

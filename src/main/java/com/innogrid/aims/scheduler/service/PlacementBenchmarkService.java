@@ -25,6 +25,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BaselinePlacers;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkContexts;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkEngineConfigs;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkLinks;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkPolicies;
@@ -53,6 +54,8 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WorkloadClassS
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
+import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -112,7 +115,9 @@ public class PlacementBenchmarkService {
      * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
      */
     static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
-            BenchmarkRules.WEIGHTED_AFFINITY_COLUMN);
+            BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
+            BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "250", BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "1000",
+            BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "0", BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN);
 
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     private static final String RANDOM_ID = "random";
@@ -1044,6 +1049,19 @@ public class PlacementBenchmarkService {
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),
                 Map.of("affinityEnabled", "true"), powerModel));
 
+        // 한계 전력 눈금 민감도 3열 — 전력 엔진에 눈금만 다른 전력 모델을 물린다. 믿은 비용도 그 모델로 잰다
+        for (double scale : BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS) {
+            String id = BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + (long) scale;
+            String meaning = scale <= 0 ? "정격 분모 · 구 방식 · 독립 증거 아님"
+                    : scale < BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT ? "포화 발현 · 판정 자격 없음" : "무포화 · 판정 자격 없음";
+            variants.put(id, powerVariant(id, "전력 인지(한계 전력 눈금 " + (long) scale + "W · " + meaning + ")",
+                    Map.of("marginalScaleWatts", String.valueOf(scale)), p -> p.setMarginalScaleWatts(scale)));
+        }
+        // 역산 차단 열 — 같은 판·같은 지점에서 역산 유무만 갈린 짝 비교
+        variants.put(BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN, powerVariant(BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN,
+                "전력 인지(유휴 역산 차단 · 대체값 고정 · 독립 증거 아님)",
+                Map.of("idleFromMeasurement", "false"), p -> p.setIdleFromMeasurement(false)));
+
         if (!variants.keySet().equals(Set.copyOf(ENGINE_VARIANT_ORDER))) {
             throw new IllegalStateException("엔진 변종 순서 목록과 구현이 다르다 — 열이 조용히 빠진다: "
                     + variants.keySet() + " vs " + ENGINE_VARIANT_ORDER);
@@ -1055,6 +1073,19 @@ public class PlacementBenchmarkService {
             ordered.add(v);
         }
         return ordered;
+    }
+
+    /**
+     * 전력 엔진 변종 열 — 기본 설정 사본에 전력 노브 하나를 바꾼 {@link PowerAwareScheduler} 를 새로 조립한다. 열 모델은 온도 모델·
+     * 네트워크 모델을 운영 것과 같은 설정으로 만들고 전력 모델만 갈아 끼운다. 스프링 컨텍스트에 등록되지 않는 객체다.
+     */
+    private EngineVariant powerVariant(String id, String label, Map<String, String> override,
+                                       java.util.function.Consumer<SchedulerProperties.Power> tweak) {
+        SchedulerProperties tuned = BenchmarkEngineConfigs.withPower(properties, tweak);
+        PowerModel model = new PowerModel(tuned);
+        PowerAwareScheduler engine = new PowerAwareScheduler(model, thermalModel, new NetworkModel(tuned), tuned);
+        return new EngineVariant(new PlacementStrategy(id, label, PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE,
+                null, engine::schedule), override, model);
     }
 
     /** 열별 노브 override — 전략 id → (노브 이름 → 값). 기본 설정 그대로인 열은 없다. */

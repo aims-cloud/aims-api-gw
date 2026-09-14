@@ -639,6 +639,8 @@ class BenchmarkRulesContractTest {
                 "시원한 노드를 선호해 핫스팟을 막는다",
                 "전력 인지 최적적합(문헌 기준선)",
                 "후보 중 최적의 노드를 선택한다",
+                "워크로드를 최적 노드에 배치한다",
+                "열적 균형으로 핫스팟 방지",   // 괄호 삽입형 "핫스팟(hot spot) 방지" 는 조각이 못 잡는다 — 원문은 이미 회피 목표 어투로 고쳤다
                 "냉각 비용이 비선형적으로 증가")) {
             assertThrows(AssertionError.class, () -> assertFreeOfBannedClaims(sentence, "표본 문장"),
                     "금지 조각이 이 문장을 잡아야 한다: " + sentence);

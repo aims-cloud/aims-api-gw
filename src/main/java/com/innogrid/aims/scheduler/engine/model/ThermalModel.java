@@ -58,8 +58,9 @@ public class ThermalModel {
     }
 
     /**
-     * 열적 균형 점수 (0~1). 클러스터 평균보다 시원한 노드를 선호한다 — 핫스팟을 피하는 것이 목표이며,
-     * 실제로 피했는지는 배치 후 온도 관측으로만 말할 수 있다(아직 그 지표가 없다).
+     * 열적 균형 점수 (0~1). 클러스터 평균보다 낮으면 가점, 높으면 감점하는 대칭식이다 — 핫스팟을 피하는 것이
+     * 목표이며, 실제로 피했는지는 실측 온도 관측 지표가 있어야 말할 수 있다. 지금은 비교 API 의 생성식 온도
+     * 지표(경고 구간 노드 수·온도 표준편차, 보조)만 있다.
      */
     public double balanceScore(double temperature, double averageTemperature) {
         if (averageTemperature <= 0) return 0.5;

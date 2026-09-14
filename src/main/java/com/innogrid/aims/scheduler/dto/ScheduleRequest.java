@@ -24,7 +24,7 @@ public record ScheduleRequest(
                 + "(편집에서 비우면 기존 값 유지)")
         Workload.ResourceType resourceType,
         @Schema(description = "실행 주기. Quartz 6필드(초 분 시 일 월 요일), 한국 시간 기준으로 해석, 120자 이내, "
-                + "최소 간격 60초. 연도 필드·C·일과 요일을 둘 다 구체값으로 지정(예: 1 * * 1)하면 400 — 한쪽이 * 또는 ? 면 허용. 생성 시 필수",
+                + "최소 간격 60초. 연도 필드·C·일과 요일을 둘 다 구체값으로 지정(예: 0 0 2 1 * MON)하면 400 — 한쪽이 * 또는 ? 면 허용. 생성 시 필수",
                 example = "0 0 2 * * ?", requiredMode = Schema.RequiredMode.REQUIRED)
         String cronExpression,
         @Schema(description = "자동 실행 여부. 생성 시 비우면 false(편집에서 비우면 기존 값 유지)")

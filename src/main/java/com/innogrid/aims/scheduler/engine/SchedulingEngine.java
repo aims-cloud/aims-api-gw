@@ -15,7 +15,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
 public interface SchedulingEngine {
 
     /**
-     * 워크로드를 최적 노드에 배치한다.
+     * 워크로드를 제약을 통과한 후보 중 점수가 가장 높은 노드에 배치한다.
      *
      * @param workload 배치할 워크로드 (자원 요구사항 포함)
      * @param context  배치 컨텍스트 (노드 상태, 정책, 예약 현황)

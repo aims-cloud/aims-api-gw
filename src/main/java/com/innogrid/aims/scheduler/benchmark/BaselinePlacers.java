@@ -120,9 +120,10 @@ public final class BaselinePlacers {
     }
 
     /**
-     * 전력 인지 최적적합(PABFD) — <b>엔진 모델 절제 대조군</b>. 배치로 늘어나는 전력이 가장 적은 노드를 고른다.
-     * 우리 {@code PowerModel} 의 한 메서드를 그대로 쓰는 절제(ablation)이므로 "문헌 기준선" 이라 부르지 않는다 —
-     * 인용할 문헌 구현이 없고, 유휴비 노브({@code idleRatio})를 엔진과 공유한다.
+     * 전력 인지 최적적합(PABFD) — <b>엔진 전력식을 공유하는 ΔP 단독 대조군</b>. 배치로 늘어나는 전력이 가장 적은 노드를 고른다.
+     * 우리 {@code PowerModel} 의 선형 ΔP 식({@code marginalPower})을 그대로 쓰므로 "문헌 기준선" 이라 부르지 않는다 —
+     * 인용할 문헌 구현이 없고, 유휴비 노브({@code idleRatio})를 엔진과 공유한다. 엔진과의 차이는 셋이다: 깨우기항이 없고,
+     * 곡선 지수 α 를 타지 않으며(기본 α=1 에서는 동적항이 같다), PEI·비낭비·열·자원을 가중 결합하지 않고 ΔP 하나로 고른다.
      *
      * <p><b>반드시 {@link PowerModel#marginalPower} 를 쓴다</b> — 정격과 요구 코어 비율만 보는 고전
      * 선형 모델이라 <b>빈 노드를 깨우는 비용이 없다</b>. {@link PowerModel#realMarginalPower} 를 쓰면
@@ -131,7 +132,7 @@ public final class BaselinePlacers {
      * 그대로 지켜야 한다.</p>
      */
     public static PlacementStrategy pabfd(PowerModel powerModel) {
-        String label = "전력 인지 최적적합(엔진 모델 절제 · 깨우기항 제외)";
+        String label = "전력 인지 최적적합(엔진 전력식 공유 · ΔP 단독 · 깨우기항 없음)";
         return new PlacementStrategy("pabfd", label, Kind.BASELINE, PolicyVariant.BASE,
                 BY_SIZE_DESC, (workload, context) -> placePabfd(workload, context, powerModel, label));
     }

@@ -7,7 +7,7 @@ import jakarta.persistence.*;
 /**
  * 스케줄링 대상 워크로드.
  * CPU, 메모리, GPU 등의 자원 요구사항을 정의하고
- * 스케줄링 엔진이 최적 노드에 배치한다.
+ * 스케줄링 엔진이 제약을 통과한 후보 중 점수가 가장 높은 노드에 배치한다.
  */
 @Entity
 @Table(name = "workloads", indexes = {

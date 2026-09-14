@@ -408,7 +408,7 @@ public final class BenchmarkRules {
      * 바뀐다</b>(반증판·계측 공백판에서 실제로 표본 수가 5 → 1 로 줄었다) — 기존 표와의 대조가 깨진다.
      */
     public static final String PAIRING_RULE =
-            "총량 짝 조건 규칙. 총량 열(generatorPowerW·activeNodeDelta·warnZoneNodeCount·measuredTempStdDev)의 짝 조건과 미계측 격차는 "
+            "총량 짝 조건 규칙. 총량 열(" + GENERATOR_POWER + "·" + ACTIVE_NODE_DELTA + "·" + WARN_ZONE_NODES + "·" + TEMP_STDDEV + ")의 짝 조건과 미계측 격차는 "
                     + "override 없는 기본 설정 열(엔진 전량·자원전용 2·대조군 6) 전부의 배치 건수가 같은 시각 지점으로 정한다. "
                     + "override 열은 그 마스크를 받아 자기 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. "
                     + "열을 더하는 것이 기존 열의 값을 바꾸지 않게 하기 위한 규칙이며, 격차 열(pabfd 짝)은 이 규칙과 무관하다. "
@@ -465,6 +465,9 @@ public final class BenchmarkRules {
     /**
      * 격차 중앙값이 줄어야 하는 최소 폭(%p). 이 지표가 <b>이미 백분율</b>이라 단위는 %p 다.
      * 값이 0 이면 부호만으로 성공이 되어 잡음이 곧 결론이 된다.
+     *
+     * <p>이 값은 {@link #SENSITIVITY_RULE}(수준 의존 판단)과 {@link #PHASE_RULE}(위상 폭 경고)에도 <b>같은 문턱</b>으로 쓰인다 —
+     * 바꾸면 세 문장이 동시에 움직인다. 재사용 근거: 우리가 개선이라 부르는 크기만큼 노브·위상이 흔들면 계기가 교란된 것이다.</p>
      */
     public static final double JUDGMENT_MEDIAN_REDUCTION_PP = 2.0;
 
@@ -542,7 +545,8 @@ public final class BenchmarkRules {
                     + "넘지 않으면 이 판에서 영향의 증거를 못 찾은 것이며 영향이 없다는 주장이 아니다. "
                     + "판정량은 두 실행의 중앙값 차(Δ)이고 이 검정은 한 실행의 수준량을 재므로, 수준 의존이 곧 판정 의존은 아니다 — 판정의 눈금 의존은 "
                     + "기준선 B 와 새 실행 N 을 같은 눈금 열에서 각각 내어 Δ 를 두 눈금에서 견주어야 하며, 그 자료가 없으면 '판정량에 대해서는 재지 않았다'로 적는다. "
-                    + "세 눈금(250·500·1000)의 중앙값이 눈금에 대해 단조이면 그 사실과 전 구간 폭을 적고, 수준의 눈금 의존과 부호의 눈금 무관을 갈라 서술한다. "
+                    + "세 눈금 — 기본 눈금 500W(power 열, 엔진 설정 기본값)·power-s250·power-s1000 — 의 중앙값이 눈금에 대해 단조이면 그 사실과 전 구간 폭을 적고, "
+                    + "수준의 눈금 의존과 부호의 눈금 무관을 갈라 서술한다. power-s0(정격 분모)은 이 사다리 밖이다. "
                     + "power-s1000 은 포화 없는 눈금, power-s0 은 노드 정격 분모(구 방식)이고 power-idle-fixed 는 역산 차단이다 — "
                     + "power-s0 과 power-idle-fixed 는 같은 자료를 재확인하는 열이라 독립 증거가 아니다.";
 

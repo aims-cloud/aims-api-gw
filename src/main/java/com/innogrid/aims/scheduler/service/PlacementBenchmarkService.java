@@ -230,7 +230,7 @@ public class PlacementBenchmarkService {
         if (!running.tryAcquire()) {
             log.warn("배치 비교 동시 호출 거절(429): board={} distribution={}", board, dist);
             throw new BusinessException(HttpStatus.TOO_MANY_REQUESTS,
-                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(수 초~십 초 남짓) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
+                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(수 초~수십 초 — 위상 독립 판은 Board 3장) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
         }
         try {
             hit = cache.get(key);   // 첫 조회가 빗나간 뒤 슬롯을 잡기 전 같은 키가 끝났을 수 있다(좁은 경합 창)

@@ -15,8 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
+import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -350,6 +351,22 @@ class PlacementBenchmarkServiceTest {
         }
         var link = service.compare("link", "heavytail").boards().get(0);
         assertNotEquals(columnOf(link, "weighted"), columnOf(link, "weighted-affinity"), "링크 판에서 게이트 on/off 열이 같다 — netScore 경로가 작동하지 않는다");
+    }
+
+    /** 순환 배정 — 표본 순서대로 a,b,c,a,b,c… 링크 판만 부여하고 링크 없는 판은 아무것도 하지 않는다. */
+    @DisplayName("데이터 MDC 는 표본 순서대로 순환 배정되고 링크 없는 판은 부여하지 않는다")
+    @Test
+    void data_mdc_is_assigned_round_robin_only_on_the_link_board() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        List<Workload> sample = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignDataMdc(sample, clusters.get(BenchmarkClusters.LINK));
+        List<String> ids = clusters.get(BenchmarkClusters.LINK).workloadDataMdcIds();
+        for (int i = 0; i < sample.size(); i++) assertEquals(ids.get(i % ids.size()), sample.get(i).getDataMdcId(), "표본 " + i);
+        assertTrue(sample.size() > ids.size(), "표본이 배정 목록보다 길어야 순환이 검증된다");
+
+        List<Workload> plain = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignDataMdc(plain, clusters.get(BenchmarkClusters.MAIN));
+        assertTrue(plain.stream().allMatch(w -> w.getDataMdcId() == null), "링크 없는 판은 dataMdcId 를 부여하지 않는다");
     }
 
     private static Map<String, Double> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {

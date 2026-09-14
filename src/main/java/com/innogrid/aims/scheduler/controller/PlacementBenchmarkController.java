@@ -39,11 +39,13 @@ public class PlacementBenchmarkController {
 
     @Operation(summary = "배치 전략 비교",
                description = "우리 엔진 전량과 대조군(선착순 두 변종·전력 인지 최적적합·자원 최밀집·최저 온도 우선·무작위), "
-                       + "그리고 자원전용 두 변종을 **같은 노드 스냅샷·같은 워크로드 표본·같은 제약 파이프라인**에서 "
+                       + "그리고 엔진 설정 변종 7열(자원전용 2 · 링크 게이트 on 1 · 한계 전력 눈금 3 · 유휴 역산 차단 1 — 열마다 "
+                       + "strategies[].engineConfigOverride 가 바뀐 노브를 밝히고 그 값은 설정 다이제스트에 들어갑니다)을 "
+                       + "**같은 노드 스냅샷·같은 워크로드 표본·같은 제약 파이프라인**에서 "
                        + "돌린 결과입니다. **저장소에는 아무것도 쓰지 않습니다.** 같은 입력(판·분포·판 파일 다이제스트·워크로드 파일 "
                        + "다이제스트·설정 다이제스트)의 두 번째 호출은 메모리 캐시에서 나오며 evaluatedAt 만 새로 찍힙니다. 계산은 한 번에 한 건만 "
                        + "돌고, 계산 중 들어온 호출 중 **캐시에 없는 입력**만 기다리지 않고 **429** 와 사유를 받습니다(캐시에 있는 "
-                       + "입력은 계산 중에도 200). 수 초~십 초 남짓 뒤 다시 호출하세요. Retry-After 헤더는 주지 않습니다.\n\n"
+                       + "입력은 계산 중에도 200). 수 초~수십 초 뒤 다시 호출하세요(위상 독립 판은 Board 3장이라 더 걸립니다). Retry-After 헤더는 주지 않습니다.\n\n"
                        + "**주 지표는 엔진이 믿은 값이 아닙니다.** engineBelievedCostW 는 전력 엔진 총점의 한 항을 "
                        + "그대로 합한 값이라 그것으로 순위를 매기면 그 목적함수를 최대화한 전략이 정의상 이깁니다. "
                        + "총전력의 주 지표(generatorPowerW)는 클러스터 파일 생성식의 **선언된 유휴 전력**으로 계산하며 "
@@ -72,9 +74,12 @@ public class PlacementBenchmarkController {
                        + "응답 metrics[] 필드: key · median · min · max · samples · points · valid · invalidReason.\n\n"
                        + "**board** — main(전수 계측 주 결과판) · adversarial(우리 엔진이 지도록 설계한 반증판) · "
                        + "sparse(주 결과판과 계측 플래그만 다른 센서 공백판) · convex(주 결과판과 생성식 지수만 다른 판) · "
-                       + "misrated(주 결과판과 엔진에 알려 준 정격만 다른 판) · convex-misrated(둘이 함께 걸린 복합판). "
-                       + "뒤의 세 판은 노드 구성이 주 결과판과 같아 판 사이의 차이를 요인으로 읽을 수 있고, 전략 순위는 "
-                       + "여전히 주 결과판에서 보고합니다. **distribution** — heavytail(작은 것 다수) 또는 "
+                       + "misrated(주 결과판과 엔진에 알려 준 정격만 다른 판) · convex-misrated(둘이 함께 걸린 복합판·판정판) · "
+                       + "link(주 결과판 노드 + links 절·데이터 MDC 순환 배정 — weighted/weighted-affinity 열 쌍만 갈린다) · "
+                       + "main-independent · convex-misrated-independent(짝 판과 노드 동일, 위상 독립 seeds 3 → boards[] 3장) · "
+                       + "concave(주 결과판과 생성식 지수 0.625 만 다른 판). 주 결과판과 노드 구성이 같은 판들은 판 사이의 차이를 "
+                       + "요인으로 읽을 수 있고, 전략 순위는 여전히 주 결과판에서 보고합니다. **판정·방향 판정 자격은 convex-misrated · main 두 판의 "
+                       + "power 행에만 있고 그 밖의 판·열·지표는 전부 자격이 없습니다.** **distribution** — heavytail(작은 것 다수) 또는 "
                        + "uniform(균일). 순위가 두 분포 사이에서 뒤집히면 그 사실 자체가 결과입니다. "
                        + "모르는 판·분포는 400 입니다. "
                        + "응답 boards[] 필드: boardId · role · clusterName · digest · phaseMode · phaseSeed · nodeCount · measuredNodeCount · "
@@ -89,7 +94,7 @@ public class PlacementBenchmarkController {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비교 결과(캐시 적중 포함)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "모르는 판·분포"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "다른 계산이 실행 중이고 이 입력은 캐시에 없음 — 수 초~십 초 남짓 뒤 재호출")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "다른 계산이 실행 중이고 이 입력은 캐시에 없음 — 수 초~수십 초 뒤 재호출")
     })
     @GetMapping("/placement")
     public ApiResponse<PlacementBenchmarkResponse> comparePlacement(

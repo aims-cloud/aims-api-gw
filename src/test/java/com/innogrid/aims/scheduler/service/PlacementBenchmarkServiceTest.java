@@ -234,8 +234,10 @@ class PlacementBenchmarkServiceTest {
         EngineConfigSnapshot other = serviceWith(tuned).compare("main", "heavytail").engineConfig();
 
         assertEquals(500.0, mine.power().marginalScaleWatts(), 1e-9, "출하 기본값이 바뀌면 판정 기준선도 무효다");
+        assertTrue(mine.power().marginalScaleWatts() >= BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT,
+                "기본 눈금이 판정 시점 실질 한계 전력 최댓값보다 작으면 점수가 0 으로 포화해 다른 결함이 섞인다");
         assertTrue(mine.power().marginalScaleWatts() >= BenchmarkRules.MAX_REAL_MARGINAL_WATTS,
-                "기본 눈금이 판의 실질 한계 전력 최댓값보다 작으면 점수가 0 으로 포화해 다른 결함이 섞인다");
+                "현 등록 판의 실측 최댓값이 기본 눈금을 넘었다 — 포화가 기본 설정에서 발현하므로 그 판의 도입을 보류한다");
         assertEquals(700.0, other.power().marginalScaleWatts(), 1e-9);
         assertNotEquals(mine.configDigest(), other.configDigest(),
                 "눈금이 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");

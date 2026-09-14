@@ -64,11 +64,14 @@ class BenchmarkRulesContractTest {
     private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
             "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할")),
             "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
-            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율")),
-            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리")),
+            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율"),
+                    new AxisSeal("9ab95b89dc3e", "2026-09-14", "방법론 변경 사전 등록 — 오목 지수 0.625·오목/링크 판 id·위상 독립 판 2장·seed 수 3·SplitMix64 혼합 상수")),
+            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리 — 이후 판정 시점 고정값(316) 으로 의미 확정, 현 실측은 축 밖")),
+            "sensitivity", List.of(new AxisSeal("3741559c00dd", "2026-09-14", "축 신설 — 한계 전력 눈금 3값(250·1000·0)·역산 차단 열·링크 게이트 열")),
             "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱")),
             "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
-            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)")));
+            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)"),
+                    new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -564,6 +567,35 @@ class BenchmarkRulesContractTest {
         }
         assertFreeOfBannedClaims(r,
                 "격차 판정 규칙 — 금지 조각 순회는 한계 문구와 지표 유효성 조건만 보므로 이 상수는 여기서 따로 본다");
+    }
+
+    @DisplayName("판정 자격은 폐쇄형이다 — 두 판의 power 행 밖은 전부 자격 없음")
+    @Test
+    void the_judgment_qualification_is_closed_form() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        assertTrue(r.contains("판정 자격(폐쇄형)"), r);
+        assertTrue(r.contains("그 밖의 판·열·지표는 전부 자격 없음"), "판·열이 늘 때 규칙을 다시 고치지 않도록 폐쇄형이어야 한다: " + r);
+    }
+
+    @DisplayName("방법론 변경 상수가 결과보다 먼저 등록되어 있다 — 오목 지수는 볼록 지수의 역수, 민감도 눈금 3값, 위상 독립 판 2장")
+    @Test
+    void the_methodology_constants_are_pre_registered() {
+        assertEquals(1.0 / BenchmarkRules.CONVEX_POWER_EXPONENT, BenchmarkRules.CONCAVE_POWER_EXPONENT, 1e-12, "대칭 응력 — 한 문장 근거");
+        assertTrue(BenchmarkRules.CONCAVE_POWER_EXPONENT < 1.0);
+        assertEquals(3, BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.stream().distinct().count());
+        assertTrue(BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.contains(0.0), "구 방식(정격 분모) 열이 있어야 눈금 도입 자체가 검증된다");
+        assertTrue(BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.stream().anyMatch(s -> s > 0 && s < BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT),
+                "포화를 발현시키는 눈금이 하나 있어야 한다");
+        assertEquals(2, BenchmarkRules.PHASE_INDEPENDENT_BOARDS.size());
+        assertTrue(BenchmarkRules.PHASE_INDEPENDENT_BOARDS.contains(BenchmarkRules.DIRECTION_CHECK_BOARD + "-independent"));
+        assertTrue(BenchmarkRules.PHASE_INDEPENDENT_BOARDS.contains(BenchmarkRules.JUDGMENT_BOARD + "-independent"));
+        assertEquals(316.0, BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT, 1e-9, "판정 시점 고정값은 판이 늘어도 바뀌지 않는다");
+        for (String s : List.of(BenchmarkRules.SENSITIVITY_RULE, BenchmarkRules.PHASE_RULE, BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE)) {
+            assertFreeOfBannedClaims(s, "방법론 규칙 문장");
+        }
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("독립 증거가 아니다"));
+        assertTrue(BenchmarkRules.PHASE_RULE.contains("검정하지 않는다"));
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("원인을 지목하지 않"));
     }
 
     /**

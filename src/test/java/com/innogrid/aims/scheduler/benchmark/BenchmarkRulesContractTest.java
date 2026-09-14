@@ -50,10 +50,10 @@ class BenchmarkRulesContractTest {
     void metric_keys_are_fixed() {
         String joined = BenchmarkRules.METRICS.stream()
                 .map(BenchmarkMetric::key).sorted().collect(Collectors.joining(","));
-        assertEquals(11, BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).distinct().count(), "키 중복 없음");
+        assertEquals(BenchmarkRules.METRICS.size(), BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).distinct().count(), "키 중복 없음");
 
         assertEquals(DECLARED_KEY_DIGEST, BenchmarkClusters.digestOf(joined),
-                "지표를 추가·삭제하려면 이 다이제스트를 먼저 고쳐야 한다 — 결과를 보고 몰래 바꿀 수 없게. 정렬 키: " + joined);
+                "지표를 추가·삭제하려면 이 다이제스트를 결과 코드보다 앞선 별도 커밋에서 먼저 고치고(옛 → 새 값과 키 목록을 메시지에), 그 뒤 하네스를 바꾼다. 정렬 키: " + joined);
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")

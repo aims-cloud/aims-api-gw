@@ -6,7 +6,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
+
+import com.innogrid.aims.scheduler.entity.MdcLink;
 
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
@@ -53,7 +56,8 @@ public final class SyntheticCluster {
      * 판 파일이 진실이 되도록 <b>파서만 먼저</b> 갈라 둔다 — 노드 절과 링크 절은 서로 다른 축이라 한 파서에 섞이면
      * 판을 늘릴 때마다 같은 메서드를 두 번 연다. 절이 없는 판은 파일 바이트가 그대로라 다이제스트·값이 변하지 않는다.</p>
      */
-    public record Link(String mdcA, String mdcB, double latencyMs, Double bandwidthMbps, Double packetLossPercent, String status) {}
+    public record Link(String mdcA, String mdcB, double latencyMs, Double bandwidthMbps, Double packetLossPercent,
+                       MdcLink.LinkStatus status) {}
 
     private final String name;
     private final String job;
@@ -103,7 +107,8 @@ public final class SyntheticCluster {
             throw new IllegalArgumentException("powerExponent 는 0 보다 큰 유한한 값이어야 합니다: " + location + " = " + powerExponent);
         }
         List<Node> nodes = parseNodes(map.get("nodes"), swing, location);
-        List<Link> links = parseLinks(map.get("links"), location);
+        Set<String> mdcIds = nodes.stream().map(Node::mdcId).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        List<Link> links = parseLinks(map.get("links"), mdcIds, location);
         return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links);
     }
 
@@ -141,11 +146,12 @@ public final class SyntheticCluster {
 
     /**
      * {@code links:} 절 — 판의 링크 축. 절이 없으면 빈 목록(지금 등록된 판 전부). 항목은 {@code mdcA}·{@code mdcB}·
-     * {@code latencyMs} 가 필수이고 {@code bandwidthMbps}·{@code packetLossPercent} 는 선택, {@code status} 는
-     * {@code UP}(기본)·{@code DEGRADED}·{@code DOWN}. 같은 MDC 사이 링크와 중복 쌍은 거부한다.
+     * {@code latencyMs} 가 필수이고 {@code bandwidthMbps}(0 초과)·{@code packetLossPercent}(0~100) 는 선택, {@code status} 는
+     * 원장 열거형 {@link MdcLink.LinkStatus}({@code UP} 기본). 같은 MDC 사이 링크·중복 쌍·<b>판의 노드에 없는 MDC</b> 를 가리키는
+     * 링크는 거부한다 — 노드 절이 진실이고 링크는 그 위에 얹히는 축이라, 없는 MDC 로의 링크는 판 파일 오타다.
      */
     @SuppressWarnings("unchecked")
-    static List<Link> parseLinks(Object rawLinks, String location) {
+    static List<Link> parseLinks(Object rawLinks, Set<String> nodeMdcIds, String location) {
         if (rawLinks == null) return List.of();
         if (!(rawLinks instanceof List<?> list)) throw new IllegalArgumentException("links 는 목록이어야 합니다: " + location);
         List<Link> links = new ArrayList<>();
@@ -156,19 +162,25 @@ public final class SyntheticCluster {
             String b = str(l.get("mdcB"), null);
             if (a == null || b == null || a.isBlank() || b.isBlank()) throw new IllegalArgumentException("links 항목에 mdcA·mdcB 가 없습니다: " + location);
             if (a.equals(b)) throw new IllegalArgumentException("같은 MDC 사이에는 링크를 둘 수 없습니다: " + a);
+            if (!nodeMdcIds.contains(a) || !nodeMdcIds.contains(b)) {
+                throw new IllegalArgumentException("links 가 판의 노드에 없는 MDC 를 가리킵니다: " + a + "-" + b + " (노드 MDC: " + nodeMdcIds + ")");
+            }
             String key = a.compareTo(b) < 0 ? a + "|" + b : b + "|" + a;
             if (!pairs.add(key)) throw new IllegalArgumentException("links 쌍 중복: " + a + "-" + b);
             if (l.get("latencyMs") == null) throw new IllegalArgumentException("links 항목에 latencyMs 가 없습니다: " + a + "-" + b);
             double latency = num(l.get("latencyMs"), 0).doubleValue();
             if (latency < 0) throw new IllegalArgumentException("latencyMs 는 0 이상이어야 합니다: " + a + "-" + b);
-            String status = str(l.get("status"), "UP").toUpperCase();
-            if (!status.equals("UP") && !status.equals("DEGRADED") && !status.equals("DOWN")) {
-                throw new IllegalArgumentException("links status 는 UP·DEGRADED·DOWN 중 하나: " + a + "-" + b + " = " + status);
+            MdcLink.LinkStatus status;
+            try {
+                status = MdcLink.LinkStatus.valueOf(str(l.get("status"), "UP").trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("links status 는 " + java.util.Arrays.toString(MdcLink.LinkStatus.values()) + " 중 하나: " + a + "-" + b + " = " + l.get("status"));
             }
-            links.add(new Link(a, b, latency,
-                    l.get("bandwidthMbps") == null ? null : num(l.get("bandwidthMbps"), 0).doubleValue(),
-                    l.get("packetLossPercent") == null ? null : num(l.get("packetLossPercent"), 0).doubleValue(),
-                    status));
+            Double bandwidth = l.get("bandwidthMbps") == null ? null : num(l.get("bandwidthMbps"), 0).doubleValue();
+            if (bandwidth != null && !(bandwidth > 0)) throw new IllegalArgumentException("bandwidthMbps 는 0 보다 커야 합니다: " + a + "-" + b + " = " + bandwidth);
+            Double loss = l.get("packetLossPercent") == null ? null : num(l.get("packetLossPercent"), 0).doubleValue();
+            if (loss != null && (loss < 0 || loss > 100)) throw new IllegalArgumentException("packetLossPercent 는 0~100 이어야 합니다: " + a + "-" + b + " = " + loss);
+            links.add(new Link(a, b, latency, bandwidth, loss, status));
         }
         return links;
     }

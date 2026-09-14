@@ -83,6 +83,8 @@ class BenchmarkEvidenceDumpTest {
 
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("generatedAt", OffsetDateTime.now().toString());
+        manifest.put("gitHead", gitHead());
+        manifest.put("representation", "재직렬화 표현 — ApiResponse 봉투 없음, 맵 키 정렬, evaluatedAt 제거. 서빙 응답과 바이트가 같지 않다");
         manifest.put("boards", clusters.boardIds());
         manifest.put("metricKeyDigest", BenchmarkClusters.digestOf(
                 BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).sorted().reduce((a, b) -> a + "," + b).orElse("")));
@@ -90,5 +92,26 @@ class BenchmarkEvidenceDumpTest {
         Files.writeString(OUT.resolve("manifest.json"), mapper.writeValueAsString(manifest), StandardCharsets.UTF_8);
 
         assertEquals(clusters.boardIds().size() * DISTRIBUTIONS.size(), entries.size());
+    }
+
+    /** 셸 없이 .git/HEAD 를 읽는다 — 보고서가 "어느 소스 리비전의 표인가" 를 지목할 수 있게. 작업 트리 청결 여부는 알 수 없다. */
+    static String gitHead() {
+        try {
+            Path git = Path.of(".git");
+            String head = Files.readString(git.resolve("HEAD"), StandardCharsets.UTF_8).trim();
+            if (!head.startsWith("ref:")) return head;
+            String ref = head.substring(4).trim();
+            Path refFile = git.resolve(ref);
+            if (Files.exists(refFile)) return Files.readString(refFile, StandardCharsets.UTF_8).trim() + " (" + ref + ", 작업 트리 청결 여부 미확인)";
+            Path packed = git.resolve("packed-refs");
+            if (Files.exists(packed)) {
+                for (String line : Files.readAllLines(packed, StandardCharsets.UTF_8)) {
+                    if (line.endsWith(" " + ref)) return line.substring(0, line.indexOf(' ')) + " (" + ref + ", packed)";
+                }
+            }
+            return "unknown (" + ref + ")";
+        } catch (IOException e) {
+            return "unknown";
+        }
     }
 }

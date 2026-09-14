@@ -196,10 +196,10 @@ public class PlacementBenchmarkService {
 
         if (!running.tryAcquire()) {
             throw new BusinessException(HttpStatus.TOO_MANY_REQUESTS,
-                    "배치 비교가 이미 실행 중입니다. 잠시 뒤 다시 호출하세요 — 같은 입력이면 결과가 캐시에서 바로 나옵니다");
+                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(판 하나 약 5~10초) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
         }
         try {
-            hit = cache.get(key);   // 기다리던 사이 같은 입력이 끝났을 수 있다
+            hit = cache.get(key);   // 첫 조회가 빗나간 뒤 슬롯을 잡기 전 같은 키가 끝났을 수 있다(좁은 경합 창)
             if (hit != null) return restamped(hit);
             PlacementBenchmarkResponse fresh = computeFresh(board, dist, cluster, config);
             if (cache.size() >= CACHE_LIMIT) cache.clear();

@@ -39,6 +39,7 @@ class BannedClaimsSourceScanTest {
     private static final Pattern LINE_COMMENT = Pattern.compile("//[^\\r\\n]*");
     private static final Pattern DESCRIPTION_ANNOTATION = Pattern.compile("@(Tag|Operation|Schema)\\s*\\(");
     private static final Pattern STRING_LITERAL = Pattern.compile("\"((?:\\\\.|[^\"\\\\])*)\"");
+    private static final Pattern DESCRIPTION_ARG = Pattern.compile("\\b(description|summary)\\s*=\\s*");
     private static final String MARKER = "ban-ok";
 
     /** 검사에 걸린 자리 — 파일·줄·조각·앞뒤 문맥. */
@@ -65,10 +66,13 @@ class BannedClaimsSourceScanTest {
             for (Block b : blocks(text)) {
                 scannedBlocks++;
                 if (b.text().contains(MARKER)) continue;
-                String flat = b.text().replaceAll("\\s+", " ");
+                // 인라인 태그와 HTML 태그를 지운 뒤 공백을 하나로 접는다 — <b>·{@code} 가 조각을 갈라놓지 못하게
+                String flat = b.text().replaceAll("\\{@\\w+\\s+", " ").replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ");
                 String squeezed = flat.replace(" ", "");
                 for (String banned : BenchmarkRules.BANNED_CLAIMS) {
-                    if (flat.contains(banned) || squeezed.contains(banned.replace(" ", ""))) {
+                    // 공백을 전부 지운 대조는 줄바꿈으로 갈린 긴 조각용이다 — 짧은 조각(6자 미만)은 어절 경계를 넘어 오탐하므로 접은 본문만 본다
+                    boolean squeezedHit = banned.replace(" ", "").length() >= 6 && squeezed.contains(banned.replace(" ", ""));
+                    if (flat.contains(banned) || squeezedHit) {
                         hits.add(new Hit(name, lineOf(text, b.start()), banned, excerpt(flat, banned)));
                     }
                 }
@@ -86,11 +90,12 @@ class BannedClaimsSourceScanTest {
     /** 주석 블록·줄 주석·설명 어노테이션의 문자열을 블록 단위로 모은다. */
     static List<Block> blocks(String text) {
         List<Block> out = new ArrayList<>();
-        Matcher bc = BLOCK_COMMENT.matcher(text);
-        while (bc.find()) out.add(new Block(bc.start(), bc.group().replace("*", " ")));
-        // 줄 주석은 주석 블록·문자열 리터럴 안의 // 를 피하기 위해 블록 주석을 지운 텍스트에서 찾는다
-        String withoutBlocks = BLOCK_COMMENT.matcher(text).replaceAll(m -> " ".repeat(m.group().length()));
-        String withoutStrings = STRING_LITERAL.matcher(withoutBlocks).replaceAll(m -> " ".repeat(m.group().length()));
+        // 문자열 리터럴 안의 /* 가 가짜 주석 블록을 열어 뒤 코드를 삼키지 않도록, 블록 주석은 리터럴을 가린 텍스트에서 찾는다
+        String literalsMasked = STRING_LITERAL.matcher(text).replaceAll(m -> " ".repeat(m.group().length()));
+        Matcher bc = BLOCK_COMMENT.matcher(literalsMasked);
+        while (bc.find()) out.add(new Block(bc.start(), text.substring(bc.start(), bc.end()).replace("*", " ")));
+        String withoutBlocks = BLOCK_COMMENT.matcher(literalsMasked).replaceAll(m -> " ".repeat(m.group().length()));
+        String withoutStrings = withoutBlocks;
         Matcher lc = LINE_COMMENT.matcher(withoutStrings);
         while (lc.find()) out.add(new Block(lc.start(), lc.group()));
         // 설명 어노테이션: 여는 괄호부터 짝이 맞는 닫는 괄호까지의 문자열 리터럴을 이어 붙인다
@@ -99,10 +104,24 @@ class BannedClaimsSourceScanTest {
             int open = an.end() - 1;
             int close = matchingParen(withoutBlocks, open);
             if (close < 0) continue;
-            String span = withoutBlocks.substring(open, close + 1);
+            // 리터럴은 원문에서 읽는다(가린 텍스트는 위치만 같다). description·summary 인자만 문장이다 — example 같은 값 표본은 대상이 아니다
+            String span = text.substring(open, close + 1);
             StringBuilder joined = new StringBuilder();
-            Matcher sl = STRING_LITERAL.matcher(span);
-            while (sl.find()) joined.append(sl.group(1)).append(' ');
+            Matcher arg = DESCRIPTION_ARG.matcher(span);
+            while (arg.find()) {
+                int from = arg.end();
+                int to = span.indexOf('\n', from);
+                String tail = span.substring(from);
+                Matcher sl = STRING_LITERAL.matcher(tail);
+                int cursor = 0;
+                while (sl.find(cursor)) {
+                    // 인자 값은 리터럴을 + 로 잇는다. 다음 인자 이름(쉼표 뒤 식별자 =) 이 나오기 전까지만 취한다
+                    String between = tail.substring(cursor, sl.start());
+                    if (between.matches("(?s).*,\\s*\\w+\\s*=.*")) break;
+                    joined.append(sl.group(1)).append(' ');
+                    cursor = sl.end();
+                }
+            }
             if (joined.length() > 0) out.add(new Block(an.start(), joined.toString()));
         }
         return out;

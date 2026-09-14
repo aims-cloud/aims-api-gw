@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
+import com.innogrid.aims.scheduler.entity.MdcLink;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,6 +25,7 @@ class SyntheticClusterLinksTest {
             nodes:
               - { mdcId: a, nodeId: "n-a:9100", cores: 8, memoryMb: 32768, idleWatts: 100, capacityWatts: 400 }
               - { mdcId: b, nodeId: "n-b:9100", cores: 8, memoryMb: 32768, idleWatts: 100, capacityWatts: 400 }
+              - { mdcId: c, nodeId: "n-c:9100", cores: 8, memoryMb: 32768, idleWatts: 100, capacityWatts: 400 }
             """;
 
     @DisplayName("등록된 판 전부는 links 절이 없어 빈 목록이다")
@@ -47,20 +49,23 @@ class SyntheticClusterLinksTest {
         assertEquals(2, c.links().size());
         SyntheticCluster.Link first = c.links().get(0);
         assertEquals("a", first.mdcA()); assertEquals("b", first.mdcB());
-        assertEquals(20.0, first.latencyMs()); assertNull(first.bandwidthMbps()); assertEquals("UP", first.status());
+        assertEquals(20.0, first.latencyMs()); assertNull(first.bandwidthMbps()); assertEquals(MdcLink.LinkStatus.UP, first.status());
         SyntheticCluster.Link second = c.links().get(1);
-        assertEquals(1000.0, second.bandwidthMbps()); assertEquals(0.5, second.packetLossPercent()); assertEquals("DEGRADED", second.status());
-        assertEquals(2, c.nodes().size(), "노드 절은 그대로 읽힌다");
+        assertEquals(1000.0, second.bandwidthMbps()); assertEquals(0.5, second.packetLossPercent()); assertEquals(MdcLink.LinkStatus.DEGRADED, second.status());
+        assertEquals(3, c.nodes().size(), "노드 절은 그대로 읽힌다");
     }
 
-    @DisplayName("같은 MDC·중복 쌍·지연 누락·모르는 상태는 거부한다")
+    @DisplayName("같은 MDC·중복 쌍·지연 누락·모르는 상태·판에 없는 MDC·범위 밖 값은 거부한다")
     @Test
     void rejects_malformed_links() {
         for (String bad : List.of(
                 "links:\n  - { mdcA: a, mdcB: a, latencyMs: 1 }\n",
                 "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1 }\n  - { mdcA: b, mdcB: a, latencyMs: 2 }\n",
                 "links:\n  - { mdcA: a, mdcB: b }\n",
-                "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, status: BROKEN }\n")) {
+                "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, status: BROKEN }\n",
+                "links:\n  - { mdcA: a, mdcB: z, latencyMs: 1 }\n",
+                "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, bandwidthMbps: 0 }\n",
+                "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, packetLossPercent: 101 }\n")) {
             Object root = new Yaml().load(NODES + bad);
             assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(root, "test"), bad);
         }
@@ -72,7 +77,7 @@ class SyntheticClusterLinksTest {
         Object root = new Yaml().load(NODES);
         SyntheticCluster c = SyntheticCluster.parse(root, "test");
         assertTrue(c.links().isEmpty());
-        assertEquals(2, c.nodes().size());
+        assertEquals(3, c.nodes().size());
         assertTrue(root instanceof Map<?, ?> m && !m.containsKey("links"));
     }
 }

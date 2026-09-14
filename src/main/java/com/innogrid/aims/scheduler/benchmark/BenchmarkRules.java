@@ -11,7 +11,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
 
 /**
- * 배치 비교의 <b>판정 규칙</b> — 결과보다 먼저 고정한다. (ban-ok: 개정 이력에 옛 지표 이름을 인용한다)
+ * 배치 비교의 <b>판정 규칙</b> — 결과보다 먼저 고정한다. <!-- ban-ok: 개정 이력에 옛 지표 이름을 인용한다 -->
  *
  * <p>이 클래스가 커밋 이력에서 결과 코드보다 <b>앞에 있는 것</b>이 사전 등록의 증거다.
  * 기술적으로 이 클래스는 지표 열거와 판정 셀의 전원 가정 말고는 아무것도 참조하지 않아 어디에 놓아도 컴파일된다 — 그래서
@@ -180,7 +180,7 @@ public final class BenchmarkRules {
 
     /**
      * <b>판정 규칙과 그 사본</b>(한계 문구·지표 문구·판 설명·전제 문구·Swagger 설명)에 있으면 안 되는
-     * 문장 조각 — 상수와 그 사본이 갈라지지 않게 (ban-ok: 금지 조각을 정의하는 자리)
+     * 문장 조각 — 상수와 그 사본이 갈라지지 않게 <!-- ban-ok: 금지 조각을 정의하는 자리 -->
      * <b>한 배열</b>로 둔다. 조각으로 적는 이유는 "…없다"/"…없습니다" 같은 어미 차이로 검사가
      * 빠져나가지 않게 하기 위해서다.
      *
@@ -204,7 +204,7 @@ public final class BenchmarkRules {
 
     public static final String PLACEMENT_RATE = "placementRatePercent";
     /**
-     * 클러스터 파일 <b>생성식</b>으로 계산한 총전력. "지상진실"이라 부르지 않는다(ban-ok: 옛 이름 인용) — 평가자도 그 생성식을 쓰므로
+     * 클러스터 파일 <b>생성식</b>으로 계산한 총전력. "지상진실"이라 부르지 않는다<!-- ban-ok: 옛 이름 인용 --> — 평가자도 그 생성식을 쓰므로
      * 이 값은 실측이 아니고, 확인되는 것은 "엔진 가정과 생성식이 얼마나 다른가"뿐이다.
      */
     public static final String GENERATOR_POWER = "generatorPowerW";

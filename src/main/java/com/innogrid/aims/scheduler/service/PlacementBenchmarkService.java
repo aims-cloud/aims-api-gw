@@ -583,9 +583,12 @@ public class PlacementBenchmarkService {
         Map<String, Map<String, List<Double>>> samples = new LinkedHashMap<>();
         for (String id : strategyIds) samples.put(id, new LinkedHashMap<>());
 
-        // 총량 비교는 시각 지점마다 짝짓는다. 어떤 지점에서 전 전략의 배치 건수가 같다면 그 지점의
-        // 총량은 견줄 수 있다 — 다른 지점이 어긋났다는 이유로 그 지점까지 버리면 쓸 수 있는 짝을 통째로
-        // 잃고 주 지표가 중부하 이상에서 사라진다. 대신 몇 곳을 썼는지 밝힌다.
+        // 총량 비교는 시각 지점마다 짝짓는다. 어떤 지점에서 기준 집합(override 없는 기본 설정 열) 전부의 배치 건수가 같다면
+        // 그 지점의 총량은 견줄 수 있다 — 다른 지점이 어긋났다는 이유로 그 지점까지 버리면 쓸 수 있는 짝을 통째로
+        // 잃고 주 지표가 중부하 이상에서 사라진다. 대신 몇 곳을 썼는지 밝힌다. override 열을 기준 집합에 넣지 않는 이유는
+        // BenchmarkRules.PAIRING_RULE — 열을 더하는 것만으로 기존 열의 값이 바뀌면 안 된다.
+        Map<String, Map<String, String>> overrides = overrides();
+        List<String> coreIds = strategyIds.stream().filter(id -> !overrides.containsKey(id)).toList();
         int usablePoints = 0;
         Map<String, Integer> mismatchExample = Map.of();
 
@@ -595,7 +598,10 @@ public class PlacementBenchmarkService {
             for (String id : strategyIds) {
                 placedHere.put(id, point.byStrategy().get(id).placed());
             }
-            boolean pointComparable = BenchmarkRules.totalsComparable(placedHere.values());
+            Map<String, Integer> corePlaced = new LinkedHashMap<>();
+            for (String id : coreIds) corePlaced.put(id, placedHere.get(id));
+            boolean pointComparable = BenchmarkRules.totalsComparable(corePlaced.values());
+            Integer coreCount = pointComparable ? corePlaced.values().iterator().next() : null;
 
             // 생성식 총전력은 지점마다 전략당 한 번 내어 두 열이 같은 값을 읽는다. 총량 열은 짝이 아닌
             // 지점을 null 로 가리지만(아래), 격차 열은 이 행과 기준 전략 둘만 짝지으므로 가리는 조건이
@@ -609,12 +615,14 @@ public class PlacementBenchmarkService {
             if (pointComparable) {
                 usablePoints++;
             } else {
-                mismatchExample = placedHere;
+                mismatchExample = corePlaced;
             }
 
             for (String id : strategyIds) {
                 Placement p = point.byStrategy().get(id);
                 Map<String, List<Double>> into = samples.get(id);
+                // override 열은 기준 집합의 마스크를 받되 자기 건수가 기준 건수와 같아야 총량을 낸다
+                boolean rowComparable = pointComparable && (coreIds.contains(id) || coreCount.equals(p.placed()));
 
                 add(into, BenchmarkRules.PLACEMENT_RATE,
                         p.requested() == 0 ? null : round(100.0 * p.placed() / p.requested()));
@@ -629,24 +637,24 @@ public class PlacementBenchmarkService {
                 // 아니다 — 생성식 온도는 CPU 의 함수라 배치량이 다르면 열이 아니라 배치량을 재게 된다.
                 // 짝이 아닌 지점의 값은 아예 세지 않는다.
                 add(into, BenchmarkRules.GENERATOR_POWER,
-                        pointComparable ? powerByStrategy.get(id) : null);
+                        rowComparable ? powerByStrategy.get(id) : null);
                 // 격차는 전 전략 짝을 요구하지 않는다 — 이 행과 기준 전략의 건수만 같으면 낸다.
                 add(into, BenchmarkRules.GAP_VS_PABFD,
                         gapVsBaseline(id, placedHere.get(id), powerByStrategy.get(id),
                                 placedBaseline, powerBaseline));
-                add(into, BenchmarkRules.ACTIVE_NODE_DELTA, pointComparable
+                add(into, BenchmarkRules.ACTIVE_NODE_DELTA, rowComparable
                         ? (double) (p.activeCountAfter() - point.activeCountBefore()) : null);
                 add(into, BenchmarkRules.WARN_ZONE_NODES,
-                        pointComparable ? (double) p.warnZoneNodes() : null);
+                        rowComparable ? (double) p.warnZoneNodes() : null);
                 add(into, BenchmarkRules.TEMP_STDDEV,
-                        pointComparable && point.measuredNodeCount() >= 2 ? round(p.measuredTempStdDev()) : null);
+                        rowComparable && point.measuredNodeCount() >= 2 ? round(p.measuredTempStdDev()) : null);
 
                 Double rate = p.placed() == 0 ? null : round(100.0 * p.unmeasuredPlacements() / p.placed());
                 add(into, BenchmarkRules.UNMEASURED_RATE, rate);
-                if (rate != null) unmeasuredRates.put(id, rate);
+                if (rate != null && coreIds.contains(id)) unmeasuredRates.put(id, rate);
             }
 
-            // 미계측 격차는 전략 사이의 값이라 지점마다 한 번 계산해 전 전략에 같은 값으로 싣는다.
+            // 미계측 격차는 기준 집합 사이의 값이라 지점마다 한 번 계산해 전 전략에 같은 값으로 싣는다.
             Double spread = spreadOf(unmeasuredRates);
             for (String id : strategyIds) {
                 add(samples.get(id), BenchmarkRules.UNMEASURED_SPREAD, spread);
@@ -657,7 +665,6 @@ public class PlacementBenchmarkService {
         String incomparable = comparable ? null
                 : pairingNote(usablePoints, points.size(), mismatchExample);
 
-        Map<String, Map<String, String>> overrides = overrides();
         List<StrategyResult> results = new ArrayList<>(strategyIds.size());
         for (String id : strategyIds) {
             Placement any = points.get(0).byStrategy().get(id);
@@ -672,7 +679,7 @@ public class PlacementBenchmarkService {
                 median(points.stream().map(PointOutcome::headroomCores).toList()),
                 median(points.stream().map(p -> (double) p.activeCountBefore()).toList()),
                 comparable, incomparable,
-                unmeasuredCaution(samples, strategyIds),
+                unmeasuredCaution(samples, coreIds),
                 probeReasonCounts(points), results);
     }
 

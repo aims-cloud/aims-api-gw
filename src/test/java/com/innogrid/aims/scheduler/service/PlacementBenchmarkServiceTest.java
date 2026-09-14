@@ -367,6 +367,24 @@ class PlacementBenchmarkServiceTest {
         assertNotEquals(columnOf(main, "power-idle-fixed"), columnOf(main, "power"), "역산 차단 열이 power 와 같다 — 계측 유휴 노드가 있는 판에서는 역산이 값을 바꿔야 한다");
     }
 
+    /**
+     * 열을 더해도 기존 열의 값이 바뀌지 않는다 — 짝 조건은 기준 집합으로만 정한다. 배포 검증에서 반증판 90%·전원 제어 셀의 power
+     * 총전력 표본이 5 → 1 로 줄어든 것이 이 규칙의 계기다. 리터럴은 변종 열 도입 전(위생 정비 PR jar) 응답에서 가져왔다.
+     */
+    @DisplayName("변종 열을 더해도 기준 집합 열의 총량 표본 수와 값이 변종 열 도입 전과 같다")
+    @Test
+    void adding_override_columns_does_not_move_core_column_totals() {
+        Cell adversarial = cell(service.compare("adversarial", "heavytail").boards().get(0), 90, "AVAILABLE");
+        MetricValue power = strategy(adversarial, "power").metrics().stream()
+                .filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow();
+        assertEquals(5, power.samples(), "짝 지점 수가 변종 열 도입 전(5)과 다르다 — 짝 조건이 override 열까지 보고 있다");
+        assertEquals(6429.0022, power.median(), 1e-4);
+        Cell sparse = cell(service.compare("sparse", "heavytail").boards().get(0), 90, "AVAILABLE");
+        MetricValue spread = strategy(sparse, "power").metrics().stream()
+                .filter(m -> m.key().equals(BenchmarkRules.UNMEASURED_SPREAD)).findFirst().orElseThrow();
+        assertEquals(32.3241, spread.median(), 1e-4, "미계측 격차가 변종 열까지 포함해 계산됐다");
+    }
+
     /** 순환 배정 — 표본 순서대로 a,b,c,a,b,c… 링크 판만 부여하고 링크 없는 판은 아무것도 하지 않는다. */
     @DisplayName("데이터 MDC 는 표본 순서대로 순환 배정되고 링크 없는 판은 부여하지 않는다")
     @Test

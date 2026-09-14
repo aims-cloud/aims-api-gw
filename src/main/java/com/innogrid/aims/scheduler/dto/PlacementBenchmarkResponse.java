@@ -366,7 +366,7 @@ public record PlacementBenchmarkResponse(
      * @param activeNodesBefore       배치 전부터 부하가 돌던 노드 수(중앙값). {@code activeNodeDelta} 가
      *                                무엇에 대한 증감인지 이 값 없이는 알 수 없다. 전원 제어가 있다는
      *                                가정에서도 <b>이 노드들은 끌 수 없으므로</b> 총전력의 바닥이 된다
-     * @param totalsComparable        총량 열을 비교해도 되는가 — 전 전략의 배치 건수가 같을 때만 참
+     * @param totalsComparable        총량 열을 비교해도 되는가 — 기준 집합(override 없는 기본 설정 열) 전부의 배치 건수가 전 지점에서 같을 때만 참
      * @param totalsIncomparableReason 비교할 수 없을 때의 사유
      * @param unmeasuredCaution       미계측 비율이 전략 간에 크게 갈릴 때의 경고. 아니면 null
      * @param probeExclusionReasons   표본 첫 워크로드로 재 본 제외 사유 분포 — 이 판이 왜 막히는지

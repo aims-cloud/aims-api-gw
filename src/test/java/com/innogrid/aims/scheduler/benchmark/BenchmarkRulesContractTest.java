@@ -71,7 +71,8 @@ class BenchmarkRulesContractTest {
             "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱")),
             "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
             "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)"),
-                    new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설")));
+                    new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설"),
+                    new AxisSeal("d06e13cc090c", "2026-09-14", "총량 짝 조건 기준 집합 규칙 — override 없는 기본 설정 열로 고정(열 추가가 기존 값을 바꾸지 않게)")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -208,7 +209,7 @@ class BenchmarkRulesContractTest {
     @DisplayName("온도 분포 두 지표는 배치 건수가 같은 지점에서만 유효하고 개입 횟수는 그 조건을 받지 않는다")
     @Test
     void the_temperature_distribution_metrics_share_the_pairing_condition_of_the_totals() {
-        String pairing = "전 전략의 배치 건수가 같은 시각 지점에서만";
+        String pairing = "기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만";
 
         for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
             assertTrue(metric(key).validity().contains(pairing),
@@ -216,7 +217,7 @@ class BenchmarkRulesContractTest {
         }
         assertFalse(metric(BenchmarkRules.C3_INTERVENTIONS).validity().contains(pairing),
                 "개입 횟수는 시도당 계수라 배치량에 비례하지 않는다 — 같은 조건을 걸면 없는 결함을 고치는 것이다");
-        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같을 때만"),
+        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같은 지점에서만"),
                 "총량 쪽 조건이 사라졌다면 '같은 조건' 이라는 위 문구의 기준이 없어진다");
     }
 
@@ -596,6 +597,8 @@ class BenchmarkRulesContractTest {
         assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("독립 증거가 아니다"));
         assertTrue(BenchmarkRules.PHASE_RULE.contains("검정하지 않는다"));
         assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("원인을 지목하지 않"));
+        assertTrue(BenchmarkRules.PAIRING_RULE.contains("override 없는 기본 설정 열"), "짝 조건 기준 집합이 문장에 있어야 한다");
+        assertFreeOfBannedClaims(BenchmarkRules.PAIRING_RULE, "짝 조건 규칙 문장");
     }
 
     /**

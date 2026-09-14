@@ -288,7 +288,8 @@ public final class BenchmarkRules {
         // 절차·정의 문장은 공백을 하나로 접어 따로 봉인한다 — 서식 편집 소음은 걸러지고, 문장을 바꿔 쓰면 이 축만 깨진다
         axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " ")
                 + "|sensitivityRule=" + SENSITIVITY_RULE.replaceAll("\\s+", " ") + "|phaseRule=" + PHASE_RULE.replaceAll("\\s+", " ")
-                + "|concaveConclusion=" + CONCAVE_CONCLUSION_TEMPLATE.replaceAll("\\s+", " "));
+                + "|concaveConclusion=" + CONCAVE_CONCLUSION_TEMPLATE.replaceAll("\\s+", " ")
+                + "|pairingRule=" + PAIRING_RULE.replaceAll("\\s+", " "));
         return axes;
     }
 
@@ -332,13 +333,14 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(GENERATOR_POWER, "총전력(생성식 기준)", "W",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
-                    "전 전략의 배치 건수가 같을 때만 총량을 비교한다. 건수가 다르면 건당 값을 쓴다. "
+                    "기본 설정 열(override 없는 열 — 엔진·자원전용·대조군) 전부의 배치 건수가 같은 지점에서만 총량을 비교한다. "
+                            + "override 열은 그 지점에서 자기 건수가 같을 때만 낸다. 건수가 다르면 건당 값을 쓴다. "
                             + "클러스터 파일 생성식으로 계산한 값이라 실측 서버의 전력이 아니다"),
 
             new BenchmarkMetric(GAP_VS_PABFD, "총전력 격차(전력 인지 최적적합 대비)", "%",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
                     "두 전략(이 행·pabfd)의 배치 건수가 같은 지점만 값을 내며 pabfd 총전력이 0 이면 제외한다 — "
-                            + "짝 정의가 총량 열(전 전략 일치)보다 느슨해 표본 수가 총량 열 이상일 수 있다. "
+                            + "짝 정의가 총량 열(기본 설정 열 전부 일치)보다 느슨해 표본 수가 총량 열 이상일 수 있다. "
                             + "pabfd 행 자신은 0 이 값이 아니라 기준이므로 무효. "
                             + "지점별 비의 중앙값이라 '총전력 중앙값의 비' 와 다른 숫자다"),
 
@@ -357,7 +359,7 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(WARN_ZONE_NODES, "경고 구간 노드 수(생성식 온도 · 정책 경계)", "대",
                     Direction.LOWER_IS_BETTER, Role.SECONDARY,
-                    "계측 노드가 있을 때만, 그리고 총량 지표와 같이 전 전략의 배치 건수가 같은 시각 지점에서만 — "
+                    "계측 노드가 있을 때만, 그리고 총량 지표와 같이 기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만 — "
                             + "덜 배치한 전략은 CPU 를 덜 얹어 생성식 온도가 낮으므로 건수가 다르면 열이 아니라 배치량을 "
                             + "재게 된다. 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다. "
                             + "온도는 클러스터 생성식으로 내지만 경고 경계는 정책·설정값(기본 65℃)이라 "
@@ -375,7 +377,7 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(TEMP_STDDEV, "계측 노드 온도 표준편차(생성식)", "℃",
                     Direction.LOWER_IS_BETTER, Role.SECONDARY,
-                    "계측 노드가 둘 이상일 때만, 그리고 총량 지표와 같이 전 전략의 배치 건수가 같은 시각 지점에서만 — "
+                    "계측 노드가 둘 이상일 때만, 그리고 총량 지표와 같이 기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만 — "
                             + "덜 배치한 전략은 CPU 를 덜 얹어 분포가 덜 벌어지므로 건수가 다르면 열이 아니라 배치량을 재게 된다. "
                             + "값은 배치 후 CPU 분포를 생성식에 넣어 낸 것이지 센서 판독이 아니다. 분모는 계측 노드 수 n(모집단 표준편차)이다. "
                             + "평균은 배치로 거의 안 움직이지만 분산은 움직인다"),
@@ -392,7 +394,19 @@ public final class BenchmarkRules {
     // ── 판정 ─────────────────────────────────────────────────
 
     /**
-     * 총량 비교가 유효한가 — <b>전 전략의 배치 건수가 같을 때만</b>.
+     * 총량 짝 조건의 <b>기준 집합</b> 규칙 — 결과보다 먼저. 짝 조건과 미계측 격차는 override 없는 열(기본 설정 열: 엔진 전량·자원전용 2·
+     * 대조군 6 — 판정 자격 집합을 포함한다)의 배치 건수로만 정한다. override 열(링크 게이트·눈금·역산 차단)은 그 마스크를 받아 자기
+     * 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. 이유: 짝 조건을 전 열로 잡으면 <b>열을 더하는 것만으로 기존 열의 값이
+     * 바뀐다</b>(반증판·계측 공백판에서 실제로 표본 수가 5 → 1 로 줄었다) — 기존 표와의 대조가 깨진다.
+     */
+    public static final String PAIRING_RULE =
+            "총량 짝 조건 규칙. 총량 열(generatorPowerW·activeNodeDelta·warnZoneNodeCount·measuredTempStdDev)의 짝 조건과 미계측 격차는 "
+                    + "override 없는 기본 설정 열(엔진 전량·자원전용 2·대조군 6) 전부의 배치 건수가 같은 시각 지점으로 정한다. "
+                    + "override 열은 그 마스크를 받아 자기 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. "
+                    + "열을 더하는 것이 기존 열의 값을 바꾸지 않게 하기 위한 규칙이며, 격차 열(pabfd 짝)은 이 규칙과 무관하다.";
+
+    /**
+     * 총량 비교가 유효한가 — <b>기준 집합(기본 설정 열) 전부의 배치 건수가 같을 때만</b>. 호출자가 기준 집합의 건수만 넘긴다.
      *
      * <p>적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다. 건수가 다르면 총량 열을
      * {@code valid=false} 로 내리고 건당 값으로 비교한다.</p>

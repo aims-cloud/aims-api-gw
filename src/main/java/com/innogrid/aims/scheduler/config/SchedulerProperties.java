@@ -408,7 +408,8 @@ public class SchedulerProperties {
      * 실행 계층 연동(디스패치) — 배치 결정을 실행 계층으로 넘기는 방식.
      *
      * <p>{@code mode} 는 등록된 디스패처 식별자다. 기본 {@code record} 는 외부를 부르지 않고 기록만 한다(실행 API 미정).
-     * {@code timeoutMinutes} 는 원격 모드에서 응답 없는 요청을 TIMED_OUT 으로 볼 시간이며 record 모드에서는 쓰지 않는다.</p>
+     * {@code timeoutMinutes} 는 원격 모드에서 응답 없는 요청을 TIMED_OUT 으로 볼 시간이며 record 모드에서는 쓰지 않는다 —
+     * 지금은 <b>읽는 코드가 없다</b>(원격 디스패처가 생기면 그때 만료 스윕이 읽는다).</p>
      */
     public static class Dispatch {
 

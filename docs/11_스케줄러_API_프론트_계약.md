@@ -37,7 +37,7 @@
 |---|---|
 | 워크로드 | `PENDING` `SCHEDULED` `RUNNING` `COMPLETED` `FAILED` |
 | 실행 | `RUNNING` `COMPLETED` `FAILED` · 실행 주체 `AUTO` `MANUAL` |
-| 배치 결정 전달 | `REQUESTED` `ACCEPTED` `RUNNING` `COMPLETED` `FAILED` `REJECTED` `UNAVAILABLE` `TIMED_OUT` |
+| 배치 결정 전달 | `REQUESTED` `ACCEPTED` `RUNNING` `COMPLETED` `FAILED` `REJECTED` `UNAVAILABLE` `TIMED_OUT`(원격 모드 전용 — 지금의 record 모드에서는 나오지 않음) |
 | 리소스 종류 | `VM` `GPU` `NPU` `CONTAINER` |
 | 배치 순서 | `PRIORITY_THEN_AGE` `PRIORITY_THEN_SIZE` |
 | 엔진 | `weighted` `power` `temperature` (소문자 — 엔진 식별자라 예외) |
@@ -189,6 +189,7 @@
 | 전력·온도 | 0 | IPMI 수집 대상 미등록 |
 | GPU | 0 | DCGM 수집 대상 미등록 |
 | 원장 3종 | 0건 | 운영자 입력 전 |
+| 링크 원장 | 0건 | 운영자 입력 전. 그래서 배치 후보 상세에 `링크품질`·`링크등록` 키가 나오지 않는다(정책 `affinityEnabled` 도 꺼져 있음) |
 | 통합 권고 | 후보가 적음 | 노드가 1대라 옮길 곳이 없음 |
 
 ---

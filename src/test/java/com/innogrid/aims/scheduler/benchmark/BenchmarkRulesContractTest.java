@@ -51,16 +51,24 @@ class BenchmarkRulesContractTest {
             "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "unmeasuredPlacementRate",
             "unmeasuredRateSpreadPercentPoints", "warnZoneNodeCount");
 
+    /** 규칙 축 봉인 한 줄 — 다이제스트 · 날짜 · 사유. 이력의 마지막 행이 현재 값이다. */
+    record AxisSeal(String digest, String date, String reason) {}
+
     /**
-     * 판정 규칙 축별 다이제스트 — 지표 키 외의 규칙 값(부하율·지점 수·시드·판 상수·판정 문턱·금지 조각)도 봉인한다.
-     * 어느 축이 바뀌었는지 보이도록 축마다 리터럴을 둔다. 바뀌면 그 축의 정규 문자열 전문이 실패 메시지에 나온다.
+     * 판정 규칙 축별 다이제스트 <b>이력</b> — 지표 키 외의 규칙 값(부하율·지점 수·시드·판 상수·판정 문턱·금지 조각·절차 문장)도
+     * 봉인한다. 축마다 행을 쌓고 마지막 행이 현재 값이어야 한다. 규칙을 바꾸는 커밋은 여기 행을 더하고(옛 → 새 값과 사유가
+     * 남는다), 제목을 {@code rules:} 로 시작하며, 결과 코드 변경을 같은 커밋에 담지 않는다 — 이력 누락은 시험이 막고 커밋
+     * 순서는 리뷰가 본다. 증거 묶음 매니페스트가 같은 값을 실으므로 옛 매니페스트의 다이제스트를 이 표로 해석한다.
+     * {@code metrics} 축(키:방향:역할)은 키 집합만의 {@link #DECLARED_KEY_DIGEST} 와 목적이 달라 값이 다르다.
      */
-    private static final Map<String, String> RULE_AXIS_DIGESTS = Map.of(
-            "metrics", "039400bdc3c1",
-            "sweep", "559301d27583",
-            "boards", "e7c96e2c89f5",
-            "judgment", "e1601b21aca2",
-            "banned", "e621e7f43e72");
+    private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
+            "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할")),
+            "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
+            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율")),
+            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리")),
+            "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱")),
+            "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
+            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -76,15 +84,18 @@ class BenchmarkRulesContractTest {
     @Test
     void rule_axes_are_sealed() {
         Map<String, String> axes = BenchmarkRules.ruleAxes();
-        assertEquals(RULE_AXIS_DIGESTS.keySet(), axes.keySet(), "축 집합이 다르다");
+        assertEquals(RULE_AXIS_HISTORY.keySet(), axes.keySet(), "축 집합이 다르다");
         List<String> changed = new java.util.ArrayList<>();
         for (Map.Entry<String, String> e : axes.entrySet()) {
+            List<AxisSeal> history = RULE_AXIS_HISTORY.get(e.getKey());
+            String current = history.get(history.size() - 1).digest();
             String actual = BenchmarkClusters.digestOf(e.getValue());
-            if (!actual.equals(RULE_AXIS_DIGESTS.get(e.getKey()))) {
-                changed.add(e.getKey() + ": " + RULE_AXIS_DIGESTS.get(e.getKey()) + " → " + actual + "  정규 문자열: " + e.getValue());
+            if (!actual.equals(current)) {
+                changed.add(e.getKey() + ": " + current + " → " + actual + "  정규 문자열: " + e.getValue());
             }
         }
-        assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 리터럴을 결과 코드보다 앞선 별도 커밋에서 먼저 고친다(옛 → 새 값을 메시지에)\n  " + String.join("\n  ", changed));
+        assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 이력에 행(새 값·날짜·사유)을 더하는 'rules:' 커밋을 결과 코드보다 앞에 둔다\n  "
+                + String.join("\n  ", changed));
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")

@@ -204,20 +204,30 @@ public final class BenchmarkRules {
      * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. 계약 시험이 축마다 다이제스트 리터럴을
      * 두고, 증거 묶음 매니페스트가 같은 값을 싣는다. 축을 나눈 이유는 "어느 규칙이 바뀌었나" 가 값 하나에 뭉개지지 않게
      * 하기 위해서다. 응답에는 싣지 않는다(형태 불변).
+     *
+     * <p><b>축이 바뀌는 커밋의 형식.</b> 제목을 {@code rules:} 로 시작하고, 본문에 축·옛 값 → 새 값·사유를 적고, 결과 코드
+     * 변경을 같은 커밋에 담지 않는다. 계약 시험의 축 이력({@code RULE_AXIS_HISTORY})에 행을 더해야 시험이 통과하므로
+     * 이력 누락은 기계가 막고, 커밋 순서는 리뷰가 본다.</p>
      */
     public static Map<String, String> ruleAxes() {
         java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
-        axes.put("metrics", METRICS.stream().map(BenchmarkMetric::key).sorted().collect(java.util.stream.Collectors.joining(",")));
+        // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(계약 시험 DECLARED_KEY_DIGEST)와는 목적이 달라 값이 같지 않다
+        axes.put("metrics", METRICS.stream().map(m -> m.key() + ":" + m.direction() + ":" + m.role()).sorted()
+                .collect(java.util.stream.Collectors.joining(",")));
         axes.put("sweep", "loadRatios=" + LOAD_RATIOS + "|sweepPoints=" + SWEEP_POINTS + "|randomSeeds=" + RANDOM_SEEDS
                 + "|memoryMbPerCore=" + MEMORY_MB_PER_CORE + "|poweredOnCpuPercent=" + POWERED_ON_CPU_PERCENT
                 + "|cooldownMinutes=" + COOLDOWN_MINUTES_FOR_BENCHMARK);
-        axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO
-                + "|maxRealMarginalWatts=" + MAX_REAL_MARGINAL_WATTS);
+        axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO);
+        // 판 실측에서 온 불변조건 — 규칙 문턱과 성격이 달라 따로 둔다(바뀌면 "규칙 변경" 이 아니라 "판 데이터 변경" 이다).
+        // 값 자체는 계약 시험의 실측 대조가 지킨다
+        axes.put("measured", "maxRealMarginalWatts=" + MAX_REAL_MARGINAL_WATTS);
         axes.put("judgment", "board=" + JUDGMENT_BOARD + "|loadRatio=" + JUDGMENT_LOAD_RATIO + "|powerControl=" + JUDGMENT_POWER_CONTROL
                 + "|minPairedPoints=" + JUDGMENT_MIN_PAIRED_POINTS + "|medianReductionPp=" + JUDGMENT_MEDIAN_REDUCTION_PP
                 + "|reducedPointRatio=" + JUDGMENT_REDUCED_POINT_RATIO + "|directionCheckBoard=" + DIRECTION_CHECK_BOARD
                 + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP);
         axes.put("banned", String.join(",", BANNED_CLAIMS));
+        // 절차·정의 문장은 공백을 하나로 접어 따로 봉인한다 — 서식 편집 소음은 걸러지고, 문장을 바꿔 쓰면 이 축만 깨진다
+        axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " "));
         return axes;
     }
 

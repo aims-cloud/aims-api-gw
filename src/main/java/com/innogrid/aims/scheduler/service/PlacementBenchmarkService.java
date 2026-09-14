@@ -129,15 +129,21 @@ public class PlacementBenchmarkService {
     private final List<String> baselineOrder;
 
     /**
-     * 순수성 캐시 — 키는 {@code 판|분포|판 다이제스트|엔진 설정 다이제스트}.
+     * 순수성 캐시 — 키는 {@link #CACHE_AXES} 순서의 {@code 판|분포|판 파일 다이제스트|워크로드 파일 다이제스트|엔진 설정 다이제스트|규칙 축 다이제스트}.
      *
      * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 시험이 지킨다). 그런데 한 번
      * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU 를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
      * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
-     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 전부 비운다 — 판 × 분포 × 설정 조합이 작아 실제로는 닿지 않는다.</p>
+     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN 을 남기고 전부 비운다 — 판 6 × 분포 2 = 12 조합(설정·규칙은 프로세스
+     * 안에서 고정)이라 상한 16 에는 닿지 않으며, 닿았다면 키 축 계산이 틀렸다는 신호다.</p>
      */
     private final Map<String, PlacementBenchmarkResponse> cache = new ConcurrentHashMap<>();
-    private static final int CACHE_LIMIT = 64;
+    private static final int CACHE_LIMIT = 16;
+
+    /** 캐시 키의 입력 축 이름 — 순서가 키 순서다. 축을 더하면 이 목록과 시험의 리터럴이 함께 바뀌어야 한다. */
+    static final List<String> CACHE_AXES = List.of("board", "distribution", "boardDigest", "workloadDigest", "configDigest", "rulesDigest");
+    /** 판정 규칙 축 전부의 다이제스트 — 규칙 상수(시드·지점 수·문턱)가 바뀌면 옛 표가 캐시에서 나가지 않게 키에 넣는다. 프로세스 안에서 상수다. */
+    private static final String RULES_DIGEST = BenchmarkClusters.digestOf(String.join("|", BenchmarkRules.ruleAxes().values()));
 
     /**
      * 동시 실행 1건 — 두 번째 호출은 기다리지 않고 429 로 돌려보낸다.
@@ -193,7 +199,7 @@ public class PlacementBenchmarkService {
         }
         SyntheticCluster cluster = resolveBoard(board);
         EngineConfigSnapshot config = engineConfig();
-        String key = cacheKey(board, dist, clusters.digest(board), BenchmarkWorkloads.digestOf(location), config.configDigest());
+        String key = cacheKey(board, dist, clusters.digest(board), BenchmarkWorkloads.digestOf(location), config.configDigest(), RULES_DIGEST);
 
         PlacementBenchmarkResponse hit = cache.get(key);
         if (hit != null) return restamped(hit);
@@ -207,7 +213,10 @@ public class PlacementBenchmarkService {
             hit = cache.get(key);   // 첫 조회가 빗나간 뒤 슬롯을 잡기 전 같은 키가 끝났을 수 있다(좁은 경합 창)
             if (hit != null) return restamped(hit);
             PlacementBenchmarkResponse fresh = computeFresh(board, dist, cluster, config);
-            if (cache.size() >= CACHE_LIMIT) cache.clear();
+            if (cache.size() >= CACHE_LIMIT) {
+                log.warn("배치 비교 캐시 상한 초과 — 전부 비운다(키 축 계산 점검 필요): size={} limit={}", cache.size(), CACHE_LIMIT);
+                cache.clear();
+            }
             cache.put(key, fresh);
             return fresh;
         } finally {
@@ -216,11 +225,12 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@code |} 로 잇는다: 판 id · 분포 이름 · 판 파일 다이제스트 · 워크로드 파일
-     * 다이제스트 · 엔진 설정 다이제스트. 축이 하나라도 빠지면 다른 입력이 같은 표를 돌려받으므로, 축의 수는 시험이 고정한다.
+     * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@link #CACHE_AXES} 순서로 {@code |} 로 잇는다. 축이 하나라도 빠지면 다른
+     * 입력이 같은 표를 돌려받으므로(워크로드 파일 다이제스트가 그렇게 빠졌던 전례), 축 이름 목록은 시험이 리터럴로 고정한다.
      */
-    static String cacheKey(String board, String dist, String boardDigest, String workloadDigest, String configDigest) {
-        return String.join("|", board, dist, boardDigest, workloadDigest, configDigest);
+    static String cacheKey(String... values) {
+        if (values.length != CACHE_AXES.size()) throw new IllegalStateException("캐시 축 수 불일치: " + values.length + " ≠ " + CACHE_AXES);
+        return String.join("|", values);
     }
 
     /**

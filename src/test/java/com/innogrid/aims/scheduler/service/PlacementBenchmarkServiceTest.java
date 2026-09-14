@@ -697,17 +697,23 @@ class PlacementBenchmarkServiceTest {
         assertNotSame(before.boards(), after.boards(), "다른 키라 재계산했다");
     }
 
-    /** 캐시 키의 입력 축은 다섯이다 — 축 하나가 빠지면 다른 입력이 같은 표를 받는다(워크로드 파일 다이제스트가 그렇게 빠졌던 전례). */
-    @DisplayName("캐시 키는 판·분포·판 다이제스트·워크로드 다이제스트·설정 다이제스트 다섯 축이고 어느 축이 바뀌어도 키가 바뀐다")
+    /**
+     * 캐시 키의 입력 축 — 이름 목록을 리터럴로 고정한다. 축 하나가 빠지면 다른 입력이 같은 표를 받는다(워크로드 파일
+     * 다이제스트가 그렇게 빠졌던 전례). 요청 축이 늘어나면(예: seeds·phaseMode) 이 리터럴이 먼저 바뀌어야 한다.
+     */
+    @DisplayName("캐시 키는 여섯 축(판·분포·판 파일·워크로드 파일·설정·규칙 다이제스트)이고 어느 축이 바뀌어도 키가 바뀐다")
     @Test
     void cache_key_covers_every_input_axis() {
-        String base = PlacementBenchmarkService.cacheKey("main", "heavytail", "b1", "w1", "c1");
-        assertEquals(5, base.split("\\|").length);
-        assertNotEquals(base, PlacementBenchmarkService.cacheKey("convex", "heavytail", "b1", "w1", "c1"));
-        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "uniform", "b1", "w1", "c1"));
-        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "heavytail", "b2", "w1", "c1"));
-        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "heavytail", "b1", "w2", "c1"));
-        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "heavytail", "b1", "w1", "c2"));
+        assertEquals(List.of("board", "distribution", "boardDigest", "workloadDigest", "configDigest", "rulesDigest"),
+                PlacementBenchmarkService.CACHE_AXES, "축을 더하거나 빼면 이 리터럴과 계약 §8 을 함께 고친다");
+        String[] base = {"main", "heavytail", "b1", "w1", "c1", "r1"};
+        String key = PlacementBenchmarkService.cacheKey(base);
+        assertEquals(PlacementBenchmarkService.CACHE_AXES.size(), key.split("\\|").length);
+        for (int i = 0; i < base.length; i++) {
+            String[] changed = base.clone(); changed[i] = changed[i] + "x";
+            assertNotEquals(key, PlacementBenchmarkService.cacheKey(changed), "축 " + PlacementBenchmarkService.CACHE_AXES.get(i) + " 가 키에 반영되지 않는다");
+        }
+        assertThrows(IllegalStateException.class, () -> PlacementBenchmarkService.cacheKey("main", "heavytail"), "축 수가 다르면 키를 만들지 않는다");
     }
 
     /** 실행 중인 호출이 있으면 두 번째 호출은 기다리지 않고 429 다. */

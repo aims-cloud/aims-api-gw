@@ -16,10 +16,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 금지 문구 조각({@link BenchmarkRules#BANNED_CLAIMS})이 <b>스케줄러 소스 자체</b>에 남아 있지 않은지 훑는다. <!-- ban-ok: 아래 예시 인용 -->
+ * 금지 문구 조각({@link BenchmarkRules#BANNED_CLAIMS})이 <b>스케줄러 소스 자체</b>에 남아 있지 않은지 훑는다.
  *
  * <p>기존 계약 시험은 판정 규칙의 사본(한계 문구·지표 라벨·판 설명·전제 문구·Swagger 설명)만 본다. 그래서
- * 주석이나 어노테이션 설명에 "볼록하기 때문이다" 같은 단정이 되돌아와도 아무 시험이 깨지지 않았다 — 문구 정정
+ * 주석이나 어노테이션 설명에 "볼록하기 때문이다" 같은 단정이 되돌아와도 아무 시험이 깨지지 않았다 — 문구 <!-- ban-ok: 예시 --> 정정
  * PR 의 효과가 다음 편집에서 조용히 사라질 수 있었다. 이 시험은 {@code src/main/java} 의 스케줄러 소스를
  * 텍스트로 읽어 <b>주석 블록</b>(javadoc 블록 · 일반 블록 주석 · 줄 주석)과 <b>설명 어노테이션</b>
  * ({@code @Tag}·{@code @Operation}·{@code @Schema})의 문자열을 검사한다. 예외 메시지 같은 일반 문자열 리터럴은
@@ -31,7 +31,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p><b>의도된 인용은 {@code ban-ok} 마커로 건너뛴다.</b> 마커가 있는 <b>줄과 그 앞뒤 한 줄</b>만 제외한다 — 금지 조각을
  * 정의하거나 "이렇게 부르지 않는다" 고 설명하는 자리가 그 예다. 블록 전체를 면제하면 연구 서술이 가장 긴 클래스 javadoc 이
  * 통째로 사각지대가 되므로 줄 단위로 좁혔고, 면제된 줄 수에는 상한을 둔다. 금지 조각을 열거하는 자리 하나만
- * {@code ban-ok-block} 으로 블록 전체를 면제한다.</p>
+ * 블록 마커({@code ban-ok-block} 을 HTML 주석으로)로 블록 전체를 면제한다. 마커는 {@code <!-- ban-ok} 로 시작하는 HTML 주석만
+ * 인식하므로 이 문장처럼 이름을 언급하는 것은 면제가 아니다.</p>
  *
  * <p>대상은 {@code src/main}·{@code src/test} 의 스케줄러 패키지 전부다 — 시험 주석의 옛 표기도 같은 규칙으로 잡는다.</p>
  */
@@ -42,16 +43,18 @@ class BannedClaimsSourceScanTest {
             Path.of("src", "test", "java", "com", "innogrid", "aims", "scheduler"));
     private static final Path ROOT = ROOTS.get(0);
     /** 면제 줄 수 상한 — 마커가 번지면 여기서 멈춘다. */
-    private static final int MAX_EXEMPT_LINES = 60;
+    private static final int MAX_EXEMPT_LINES = 46;   // 실측 41(줄 마커 8곳 × 3 + 열거 블록 17) — 마커 두 곳이 더 생기면 여기서 멈춘다
     /** 블록 전체 면제 — 금지 조각을 정의·열거하는 자리 한 곳만을 위한 형태. 면제 줄 수는 전부 상한에 든다. */
-    private static final String BLOCK_MARKER = "ban-ok-block";
+    private static final String BLOCK_MARKER = "<!-- ban-ok-block";
     private static final Pattern TEXT_BLOCK = Pattern.compile("\"\"\".*?\"\"\"", Pattern.DOTALL);
     private static final Pattern BLOCK_COMMENT = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
     private static final Pattern LINE_COMMENT = Pattern.compile("//[^\\r\\n]*");
-    private static final Pattern DESCRIPTION_ANNOTATION = Pattern.compile("@(Tag|Operation|Schema|Parameter|ApiResponse)\\s*\\(");
+    // FQN 인라인(@io.swagger…ApiResponse) 도 잡는다 — 컨트롤러가 공통 ApiResponse 와의 이름 충돌로 FQN 을 쓴다
+    private static final Pattern DESCRIPTION_ANNOTATION = Pattern.compile("@(?:\\w+\\.)*(Tag|Operation|Schema|Parameter|ApiResponses?)\\s*\\(");
     private static final Pattern STRING_LITERAL = Pattern.compile("\"((?:\\\\.|[^\"\\\\])*)\"");
     private static final Pattern DESCRIPTION_ARG = Pattern.compile("\\b(description|summary)\\s*=\\s*");
-    private static final String MARKER = "ban-ok";
+    /** 마커는 HTML 주석 형태만 인식한다 — 산문에서 마커 이름을 언급해도 면제가 생기지 않게. */
+    private static final String MARKER = "<!-- ban-ok";
 
     /** 검사에 걸린 자리 — 파일·줄·조각·앞뒤 문맥. */
     record Hit(String file, int line, String fragment, String context) {
@@ -93,7 +96,8 @@ class BannedClaimsSourceScanTest {
                     }
                     StringBuilder kept = new StringBuilder();
                     for (int i = 0; i < lines.length; i++) {
-                        if (drop[i]) exemptLines++; else kept.append(lines[i]).append('\n');
+                        // 면제 줄 자리에 구분자를 남긴다 — 마커 줄을 사이에 두고 떨어져 있던 두 줄이 줄 결합 대조에서 붙지 않게
+                        if (drop[i]) { exemptLines++; kept.append("\u0000\n"); } else kept.append(lines[i]).append('\n');
                     }
                     body = kept.toString();
                 }

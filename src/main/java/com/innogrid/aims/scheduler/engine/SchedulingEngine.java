@@ -10,7 +10,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 /**
  * 스케줄링 엔진 인터페이스.
- * 워크로드와 후보 노드 목록을 받아 최적의 노드를 선택한다.
+ * 워크로드와 후보 노드 목록을 받아 제약을 통과한 후보 중 점수가 가장 높은 노드를 선택한다.
  */
 public interface SchedulingEngine {
 

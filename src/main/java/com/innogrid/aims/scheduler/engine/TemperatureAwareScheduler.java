@@ -30,14 +30,14 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *    → 전체 노드의 평균 온도 계산
  *    → 평균보다 낮은 노드에 보너스, 높은 노드에 패널티
  *    → balance_factor = (T_avg - T_current) / T_avg
- *    → 핫스팟(hot spot) 방지
+ *    → 핫스팟(hot spot) 회피가 목표 (효과는 배치 후 온도 관측으로만 확인 가능)
  *
  * 3. 열관성(Thermal Inertia) 예측
  *    → 워크로드 배치 후 예상 온도 상승량 추정 (ConstraintEvaluator 가 제외 판정)
  *    → ΔT = k × (requiredCPU / totalCPU) × T_current
  *
  * 4. 냉각 비용 최소화
- *    → 높은 온도의 서버에 워크로드를 추가하면 냉각 비용이 비선형적으로 증가
+ *    → 높은 온도의 서버에 워크로드를 추가하면 냉각 비용이 더 가파르게 늘어난다고 가정
  *    → cooling_cost = (T / T_max)^2 (제곱 비용 모델)
  *
  * <p><b>온도·자원 점수는 예약분까지 반영한 실효값으로 계산한다.</b> 한 실행에서 워크로드를

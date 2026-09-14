@@ -28,13 +28,31 @@ class SyntheticClusterLinksTest {
               - { mdcId: c, nodeId: "n-c:9100", cores: 8, memoryMb: 32768, idleWatts: 100, capacityWatts: 400 }
             """;
 
-    @DisplayName("등록된 판 전부는 links 절이 없어 빈 목록이다")
+    @DisplayName("링크 판만 links 절과 데이터 MDC 순환 배정을 선언하고 나머지 판은 둘 다 비어 있다")
     @Test
-    void registered_boards_declare_no_links() {
+    void only_the_link_board_declares_links() {
         BenchmarkClusters clusters = new BenchmarkClusters();
         for (String id : clusters.boardIds()) {
-            assertTrue(clusters.get(id).links().isEmpty(), id + " — 링크 절이 생기면 이 시험과 다이제스트 리터럴이 함께 깨져야 한다");
+            SyntheticCluster c = clusters.get(id);
+            if (BenchmarkClusters.LINK.equals(id)) {
+                assertEquals(2, c.links().size(), "링크 판 — 등록 두 쌍(UP·DEGRADED), 나머지 한 쌍은 미등록");
+                assertEquals(List.of("bm-mdc-a", "bm-mdc-b", "bm-mdc-c"), c.workloadDataMdcIds());
+            } else {
+                assertTrue(c.links().isEmpty(), id + " — 링크 절이 생기면 이 시험과 다이제스트 리터럴이 함께 깨져야 한다");
+                assertTrue(c.workloadDataMdcIds().isEmpty(), id + " — 데이터 MDC 를 부여하면 게이트가 켜져 기준선이 바뀐다");
+            }
         }
+    }
+
+    @DisplayName("workloadDataMdcIds 는 판의 노드 MDC 여야 하고 중복·빈 목록은 거부한다")
+    @Test
+    void rejects_malformed_workload_data_mdc_ids() {
+        for (String bad : List.of("workloadDataMdcIds: [a, z]\n", "workloadDataMdcIds: [a, a]\n", "workloadDataMdcIds: []\n")) {
+            Object root = new Yaml().load(NODES + bad);
+            assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(root, "test"), bad);
+        }
+        SyntheticCluster ok = SyntheticCluster.parse(new Yaml().load(NODES + "workloadDataMdcIds: [b, a]\n"), "test");
+        assertEquals(List.of("b", "a"), ok.workloadDataMdcIds(), "선언 순서가 배정 순서다");
     }
 
     @DisplayName("links 절을 읽는다 — 필수 셋과 선택 둘, 상태 기본 UP")

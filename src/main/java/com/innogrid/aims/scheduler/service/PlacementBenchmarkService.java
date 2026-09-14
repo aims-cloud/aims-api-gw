@@ -25,6 +25,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BaselinePlacers;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkContexts;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkLinks;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkPolicies;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
@@ -41,6 +42,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.EngineConfigSn
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.IdleGap;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.NetworkKnobs;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PolicySnapshot;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PowerKnobs;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult;
@@ -109,7 +111,8 @@ public class PlacementBenchmarkService {
      * 이 순서로 선다. {@link #engineVariants()} 가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
      * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
      */
-    static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated");
+    static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
+            BenchmarkRules.WEIGHTED_AFFINITY_COLUMN);
 
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     private static final String RANDOM_ID = "random";
@@ -299,7 +302,7 @@ public class PlacementBenchmarkService {
                 BenchmarkRules.SWEEP_POINTS, cluster.periodMinutes(),
                 BenchmarkRules.COOLDOWN_MINUTES_FOR_BENCHMARK, BenchmarkRules.MEMORY_MB_PER_CORE,
                 properties.getPower().getIdleRatio(), Assumptions.GENERATOR_FORMULA, Assumptions.POWER_CONTROL_NOTE,
-                BenchmarkRules.RANDOM_SEEDS.size(), Assumptions.POLICY_BASIS);
+                BenchmarkRules.RANDOM_SEEDS.size(), Assumptions.POLICY_BASIS, dataMdcAssignment(cluster));
     }
 
     // ── 판 하나 ──────────────────────────────────────────────
@@ -431,6 +434,8 @@ public class PlacementBenchmarkService {
 
         double headroom = headroomCores(snapshot, basePolicy);
         List<Workload> sampled = workloads.sample(headroom * loadRatio / 100.0);
+        assignDataMdc(sampled, cluster);
+        LinkMatrix links = BenchmarkLinks.matrixOf(cluster);
         double requestedCores = sampled.stream().mapToInt(Workload::getRequiredCpu).sum();
 
         Map<String, Double> cpuBefore = new LinkedHashMap<>();
@@ -447,15 +452,18 @@ public class PlacementBenchmarkService {
         Map<String, String> probe = Map.of();
         if (!sampled.isEmpty()) {
             ConstraintEvaluator probeEvaluator = BenchmarkContexts.freshEvaluator(properties);
+            // 프로브도 전략과 같은 링크 행렬을 본다 — 전 전략 입력 동일성은 프로브까지 포함한다
             probe = BenchmarkContexts.exclusions(sampled.get(0),
-                    BenchmarkContexts.copyOf(snapshot, basePolicy, probeEvaluator));
+                    BenchmarkContexts.copyOf(snapshot, basePolicy, probeEvaluator, links));
         }
 
         Map<String, Placement> byStrategy = new LinkedHashMap<>();
-        Map<String, PowerModel> costModels = believedCostModels();
+        Map<String, EngineVariant> variants = new LinkedHashMap<>();
+        for (EngineVariant v : engineVariants()) variants.put(v.strategy().id(), v);
         for (PlacementStrategy strategy : strategies()) {
-            byStrategy.put(strategy.id(), run(strategy, sampled, snapshot, cluster, oracle,
-                    costModels.getOrDefault(strategy.id(), powerModel)));
+            EngineVariant v = variants.get(strategy.id());
+            byStrategy.put(strategy.id(), run(strategy, sampled, snapshot, cluster, oracle, links,
+                    v == null ? powerModel : v.believedCostModel(), v == null ? Map.of() : v.override()));
         }
 
         return new PointOutcome(headroom, sampled.size(), requestedCores,
@@ -470,24 +478,26 @@ public class PlacementBenchmarkService {
      */
     private Placement run(PlacementStrategy strategy, List<Workload> sampled,
                           List<NodeResource> snapshot, SyntheticCluster cluster,
-                          GroundTruthOracle oracle, PowerModel believedCostModel) {
+                          GroundTruthOracle oracle, LinkMatrix links, PowerModel believedCostModel,
+                          Map<String, String> override) {
         if (!RANDOM_ID.equals(strategy.id())) {
-            return runOnce(strategy, sampled, snapshot, cluster, oracle, believedCostModel);
+            return runOnce(strategy, sampled, snapshot, cluster, oracle, links, believedCostModel, override);
         }
 
         List<Placement> draws = new ArrayList<>(BenchmarkRules.RANDOM_SEEDS.size());
         for (long seed : BenchmarkRules.RANDOM_SEEDS) {
-            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle, believedCostModel));
+            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle, links, believedCostModel, override));
         }
         return medianDraw(draws);
     }
 
     private Placement runOnce(PlacementStrategy strategy, List<Workload> sampled,
                               List<NodeResource> snapshot, SyntheticCluster cluster,
-                              GroundTruthOracle oracle, PowerModel believedCostModel) {
-        SchedulingPolicy policy = policyFor(strategy);
+                              GroundTruthOracle oracle, LinkMatrix links, PowerModel believedCostModel,
+                              Map<String, String> override) {
+        SchedulingPolicy policy = policyFor(strategy, override);
         ConstraintEvaluator evaluator = BenchmarkContexts.freshEvaluator(properties);
-        PlacementContext ctx = BenchmarkContexts.copyOf(snapshot, policy, evaluator);
+        PlacementContext ctx = BenchmarkContexts.copyOf(snapshot, policy, evaluator, links);
 
         List<Workload> ordered = strategy.usesArrivalOrder()
                 ? sampled
@@ -1021,6 +1031,12 @@ public class PlacementBenchmarkService {
         variants.put("resource-only-ungated", new EngineVariant(new PlacementStrategy("resource-only-ungated", "자원전용(제약까지 해제)",
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED, null, weighted::schedule),
                 Map.of(), powerModel));
+        // 링크 게이트를 켠 가중 점수 — 링크 판에서 weighted 와의 차이가 netScore 경로의 효과다. 링크 없는 판에서는 워크로드에
+        // dataMdcId 가 없어 게이트가 켜지지 않으므로 weighted 와 같은 값이다(구조적 사실 — 시험이 고정한다)
+        variants.put(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
+                "가중 점수(링크 게이트 on · 링크 판에서만 weighted 와 다르다 · 판정 자격 없음)",
+                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),
+                Map.of("affinityEnabled", "true"), powerModel));
 
         if (!variants.keySet().equals(Set.copyOf(ENGINE_VARIANT_ORDER))) {
             throw new IllegalStateException("엔진 변종 순서 목록과 구현이 다르다 — 열이 조용히 빠진다: "
@@ -1049,9 +1065,35 @@ public class PlacementBenchmarkService {
         return out;
     }
 
-    /** 이 전략이 볼 정책. 어떤 경우에도 <b>영속되지 않는 사본</b>이다. */
-    private static SchedulingPolicy policyFor(PlacementStrategy strategy) {
-        return policyFor(strategy.policy());
+    /**
+     * 표본 워크로드에 판이 선언한 데이터 MDC 를 <b>순환 배정</b>한다 — 표본 순서가 결정적이라 배정도 결정적이고, 전략 실행 전에 끝나
+     * 전 열이 같은 목록을 본다. 절이 없는 판은 아무것도 하지 않는다(기존 판의 게이트는 꺼진 채다). {@code sample()} 이 호출마다 새
+     * 객체를 만들므로 공유 인스턴스가 오염될 길은 없다.
+     */
+    static void assignDataMdc(List<Workload> sampled, SyntheticCluster cluster) {
+        List<String> ids = cluster.workloadDataMdcIds();
+        if (ids.isEmpty()) return;
+        for (int i = 0; i < sampled.size(); i++) sampled.get(i).setDataMdcId(ids.get(i % ids.size()));
+    }
+
+    /** 배정 규칙을 응답 전제로 밝힌다. */
+    private static String dataMdcAssignment(SyntheticCluster cluster) {
+        List<String> ids = cluster.workloadDataMdcIds();
+        return ids.isEmpty() ? "없음 — 워크로드에 dataMdcId 를 부여하지 않아 링크 게이트는 꺼져 있다"
+                : "표본 순서대로 " + ids + " 순환 배정 — 게이트를 켠 열(weighted-affinity)만 링크 점수를 섞는다";
+    }
+
+    /**
+     * 이 전략이 볼 정책 — 변종 사본에 열 override 를 얹는다. 지금 정책 노브 override 는 {@code affinityEnabled} 하나다.
+     * 어떤 경우에도 <b>영속되지 않는 사본</b>이다.
+     */
+    private static SchedulingPolicy policyFor(PlacementStrategy strategy, Map<String, String> override) {
+        SchedulingPolicy policy = policyFor(strategy.policy());
+        if ("true".equals(override.get("affinityEnabled"))) {
+            policy = BenchmarkPolicies.copyOf(policy);
+            policy.setAffinityEnabled(true);
+        }
+        return policy;
     }
 
     /** 변종 하나의 정책 사본. 설정 스냅샷도 이 메서드로 만든다 — 응답이 밝히는 정책과 돌린 정책이 갈리지 않게. */

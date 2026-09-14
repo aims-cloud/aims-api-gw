@@ -41,7 +41,7 @@ class BenchmarkClustersTest {
     @Test
     void six_boards_load() {
         assertEquals(List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE,
-                        BenchmarkClusters.CONVEX, BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED),
+                        BenchmarkClusters.CONVEX, BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED, BenchmarkClusters.LINK),
                 clusters.boardIds(), "판 순서는 고정 — 표의 열 순서가 호출마다 달라지면 두 실행을 대조할 수 없다");
         // 판 수는 여기 다시 적지 않는다 — 순서·파일·역할이 등록부 한 레코드 목록에 있어 어긋날 수 없다
         for (String boardId : clusters.boardIds()) {

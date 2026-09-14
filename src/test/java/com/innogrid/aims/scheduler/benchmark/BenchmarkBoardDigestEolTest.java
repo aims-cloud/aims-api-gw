@@ -77,7 +77,8 @@ class BenchmarkBoardDigestEolTest {
             BenchmarkClusters.SPARSE, "f2109dcf47e1",
             BenchmarkClusters.CONVEX, "5e71beea2592",
             BenchmarkClusters.MISRATED, "e935750a1637",
-            BenchmarkClusters.CONVEX_MISRATED, "d199d46fa3b0");
+            BenchmarkClusters.CONVEX_MISRATED, "d199d46fa3b0",
+            BenchmarkClusters.LINK, "9d04e5ef0788");
 
     @DisplayName("등록된 판 전부의 다이제스트가 저장소 LF 바이트의 해시 리터럴과 같다 — 판을 더하면 리터럴도 함께 늘어야 한다")
     @Test

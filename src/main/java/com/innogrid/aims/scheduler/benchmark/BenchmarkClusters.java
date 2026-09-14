@@ -60,6 +60,9 @@ public class BenchmarkClusters {
     /** 복합판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판. 판정 셀이 여기 있다. */
     public static final String CONVEX_MISRATED = "convex-misrated";
 
+    /** 링크 판 — 주 결과판 노드 블록 + links 절 + 데이터 MDC 순환 배정. {@code BenchmarkRules.LINK_BOARD} 와 같은 문자열. */
+    public static final String LINK = "link";
+
     /** 다이제스트로 남길 자릿수. 12자면 등록된 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
     private static final int DIGEST_LENGTH = 12;
 
@@ -106,7 +109,12 @@ public class BenchmarkClusters {
                     + "60% · 전원 제어 있음)이 여기 있다. 두 부록판이 요인 하나씩을 귀속시키고 판정은 이 판에서 한다. 두 오차항은 "
                     + "노드에 따라 상쇄하므로(과소 믿음 노드에서는 부호가 반대다) 유휴 역산이 선언값에 가까워지는 행을 '항등이 "
                     + "살아남았다' 로 읽으면 안 된다. 판정 셀은 현 시스템에 없는 전원 제어를 가정한 값이라 배포 환경에서 "
-                    + "재현되지 않는다."));
+                    + "재현되지 않는다."),
+            new Board(LINK, "classpath:scheduler/benchmark-cluster-link.yml",
+                    "링크 판(부록) — 주 결과판과 노드 구성이 같고 links 절(a-b UP 8ms · a-c DEGRADED 45ms/1.5% · b-c 미등록)과 워크로드 "
+                    + "데이터 MDC 순환 배정만 더했다. 링크 점수를 섞는 엔진은 weighted 하나뿐이라 이 판에서 값이 달라지는 열은 weighted 계열이고, "
+                    + "비교는 같은 판 안의 게이트 on/off 열 쌍(weighted · weighted-affinity)으로 한다 — netScore 경로의 작동 확인이며 전력 "
+                    + "판정과 무관하다. 판정·방향 판정 자격 없음. 링크는 이 판 파일이 원장 노릇을 하고 DB 원장(0건)과 무관하다."));
 
     private static final Map<String, Board> BY_ID = BOARDS.stream()
             .collect(Collectors.toMap(Board::id, Function.identity(),

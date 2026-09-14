@@ -165,6 +165,8 @@ public record PlacementBenchmarkResponse(
      * @param powerControlNote     전원 제어 두 판의 뜻
      * @param randomSeedCount      무작위 대조군에 쓴 시드 수
      * @param policyBasis          어느 정책으로 돌렸는가 — 배포된 활성 정책이 아니라는 사실을 밝힌다
+     * @param workloadDataMdcAssignment 워크로드에 데이터 MDC 를 어떻게 부여했는가 — 링크 판만 순환 배정이고 나머지는 부여하지 않아
+     *                             링크 게이트가 꺼져 있다. 이 판의 워크로드가 어느 MDC 에 붙었는지가 응답에서 보여야 한다
      */
     public record Assumptions(
             String workloadDistribution,
@@ -180,7 +182,8 @@ public record PlacementBenchmarkResponse(
             String generatorFormula,
             String powerControlNote,
             int randomSeedCount,
-            String policyBasis
+            String policyBasis,
+            String workloadDataMdcAssignment
     ) {
         public Assumptions {
             workloadClasses = workloadClasses == null ? List.of() : List.copyOf(workloadClasses);

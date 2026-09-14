@@ -315,10 +315,14 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("엔진 변종 열 순서가 고정되고 기본 설정 열은 override 가 비어 있다")
     @Test
     void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
-        assertEquals(List.of("resource-only-gated", "resource-only-ungated"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+        assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
         var cell = service.compare("main", "heavytail").boards().get(0).cells().get(0);
         for (var s : cell.strategies()) {
-            assertTrue(s.engineConfigOverride().isEmpty(), s.strategyId() + " — 기본 설정 열인데 override 가 있다");
+            if ("weighted-affinity".equals(s.strategyId())) {
+                assertEquals(Map.of("affinityEnabled", "true"), s.engineConfigOverride());
+            } else {
+                assertTrue(s.engineConfigOverride().isEmpty(), s.strategyId() + " — 기본 설정 열인데 override 가 있다");
+            }
         }
     }
 

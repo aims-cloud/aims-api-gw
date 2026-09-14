@@ -68,6 +68,8 @@ public final class SyntheticCluster {
     private final double powerExponent;
     private final List<Node> nodes;
     private final List<Link> links;
+    /** 워크로드 데이터 MDC 순환 배정 목록 — 비어 있으면 dataMdcId 를 부여하지 않는다(등록된 판 대부분). */
+    private final List<String> workloadDataMdcIds;
     /** 노드별 위상(라디안) — 생성 시 한 번 계산한다. {@code phase()} 는 지표 5종 × 지점 × 노드마다 불리는 뜨거운 경로다. */
     private final Map<String, Double> phaseByNodeId;
 
@@ -78,7 +80,13 @@ public final class SyntheticCluster {
 
     SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
                      double powerExponent, List<Node> nodes, List<Link> links) {
+        this(name, job, periodMinutes, swing, seed, powerExponent, nodes, links, List.of());
+    }
+
+    SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
+                     double powerExponent, List<Node> nodes, List<Link> links, List<String> workloadDataMdcIds) {
         this.links = List.copyOf(links);
+        this.workloadDataMdcIds = List.copyOf(workloadDataMdcIds);
         this.name = name; this.job = job; this.periodMinutes = periodMinutes; this.swing = swing; this.seed = seed;
         this.powerExponent = powerExponent;
         this.nodes = List.copyOf(nodes);
@@ -92,7 +100,7 @@ public final class SyntheticCluster {
      * 돌리려면 사본이 필요하다. 등록부는 판당 인스턴스 하나를 캐시하므로 사본은 호출자가 든다.
      */
     public SyntheticCluster withSeed(long newSeed) {
-        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links);
+        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds);
     }
 
     // ── 로딩 ──────────────────────────────────────────────────
@@ -123,7 +131,25 @@ public final class SyntheticCluster {
         List<Node> nodes = parseNodes(map.get("nodes"), swing, location);
         Set<String> mdcIds = nodes.stream().map(Node::mdcId).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         List<Link> links = parseLinks(map.get("links"), mdcIds, location);
-        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links);
+        List<String> dataMdcIds = parseWorkloadDataMdcIds(map.get("workloadDataMdcIds"), mdcIds, location);
+        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links, dataMdcIds);
+    }
+
+    /**
+     * {@code workloadDataMdcIds:} 절 — 표본 워크로드에 순환 배정할 데이터 MDC 목록. 절이 없으면 빈 목록(dataMdcId 미부여).
+     * 항목은 판의 노드 MDC 여야 하고(데이터 전용 MDC 는 아직 지원하지 않는다) 중복은 거부한다.
+     */
+    static List<String> parseWorkloadDataMdcIds(Object raw, Set<String> nodeMdcIds, String location) {
+        if (raw == null) return List.of();
+        if (!(raw instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("workloadDataMdcIds 는 비어 있지 않은 목록이어야 합니다: " + location);
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        for (Object o : list) {
+            String id = str(o, null);
+            if (id == null || id.isBlank()) throw new IllegalArgumentException("workloadDataMdcIds 에 빈 항목이 있습니다: " + location);
+            if (!nodeMdcIds.contains(id)) throw new IllegalArgumentException("workloadDataMdcIds 가 판의 노드에 없는 MDC 를 가리킵니다: " + id + " (노드 MDC: " + nodeMdcIds + ")");
+            if (!ids.add(id)) throw new IllegalArgumentException("workloadDataMdcIds 중복: " + id);
+        }
+        return List.copyOf(ids);
     }
 
     /** {@code nodes:} 절 — 판의 노드 축. 비어 있으면 판이 아니다. */
@@ -237,8 +263,10 @@ public final class SyntheticCluster {
     public double powerExponent() { return powerExponent; }
     public long seed() { return seed; }
     public List<Node> nodes() { return nodes; }
-    /** 판이 선언한 링크. 지금 등록된 판은 전부 빈 목록이다. */
+    /** 판이 선언한 링크. 링크 판만 비어 있지 않다. */
     public List<Link> links() { return links; }
+    /** 워크로드 데이터 MDC 순환 배정 목록. 비어 있으면 dataMdcId 를 부여하지 않는다. */
+    public List<String> workloadDataMdcIds() { return workloadDataMdcIds; }
     public int mdcCount() { return (int) nodes.stream().map(Node::mdcId).distinct().count(); }
     public Optional<Node> node(String nodeId) { return nodes.stream().filter(n -> n.nodeId().equals(nodeId)).findFirst(); }
 

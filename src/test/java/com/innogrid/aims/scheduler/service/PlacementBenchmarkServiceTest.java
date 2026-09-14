@@ -697,6 +697,19 @@ class PlacementBenchmarkServiceTest {
         assertNotSame(before.boards(), after.boards(), "다른 키라 재계산했다");
     }
 
+    /** 캐시 키의 입력 축은 다섯이다 — 축 하나가 빠지면 다른 입력이 같은 표를 받는다(워크로드 파일 다이제스트가 그렇게 빠졌던 전례). */
+    @DisplayName("캐시 키는 판·분포·판 다이제스트·워크로드 다이제스트·설정 다이제스트 다섯 축이고 어느 축이 바뀌어도 키가 바뀐다")
+    @Test
+    void cache_key_covers_every_input_axis() {
+        String base = PlacementBenchmarkService.cacheKey("main", "heavytail", "b1", "w1", "c1");
+        assertEquals(5, base.split("\\|").length);
+        assertNotEquals(base, PlacementBenchmarkService.cacheKey("convex", "heavytail", "b1", "w1", "c1"));
+        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "uniform", "b1", "w1", "c1"));
+        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "heavytail", "b2", "w1", "c1"));
+        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "heavytail", "b1", "w2", "c1"));
+        assertNotEquals(base, PlacementBenchmarkService.cacheKey("main", "heavytail", "b1", "w1", "c2"));
+    }
+
     /** 실행 중인 호출이 있으면 두 번째 호출은 기다리지 않고 429 다. */
     @DisplayName("동시 두 번째 호출은 429 로 거절된다")
     @Test

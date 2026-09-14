@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
@@ -149,6 +150,11 @@ public final class SyntheticCluster {
      * {@code latencyMs} 가 필수이고 {@code bandwidthMbps}(0 초과)·{@code packetLossPercent}(0~100) 는 선택, {@code status} 는
      * 원장 열거형 {@link MdcLink.LinkStatus}({@code UP} 기본). 같은 MDC 사이 링크·중복 쌍·<b>판의 노드에 없는 MDC</b> 를 가리키는
      * 링크는 거부한다 — 노드 절이 진실이고 링크는 그 위에 얹히는 축이라, 없는 MDC 로의 링크는 판 파일 오타다.
+     * 데이터 전용 MDC(노드 없이 {@code dataMdcId} 로만 가리키는 사이트)가 필요한 링크 판이 들어오면 {@code mdcs:} 선언 절을
+     * 두고 이 검사를 "노드 MDC ∪ 선언 MDC" 로 넓힌다 — 그때까지는 좁게 둔다.
+     *
+     * <p>쌍은 원장 규칙({@link MdcLink.Pair#of})으로 정렬해 담는다 — 파일에 {@code b,a} 로 적어도 {@code a,b} 와 같은 레코드다.
+     * {@code latencyMs} 는 원장과 같이 왕복 지연이고, {@code bandwidthMbps} 는 원장과 같이 저장만 하고 점수에는 쓰지 않는다.</p>
      */
     @SuppressWarnings("unchecked")
     static List<Link> parseLinks(Object rawLinks, Set<String> nodeMdcIds, String location) {
@@ -157,22 +163,24 @@ public final class SyntheticCluster {
         List<Link> links = new ArrayList<>();
         LinkedHashSet<String> pairs = new LinkedHashSet<>();
         for (Object o : list) {
+            if (!(o instanceof Map<?, ?>)) throw new IllegalArgumentException("links 항목은 맵이어야 합니다: " + location + " → " + o);
             Map<String, Object> l = (Map<String, Object>) o;
             String a = str(l.get("mdcA"), null);
             String b = str(l.get("mdcB"), null);
             if (a == null || b == null || a.isBlank() || b.isBlank()) throw new IllegalArgumentException("links 항목에 mdcA·mdcB 가 없습니다: " + location);
             if (a.equals(b)) throw new IllegalArgumentException("같은 MDC 사이에는 링크를 둘 수 없습니다: " + a);
             if (!nodeMdcIds.contains(a) || !nodeMdcIds.contains(b)) {
-                throw new IllegalArgumentException("links 가 판의 노드에 없는 MDC 를 가리킵니다: " + a + "-" + b + " (노드 MDC: " + nodeMdcIds + ")");
+                throw new IllegalArgumentException("links 가 판의 노드에 없는 MDC 를 가리킵니다: " + a + "-" + b + " (노드 MDC: " + nodeMdcIds
+                        + "; 데이터 전용 MDC 는 아직 지원하지 않는다 — 필요하면 mdcs: 선언 절을 먼저 도입한다)");
             }
-            String key = a.compareTo(b) < 0 ? a + "|" + b : b + "|" + a;
-            if (!pairs.add(key)) throw new IllegalArgumentException("links 쌍 중복: " + a + "-" + b);
+            MdcLink.Pair pair = MdcLink.Pair.of(a, b);
+            if (!pairs.add(pair.a() + "|" + pair.b())) throw new IllegalArgumentException("links 쌍 중복: " + a + "-" + b);
             if (l.get("latencyMs") == null) throw new IllegalArgumentException("links 항목에 latencyMs 가 없습니다: " + a + "-" + b);
             double latency = num(l.get("latencyMs"), 0).doubleValue();
             if (latency < 0) throw new IllegalArgumentException("latencyMs 는 0 이상이어야 합니다: " + a + "-" + b);
             MdcLink.LinkStatus status;
             try {
-                status = MdcLink.LinkStatus.valueOf(str(l.get("status"), "UP").trim().toUpperCase());
+                status = MdcLink.LinkStatus.valueOf(str(l.get("status"), "UP").trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("links status 는 " + java.util.Arrays.toString(MdcLink.LinkStatus.values()) + " 중 하나: " + a + "-" + b + " = " + l.get("status"));
             }
@@ -180,7 +188,7 @@ public final class SyntheticCluster {
             if (bandwidth != null && !(bandwidth > 0)) throw new IllegalArgumentException("bandwidthMbps 는 0 보다 커야 합니다: " + a + "-" + b + " = " + bandwidth);
             Double loss = l.get("packetLossPercent") == null ? null : num(l.get("packetLossPercent"), 0).doubleValue();
             if (loss != null && (loss < 0 || loss > 100)) throw new IllegalArgumentException("packetLossPercent 는 0~100 이어야 합니다: " + a + "-" + b + " = " + loss);
-            links.add(new Link(a, b, latency, bandwidth, loss, status));
+            links.add(new Link(pair.a(), pair.b(), latency, bandwidth, loss, status));
         }
         return links;
     }

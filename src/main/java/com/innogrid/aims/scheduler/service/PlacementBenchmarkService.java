@@ -15,6 +15,8 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -62,9 +64,10 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 /**
  * 배치 전략 비교 하네스 — 우리 엔진과 대조군을 <b>같은 판·같은 워크로드·같은 제약</b>에서 돌린다.
  *
- * <p>이 서비스는 <b>아무것도 저장하지 않는다.</b> 워크로드는 파일에 선언된 분포에서 뽑은 비영속
+ * <p>이 서비스는 <b>저장소에는 아무것도 쓰지 않는다.</b> 워크로드는 파일에 선언된 분포에서 뽑은 비영속
  * 객체이고, 정책은 코드 기본값의 사본이며, 노드는 클러스터 파일에서 만든 스냅샷이다. 저장소를
- * 하나도 주입받지 않으므로 저장할 경로 자체가 없다.</p>
+ * 하나도 주입받지 않으므로 저장할 경로 자체가 없다. 같은 입력의 응답 본문은 프로세스 메모리에 보관하며
+ * 재시작하면 사라진다(아래 {@code cache}).</p>
  *
  * <p><b>왜 저장소를 쓰지 않는가.</b> 저장된 워크로드를 쓰면 예약 적용 경로가 같은 워크로드를 예약으로
  * 한 번, 배치 대상으로 또 한 번 세어 요구량이 두 배가 된다. 활성 정책 조회 경로는 정책이 없으면
@@ -143,6 +146,7 @@ public class PlacementBenchmarkService {
      * 실릴 테니 잠시 뒤 다시 부르면 되고, 다른 입력이면 순서대로 부르는 편이 CPU 를 공유하는 배포 서버에 안전하다.</p>
      */
     private final Semaphore running = new Semaphore(1);
+    private static final Logger log = LoggerFactory.getLogger(PlacementBenchmarkService.class);
 
     /** 스프링이 쓰는 생성자 — 생성자가 둘이라 어느 것인지 표시해야 한다. 대조군은 항상 {@link #BASELINE_ORDER} 전량. */
     @Autowired
@@ -189,14 +193,15 @@ public class PlacementBenchmarkService {
         }
         SyntheticCluster cluster = resolveBoard(board);
         EngineConfigSnapshot config = engineConfig();
-        String key = board + "|" + dist + "|" + clusters.digest(board) + "|" + config.configDigest();
+        String key = cacheKey(board, dist, clusters.digest(board), BenchmarkWorkloads.digestOf(location), config.configDigest());
 
         PlacementBenchmarkResponse hit = cache.get(key);
         if (hit != null) return restamped(hit);
 
         if (!running.tryAcquire()) {
+            log.warn("배치 비교 동시 호출 거절(429): board={} distribution={}", board, dist);
             throw new BusinessException(HttpStatus.TOO_MANY_REQUESTS,
-                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(판 하나 약 5~10초) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
+                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(수 초~십 초 남짓) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
         }
         try {
             hit = cache.get(key);   // 첫 조회가 빗나간 뒤 슬롯을 잡기 전 같은 키가 끝났을 수 있다(좁은 경합 창)
@@ -208,6 +213,14 @@ public class PlacementBenchmarkService {
         } finally {
             running.release();
         }
+    }
+
+    /**
+     * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@code |} 로 잇는다: 판 id · 분포 이름 · 판 파일 다이제스트 · 워크로드 파일
+     * 다이제스트 · 엔진 설정 다이제스트. 축이 하나라도 빠지면 다른 입력이 같은 표를 돌려받으므로, 축의 수는 시험이 고정한다.
+     */
+    static String cacheKey(String board, String dist, String boardDigest, String workloadDigest, String configDigest) {
+        return String.join("|", board, dist, boardDigest, workloadDigest, configDigest);
     }
 
     /**

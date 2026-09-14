@@ -19,6 +19,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
@@ -58,8 +59,13 @@ class BenchmarkEvidenceDumpTest {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).enable(SerializationFeature.INDENT_OUTPUT)
                 .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
         Files.createDirectories(OUT);
+        // 옛 리비전 산출물이 새 매니페스트 옆에 남지 않게 비운다 — 파일명에 다이제스트가 들어가 덮어써지지 않기 때문
+        try (var old = Files.list(OUT)) {
+            for (Path p : old.filter(p -> p.toString().endsWith(".json")).toList()) Files.delete(p);
+        }
 
         List<Map<String, Object>> entries = new ArrayList<>();
+        List<String> engineIds = List.of();
         for (String board : clusters.boardIds()) {
             for (String dist : DISTRIBUTIONS) {
                 PlacementBenchmarkResponse r = service.compareFresh(board, dist);
@@ -70,13 +76,15 @@ class BenchmarkEvidenceDumpTest {
                 // evaluatedAt 을 빼고 쓴다 — 같은 입력이면 바이트까지 같아야 한다
                 PlacementBenchmarkResponse stable = new PlacementBenchmarkResponse(null, r.assumptions(), r.engineConfig(),
                         r.metrics(), r.boards(), r.limitation());
-                Path file = OUT.resolve(board + "-" + dist + "-" + boardDigest + "-" + configDigest + ".json");
+                engineIds = r.engineConfig().engineIds();
+                String workloadDigest = BenchmarkWorkloads.digestOf("classpath:scheduler/benchmark-workloads-" + dist + ".yml");
+                Path file = OUT.resolve(board + "-" + dist + "-" + boardDigest + "-" + workloadDigest + "-" + configDigest + ".json");
                 Files.writeString(file, mapper.writeValueAsString(stable), StandardCharsets.UTF_8);
                 assertTrue(Files.size(file) > 10_000, file + " 가 너무 작다 — 응답이 비었다");
 
                 Map<String, Object> e = new LinkedHashMap<>();
                 e.put("board", board); e.put("distribution", dist); e.put("boardDigest", boardDigest);
-                e.put("configDigest", configDigest); e.put("file", file.getFileName().toString());
+                e.put("workloadDigest", workloadDigest); e.put("configDigest", configDigest); e.put("file", file.getFileName().toString());
                 entries.add(e);
             }
         }
@@ -85,6 +93,13 @@ class BenchmarkEvidenceDumpTest {
         manifest.put("generatedAt", OffsetDateTime.now().toString());
         manifest.put("gitHead", gitHead());
         manifest.put("representation", "재직렬화 표현 — ApiResponse 봉투 없음, 맵 키 정렬, evaluatedAt 제거. 서빙 응답과 바이트가 같지 않다");
+        manifest.put("properties", "코드 기본 SchedulerProperties 로 생성 — 배포 env 의 덮어쓰기는 반영하지 않는다. 서빙 configDigest 와 다르면 그 차이다");
+        manifest.put("engineIds", engineIds);
+        manifest.put("jvm", System.getProperty("java.vendor") + " " + System.getProperty("java.runtime.version"));
+        manifest.put("os", System.getProperty("os.name") + " " + System.getProperty("os.version") + " / " + java.util.TimeZone.getDefault().getID());
+        Map<String, String> ruleDigests = new LinkedHashMap<>();
+        BenchmarkRules.ruleAxes().forEach((k, v) -> ruleDigests.put(k, BenchmarkClusters.digestOf(v)));
+        manifest.put("ruleAxisDigests", ruleDigests);
         manifest.put("boards", clusters.boardIds());
         manifest.put("metricKeyDigest", BenchmarkClusters.digestOf(
                 BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).sorted().reduce((a, b) -> a + "," + b).orElse("")));

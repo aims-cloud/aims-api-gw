@@ -45,15 +45,46 @@ class BenchmarkRulesContractTest {
      */
     private static final String DECLARED_KEY_DIGEST = "039400bdc3c1";
 
-    @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록의 다이제스트로")
+    /** 사람이 읽는 사전 등록 목록(정렬). 다이제스트는 이 목록에서 계산해 리터럴과 맞춘다 — 두 줄이 같이 바뀌는 것이 이중 서명이다. */
+    private static final List<String> DECLARED_KEYS = List.of(
+            "activeNodeDelta", "c3InterventionCount", "engineBelievedCostW", "gapVsPabfdPercent", "generatorPowerW",
+            "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "unmeasuredPlacementRate",
+            "unmeasuredRateSpreadPercentPoints", "warnZoneNodeCount");
+
+    /**
+     * 판정 규칙 축별 다이제스트 — 지표 키 외의 규칙 값(부하율·지점 수·시드·판 상수·판정 문턱·금지 조각)도 봉인한다.
+     * 어느 축이 바뀌었는지 보이도록 축마다 리터럴을 둔다. 바뀌면 그 축의 정규 문자열 전문이 실패 메시지에 나온다.
+     */
+    private static final Map<String, String> RULE_AXIS_DIGESTS = Map.of(
+            "metrics", "039400bdc3c1",
+            "sweep", "559301d27583",
+            "boards", "e7c96e2c89f5",
+            "judgment", "e1601b21aca2",
+            "banned", "e621e7f43e72");
+
+    @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
     void metric_keys_are_fixed() {
-        String joined = BenchmarkRules.METRICS.stream()
-                .map(BenchmarkMetric::key).sorted().collect(Collectors.joining(","));
-        assertEquals(BenchmarkRules.METRICS.size(), BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).distinct().count(), "키 중복 없음");
+        List<String> actual = BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).sorted().toList();
+        assertEquals(BenchmarkRules.METRICS.size(), actual.stream().distinct().count(), "키 중복 없음");
+        assertEquals(DECLARED_KEYS, actual, "지표 키 집합이 사전 등록 목록과 다르다 — 목록·다이제스트를 결과 코드보다 앞선 커밋에서 먼저 고친다");
+        assertEquals(DECLARED_KEY_DIGEST, BenchmarkClusters.digestOf(String.join(",", DECLARED_KEYS)),
+                "목록과 다이제스트가 어긋난다 — 둘을 같은 커밋에서 함께 고친다(옛 → 새 값을 메시지에)");
+    }
 
-        assertEquals(DECLARED_KEY_DIGEST, BenchmarkClusters.digestOf(joined),
-                "지표를 추가·삭제하려면 이 다이제스트를 결과 코드보다 앞선 별도 커밋에서 먼저 고치고(옛 → 새 값과 키 목록을 메시지에), 그 뒤 하네스를 바꾼다. 정렬 키: " + joined);
+    @DisplayName("판정 규칙의 축별 정규 문자열이 다이제스트 리터럴과 같다 — 규칙 변경은 결과 코드보다 앞선 커밋에서만")
+    @Test
+    void rule_axes_are_sealed() {
+        Map<String, String> axes = BenchmarkRules.ruleAxes();
+        assertEquals(RULE_AXIS_DIGESTS.keySet(), axes.keySet(), "축 집합이 다르다");
+        List<String> changed = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> e : axes.entrySet()) {
+            String actual = BenchmarkClusters.digestOf(e.getValue());
+            if (!actual.equals(RULE_AXIS_DIGESTS.get(e.getKey()))) {
+                changed.add(e.getKey() + ": " + RULE_AXIS_DIGESTS.get(e.getKey()) + " → " + actual + "  정규 문자열: " + e.getValue());
+            }
+        }
+        assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 리터럴을 결과 코드보다 앞선 별도 커밋에서 먼저 고친다(옛 → 새 값을 메시지에)\n  " + String.join("\n  ", changed));
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")
@@ -85,7 +116,7 @@ class BenchmarkRulesContractTest {
     }
 
     /**
-     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가
+     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가 <!-- ban-ok: 이름 금지 사유 -->
      * 사실로 굳는다 — 이름·라벨 어디에도 그 단어가 없어야 한다.
      */
     @DisplayName("총전력의 주 지표는 엔진 점수가 아니라 생성식 기준값이고, 실측을 암시하는 이름을 쓰지 않는다")

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 
@@ -102,7 +103,8 @@ public record PlacementBenchmarkResponse(
             double marginalScaleWatts
     ) {
         public PowerKnobs {
-            capacityByNode = capacityByNode == null ? Map.of() : Map.copyOf(capacityByNode);
+            // 키 정렬 사본 — Map.copyOf 는 JVM 마다 순회 순서가 달라 응답 바이트가 실행마다 바뀐다
+            capacityByNode = capacityByNode == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(capacityByNode));
         }
     }
 
@@ -361,7 +363,7 @@ public record PlacementBenchmarkResponse(
             List<StrategyResult> strategies
     ) {
         public Cell {
-            probeExclusionReasons = probeExclusionReasons == null ? Map.of() : Map.copyOf(probeExclusionReasons);
+            probeExclusionReasons = probeExclusionReasons == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(probeExclusionReasons));
             strategies = strategies == null ? List.of() : List.copyOf(strategies);
         }
     }

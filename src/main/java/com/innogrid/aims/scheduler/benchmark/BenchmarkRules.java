@@ -11,7 +11,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Direction;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
 
 /**
- * 배치 비교의 <b>판정 규칙</b> — 결과보다 먼저 고정한다. <!-- ban-ok: 개정 이력에 옛 지표 이름을 인용한다 -->
+ * 배치 비교의 <b>판정 규칙</b> — 결과보다 먼저 고정한다.
  *
  * <p>이 클래스가 커밋 이력에서 결과 코드보다 <b>앞에 있는 것</b>이 사전 등록의 증거다.
  * 기술적으로 이 클래스는 지표 열거와 판정 셀의 전원 가정 말고는 아무것도 참조하지 않아 어디에 놓아도 컴파일된다 — 그래서
@@ -23,7 +23,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
  *
  * <p><b>개정 이력(정직한 사전 등록 서술).</b> 이 클래스는 2026-09-07 에 첫 선언됐고(하네스 결과 코드보다 앞),
  * 그 뒤 여러 차례 개정됐다(횟수·내용 전량은 {@code git log --follow -- BenchmarkRules.java} 에 남아 있다 — 세는 순간
- * 낡는 숫자는 여기 적지 않는다) — 난수원 교체, 지표 이름 정정("지상진실" → "생성식 기준"), 열 계열 지표 보조 강등,
+ * 낡는 숫자는 여기 적지 않는다) — 난수원 교체, 지표 이름 정정("지상진실" → "생성식 기준"), <!-- ban-ok: 개정 이력의 옛 이름 인용 --> 열 계열 지표 보조 강등,
  * 통전·격차 판정 문턱 고정, 문구 사실성 정정 등. 판정 상수(격차 문턱·지점 수 비율)는 비교 API 가 이미 실행 가능한
  * 상태에서 등록됐다. 따라서 "결과를 볼 수 없는 상태에서 규칙을 정했다" 가 아니라 <b>"규칙 클래스가 결과 코드보다
  * 먼저 존재했고 이후 개정은 전부 커밋 이력에 남아 있다"</b> 가 이 저장소가 주장할 수 있는 전부다.
@@ -180,7 +180,7 @@ public final class BenchmarkRules {
 
     /**
      * <b>판정 규칙과 그 사본</b>(한계 문구·지표 문구·판 설명·전제 문구·Swagger 설명)에 있으면 안 되는
-     * 문장 조각 — 상수와 그 사본이 갈라지지 않게 <!-- ban-ok: 금지 조각을 정의하는 자리 -->
+     * 문장 조각 — 상수와 그 사본이 갈라지지 않게 <!-- ban-ok-block: 금지 조각을 정의하는 자리 — 블록 전체가 인용이다 -->
      * <b>한 배열</b>로 둔다. 조각으로 적는 이유는 "…없다"/"…없습니다" 같은 어미 차이로 검사가
      * 빠져나가지 않게 하기 위해서다.
      *
@@ -199,6 +199,27 @@ public final class BenchmarkRules {
             List.of("지상진실", "온도 축에는 결론을 지지하는 지표가 없",
                     "볼록하기 때문", "핫스팟을 막", "핫스팟 방지", "핫스팟을 방지",
                     "문헌 기준선", "최적의 노드", "최적 노드", "비선형적으로 증가");
+
+    /**
+     * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. 계약 시험이 축마다 다이제스트 리터럴을
+     * 두고, 증거 묶음 매니페스트가 같은 값을 싣는다. 축을 나눈 이유는 "어느 규칙이 바뀌었나" 가 값 하나에 뭉개지지 않게
+     * 하기 위해서다. 응답에는 싣지 않는다(형태 불변).
+     */
+    public static Map<String, String> ruleAxes() {
+        java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
+        axes.put("metrics", METRICS.stream().map(BenchmarkMetric::key).sorted().collect(java.util.stream.Collectors.joining(",")));
+        axes.put("sweep", "loadRatios=" + LOAD_RATIOS + "|sweepPoints=" + SWEEP_POINTS + "|randomSeeds=" + RANDOM_SEEDS
+                + "|memoryMbPerCore=" + MEMORY_MB_PER_CORE + "|poweredOnCpuPercent=" + POWERED_ON_CPU_PERCENT
+                + "|cooldownMinutes=" + COOLDOWN_MINUTES_FOR_BENCHMARK);
+        axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO
+                + "|maxRealMarginalWatts=" + MAX_REAL_MARGINAL_WATTS);
+        axes.put("judgment", "board=" + JUDGMENT_BOARD + "|loadRatio=" + JUDGMENT_LOAD_RATIO + "|powerControl=" + JUDGMENT_POWER_CONTROL
+                + "|minPairedPoints=" + JUDGMENT_MIN_PAIRED_POINTS + "|medianReductionPp=" + JUDGMENT_MEDIAN_REDUCTION_PP
+                + "|reducedPointRatio=" + JUDGMENT_REDUCED_POINT_RATIO + "|directionCheckBoard=" + DIRECTION_CHECK_BOARD
+                + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP);
+        axes.put("banned", String.join(",", BANNED_CLAIMS));
+        return axes;
+    }
 
     // ── 지표 ─────────────────────────────────────────────────
 

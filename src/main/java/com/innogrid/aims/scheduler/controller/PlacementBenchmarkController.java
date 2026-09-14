@@ -10,6 +10,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse;
 import com.innogrid.aims.scheduler.service.PlacementBenchmarkService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -25,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 접두어를 {@code /benchmark} 로 갈라 두면 그 경합이 생기지 않는다.</p>
  */
 @Tag(name = "스케줄러 (배치 전략 비교)",
-     description = "우리 엔진과 대조군(엔진 전력식 공유 ΔP 단독·자원 최밀집·단순 규칙·무작위)을 같은 판·같은 워크로드·같은 제약에서 비교")
+     description = "우리 엔진과 대조군(선착순 두 변종·엔진 전력식 공유 ΔP 단독·자원 최밀집·단순 규칙·무작위)을 같은 판·같은 워크로드·같은 제약에서 비교")
 @RestController
 @RequestMapping("/api/v1/scheduler/benchmark")
 public class PlacementBenchmarkController {
@@ -41,8 +42,8 @@ public class PlacementBenchmarkController {
                        + "그리고 자원전용 두 변종을 **같은 노드 스냅샷·같은 워크로드 표본·같은 제약 파이프라인**에서 "
                        + "돌린 결과입니다. **저장소에는 아무것도 쓰지 않습니다.** 같은 입력(판·분포·판 다이제스트·설정 "
                        + "다이제스트)의 두 번째 호출은 메모리 캐시에서 나오며 evaluatedAt 만 새로 찍힙니다. 계산은 한 번에 한 건만 "
-                       + "돌고, 계산 중 들어온 호출은 기다리지 않고 **429** 와 사유를 받습니다 — 판 하나 약 5~10초 뒤 다시 "
-                       + "호출하세요.\n\n"
+                       + "돌고, 계산 중 들어온 호출 중 **캐시에 없는 입력**만 기다리지 않고 **429** 와 사유를 받습니다(캐시에 있는 "
+                       + "입력은 계산 중에도 200). 수 초~십 초 남짓 뒤 다시 호출하세요. Retry-After 헤더는 주지 않습니다.\n\n"
                        + "**주 지표는 엔진이 믿은 값이 아닙니다.** engineBelievedCostW 는 전력 엔진 총점의 한 항을 "
                        + "그대로 합한 값이라 그것으로 순위를 매기면 그 목적함수를 최대화한 전략이 정의상 이깁니다. "
                        + "총전력의 주 지표(generatorPowerW)는 클러스터 파일 생성식의 **선언된 유휴 전력**으로 계산하며 "
@@ -83,6 +84,11 @@ public class PlacementBenchmarkController {
                        + "통합으로 아낄 전력은 정의상 0 이고, 열 지표는 헤드라인이 아닙니다 — 이 API 는 "
                        + "전력 기반 배치·온도 제어의 효과를 결론 수준으로 증명하지 않습니다. 배포 환경은 노드가 한 대뿐이라 "
                        + "이 비교가 성립하지 않습니다. 전문은 응답의 limitation 에 있습니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비교 결과(캐시 적중 포함)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "모르는 판·분포"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "다른 계산이 실행 중이고 이 입력은 캐시에 없음 — 수 초~십 초 남짓 뒤 재호출")
+    })
     @GetMapping("/placement")
     public ApiResponse<PlacementBenchmarkResponse> comparePlacement(
             @RequestParam(required = false, defaultValue = "main") String board,

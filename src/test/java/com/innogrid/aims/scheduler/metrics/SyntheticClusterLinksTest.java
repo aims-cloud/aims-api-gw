@@ -65,10 +65,20 @@ class SyntheticClusterLinksTest {
                 "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, status: BROKEN }\n",
                 "links:\n  - { mdcA: a, mdcB: z, latencyMs: 1 }\n",
                 "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, bandwidthMbps: 0 }\n",
-                "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, packetLossPercent: 101 }\n")) {
+                "links:\n  - { mdcA: a, mdcB: b, latencyMs: 1, packetLossPercent: 101 }\n",
+                "links:\n  - a-b\n")) {
             Object root = new Yaml().load(NODES + bad);
             assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(root, "test"), bad);
         }
+    }
+
+    @DisplayName("쌍은 원장 규칙으로 정렬해 담는다 — b,a 로 적어도 a,b 와 같은 레코드")
+    @Test
+    void pairs_are_normalized_like_the_ledger() {
+        SyntheticCluster c = SyntheticCluster.parse(new Yaml().load(NODES + "links:\n  - { mdcA: b, mdcB: a, latencyMs: 3 }\n"), "test");
+        SyntheticCluster.Link l = c.links().get(0);
+        assertEquals("a", l.mdcA()); assertEquals("b", l.mdcB());
+        assertEquals(MdcLink.Pair.of("b", "a"), new MdcLink.Pair(l.mdcA(), l.mdcB()));
     }
 
     @DisplayName("links 절이 없는 판은 파싱 결과가 예전과 같다")

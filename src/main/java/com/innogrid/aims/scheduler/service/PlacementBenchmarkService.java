@@ -12,7 +12,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -60,9 +64,10 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 /**
  * 배치 전략 비교 하네스 — 우리 엔진과 대조군을 <b>같은 판·같은 워크로드·같은 제약</b>에서 돌린다.
  *
- * <p>이 서비스는 <b>아무것도 저장하지 않는다.</b> 워크로드는 파일에 선언된 분포에서 뽑은 비영속
+ * <p>이 서비스는 <b>저장소에는 아무것도 쓰지 않는다.</b> 워크로드는 파일에 선언된 분포에서 뽑은 비영속
  * 객체이고, 정책은 코드 기본값의 사본이며, 노드는 클러스터 파일에서 만든 스냅샷이다. 저장소를
- * 하나도 주입받지 않으므로 저장할 경로 자체가 없다.</p>
+ * 하나도 주입받지 않으므로 저장할 경로 자체가 없다. 같은 입력의 응답 본문은 프로세스 메모리에 보관하며
+ * 재시작하면 사라진다(아래 {@code cache}).</p>
  *
  * <p><b>왜 저장소를 쓰지 않는가.</b> 저장된 워크로드를 쓰면 예약 적용 경로가 같은 워크로드를 예약으로
  * 한 번, 배치 대상으로 또 한 번 세어 요구량이 두 배가 된다. 활성 정책 조회 경로는 정책이 없으면
@@ -123,6 +128,32 @@ public class PlacementBenchmarkService {
     /** 이 실행이 비교에 넣는 대조군 순서. 운영은 항상 {@link #BASELINE_ORDER} 다. */
     private final List<String> baselineOrder;
 
+    /**
+     * 순수성 캐시 — 키는 {@link #CACHE_AXES} 순서의 {@code 판|분포|판 파일 다이제스트|워크로드 파일 다이제스트|엔진 설정 다이제스트|규칙 축 다이제스트}.
+     *
+     * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 시험이 지킨다). 그런데 한 번
+     * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU 를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
+     * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
+     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN 을 남기고 전부 비운다 — 판 6 × 분포 2 = 12 조합(설정·규칙은 프로세스
+     * 안에서 고정)이라 상한 16 에는 닿지 않으며, 닿았다면 키 축 계산이 틀렸다는 신호다.</p>
+     */
+    private final Map<String, PlacementBenchmarkResponse> cache = new ConcurrentHashMap<>();
+    private static final int CACHE_LIMIT = 16;
+
+    /** 캐시 키의 입력 축 이름 — 순서가 키 순서다. 축을 더하면 이 목록과 시험의 리터럴이 함께 바뀌어야 한다. */
+    static final List<String> CACHE_AXES = List.of("board", "distribution", "boardDigest", "workloadDigest", "configDigest", "rulesDigest");
+    /** 판정 규칙 축 전부의 다이제스트 — 규칙 상수(시드·지점 수·문턱)가 바뀌면 옛 표가 캐시에서 나가지 않게 키에 넣는다. 프로세스 안에서 상수다. */
+    private static final String RULES_DIGEST = BenchmarkClusters.digestOf(String.join("|", BenchmarkRules.ruleAxes().values()));
+
+    /**
+     * 동시 실행 1건 — 두 번째 호출은 기다리지 않고 429 로 돌려보낸다.
+     *
+     * <p>기다리게 하면 요청 스레드가 묶이고 호출자는 응답이 늦는 이유를 모른다. 지금 계산 중인 것과 같은 입력이면 곧 캐시에
+     * 실릴 테니 잠시 뒤 다시 부르면 되고, 다른 입력이면 순서대로 부르는 편이 CPU 를 공유하는 배포 서버에 안전하다.</p>
+     */
+    private final Semaphore running = new Semaphore(1);
+    private static final Logger log = LoggerFactory.getLogger(PlacementBenchmarkService.class);
+
     /** 스프링이 쓰는 생성자 — 생성자가 둘이라 어느 것인지 표시해야 한다. 대조군은 항상 {@link #BASELINE_ORDER} 전량. */
     @Autowired
     public PlacementBenchmarkService(EngineRegistry engineRegistry, SchedulerProperties properties,
@@ -167,15 +198,67 @@ public class PlacementBenchmarkService {
                     + " (쓸 수 있는 분포: " + new TreeSet<>(DISTRIBUTION_FILES.keySet()) + ")");
         }
         SyntheticCluster cluster = resolveBoard(board);
-        BenchmarkWorkloads workloads = BenchmarkWorkloads.load(location);
+        EngineConfigSnapshot config = engineConfig();
+        String key = cacheKey(board, dist, clusters.digest(board), BenchmarkWorkloads.digestOf(location), config.configDigest(), RULES_DIGEST);
 
+        PlacementBenchmarkResponse hit = cache.get(key);
+        if (hit != null) return restamped(hit);
+
+        if (!running.tryAcquire()) {
+            log.warn("배치 비교 동시 호출 거절(429): board={} distribution={}", board, dist);
+            throw new BusinessException(HttpStatus.TOO_MANY_REQUESTS,
+                    "배치 비교가 이미 실행 중입니다(동시 1건). 앞 계산이 끝난 뒤(수 초~십 초 남짓) 다시 호출하세요 — 같은 입력이면 그때 캐시에서 바로 나옵니다");
+        }
+        try {
+            hit = cache.get(key);   // 첫 조회가 빗나간 뒤 슬롯을 잡기 전 같은 키가 끝났을 수 있다(좁은 경합 창)
+            if (hit != null) return restamped(hit);
+            PlacementBenchmarkResponse fresh = computeFresh(board, dist, cluster, config);
+            if (cache.size() >= CACHE_LIMIT) {
+                log.warn("배치 비교 캐시 상한 초과 — 전부 비운다(키 축 계산 점검 필요): size={} limit={}", cache.size(), CACHE_LIMIT);
+                cache.clear();
+            }
+            cache.put(key, fresh);
+            return fresh;
+        } finally {
+            running.release();
+        }
+    }
+
+    /**
+     * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@link #CACHE_AXES} 순서로 {@code |} 로 잇는다. 축이 하나라도 빠지면 다른
+     * 입력이 같은 표를 돌려받으므로(워크로드 파일 다이제스트가 그렇게 빠졌던 전례), 축 이름 목록은 시험이 리터럴로 고정한다.
+     */
+    static String cacheKey(String... values) {
+        if (values.length != CACHE_AXES.size()) throw new IllegalStateException("캐시 축 수 불일치: " + values.length + " ≠ " + CACHE_AXES);
+        return String.join("|", values);
+    }
+
+    /**
+     * 캐시·동시 제한을 거치지 않는 계산 — <b>시험 전용</b>(패키지 밖에서 보이지 않는다). 결정론 시험이 "두 번 계산해도 같은
+     * 숫자" 를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
+     */
+    PlacementBenchmarkResponse compareFresh(String boardId, String distribution) {
+        String board = blank(boardId) ? BenchmarkClusters.MAIN : boardId;
+        String dist = blank(distribution) ? HEAVYTAIL : distribution;
+        return computeFresh(board, dist, resolveBoard(board), engineConfig());
+    }
+
+    private PlacementBenchmarkResponse computeFresh(String board, String dist, SyntheticCluster cluster,
+                                                    EngineConfigSnapshot config) {
+        BenchmarkWorkloads workloads = BenchmarkWorkloads.load(DISTRIBUTION_FILES.get(dist));
         return new PlacementBenchmarkResponse(
                 OffsetDateTime.now(),
                 assumptions(workloads, cluster),
-                engineConfig(),
+                config,
                 BenchmarkRules.METRICS,
                 List.of(runBoard(board, cluster, workloads)),
                 BenchmarkRules.LIMITATION);
+    }
+
+    /** 캐시 적중 응답 — 본문은 그대로, 응답 시각만 지금으로. 캐시가 응답 시각을 과거로 만들지 않는다. */
+    private static PlacementBenchmarkResponse restamped(PlacementBenchmarkResponse cached) {
+        return new PlacementBenchmarkResponse(OffsetDateTime.now(), cached.assumptions(), cached.engineConfig(),
+                cached.metrics(), cached.boards(), cached.limitation());
     }
 
     private static boolean blank(String s) {

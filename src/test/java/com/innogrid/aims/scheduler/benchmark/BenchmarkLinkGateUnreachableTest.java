@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 판정판 경로에서 링크 점수가 <b>한 번도 계산되지 않는다</b>는 사실을 고정한다.
  *
- * <p>미등록 원격 MDC 의 링크 점수를 1.0 에서 0.5 로 바꾼 뒤에도 여섯 판의 결과와 기준선이 그대로인 이유가
+ * <p>미등록 원격 MDC 의 링크 점수를 1.0 에서 0.5 로 바꾼 뒤에도 등록된 판 전부의 결과와 기준선이 그대로인 이유가
  * 이 시험이다. 게이트는 정책 {@code affinityEnabled} <b>와</b> 워크로드 {@code dataMdcId} 둘 다 있어야 켜지는데,
  * 판정판 워크로드 생성기는 {@code dataMdcId} 를 넣지 않는다. 그러므로 정책 사본이 affinity 를 켜고 있어도
  * 링크 코드는 도달하지 않는다. 누군가 판에 데이터 MDC 를 넣으면 이 시험이 먼저 깨져 "기준선이 바뀐다" 를 알린다.</p>
@@ -41,7 +41,7 @@ class BenchmarkLinkGateUnreachableTest {
         }
     }
 
-    @DisplayName("여섯 판 어디에도 링크 정의가 없고 노드 MDC 는 있으므로 링크가 반영되려면 워크로드 쪽이 바뀌어야 한다")
+    @DisplayName("등록된 판 어디에도 링크 정의가 없고 노드 MDC 는 있으므로 링크가 반영되려면 워크로드 쪽이 바뀌어야 한다")
     @Test
     void boards_have_mdc_labels_but_no_links() {
         BenchmarkClusters clusters = new BenchmarkClusters();

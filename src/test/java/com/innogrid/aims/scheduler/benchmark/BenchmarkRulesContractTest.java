@@ -36,22 +36,66 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class BenchmarkRulesContractTest {
 
-    /** 사전 등록된 지표 키 — 이 집합이 바뀌면 규칙이 바뀐 것이다. */
-    private static final Set<String> DECLARED_KEYS = new TreeSet<>(Set.of(
-            "placementRatePercent", "generatorPowerW", "perWorkloadPowerW",
-            "engineBelievedCostW", "activeNodeDelta", "warnZoneNodeCount",
-            "c3InterventionCount", "measuredTempStdDev",
-            "unmeasuredPlacementRate", "unmeasuredRateSpreadPercentPoints",
-            "gapVsPabfdPercent"));
+    /**
+     * 사전 등록된 지표 키 집합의 다이제스트 — 키를 오름차순으로 정렬해 {@code ,} 로 이은 문자열의 SHA-256 앞 12자.
+     *
+     * <p>예전에는 키 11개를 여기 다시 나열했다(규칙 상수·라벨 상수·시험 목록의 3중 선언). 지표를 더하거나 빼면 규칙이
+     * 바뀐 것이므로 이 값을 <b>먼저</b> 고쳐야 하고, 그 커밋이 결과 코드보다 앞에 있어야 한다는 사전 등록 요건은 그대로다.
+     * 다이제스트가 바뀌는 커밋 메시지에 옛 값 → 새 값을 적는다.</p>
+     */
+    private static final String DECLARED_KEY_DIGEST = "039400bdc3c1";
 
-    @DisplayName("사전 등록된 지표 키 집합이 고정된다")
+    /** 사람이 읽는 사전 등록 목록(정렬). 다이제스트는 이 목록에서 계산해 리터럴과 맞춘다 — 두 줄이 같이 바뀌는 것이 이중 서명이다. */
+    private static final List<String> DECLARED_KEYS = List.of(
+            "activeNodeDelta", "c3InterventionCount", "engineBelievedCostW", "gapVsPabfdPercent", "generatorPowerW",
+            "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "unmeasuredPlacementRate",
+            "unmeasuredRateSpreadPercentPoints", "warnZoneNodeCount");
+
+    /** 규칙 축 봉인 한 줄 — 다이제스트 · 날짜 · 사유. 이력의 마지막 행이 현재 값이다. */
+    record AxisSeal(String digest, String date, String reason) {}
+
+    /**
+     * 판정 규칙 축별 다이제스트 <b>이력</b> — 지표 키 외의 규칙 값(부하율·지점 수·시드·판 상수·판정 문턱·금지 조각·절차 문장)도
+     * 봉인한다. 축마다 행을 쌓고 마지막 행이 현재 값이어야 한다. 규칙을 바꾸는 커밋은 여기 행을 더하고(옛 → 새 값과 사유가
+     * 남는다), 제목을 {@code rules:} 로 시작하며, 결과 코드 변경을 같은 커밋에 담지 않는다 — 이력 누락은 시험이 막고 커밋
+     * 순서는 리뷰가 본다. 증거 묶음 매니페스트가 같은 값을 실으므로 옛 매니페스트의 다이제스트를 이 표로 해석한다.
+     * {@code metrics} 축(키:방향:역할)은 키 집합만의 {@link #DECLARED_KEY_DIGEST} 와 목적이 달라 값이 다르다.
+     */
+    private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
+            "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할")),
+            "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
+            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율")),
+            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리")),
+            "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱")),
+            "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
+            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)")));
+
+    @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
     void metric_keys_are_fixed() {
-        Set<String> actual = BenchmarkRules.METRICS.stream()
-                .map(BenchmarkMetric::key).collect(Collectors.toCollection(TreeSet::new));
+        List<String> actual = BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).sorted().toList();
+        assertEquals(BenchmarkRules.METRICS.size(), actual.stream().distinct().count(), "키 중복 없음");
+        assertEquals(DECLARED_KEYS, actual, "지표 키 집합이 사전 등록 목록과 다르다 — 목록·다이제스트를 결과 코드보다 앞선 커밋에서 먼저 고친다");
+        assertEquals(DECLARED_KEY_DIGEST, BenchmarkClusters.digestOf(String.join(",", DECLARED_KEYS)),
+                "목록과 다이제스트가 어긋난다 — 둘을 같은 커밋에서 함께 고친다(옛 → 새 값을 메시지에)");
+    }
 
-        assertEquals(DECLARED_KEYS, actual,
-                "지표를 추가·삭제하려면 이 테스트를 먼저 고쳐야 한다 — 결과를 보고 몰래 바꿀 수 없게");
+    @DisplayName("판정 규칙의 축별 정규 문자열이 다이제스트 리터럴과 같다 — 규칙 변경은 결과 코드보다 앞선 커밋에서만")
+    @Test
+    void rule_axes_are_sealed() {
+        Map<String, String> axes = BenchmarkRules.ruleAxes();
+        assertEquals(RULE_AXIS_HISTORY.keySet(), axes.keySet(), "축 집합이 다르다");
+        List<String> changed = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> e : axes.entrySet()) {
+            List<AxisSeal> history = RULE_AXIS_HISTORY.get(e.getKey());
+            String current = history.get(history.size() - 1).digest();
+            String actual = BenchmarkClusters.digestOf(e.getValue());
+            if (!actual.equals(current)) {
+                changed.add(e.getKey() + ": " + current + " → " + actual + "  정규 문자열: " + e.getValue());
+            }
+        }
+        assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 이력에 행(새 값·날짜·사유)을 더하는 'rules:' 커밋을 결과 코드보다 앞에 둔다\n  "
+                + String.join("\n  ", changed));
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")
@@ -83,7 +127,7 @@ class BenchmarkRulesContractTest {
     }
 
     /**
-     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가
+     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가 <!-- ban-ok: 이름 금지 사유 -->
      * 사실로 굳는다 — 이름·라벨 어디에도 그 단어가 없어야 한다.
      */
     @DisplayName("총전력의 주 지표는 엔진 점수가 아니라 생성식 기준값이고, 실측을 암시하는 이름을 쓰지 않는다")
@@ -656,7 +700,7 @@ class BenchmarkRulesContractTest {
      * 사본이라, 한계 문구에서 지운 문장이 그쪽에 남아 있으면 읽는 사람에게는 그 문장이 여전히 살아 있다.
      * 실제로 옛 온도 문구가 사본 쪽에 남아 있던 적이 있다.
      */
-    @DisplayName("여섯 판의 설명과 전제 문구에도 금지 문장 조각이 없다")
+    @DisplayName("등록된 판 전부의 설명과 전제 문구에도 금지 문장 조각이 없다")
     @Test
     void the_board_roles_and_the_assumption_notes_are_free_of_banned_claims() {
         BenchmarkClusters clusters = new BenchmarkClusters();

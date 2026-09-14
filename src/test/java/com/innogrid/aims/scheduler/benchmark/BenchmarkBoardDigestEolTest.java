@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,15 +66,26 @@ class BenchmarkBoardDigestEolTest {
                 "내용이 다르면 다르다");
     }
 
-    @DisplayName("여섯 판의 다이제스트는 저장소 LF 바이트의 해시 리터럴과 같다 — 빌드 PC 가 바뀌어도 표를 대조할 수 있다")
+    /**
+     * 판 id → 저장소 LF 바이트 해시 리터럴. <b>판 추가 절차</b>: (1) 규칙 커밋을 먼저(판정 상수가 바뀌면 그 커밋에서),
+     * (2) 판 yml 과 등록부 레코드, (3) 이 맵에 한 줄, (4) 계약 §10 에 행, (5) 증거 묶음 재생성. 등록부와 이 맵의 키 집합이
+     * 다르면 아래 시험이 깨진다 — 판을 더하고 다이제스트를 고정하지 않은 채 지나갈 수 없다.
+     */
+    private static final Map<String, String> BOARD_DIGESTS = Map.of(
+            BenchmarkClusters.MAIN, "fb011848258b",
+            BenchmarkClusters.ADVERSARIAL, "b89c82edff1c",
+            BenchmarkClusters.SPARSE, "f2109dcf47e1",
+            BenchmarkClusters.CONVEX, "5e71beea2592",
+            BenchmarkClusters.MISRATED, "e935750a1637",
+            BenchmarkClusters.CONVEX_MISRATED, "d199d46fa3b0");
+
+    @DisplayName("등록된 판 전부의 다이제스트가 저장소 LF 바이트의 해시 리터럴과 같다 — 판을 더하면 리터럴도 함께 늘어야 한다")
     @Test
-    void six_board_digests_match_repository_literals() {
-        assertEquals("fb011848258b", clusters.digest(BenchmarkClusters.MAIN));
-        assertEquals("b89c82edff1c", clusters.digest(BenchmarkClusters.ADVERSARIAL));
-        assertEquals("f2109dcf47e1", clusters.digest(BenchmarkClusters.SPARSE));
-        assertEquals("5e71beea2592", clusters.digest(BenchmarkClusters.CONVEX));
-        assertEquals("e935750a1637", clusters.digest(BenchmarkClusters.MISRATED));
-        assertEquals("d199d46fa3b0", clusters.digest(BenchmarkClusters.CONVEX_MISRATED));
+    void every_registered_board_digest_matches_a_repository_literal() {
+        assertEquals(Set.copyOf(clusters.boardIds()), BOARD_DIGESTS.keySet(), "등록부와 리터럴 맵의 판 집합이 다르다 — 판 추가 절차를 따른다");
+        for (String id : clusters.boardIds()) {
+            assertEquals(BOARD_DIGESTS.get(id), clusters.digest(id), id);
+        }
     }
 
     @DisplayName("엔진 설정 다이제스트는 정규 문자열 그대로의 해시다 — 개행이 없는 입력이라 정규화 대상이 아니다")

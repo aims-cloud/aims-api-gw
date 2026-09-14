@@ -23,7 +23,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
  *
  * <p><b>개정 이력(정직한 사전 등록 서술).</b> 이 클래스는 2026-09-07 에 첫 선언됐고(하네스 결과 코드보다 앞),
  * 그 뒤 여러 차례 개정됐다(횟수·내용 전량은 {@code git log --follow -- BenchmarkRules.java} 에 남아 있다 — 세는 순간
- * 낡는 숫자는 여기 적지 않는다) — 난수원 교체, 지표 이름 정정("지상진실" → "생성식 기준"), 열 계열 지표 보조 강등,
+ * 낡는 숫자는 여기 적지 않는다) — 난수원 교체, 지표 이름 정정("지상진실" → "생성식 기준"), <!-- ban-ok: 개정 이력의 옛 이름 인용 --> 열 계열 지표 보조 강등,
  * 통전·격차 판정 문턱 고정, 문구 사실성 정정 등. 판정 상수(격차 문턱·지점 수 비율)는 비교 API 가 이미 실행 가능한
  * 상태에서 등록됐다. 따라서 "결과를 볼 수 없는 상태에서 규칙을 정했다" 가 아니라 <b>"규칙 클래스가 결과 코드보다
  * 먼저 존재했고 이후 개정은 전부 커밋 이력에 남아 있다"</b> 가 이 저장소가 주장할 수 있는 전부다.
@@ -180,7 +180,7 @@ public final class BenchmarkRules {
 
     /**
      * <b>판정 규칙과 그 사본</b>(한계 문구·지표 문구·판 설명·전제 문구·Swagger 설명)에 있으면 안 되는
-     * 문장 조각 — 상수와 그 사본이 갈라지지 않게
+     * 문장 조각 — 상수와 그 사본이 갈라지지 않게 <!-- ban-ok-block: 금지 조각을 정의하는 자리 — 블록 전체가 인용이다 -->
      * <b>한 배열</b>로 둔다. 조각으로 적는 이유는 "…없다"/"…없습니다" 같은 어미 차이로 검사가
      * 빠져나가지 않게 하기 위해서다.
      *
@@ -200,11 +200,42 @@ public final class BenchmarkRules {
                     "볼록하기 때문", "핫스팟을 막", "핫스팟 방지", "핫스팟을 방지",
                     "문헌 기준선", "최적의 노드", "최적 노드", "비선형적으로 증가");
 
+    /**
+     * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. 계약 시험이 축마다 다이제스트 리터럴을
+     * 두고, 증거 묶음 매니페스트가 같은 값을 싣는다. 축을 나눈 이유는 "어느 규칙이 바뀌었나" 가 값 하나에 뭉개지지 않게
+     * 하기 위해서다. 응답에는 싣지 않는다(형태 불변).
+     *
+     * <p><b>축이 바뀌는 커밋의 형식.</b> 제목을 {@code rules:} 로 시작하고, 본문에 축·옛 값 → 새 값·사유를 적고, 결과 코드
+     * 변경을 같은 커밋에 담지 않는다. 계약 시험의 축 이력({@code RULE_AXIS_HISTORY})에 행을 더해야 시험이 통과하므로
+     * 이력 누락은 기계가 막고, 커밋 순서는 리뷰가 본다.</p>
+     */
+    public static Map<String, String> ruleAxes() {
+        java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
+        // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(계약 시험 DECLARED_KEY_DIGEST)와는 목적이 달라 값이 같지 않다
+        axes.put("metrics", METRICS.stream().map(m -> m.key() + ":" + m.direction() + ":" + m.role()).sorted()
+                .collect(java.util.stream.Collectors.joining(",")));
+        axes.put("sweep", "loadRatios=" + LOAD_RATIOS + "|sweepPoints=" + SWEEP_POINTS + "|randomSeeds=" + RANDOM_SEEDS
+                + "|memoryMbPerCore=" + MEMORY_MB_PER_CORE + "|poweredOnCpuPercent=" + POWERED_ON_CPU_PERCENT
+                + "|cooldownMinutes=" + COOLDOWN_MINUTES_FOR_BENCHMARK);
+        axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO);
+        // 판 실측에서 온 불변조건 — 규칙 문턱과 성격이 달라 따로 둔다(바뀌면 "규칙 변경" 이 아니라 "판 데이터 변경" 이다).
+        // 값 자체는 계약 시험의 실측 대조가 지킨다
+        axes.put("measured", "maxRealMarginalWatts=" + MAX_REAL_MARGINAL_WATTS);
+        axes.put("judgment", "board=" + JUDGMENT_BOARD + "|loadRatio=" + JUDGMENT_LOAD_RATIO + "|powerControl=" + JUDGMENT_POWER_CONTROL
+                + "|minPairedPoints=" + JUDGMENT_MIN_PAIRED_POINTS + "|medianReductionPp=" + JUDGMENT_MEDIAN_REDUCTION_PP
+                + "|reducedPointRatio=" + JUDGMENT_REDUCED_POINT_RATIO + "|directionCheckBoard=" + DIRECTION_CHECK_BOARD
+                + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP);
+        axes.put("banned", String.join(",", BANNED_CLAIMS));
+        // 절차·정의 문장은 공백을 하나로 접어 따로 봉인한다 — 서식 편집 소음은 걸러지고, 문장을 바꿔 쓰면 이 축만 깨진다
+        axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " "));
+        return axes;
+    }
+
     // ── 지표 ─────────────────────────────────────────────────
 
     public static final String PLACEMENT_RATE = "placementRatePercent";
     /**
-     * 클러스터 파일 <b>생성식</b>으로 계산한 총전력. "지상진실"이라 부르지 않는다 — 평가자도 그 생성식을 쓰므로
+     * 클러스터 파일 <b>생성식</b>으로 계산한 총전력. "지상진실"이라 부르지 않는다<!-- ban-ok: 옛 이름 인용 --> — 평가자도 그 생성식을 쓰므로
      * 이 값은 실측이 아니고, 확인되는 것은 "엔진 가정과 생성식이 얼마나 다른가"뿐이다.
      */
     public static final String GENERATOR_POWER = "generatorPowerW";
@@ -397,9 +428,9 @@ public final class BenchmarkRules {
                     + "이 지표의 정의와 문턱 상수는 이 PR 에서만 바뀌고 다음 PR 은 참조만 한다.";
 
     /**
-     * 여섯 판에서 실측한 {@code PowerModel.realMarginalPower} 의 <b>최댓값(W)</b>.
+     * 등록된 판 전부에서 실측한 {@code PowerModel.realMarginalPower} 의 <b>최댓값(W)</b>.
      *
-     * <p>판 6장 × 12지점 × 전 노드 × 두 워크로드 파일이 쓰는 요구 코어 집합을 모두 훑어 잰 값이다.
+     * <p>등록된 판 전부 × 12지점 × 전 노드 × 두 워크로드 파일이 쓰는 요구 코어 집합을 모두 훑어 잰 값이다.
      * 계약 시험이 이 수를 실측과 대조하므로, 판이나 생성식이 바뀌면 시험이 먼저 빨간불이 된다.</p>
      *
      * <p><b>무엇을 위한 수인가</b> — 한계 전력 점수의 분모를 노드 정격에서 고정 W 눈금 S 로 바꿀 때,

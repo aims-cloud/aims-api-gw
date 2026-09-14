@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 
@@ -102,7 +103,8 @@ public record PlacementBenchmarkResponse(
             double marginalScaleWatts
     ) {
         public PowerKnobs {
-            capacityByNode = capacityByNode == null ? Map.of() : Map.copyOf(capacityByNode);
+            // 키 정렬 사본 — Map.copyOf 는 JVM 마다 순회 순서가 달라 응답 바이트가 실행마다 바뀐다
+            capacityByNode = capacityByNode == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(capacityByNode));
         }
     }
 
@@ -215,7 +217,8 @@ public record PlacementBenchmarkResponse(
      * @param boardId            판 식별자
      * @param role               이 판을 만든 의도
      * @param clusterName        클러스터 파일이 밝히는 이름
-     * @param digest             파일 내용(개행 LF 정규화) 해시 앞 12자 — 응답이 자기 입력을 지목한다. 표시 전용, 계산에 쓰이지 않는다
+     * @param digest             파일 내용(개행 LF 정규화) 해시 앞 12자 — 응답이 자기 <b>판 파일</b>을 지목한다(워크로드 분포
+     *                           파일·판정 규칙은 이 값에 들어가지 않는다 — 계약 §8). 표시 전용, 계산에 쓰이지 않는다
      * @param nodeCount          노드 수
      * @param measuredNodeCount  전력·온도가 계측되는 노드 수
      * @param powerExponent         이 판의 생성식 지수 β. 1 이면 선형이고, 1 보다 크면 저부하에서 전력이
@@ -361,7 +364,7 @@ public record PlacementBenchmarkResponse(
             List<StrategyResult> strategies
     ) {
         public Cell {
-            probeExclusionReasons = probeExclusionReasons == null ? Map.of() : Map.copyOf(probeExclusionReasons);
+            probeExclusionReasons = probeExclusionReasons == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(probeExclusionReasons));
             strategies = strategies == null ? List.of() : List.copyOf(strategies);
         }
     }

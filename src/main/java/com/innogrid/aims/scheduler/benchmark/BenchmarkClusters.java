@@ -5,10 +5,12 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
@@ -17,7 +19,7 @@ import org.springframework.stereotype.Component;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 /**
- * 비교용 가상 클러스터 여섯 벌 — 판(board)마다 <b>역할이 먼저 정해져 있다</b>.
+ * 비교용 가상 클러스터 — 판(board)마다 <b>역할이 먼저 정해져 있다</b>. 목록은 등록부 {@code BOARDS} 하나에 있다.
  *
  * <p>판이 여럿인 이유는 결과를 여러 장으로 나눠 보이기 위해서가 아니라, 한 판의 결과만으로는
  * 반론을 막을 수 없기 때문이다. 주 결과판은 우리 엔진에 유리한 우연(미계측 배출구·유휴 비율
@@ -58,72 +60,77 @@ public class BenchmarkClusters {
     /** 복합판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판. 판정 셀이 여기 있다. */
     public static final String CONVEX_MISRATED = "convex-misrated";
 
-    /** 다이제스트로 남길 자릿수. 12자면 여섯 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
+    /** 다이제스트로 남길 자릿수. 12자면 등록된 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
     private static final int DIGEST_LENGTH = 12;
 
-    /** 판 목록의 <b>고정 순서</b>. 표의 열 순서가 호출마다 달라지면 두 실행 결과를 눈으로 대조할 수 없다. */
-    private static final List<String> ORDER =
-            List.of(MAIN, ADVERSARIAL, SPARSE, CONVEX, MISRATED, CONVEX_MISRATED);
+    /**
+     * 판 등록부 — <b>한 곳</b>. 순서·파일·역할이 한 레코드에 있어 어긋날 수 없다.
+     *
+     * <p>예전에는 순서 목록·파일 맵·역할 맵 셋으로 갈라져 있어 판을 더할 때 한 곳만 고치면 판이 응답에서 조용히 빠지거나
+     * 역할이 null 로 나갔고, 그 실수를 클래스 적재 시점의 집합 비교 가드가 잡았다. 등록부를 하나로 접으면 그 불일치가
+     * <b>타입상 불가능</b>해져 가드가 필요 없다 — 가드를 지운 것이 아니라 가드가 필요 없는 구조로 대체했다.
+     * 목록의 순서가 곧 응답의 판 순서다. 표의 열 순서가 호출마다 달라지면 두 실행 결과를 눈으로 대조할 수 없다.</p>
+     *
+     * <p>판의 <b>내용</b>(노드·지수·seed·위상 방식·링크)은 전부 판 파일이 진실이고 여기에는 두지 않는다 — 다이제스트가 파일
+     * 내용의 함수라, 등록부에 판 성질을 적으면 다이제스트가 덮지 못하는 사본이 생긴다.</p>
+     */
+    record Board(String id, String location, String role) {}
 
-    private static final Map<String, String> LOCATIONS = Map.of(
-            MAIN, "classpath:scheduler/benchmark-cluster-main.yml",
-            ADVERSARIAL, "classpath:scheduler/benchmark-cluster-adversarial.yml",
-            SPARSE, "classpath:scheduler/benchmark-cluster-sparse.yml",
-            CONVEX, "classpath:scheduler/benchmark-cluster-convex.yml",
-            MISRATED, "classpath:scheduler/benchmark-cluster-misrated.yml",
-            CONVEX_MISRATED, "classpath:scheduler/benchmark-cluster-convex-misrated.yml");
-
-    private static final Map<String, String> ROLES = Map.of(
-            MAIN, "주 결과판 — 노드 14대 전수 계측(유휴 5대 · 가동 9대). 미계측 배출구를 없애고, 유휴 전력 비율을 "
+    private static final List<Board> BOARDS = List.of(
+            new Board(MAIN, "classpath:scheduler/benchmark-cluster-main.yml",
+                    "주 결과판 — 노드 14대 전수 계측(유휴 5대 · 가동 9대). 미계측 배출구를 없애고, 유휴 전력 비율을 "
                     + "0.20~0.45 로 흩뿌려 엔진 가정(정격의 30%)과 어긋나게 두고, 정격과 코어당 전력의 상관을 "
-                    + "양방향(-0.21)으로 두었다. 전략 순위는 이 판에서 보고한다.",
-            ADVERSARIAL, "반증(적대)판 — 우리 엔진이 지도록 설계했다. 유휴 전력 비율이 0.060~0.100 이라 엔진이 깨우기 "
+                    + "양방향(-0.21)으로 두었다. 전략 순위는 이 판에서 보고한다."),
+            new Board(ADVERSARIAL, "classpath:scheduler/benchmark-cluster-adversarial.yml",
+                    "반증(적대)판 — 우리 엔진이 지도록 설계했다. 유휴 전력 비율이 0.060~0.100 이라 엔진이 깨우기 "
                     + "비용을 3~5배 과대 추정하고, 코어당 생성식 전력이 PEI 순위를 거의 뒤집으며(가동 노드 상관 +0.97), "
-                    + "정격이 큰 노드가 효율적이다(상관 -0.87). 여기서 이기면 판을 다시 설계해야 한다.",
-            SPARSE, "계측 공백판(부록) — 주 결과판과 같은 14대인데 5대만 ipmi: false 다(가동 3 · 유휴 2). 다른 값은 "
+                    + "정격이 큰 노드가 효율적이다(상관 -0.87). 여기서 이기면 판을 다시 설계해야 한다."),
+            new Board(SPARSE, "classpath:scheduler/benchmark-cluster-sparse.yml",
+                    "계측 공백판(부록) — 주 결과판과 같은 14대인데 5대만 ipmi: false 다(가동 3 · 유휴 2). 다른 값은 "
                     + "하나도 다르지 않으므로 두 판의 결과 차이는 '센서가 있는가' 하나로만 설명된다. 그 차이가 센서 "
-                    + "공백의 크기이고, 계측을 요구할 정량 근거다.",
-            CONVEX, "볼록 생성식판(부록) — 주 결과판과 생성식 지수(powerExponent 1.6)만 다르다. 지수를 1 보다 크게 둔 것은 "
+                    + "공백의 크기이고, 계측을 요구할 정량 근거다."),
+            new Board(CONVEX, "classpath:scheduler/benchmark-cluster-convex.yml",
+                    "볼록 생성식판(부록) — 주 결과판과 생성식 지수(powerExponent 1.6)만 다르다. 지수를 1 보다 크게 둔 것은 "
                     + "실서버 근사가 아니라 엔진의 선형 가정이 틀린 방향으로 기울인 응력 시험이고, 문헌에는 반대 방향의 보고도 "
                     + "있다. 엔진의 깨우기 역산은 선형식을 푼 것이라 이 판에서는 선언된 유휴 전력을 복원하지 못하고 낮게 본다 — "
                     + "노드별 차는 wakeupReconstructionCheck 에 있다. 유휴비가 높은 노드의 중·고부하에서 낭비 점수가 포화해 "
-                    + "변별이 좁아질 수 있다.",
-            MISRATED, "정격 어긋남판(부록) — 주 결과판과 엔진에게 알려 준 정격(believedCapacityWatts)만 다르고, 생성식이 쓰는 "
+                    + "변별이 좁아질 수 있다."),
+            new Board(MISRATED, "classpath:scheduler/benchmark-cluster-misrated.yml",
+                    "정격 어긋남판(부록) — 주 결과판과 엔진에게 알려 준 정격(believedCapacityWatts)만 다르고, 생성식이 쓰는 "
                     + "정격은 그대로다. 부호는 손으로 고르지 않는다 — 층마다 한 양을 최소로 하는 분할이 정하며(유휴 층은 깨우기 "
                     + "벌점 편향, 가동 층은 정격 합 편중) 계약 시험이 파일만 보고 재계산한다. 그래서 중립이 아니다: 부호는 코어당 "
                     + "생성식 전력과 상관이 있고(유휴 층 약 −0.8, 가동 층은 양), 상세 수치는 판 파일 머리말에 있다. 어긋남이 크게 "
-                    + "흔드는 곳은 유휴 역산이 아니라 깨우기 벌점·전력 제약 여유·전력 인지 대조군의 선택이다.",
-            CONVEX_MISRATED, "판정판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판이고, 다음 엔진 변경의 효과를 판정할 셀(부하율 "
+                    + "흔드는 곳은 유휴 역산이 아니라 깨우기 벌점·전력 제약 여유·전력 인지 대조군의 선택이다."),
+            new Board(CONVEX_MISRATED, "classpath:scheduler/benchmark-cluster-convex-misrated.yml",
+                    "판정판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판이고, 다음 엔진 변경의 효과를 판정할 셀(부하율 "
                     + "60% · 전원 제어 있음)이 여기 있다. 두 부록판이 요인 하나씩을 귀속시키고 판정은 이 판에서 한다. 두 오차항은 "
                     + "노드에 따라 상쇄하므로(과소 믿음 노드에서는 부호가 반대다) 유휴 역산이 선언값에 가까워지는 행을 '항등이 "
                     + "살아남았다' 로 읽으면 안 된다. 판정 셀은 현 시스템에 없는 전원 제어를 가정한 값이라 배포 환경에서 "
-                    + "재현되지 않는다.");
+                    + "재현되지 않는다."));
 
-    static {
-        // 등록부 셋(순서·파일·역할)의 판 집합이 어긋나면 판이 응답에서 조용히 빠지거나 역할이 null 로 나간다.
-        // 판을 더하거나 뺄 때 한 곳만 고친 실수를 클래스 적재 시점에 잡는다 — 시험이 판 수를 다시 적지 않는 대신이다.
-        if (!Set.copyOf(ORDER).equals(LOCATIONS.keySet()) || !Set.copyOf(ORDER).equals(ROLES.keySet())) {
-            throw new IllegalStateException("판 등록부가 어긋난다 — 순서 " + ORDER + " · 파일 " + LOCATIONS.keySet()
-                    + " · 역할 " + ROLES.keySet());
-        }
-    }
+    private static final Map<String, Board> BY_ID = BOARDS.stream()
+            .collect(Collectors.toMap(Board::id, Function.identity(),
+                    (x, y) -> { throw new IllegalStateException("판 id 중복: " + x.id()); }, LinkedHashMap::new));
+
+    /** 판 목록의 <b>고정 순서</b> — 등록부 순서 그대로. */
+    private static final List<String> ORDER = BOARDS.stream().map(Board::id).toList();
 
     private final Map<String, SyntheticCluster> loaded = new ConcurrentHashMap<>();
     private final Map<String, String> digests = new ConcurrentHashMap<>();
 
-    /** 판 목록(고정 순서: main, adversarial, sparse, convex, misrated, convex-misrated). */
+    /** 판 목록(등록부 순서). */
     public List<String> boardIds() {
         return ORDER;
     }
 
     /** 판 하나. 모르는 {@code boardId} 는 {@link IllegalArgumentException}. */
     public SyntheticCluster get(String boardId) {
-        return loaded.computeIfAbsent(require(boardId), id -> SyntheticCluster.load(LOCATIONS.get(id)));
+        return loaded.computeIfAbsent(require(boardId), id -> SyntheticCluster.load(BY_ID.get(id).location()));
     }
 
     /** 판의 역할 설명(응답에 싣는다). */
     public String roleOf(String boardId) {
-        return ROLES.get(require(boardId));
+        return BY_ID.get(require(boardId)).role();
     }
 
     /**
@@ -136,11 +143,11 @@ public class BenchmarkClusters {
      * 고정하지만, 다이제스트는 체크아웃 설정에 기대지 않고 코드에서 보장한다.</p>
      */
     public String digest(String boardId) {
-        return digests.computeIfAbsent(require(boardId), id -> sha256Prefix(LOCATIONS.get(id)));
+        return digests.computeIfAbsent(require(boardId), id -> sha256Prefix(BY_ID.get(id).location()));
     }
 
     private static String require(String boardId) {
-        if (boardId == null || !LOCATIONS.containsKey(boardId)) {
+        if (boardId == null || !BY_ID.containsKey(boardId)) {
             throw new IllegalArgumentException("모르는 비교판입니다: " + boardId + " (쓸 수 있는 판: " + ORDER + ")");
         }
         return boardId;

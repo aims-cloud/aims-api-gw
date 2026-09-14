@@ -283,6 +283,44 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
+     * 네트워크 노브 성분 <b>전량</b>이 다이제스트에 반응하고 응답 레코드에 노출된다 — 전력 노브와 같은 규약.
+     * 링크를 선언한 판에서 이 노브가 결과에 반영되므로, 빠지면 같은 다이제스트로 다른 표가 나온다.
+     */
+    @DisplayName("네트워크 노브 성분 전량이 다이제스트를 움직이고 응답 레코드와 성분 집합이 같다")
+    @Test
+    void every_network_knob_component_moves_the_digest() {
+        Map<String, java.util.function.Consumer<SchedulerProperties.Network>> tweaks = new LinkedHashMap<>();
+        tweaks.put("latencyScaleMs", n -> n.setLatencyScaleMs(80.0));
+        tweaks.put("degradedPenalty", n -> n.setDegradedPenalty(0.4));
+        tweaks.put("linkWeight", n -> n.setLinkWeight(0.6));
+        tweaks.put("unknownLinkScore", n -> n.setUnknownLinkScore(0.4));
+
+        String base = service.compare("main", "heavytail").engineConfig().configDigest();
+        tweaks.forEach((name, tweak) -> {
+            SchedulerProperties props = new SchedulerProperties();
+            tweak.accept(props.getNetwork());
+            assertNotEquals(base, serviceWith(props).compare("main", "heavytail").engineConfig().configDigest(),
+                    name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
+        });
+        Set<String> components = java.util.Arrays.stream(
+                        PlacementBenchmarkResponse.NetworkKnobs.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).collect(Collectors.toSet());
+        assertEquals(components, tweaks.keySet(), "네트워크 노브 성분과 민감도 표가 어긋났다");
+        assertEquals(0.5, service.compare("main", "heavytail").engineConfig().network().unknownLinkScore(), 1e-9);
+    }
+
+    /** 엔진 쪽 변종 열의 순서 리터럴 — 열을 더하면 이 목록과 응답 열 수 단언이 함께 바뀐다. */
+    @DisplayName("엔진 변종 열 순서가 고정되고 기본 설정 열은 override 가 비어 있다")
+    @Test
+    void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
+        assertEquals(List.of("resource-only-gated", "resource-only-ungated"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+        var cell = service.compare("main", "heavytail").boards().get(0).cells().get(0);
+        for (var s : cell.strategies()) {
+            assertTrue(s.engineConfigOverride().isEmpty(), s.strategyId() + " — 기본 설정 열인데 override 가 있다");
+        }
+    }
+
+    /**
      * 눈금 전환의 점수 차가 닫힌 형태와 같다 — 판의 모든 노드·지점·요구 코어에서.
      *
      * <p>{@code score_S = 1 − rm/S}, {@code score_pMax = 1 − rm/pMax} 이므로

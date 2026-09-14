@@ -40,6 +40,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Cell;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.EngineConfigSnapshot;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.IdleGap;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.NetworkKnobs;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PolicySnapshot;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PowerKnobs;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult;
@@ -103,8 +104,22 @@ public class PlacementBenchmarkService {
     static final List<String> BASELINE_ORDER =
             List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "coolest-first", "random");
 
+    /**
+     * 엔진 쪽 변종 열의 순서 — 대조군의 {@link #BASELINE_ORDER} 와 같은 역할. 운영 엔진 전량(레지스트리 정렬) 뒤, 대조군 앞에
+     * 이 순서로 선다. {@link #engineVariants()} 가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
+     * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
+     */
+    static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated");
+
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     private static final String RANDOM_ID = "random";
+
+    /**
+     * 엔진 쪽 변종 열 하나 — 전략과, 그 열만 다르게 준 노브(이름 → 값). 노브는 응답의 {@code engineConfigOverride} 와 설정
+     * 다이제스트의 {@code overrides=} 세그먼트에 같은 값으로 실린다. {@code believedCostModel} 은 "엔진이 믿은 비용" 을 재는
+     * 전력 모델 — 노브가 전력 모델 형태를 바꾸는 열은 자기 모델로 재야 그 열이 믿은 값이 된다.
+     */
+    private record EngineVariant(PlacementStrategy strategy, Map<String, String> override, PowerModel believedCostModel) {}
 
     /**
      * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 전력식을 공유하는 ΔP 단독 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
@@ -437,8 +452,10 @@ public class PlacementBenchmarkService {
         }
 
         Map<String, Placement> byStrategy = new LinkedHashMap<>();
+        Map<String, PowerModel> costModels = believedCostModels();
         for (PlacementStrategy strategy : strategies()) {
-            byStrategy.put(strategy.id(), run(strategy, sampled, snapshot, cluster, oracle));
+            byStrategy.put(strategy.id(), run(strategy, sampled, snapshot, cluster, oracle,
+                    costModels.getOrDefault(strategy.id(), powerModel)));
         }
 
         return new PointOutcome(headroom, sampled.size(), requestedCores,
@@ -453,21 +470,21 @@ public class PlacementBenchmarkService {
      */
     private Placement run(PlacementStrategy strategy, List<Workload> sampled,
                           List<NodeResource> snapshot, SyntheticCluster cluster,
-                          GroundTruthOracle oracle) {
+                          GroundTruthOracle oracle, PowerModel believedCostModel) {
         if (!RANDOM_ID.equals(strategy.id())) {
-            return runOnce(strategy, sampled, snapshot, cluster, oracle);
+            return runOnce(strategy, sampled, snapshot, cluster, oracle, believedCostModel);
         }
 
         List<Placement> draws = new ArrayList<>(BenchmarkRules.RANDOM_SEEDS.size());
         for (long seed : BenchmarkRules.RANDOM_SEEDS) {
-            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle));
+            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle, believedCostModel));
         }
         return medianDraw(draws);
     }
 
     private Placement runOnce(PlacementStrategy strategy, List<Workload> sampled,
                               List<NodeResource> snapshot, SyntheticCluster cluster,
-                              GroundTruthOracle oracle) {
+                              GroundTruthOracle oracle, PowerModel believedCostModel) {
         SchedulingPolicy policy = policyFor(strategy);
         ConstraintEvaluator evaluator = BenchmarkContexts.freshEvaluator(properties);
         PlacementContext ctx = BenchmarkContexts.copyOf(snapshot, policy, evaluator);
@@ -493,7 +510,7 @@ public class PlacementBenchmarkService {
                     "전략 " + strategy.id() + " 가 판에 없는 노드를 골랐다: " + nodeId));
 
             // 엔진이 믿은 비용은 배치 직전 상태에서 재야 한다 — 예약을 잡은 뒤에는 다른 값이 된다.
-            believedCost += powerModel.realMarginalPower(node, workload.getRequiredCpu());
+            believedCost += believedCostModel.realMarginalPower(node, workload.getRequiredCpu());
 
             ctx.reserve(nodeId, workload);
             used.add(nodeId);
@@ -619,11 +636,12 @@ public class PlacementBenchmarkService {
         String incomparable = comparable ? null
                 : pairingNote(usablePoints, points.size(), mismatchExample);
 
+        Map<String, Map<String, String>> overrides = overrides();
         List<StrategyResult> results = new ArrayList<>(strategyIds.size());
         for (String id : strategyIds) {
             Placement any = points.get(0).byStrategy().get(id);
             results.add(new StrategyResult(id, any.strategy().label(), any.strategy().kind().name(),
-                    any.strategy().policy().name(),
+                    any.strategy().policy().name(), overrides.getOrDefault(id, Map.of()),
                     metricValues(samples.get(id), any, usablePoints, points)));
         }
 
@@ -954,15 +972,7 @@ public class PlacementBenchmarkService {
             all.add(PlacementStrategy.ofEngine(engineRegistry.resolve(id)));
         }
 
-        // 자원전용 두 변종은 기본 엔진에 정책만 갈아 끼운 것이다 — 가중치를 안 봐도 제약이 막아 주는지,
-        // 제약까지 없으면 얼마나 나빠지는지를 갈라 본다.
-        SchedulingEngine weighted = engineRegistry.resolve(EngineRegistry.DEFAULT_ENGINE_ID);
-        all.add(new PlacementStrategy("resource-only-gated", "자원전용(전력·온도 제약 유지)",
-                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_GATED,
-                null, weighted::schedule));
-        all.add(new PlacementStrategy("resource-only-ungated", "자원전용(제약까지 해제)",
-                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED,
-                null, weighted::schedule));
+        for (EngineVariant variant : engineVariants()) all.add(variant.strategy());
 
         Map<String, PlacementStrategy> baselines = new LinkedHashMap<>();
         baselines.put("ffd-size", BaselinePlacers.ffdBySize());
@@ -996,6 +1006,49 @@ public class PlacementBenchmarkService {
         return all;
     }
 
+    /**
+     * 엔진 쪽 변종 열 전부 — {@link #ENGINE_VARIANT_ORDER} 순서. 자원전용 두 변종은 기본 엔진에 정책만 갈아 끼운 것이다 —
+     * 가중치를 안 봐도 제약이 막아 주는지, 제약까지 없으면 얼마나 나빠지는지를 갈라 본다.
+     *
+     * <p>순서 목록과 구현 맵의 집합이 같아야 한다 — 대조군 쪽 가드와 같은 이유로, 한쪽에만 있는 id 는 여기서 크게 실패한다.</p>
+     */
+    private List<EngineVariant> engineVariants() {
+        SchedulingEngine weighted = engineRegistry.resolve(EngineRegistry.DEFAULT_ENGINE_ID);
+        Map<String, EngineVariant> variants = new LinkedHashMap<>();
+        variants.put("resource-only-gated", new EngineVariant(new PlacementStrategy("resource-only-gated", "자원전용(전력·온도 제약 유지)",
+                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_GATED, null, weighted::schedule),
+                Map.of(), powerModel));
+        variants.put("resource-only-ungated", new EngineVariant(new PlacementStrategy("resource-only-ungated", "자원전용(제약까지 해제)",
+                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED, null, weighted::schedule),
+                Map.of(), powerModel));
+
+        if (!variants.keySet().equals(Set.copyOf(ENGINE_VARIANT_ORDER))) {
+            throw new IllegalStateException("엔진 변종 순서 목록과 구현이 다르다 — 열이 조용히 빠진다: "
+                    + variants.keySet() + " vs " + ENGINE_VARIANT_ORDER);
+        }
+        List<EngineVariant> ordered = new ArrayList<>(ENGINE_VARIANT_ORDER.size());
+        for (String id : ENGINE_VARIANT_ORDER) {
+            EngineVariant v = variants.get(id);
+            if (!id.equals(v.strategy().id())) throw new IllegalStateException("엔진 변종 맵의 키와 전략 id 가 다르다: " + id + " ≠ " + v.strategy().id());
+            ordered.add(v);
+        }
+        return ordered;
+    }
+
+    /** 열별 노브 override — 전략 id → (노브 이름 → 값). 기본 설정 그대로인 열은 없다. */
+    private Map<String, Map<String, String>> overrides() {
+        Map<String, Map<String, String>> out = new LinkedHashMap<>();
+        for (EngineVariant v : engineVariants()) if (!v.override().isEmpty()) out.put(v.strategy().id(), v.override());
+        return out;
+    }
+
+    /** 열별 "엔진이 믿은 비용" 모델 — 전력 모델 형태를 바꾼 열만 자기 모델을 갖는다. */
+    private Map<String, PowerModel> believedCostModels() {
+        Map<String, PowerModel> out = new LinkedHashMap<>();
+        for (EngineVariant v : engineVariants()) if (v.believedCostModel() != powerModel) out.put(v.strategy().id(), v.believedCostModel());
+        return out;
+    }
+
     /** 이 전략이 볼 정책. 어떤 경우에도 <b>영속되지 않는 사본</b>이다. */
     private static SchedulingPolicy policyFor(PlacementStrategy strategy) {
         return policyFor(strategy.policy());
@@ -1022,6 +1075,7 @@ public class PlacementBenchmarkService {
     private EngineConfigSnapshot engineConfig() {
         SchedulerProperties.Power p = properties.getPower();
         SchedulerProperties.Thermal t = properties.getThermal();
+        SchedulerProperties.Network nw = properties.getNetwork();
 
         List<String> engineIds = engineRegistry.describe().stream().map(m -> m.get("id")).sorted().toList();
         PowerKnobs power = new PowerKnobs(p.getIdleRatio(), p.getActiveCpuPercent(),
@@ -1032,6 +1086,7 @@ public class PlacementBenchmarkService {
                 p.isIdleFromMeasurement(), p.getMarginalScaleWatts());
         ThermalKnobs thermal = new ThermalKnobs(t.getInertiaK(), t.getDefaultWarningCelsius(),
                 t.getCooldownMinutes(), BenchmarkRules.COOLDOWN_MINUTES_FOR_BENCHMARK);
+        NetworkKnobs network = new NetworkKnobs(nw.getLatencyScaleMs(), nw.getDegradedPenalty(), nw.getLinkWeight(), nw.getUnknownLinkScore());
 
         List<PolicySnapshot> policies = new ArrayList<>();
         List<String> canonical = new ArrayList<>();
@@ -1054,6 +1109,18 @@ public class PlacementBenchmarkService {
         canonical.add("defaultWarningCelsius=" + thermal.defaultWarningCelsius());
         canonical.add("cooldownMinutes=" + thermal.cooldownMinutes());
         canonical.add("benchmarkCooldown=" + thermal.benchmarkCooldownMinutes());
+        // 네트워크 노브 — 링크를 선언한 판에서 결과에 반영된다. 없으면 같은 다이제스트로 다른 표가 나올 수 있다
+        canonical.add("network=" + network.latencyScaleMs() + "," + network.degradedPenalty() + ","
+                + network.linkWeight() + "," + network.unknownLinkScore());
+        // 열별 override — 전략 id 오름차순, 노브는 이름 오름차순(TreeMap). 열마다 다른 노브를 쓰면서 다이제스트가 고정되면
+        // "응답이 자기 입력을 지목한다" 가 거짓이 된다
+        List<String> overrideSegments = new ArrayList<>();
+        overrides().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
+            List<String> kv = new ArrayList<>();
+            new TreeMap<>(e.getValue()).forEach((k, v) -> kv.add(k + "=" + v));
+            overrideSegments.add(e.getKey() + ":" + String.join(",", kv));
+        });
+        canonical.add("overrides=" + String.join(";", overrideSegments));
         for (PlacementStrategy.PolicyVariant variant : PlacementStrategy.PolicyVariant.values()) {
             SchedulingPolicy policy = policyFor(variant);
             PolicySnapshot snap = new PolicySnapshot(variant.name(),
@@ -1073,7 +1140,7 @@ public class PlacementBenchmarkService {
         }
 
         return new EngineConfigSnapshot(BenchmarkClusters.digestOf(String.join("|", canonical)),
-                engineIds, power, thermal, policies);
+                engineIds, power, thermal, network, policies);
     }
 
     /**

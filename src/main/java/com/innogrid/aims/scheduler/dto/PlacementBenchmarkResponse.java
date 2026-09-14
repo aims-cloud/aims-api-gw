@@ -59,6 +59,8 @@ public record PlacementBenchmarkResponse(
      * @param engineIds    비교에 참가한 엔진 id(정렬). 레지스트리가 자동 수집하므로 실행마다 확인해야 한다
      * @param power        전력 모델 노브. 하네스가 회계에 쓰는 문턱을 엔진 노브와 나란히 싣는다
      * @param thermal      온도 모델 노브
+     * @param network      네트워크(링크 점수) 노브. 링크를 선언한 판에서 결과에 반영되므로 다이제스트 성분이고, 성분은 응답에
+     *                     노출된다는 규약에 따라 여기 싣는다
      * @param policies     전략이 보는 정책 변종 셋 — 저장되지 않는 사본이다
      */
     public record EngineConfigSnapshot(
@@ -66,12 +68,24 @@ public record PlacementBenchmarkResponse(
             List<String> engineIds,
             PowerKnobs power,
             ThermalKnobs thermal,
+            NetworkKnobs network,
             List<PolicySnapshot> policies
     ) {
         public EngineConfigSnapshot {
             engineIds = engineIds == null ? List.of() : List.copyOf(engineIds);
             policies = policies == null ? List.of() : List.copyOf(policies);
         }
+    }
+
+    /**
+     * 네트워크(링크 점수) 노브 — {@code NetworkModel} 이 읽는 넷.
+     *
+     * @param latencyScaleMs   지연을 1 로 자르는 눈금(ms)
+     * @param degradedPenalty  DEGRADED 링크 가산 비용
+     * @param linkWeight       트래픽 점수와 링크 점수를 섞는 가중치
+     * @param unknownLinkScore 원장에 없는 원격 쌍의 링크 점수
+     */
+    public record NetworkKnobs(double latencyScaleMs, double degradedPenalty, double linkWeight, double unknownLinkScore) {
     }
 
     /**
@@ -376,6 +390,8 @@ public record PlacementBenchmarkResponse(
      * @param label         사람이 읽는 이름
      * @param kind          {@code ENGINE}(운영 엔진) 또는 {@code BASELINE}(비교용 대조군)
      * @param policyVariant 이 전략이 본 정책 변종
+     * @param engineConfigOverride 이 열만 다르게 준 노브(이름 → 값). 기본 설정 그대로인 열은 빈 맵. 여기 실린 값은 설정 다이제스트의
+     *                             {@code overrides=} 세그먼트에 그대로 들어간다 — 응답이 자기 입력을 지목한다는 원칙을 열 단위로 지킨다
      * @param metrics       지표별 값
      */
     public record StrategyResult(
@@ -383,9 +399,11 @@ public record PlacementBenchmarkResponse(
             String label,
             String kind,
             String policyVariant,
+            Map<String, String> engineConfigOverride,
             List<MetricValue> metrics
     ) {
         public StrategyResult {
+            engineConfigOverride = engineConfigOverride == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(engineConfigOverride));
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
         }
     }

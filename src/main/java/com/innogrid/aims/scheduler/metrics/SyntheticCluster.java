@@ -68,6 +68,8 @@ public final class SyntheticCluster {
     private final double powerExponent;
     private final List<Node> nodes;
     private final List<Link> links;
+    /** 노드별 위상(라디안) — 생성 시 한 번 계산한다. {@code phase()} 는 지표 5종 × 지점 × 노드마다 불리는 뜨거운 경로다. */
+    private final Map<String, Double> phaseByNodeId;
 
     SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
                      double powerExponent, List<Node> nodes) {
@@ -80,6 +82,17 @@ public final class SyntheticCluster {
         this.name = name; this.job = job; this.periodMinutes = periodMinutes; this.swing = swing; this.seed = seed;
         this.powerExponent = powerExponent;
         this.nodes = List.copyOf(nodes);
+        Map<String, Double> phases = new java.util.LinkedHashMap<>();
+        for (Node n : this.nodes) phases.put(n.nodeId(), computePhase(n));
+        this.phaseByNodeId = java.util.Collections.unmodifiableMap(phases);
+    }
+
+    /**
+     * 시드만 다른 <b>비영속 사본</b> — 노드·링크·지수·주기는 그대로다. 시드는 final 필드라 같은 판을 다른 위상 구성으로
+     * 돌리려면 사본이 필요하다. 등록부는 판당 인스턴스 하나를 캐시하므로 사본은 호출자가 든다.
+     */
+    public SyntheticCluster withSeed(long newSeed) {
+        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links);
     }
 
     // ── 로딩 ──────────────────────────────────────────────────
@@ -222,6 +235,7 @@ public final class SyntheticCluster {
      * 1 보다 크면 저부하에서 전력이 선형보다 낮은 <b>볼록</b> 판이 되고, 1 보다 작으면 오목 판이 된다.
      */
     public double powerExponent() { return powerExponent; }
+    public long seed() { return seed; }
     public List<Node> nodes() { return nodes; }
     /** 판이 선언한 링크. 지금 등록된 판은 전부 빈 목록이다. */
     public List<Link> links() { return links; }
@@ -230,8 +244,17 @@ public final class SyntheticCluster {
 
     // ── 시각의 함수 ──────────────────────────────────────────
 
-    /** 노드별 위상 — 식별자 해시로 정해져 파일이 같으면 늘 같다. */
+    /** 노드별 위상 — 생성 시 계산한 값을 돌려준다. 파일이 같으면 늘 같다. */
     double phase(Node node) {
+        Double p = phaseByNodeId.get(node.nodeId());
+        return p != null ? p : computePhase(node);
+    }
+
+    /**
+     * 위상 계산 — 시드·식별자의 순수 함수. 식은 <b>글자 그대로</b> 보존한다({@code h = seed; h = h*31 + c}): 등록된 판 전부의
+     * 값이 이 식에 묶여 있어 괄호 하나만 바꿔도 6판의 다이제스트 기준선이 무효가 된다.
+     */
+    private double computePhase(Node node) {
         long h = seed;
         for (char c : node.nodeId().toCharArray()) h = h * 31 + c;
         return (Math.floorMod(h, 1000) / 1000.0) * 2 * Math.PI;

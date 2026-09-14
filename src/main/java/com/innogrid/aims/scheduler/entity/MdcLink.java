@@ -28,7 +28,7 @@ import jakarta.persistence.*;
        })
 public class MdcLink {
 
-    /** 링크 상태. DOWN 은 배치 제약 C5 가 후보 제외에 쓰고, DEGRADED 는 점수 가산 비용으로만 반영된다. */
+    /** 링크 상태. DOWN 은 배치 제약 C5(전 엔진 공통)가 후보 제외에 쓰고, DEGRADED 는 weighted 엔진의 링크 점수에만 가산 비용으로 반영된다. */
     public enum LinkStatus { UP, DEGRADED, DOWN }
 
     /** 값의 출처. PROBE 는 자동 측정용으로 예약만 해 두었다 — 측정기는 아직 없다. */

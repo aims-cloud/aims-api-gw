@@ -34,13 +34,16 @@ public record SchedulingResult(
             String exclusionReason,
             Map<String, Double> details
     ) {
-        /** details 없이 만드는 기존 형태. */
+        /**
+         * details 없이 만드는 기존 형태. 빈 맵은 <b>가변</b>으로 둔다 — 엔진 후처리가 {@code details().put} 으로
+         * 진단 키를 사후에 더하므로({@code PowerAwareScheduler} 의 통합여유), 불변 맵이면 그 경로에서 예외가 난다.
+         */
         public NodeScore(String mdcId, String nodeId,
                          double cpuScore, double memoryScore, double powerScore,
                          double temperatureScore, double networkScore, double totalScore,
                          boolean eligible, String exclusionReason) {
             this(mdcId, nodeId, cpuScore, memoryScore, powerScore,
-                    temperatureScore, networkScore, totalScore, eligible, exclusionReason, Map.of());
+                    temperatureScore, networkScore, totalScore, eligible, exclusionReason, new java.util.LinkedHashMap<>());
         }
     }
 

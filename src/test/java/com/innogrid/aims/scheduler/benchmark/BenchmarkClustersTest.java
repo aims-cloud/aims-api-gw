@@ -39,7 +39,7 @@ class BenchmarkClustersTest {
 
     @DisplayName("등록된 판이 모두 읽힌다 — 순서 고정")
     @Test
-    void six_boards_load() {
+    void board_registry_loads_in_order() {
         assertEquals(List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE,
                         BenchmarkClusters.CONVEX, BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED, BenchmarkClusters.LINK,
                         BenchmarkClusters.MAIN_INDEPENDENT, BenchmarkClusters.CONVEX_MISRATED_INDEPENDENT, BenchmarkClusters.CONCAVE),

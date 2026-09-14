@@ -269,11 +269,11 @@ class PlacementBenchmarkServiceTest {
         tweaks.put("idleFromMeasurement", pw -> pw.setIdleFromMeasurement(false));
         tweaks.put("marginalScaleWatts", pw -> pw.setMarginalScaleWatts(700.0));
 
-        String base = service.compare("main", "heavytail").engineConfig().configDigest();
+        String base = service.engineConfig().configDigest();   // 스냅샷만 — 판 계산 없이 다이제스트를 읽는다
         tweaks.forEach((name, tweak) -> {
             SchedulerProperties props = new SchedulerProperties();
             tweak.accept(props.getPower());
-            assertNotEquals(base, serviceWith(props).compare("main", "heavytail").engineConfig().configDigest(),
+            assertNotEquals(base, serviceWith(props).engineConfig().configDigest(),
                     name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
         });
 
@@ -299,18 +299,18 @@ class PlacementBenchmarkServiceTest {
         tweaks.put("linkWeight", n -> n.setLinkWeight(0.6));
         tweaks.put("unknownLinkScore", n -> n.setUnknownLinkScore(0.4));
 
-        String base = service.compare("main", "heavytail").engineConfig().configDigest();
+        String base = service.engineConfig().configDigest();
         tweaks.forEach((name, tweak) -> {
             SchedulerProperties props = new SchedulerProperties();
             tweak.accept(props.getNetwork());
-            assertNotEquals(base, serviceWith(props).compare("main", "heavytail").engineConfig().configDigest(),
+            assertNotEquals(base, serviceWith(props).engineConfig().configDigest(),
                     name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
         });
         Set<String> components = java.util.Arrays.stream(
                         PlacementBenchmarkResponse.NetworkKnobs.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName).collect(Collectors.toSet());
         assertEquals(components, tweaks.keySet(), "네트워크 노브 성분과 민감도 표가 어긋났다");
-        assertEquals(0.5, service.compare("main", "heavytail").engineConfig().network().unknownLinkScore(), 1e-9);
+        assertEquals(0.5, service.engineConfig().network().unknownLinkScore(), 1e-9);
     }
 
     /** 위상 독립 판은 seed 마다 Board 하나 — 서로 독립 복제라 값이 다르고, legacy 판은 Board 하나다. */
@@ -430,7 +430,7 @@ class PlacementBenchmarkServiceTest {
                         if (mine < core) {
                             found++;
                             assertNotNull(cell.totalsIncomparableReason(), board + " " + cell.loadRatioPercent() + " " + s.strategyId() + " — 표본이 줄었는데 셀 문장이 없다");
-                            assertTrue(cell.totalsIncomparableReason().contains(s.strategyId() + " " + (core - mine) + "곳"),
+                            assertTrue(cell.totalsIncomparableReason().contains(s.strategyId() + " " + (core - mine) + "곳 제외(표본 " + mine + ")"),
                                     board + " " + cell.loadRatioPercent() + " — 셀 문장에 열과 지점 수가 없다: " + cell.totalsIncomparableReason());
                         }
                     }

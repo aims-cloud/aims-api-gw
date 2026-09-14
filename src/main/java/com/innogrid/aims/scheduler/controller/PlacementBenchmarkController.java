@@ -76,7 +76,7 @@ public class PlacementBenchmarkController {
                        + "sparse(주 결과판과 계측 플래그만 다른 센서 공백판) · convex(주 결과판과 생성식 지수만 다른 판) · "
                        + "misrated(주 결과판과 엔진에 알려 준 정격만 다른 판) · convex-misrated(둘이 함께 걸린 복합판·판정판) · "
                        + "link(주 결과판 노드 + links 절·데이터 MDC 순환 배정 — weighted/weighted-affinity 열 쌍만 갈린다) · "
-                       + "main-independent · convex-misrated-independent(짝 판과 노드 동일, 위상 독립 seeds 3 → boards[] 3장) · "
+                       + "main-independent · convex-misrated-independent(짝 판과 노드 동일, 위상 독립 seeds 3 — boards[] 문단 참조) · "
                        + "concave(주 결과판과 생성식 지수 0.625 만 다른 판). 주 결과판과 노드 구성이 같은 판들은 판 사이의 차이를 "
                        + "요인으로 읽을 수 있고, 전략 순위는 여전히 주 결과판에서 보고합니다. **판정·방향 판정 자격은 convex-misrated · main 두 판의 "
                        + "power 행에만 있고 그 밖의 판·열·지표는 전부 자격이 없습니다.** **distribution** — heavytail(작은 것 다수) 또는 "

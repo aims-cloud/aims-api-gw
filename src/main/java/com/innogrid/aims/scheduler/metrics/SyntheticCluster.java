@@ -165,17 +165,20 @@ public final class SyntheticCluster {
      */
     static List<Long> parseSeeds(Object single, Object many, String location) {
         if (single != null && many != null) throw new IllegalArgumentException("seed 와 seeds 를 함께 적을 수 없습니다: " + location);
-        if (many == null) return List.of(num(single, 7).longValue());
+        if (many == null) return List.of(single == null ? 7L : integral(single, location));
         if (!(many instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("seeds 는 비어 있지 않은 목록이어야 합니다: " + location);
         LinkedHashSet<Long> out = new LinkedHashSet<>();
         for (Object o : list) {
-            if (!(o instanceof Number n) || n.doubleValue() != Math.rint(n.doubleValue())) {
-                throw new IllegalArgumentException("seeds 항목은 정수여야 합니다: " + o + " (" + location + ")");
-            }
-            long s = n.longValue();
+            long s = integral(o, location);
             if (!out.add(s)) throw new IllegalArgumentException("seeds 중복: " + s + " (" + location + ")");
         }
         return List.copyOf(out);
+    }
+
+    /** seed 값 — 64비트 정수만 받는다(실수·BigInteger·문자열 거부). 조용한 절단은 다른 위상을 조용히 만든다. */
+    private static long integral(Object o, String location) {
+        if (o instanceof Integer || o instanceof Long) return ((Number) o).longValue();
+        throw new IllegalArgumentException("seed 는 64비트 정수여야 합니다: " + o + " (" + location + ")");
     }
 
     /** {@code phaseMode:} — 없으면 legacy. 모르는 값은 거부한다. */

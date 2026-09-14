@@ -272,7 +272,7 @@ public class PlacementBenchmarkService {
         // seed 마다 Board 하나 — 서로 독립 복제. legacy 판은 seed 가 하나라 길이 1 그대로다
         List<Board> boards = new ArrayList<>(cluster.seeds().size());
         for (long seed : cluster.seeds()) {
-            boards.add(runBoard(board, seed == cluster.seed() ? cluster : cluster.withSeed(seed), workloads));
+            boards.add(runBoard(board, cluster.withSeed(seed), workloads));   // 원본도 사본으로 — seeds 길이 비대칭을 두지 않는다
         }
         return new PlacementBenchmarkResponse(
                 OffsetDateTime.now(),
@@ -668,11 +668,12 @@ public class PlacementBenchmarkService {
         String incomparable = comparable ? null
                 : pairingNote(usablePoints, points.size(), mismatchExample);
         if (!droppedByRow.isEmpty()) {
+            final int usable = usablePoints;
             List<String> parts = new ArrayList<>();
-            droppedByRow.forEach((id, n) -> parts.add(id + " " + n + "곳"));
+            droppedByRow.forEach((id, k) -> parts.add(id + " " + k + "곳 제외(표본 " + (usable - k) + ")"));
             String note = "override 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", parts)
                     + " — 그 열의 총량 표본(samples)은 그만큼 적다";
-            incomparable = incomparable == null ? note : incomparable + " " + note;
+            incomparable = incomparable == null ? note : incomparable + ". " + note;
         }
 
         List<StrategyResult> results = new ArrayList<>(strategyIds.size());
@@ -756,7 +757,7 @@ public class PlacementBenchmarkService {
             if (series.isEmpty()) {
                 boolean totals = BenchmarkRules.GENERATOR_POWER.equals(metric.key()) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(metric.key())
                         || BenchmarkRules.WARN_ZONE_NODES.equals(metric.key()) || BenchmarkRules.TEMP_STDDEV.equals(metric.key());
-                if (totals && droppedPoints > 0 && droppedPoints == usablePoints) {
+                if (invalid == null && totals && droppedPoints > 0 && droppedPoints == usablePoints) {
                     invalid = "기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + droppedPoints + "곳)";
                 }
                 values.add(new MetricValue(metric.key(), null, null, null, 0, pointValues, false,
@@ -1166,7 +1167,7 @@ public class PlacementBenchmarkService {
      * record 의 {@code toString} 이 아니라 <b>명시적 이름=값 목록</b>이다 — 필드 순서를 바꾸는 리팩터링에
      * 어제 낸 표와 오늘 낸 표가 "다른 설정"으로 보이면 안 된다.</p>
      */
-    private EngineConfigSnapshot engineConfig() {
+    EngineConfigSnapshot engineConfig() {   // 패키지 공개 — 다이제스트 시험이 판을 계산하지 않고 스냅샷만 읽는다
         SchedulerProperties.Power p = properties.getPower();
         SchedulerProperties.Thermal t = properties.getThermal();
         SchedulerProperties.Network nw = properties.getNetwork();

@@ -117,7 +117,7 @@ class SyntheticClusterPhaseModeTest {
     @Test
     void rejects_malformed_phase_declarations() {
         String nodes = "name: t\nnodes:\n  - { mdcId: a, nodeId: \"n-a:9100\", cores: 8, memoryMb: 32768, idleWatts: 100, capacityWatts: 400 }\n";
-        for (String bad : List.of("seed: 7\nseeds: [7, 11]\n", "seeds: [7, 7]\n", "seeds: []\n", "phaseMode: random\n", "seeds: [7, 1.5]\n", "seeds: [7, x]\n")) {
+        for (String bad : List.of("seed: 7\nseeds: [7, 11]\n", "seeds: [7, 7]\n", "seeds: []\n", "phaseMode: random\n", "seeds: [7, 1.5]\n", "seeds: [7, x]\n", "seed: 7.9\n", "seeds: [99999999999999999999]\n")) {
             Object root = new Yaml().load(nodes + bad);
             assertThrows(IllegalArgumentException.class, () -> SyntheticCluster.parse(root, "test"), bad);
         }

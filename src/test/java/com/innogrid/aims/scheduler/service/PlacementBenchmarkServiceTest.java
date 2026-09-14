@@ -353,6 +353,20 @@ class PlacementBenchmarkServiceTest {
         assertNotEquals(columnOf(link, "weighted"), columnOf(link, "weighted-affinity"), "링크 판에서 게이트 on/off 열이 같다 — netScore 경로가 작동하지 않는다");
     }
 
+    /**
+     * 민감도 3열은 실제로 다른 눈금으로 돈다 — 표기만 다르고 값이 같으면 열이 죽어 있는 것이다. 주 결과판에서 250W 눈금은
+     * 실질 한계 전력 최댓값(316W) 아래라 포화가 발현해 1000W 열과 갈라져야 하고, 정격 분모(0) 열도 W 눈금 열과 갈라져야 한다.
+     */
+    @DisplayName("민감도 3열의 값이 서로 다르다 — 표기만 다른 열이 아니다")
+    @Test
+    void the_sensitivity_columns_actually_differ() {
+        var main = service.compare("main", "heavytail").boards().get(0);
+        Map<String, Double> s250 = columnOf(main, "power-s250"), s1000 = columnOf(main, "power-s1000"), s0 = columnOf(main, "power-s0");
+        assertNotEquals(s250, s1000, "250W 눈금 열이 1000W 열과 같다 — 포화가 발현하지 않거나 눈금이 적용되지 않았다");
+        assertNotEquals(s0, s1000, "정격 분모 열이 1000W 열과 같다 — 구 방식이 적용되지 않았다");
+        assertNotEquals(columnOf(main, "power-idle-fixed"), columnOf(main, "power"), "역산 차단 열이 power 와 같다 — 계측 유휴 노드가 있는 판에서는 역산이 값을 바꿔야 한다");
+    }
+
     /** 순환 배정 — 표본 순서대로 a,b,c,a,b,c… 링크 판만 부여하고 링크 없는 판은 아무것도 하지 않는다. */
     @DisplayName("데이터 MDC 는 표본 순서대로 순환 배정되고 링크 없는 판은 부여하지 않는다")
     @Test

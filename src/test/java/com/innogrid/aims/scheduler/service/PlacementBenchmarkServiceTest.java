@@ -311,6 +311,31 @@ class PlacementBenchmarkServiceTest {
         assertEquals(0.5, service.compare("main", "heavytail").engineConfig().network().unknownLinkScore(), 1e-9);
     }
 
+    /** 위상 독립 판은 seed 마다 Board 하나 — 서로 독립 복제라 값이 다르고, legacy 판은 Board 하나다. */
+    @DisplayName("위상 독립 판은 seeds 수만큼 Board 를 내고 seed 별 값이 서로 다르며, legacy 판은 Board 하나다")
+    @Test
+    void independent_boards_yield_one_board_per_seed() {
+        var main = service.compare("main", "heavytail");
+        assertEquals(1, main.boards().size());
+        assertEquals("LEGACY", main.boards().get(0).phaseMode());
+        assertEquals(7L, main.boards().get(0).phaseSeed());
+
+        var ind = service.compare("main-independent", "heavytail");
+        assertEquals(List.of(7L, 11L, 13L), ind.boards().stream().map(b -> b.phaseSeed()).toList());
+        assertTrue(ind.boards().stream().allMatch(b -> "INDEPENDENT".equals(b.phaseMode())));
+        assertEquals(1, ind.boards().stream().map(b -> b.digest()).distinct().count(), "같은 판 파일 — 다이제스트 하나");
+        assertEquals(3, ind.boards().stream().map(PlacementBenchmarkServiceTest::flattenBoard).distinct().count(),
+                "seed 별 Board 의 값이 전부 같다 — 위상이 seed 에 반응하지 않는다");
+    }
+
+    private static Map<String, Double> flattenBoard(PlacementBenchmarkResponse.Board board) {
+        Map<String, Double> out = new LinkedHashMap<>();
+        for (var cell : board.cells()) for (var s : cell.strategies()) for (var m : s.metrics()) {
+            out.put(cell.loadRatioPercent() + "/" + cell.powerControl() + "/" + s.strategyId() + "/" + m.key(), m.median());
+        }
+        return out;
+    }
+
     /** 엔진 쪽 변종 열의 순서 리터럴 — 열을 더하면 이 목록과 응답 열 수 단언이 함께 바뀐다. */
     @DisplayName("엔진 변종 열 순서가 고정되고 기본 설정 열은 override 가 비어 있다")
     @Test

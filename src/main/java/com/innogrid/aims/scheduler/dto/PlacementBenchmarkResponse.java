@@ -244,6 +244,9 @@ public record PlacementBenchmarkResponse(
      * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식(℃·K 두 눈금)과 생성식을 나란히.
      *                              격차·비율·판정은 없다. 두 엔진 값이 다르다는 것이 척도 의존의 증거다
      * @param wakeupReconstructionCheck 유휴 노드의 깨우기 비용 역산 — 선언값과 엔진 역산의 범위를 나란히
+     * @param phaseMode             위상 방식 — {@code LEGACY}(옛 식) 또는 {@code INDEPENDENT}(seed·nodeId 혼합). 같은 판의 Board 가
+     *                              여럿이면 전부 INDEPENDENT 이고 서로 독립 복제다 — 지점 지수는 Board 안에서만 뜻이 있다
+     * @param phaseSeed             이 Board 의 위상 seed. legacy 판은 파일의 seed 하나
      * @param cells                 부하율 × 전원 상태 가정의 격자
      */
     public record Board(
@@ -251,6 +254,8 @@ public record PlacementBenchmarkResponse(
             String role,
             String clusterName,
             String digest,
+            String phaseMode,
+            long phaseSeed,
             int nodeCount,
             int measuredNodeCount,
             double powerExponent,

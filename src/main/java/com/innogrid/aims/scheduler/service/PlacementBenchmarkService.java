@@ -152,11 +152,11 @@ public class PlacementBenchmarkService {
      * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 시험이 지킨다). 그런데 한 번
      * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU 를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
      * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
-     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN 을 남기고 전부 비운다 — 판 6 × 분포 2 = 12 조합(설정·규칙은 프로세스
-     * 안에서 고정)이라 상한 16 에는 닿지 않으며, 닿았다면 키 축 계산이 틀렸다는 신호다.</p>
+     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN 을 남기고 전부 비운다 — 판 10 × 분포 2 = 20 조합(설정·규칙은 프로세스
+     * 안에서 고정, seed 는 판 파일 값이라 요청 축이 아니다)이라 상한 25 에는 닿지 않으며, 닿았다면 키 축 계산이 틀렸다는 신호다.</p>
      */
     private final Map<String, PlacementBenchmarkResponse> cache = new ConcurrentHashMap<>();
-    private static final int CACHE_LIMIT = 16;
+    private static final int CACHE_LIMIT = 25;
 
     /** 캐시 키의 입력 축 이름 — 순서가 키 순서다. 축을 더하면 이 목록과 시험의 리터럴이 함께 바뀌어야 한다. */
     static final List<String> CACHE_AXES = List.of("board", "distribution", "boardDigest", "workloadDigest", "configDigest", "rulesDigest");
@@ -264,12 +264,17 @@ public class PlacementBenchmarkService {
     private PlacementBenchmarkResponse computeFresh(String board, String dist, SyntheticCluster cluster,
                                                     EngineConfigSnapshot config) {
         BenchmarkWorkloads workloads = BenchmarkWorkloads.load(DISTRIBUTION_FILES.get(dist));
+        // seed 마다 Board 하나 — 서로 독립 복제. legacy 판은 seed 가 하나라 길이 1 그대로다
+        List<Board> boards = new ArrayList<>(cluster.seeds().size());
+        for (long seed : cluster.seeds()) {
+            boards.add(runBoard(board, seed == cluster.seed() ? cluster : cluster.withSeed(seed), workloads));
+        }
         return new PlacementBenchmarkResponse(
                 OffsetDateTime.now(),
                 assumptions(workloads, cluster),
                 config,
                 BenchmarkRules.METRICS,
-                List.of(runBoard(board, cluster, workloads)),
+                boards,
                 BenchmarkRules.LIMITATION);
     }
 
@@ -325,6 +330,7 @@ public class PlacementBenchmarkService {
 
         long measured = cluster.nodes().stream().filter(SyntheticCluster.Node::ipmi).count();
         return new Board(boardId, clusters.roleOf(boardId), cluster.name(), clusters.digest(boardId),
+                cluster.phaseMode().name(), cluster.seed(),
                 cluster.nodes().size(), (int) measured, cluster.powerExponent(),
                 idleGaps(oracle), thermalRiseScale(oracle), wakeupReconstruction(cluster), cells);
     }

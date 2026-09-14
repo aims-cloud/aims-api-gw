@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
 
+import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.entity.MdcLink;
 
 import org.springframework.core.io.DefaultResourceLoader;
@@ -60,11 +61,22 @@ public final class SyntheticCluster {
     public record Link(String mdcA, String mdcB, double latencyMs, Double bandwidthMbps, Double packetLossPercent,
                        MdcLink.LinkStatus status) {}
 
+    /** 위상 방식 — {@code legacy} 는 옛 식 글자 그대로, {@code independent} 는 seed·nodeId 의 SplitMix64 혼합. */
+    public enum PhaseMode { LEGACY, INDEPENDENT }
+
+    /** SplitMix64 마무리 함수 상수 — 코드 안에 두어 JDK 와 무관하게 재현된다. 판정 규칙 축이 같은 값을 봉인한다. */
+    public static final long PHASE_MIX_GOLDEN = 0x9E3779B97F4A7C15L;
+    public static final long PHASE_MIX_M1 = 0xBF58476D1CE4E5B9L;
+    public static final long PHASE_MIX_M2 = 0x94D049BB133111EBL;
+
     private final String name;
     private final String job;
     private final int periodMinutes;
     private final double swing;
     private final long seed;
+    private final PhaseMode phaseMode;
+    /** 판이 선언한 seed 목록 — 비어 있지 않으며 {@code seed} 는 첫 항목이다. legacy 판은 길이 1. */
+    private final List<Long> seeds;
     private final double powerExponent;
     private final List<Node> nodes;
     private final List<Link> links;
@@ -85,6 +97,14 @@ public final class SyntheticCluster {
 
     SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
                      double powerExponent, List<Node> nodes, List<Link> links, List<String> workloadDataMdcIds) {
+        this(name, job, periodMinutes, swing, seed, powerExponent, nodes, links, workloadDataMdcIds, PhaseMode.LEGACY, List.of(seed));
+    }
+
+    SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
+                     double powerExponent, List<Node> nodes, List<Link> links, List<String> workloadDataMdcIds,
+                     PhaseMode phaseMode, List<Long> seeds) {
+        this.phaseMode = phaseMode;
+        this.seeds = List.copyOf(seeds);
         this.links = List.copyOf(links);
         this.workloadDataMdcIds = List.copyOf(workloadDataMdcIds);
         this.name = name; this.job = job; this.periodMinutes = periodMinutes; this.swing = swing; this.seed = seed;
@@ -100,7 +120,7 @@ public final class SyntheticCluster {
      * 돌리려면 사본이 필요하다. 등록부는 판당 인스턴스 하나를 캐시하므로 사본은 호출자가 든다.
      */
     public SyntheticCluster withSeed(long newSeed) {
-        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds);
+        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds, phaseMode, seeds);
     }
 
     // ── 로딩 ──────────────────────────────────────────────────
@@ -123,7 +143,9 @@ public final class SyntheticCluster {
         String job = str(map.get("job"), "mdc-nodes");
         int period = num(map.get("periodMinutes"), 60).intValue();
         double swing = num(map.get("swing"), 15).doubleValue();
-        long seed = num(map.get("seed"), 7).longValue();
+        List<Long> seeds = parseSeeds(map.get("seed"), map.get("seeds"), location);
+        long seed = seeds.get(0);
+        PhaseMode phaseMode = parsePhaseMode(map.get("phaseMode"), location);
         double powerExponent = num(map.get("powerExponent"), 1.0).doubleValue();
         if (!(powerExponent > 0) || !Double.isFinite(powerExponent)) {
             throw new IllegalArgumentException("powerExponent 는 0 보다 큰 유한한 값이어야 합니다: " + location + " = " + powerExponent);
@@ -132,7 +154,34 @@ public final class SyntheticCluster {
         Set<String> mdcIds = nodes.stream().map(Node::mdcId).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         List<Link> links = parseLinks(map.get("links"), mdcIds, location);
         List<String> dataMdcIds = parseWorkloadDataMdcIds(map.get("workloadDataMdcIds"), mdcIds, location);
-        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links, dataMdcIds);
+        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links, dataMdcIds, phaseMode, seeds);
+    }
+
+    /**
+     * {@code seed:}(단일) 또는 {@code seeds:}(목록) — 둘을 함께 적으면 거부한다(어느 것이 진실인지 모호). 둘 다 없으면 7 하나.
+     * 목록은 비어 있지 않고 서로 다른 정수여야 한다. legacy 판에 목록을 적어도 파서는 받는다 — seed 가 전역 회전에 그친다는
+     * 사실은 규칙 문장이 밝히고, 판 파일 작성자가 그 사실을 알고 쓰는 것으로 본다.
+     */
+    static List<Long> parseSeeds(Object single, Object many, String location) {
+        if (single != null && many != null) throw new IllegalArgumentException("seed 와 seeds 를 함께 적을 수 없습니다: " + location);
+        if (many == null) return List.of(num(single, 7).longValue());
+        if (!(many instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("seeds 는 비어 있지 않은 목록이어야 합니다: " + location);
+        LinkedHashSet<Long> out = new LinkedHashSet<>();
+        for (Object o : list) {
+            long s = num(o, 0).longValue();
+            if (!out.add(s)) throw new IllegalArgumentException("seeds 중복: " + s + " (" + location + ")");
+        }
+        return List.copyOf(out);
+    }
+
+    /** {@code phaseMode:} — 없으면 legacy. 모르는 값은 거부한다. */
+    static PhaseMode parsePhaseMode(Object raw, String location) {
+        if (raw == null) return PhaseMode.LEGACY;
+        try {
+            return PhaseMode.valueOf(String.valueOf(raw).trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("phaseMode 는 legacy 또는 independent 여야 합니다: " + raw + " (" + location + ")");
+        }
     }
 
     /**
@@ -262,6 +311,9 @@ public final class SyntheticCluster {
      */
     public double powerExponent() { return powerExponent; }
     public long seed() { return seed; }
+    public PhaseMode phaseMode() { return phaseMode; }
+    /** 판이 선언한 seed 전부 — 하네스가 seed 마다 Board 하나씩 낸다. */
+    public List<Long> seeds() { return seeds; }
     public List<Node> nodes() { return nodes; }
     /** 판이 선언한 링크. 링크 판만 비어 있지 않다. */
     public List<Link> links() { return links; }
@@ -279,13 +331,31 @@ public final class SyntheticCluster {
     }
 
     /**
-     * 위상 계산 — 시드·식별자의 순수 함수. 식은 <b>글자 그대로</b> 보존한다({@code h = seed; h = h*31 + c}): 등록된 판 전부의
+     * 위상 계산 — 시드·식별자의 순수 함수. legacy 식은 <b>글자 그대로</b> 보존한다({@code h = seed; h = h*31 + c}): 등록된 판 전부의
      * 값이 이 식에 묶여 있어 괄호 하나만 바꿔도 6판의 다이제스트 기준선이 무효가 된다.
+     *
+     * <p>{@code independent} 는 SplitMix64 마무리 함수를 코드 안에서 돈다(JDK 난수기의 값열에 기대지 않는다 — JDK 를 바꿔도 값이
+     * 같다). 입력은 {@code seed × GOLDEN ^ hash(nodeId)} 이고 {@code String.hashCode} 는 명세로 고정된 값이다. 하위 10진 3자리를
+     * 위상으로 쓰는 것은 legacy 와 같은 해상도(1/1000 회전)를 유지하기 위해서다.</p>
      */
     private double computePhase(Node node) {
+        if (phaseMode == PhaseMode.INDEPENDENT) {
+            long z = seed * PHASE_MIX_GOLDEN ^ node.nodeId().hashCode();
+            z = (z ^ (z >>> 30)) * PHASE_MIX_M1;
+            z = (z ^ (z >>> 27)) * PHASE_MIX_M2;
+            z ^= (z >>> 31);
+            return (Math.floorMod(z, 1000) / 1000.0) * 2 * Math.PI;
+        }
         long h = seed;
         for (char c : node.nodeId().toCharArray()) h = h * 31 + c;
         return (Math.floorMod(h, 1000) / 1000.0) * 2 * Math.PI;
+    }
+
+    /** 시험용 — 노드별 위상(라디안)을 그대로 본다. */
+    public double phaseOf(String nodeId) {
+        Double p = phaseByNodeId.get(nodeId);
+        if (p == null) throw new IllegalArgumentException("판에 없는 노드: " + nodeId);
+        return p;
     }
 
     /** 노드별 진폭 — 파일에 적었으면 그 값, 아니면 클러스터 공통. 유휴 노드를 진짜 유휴로 두려면 작게 적는다. */

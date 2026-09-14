@@ -86,6 +86,8 @@ class BenchmarkEvidenceDumpTest {
 
                 Map<String, Object> e = new LinkedHashMap<>();
                 e.put("board", board); e.put("distribution", dist); e.put("boardDigest", boardDigest);
+                e.put("phaseMode", r.boards().get(0).phaseMode()); e.put("boardCount", r.boards().size());
+                e.put("phaseSeeds", r.boards().stream().map(PlacementBenchmarkResponse.Board::phaseSeed).toList());
                 e.put("workloadDigest", workloadDigest); e.put("configDigest", configDigest); e.put("file", file.getFileName().toString());
                 e.put("sha256", BenchmarkClusters.digestOf(json));
                 entries.add(e);

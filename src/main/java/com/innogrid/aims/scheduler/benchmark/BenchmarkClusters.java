@@ -63,6 +63,12 @@ public class BenchmarkClusters {
     /** 링크 판 — 주 결과판 노드 블록 + links 절 + 데이터 MDC 순환 배정. {@code BenchmarkRules.LINK_BOARD} 와 같은 문자열. */
     public static final String LINK = "link";
 
+    /** 주 결과판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
+    public static final String MAIN_INDEPENDENT = "main-independent";
+
+    /** 판정판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
+    public static final String CONVEX_MISRATED_INDEPENDENT = "convex-misrated-independent";
+
     /** 다이제스트로 남길 자릿수. 12자면 등록된 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
     private static final int DIGEST_LENGTH = 12;
 
@@ -114,7 +120,16 @@ public class BenchmarkClusters {
                     "링크 판(부록) — 주 결과판과 노드 구성이 같고 links 절(a-b UP 8ms · a-c DEGRADED 45ms/1.5% · b-c 미등록)과 워크로드 "
                     + "데이터 MDC 순환 배정만 더했다. 링크 점수를 섞는 엔진은 weighted 하나뿐이라 이 판에서 값이 달라지는 열은 weighted 계열이고, "
                     + "비교는 같은 판 안의 게이트 on/off 열 쌍(weighted · weighted-affinity)으로 한다 — netScore 경로의 작동 확인이며 전력 "
-                    + "판정과 무관하다. 판정·방향 판정 자격 없음. 링크는 이 판 파일이 원장 노릇을 하고 DB 원장(0건)과 무관하다."));
+                    + "판정과 무관하다. 판정·방향 판정 자격 없음. 링크는 이 판 파일이 원장 노릇을 하고 DB 원장(0건)과 무관하다."),
+            new Board(MAIN_INDEPENDENT, "classpath:scheduler/benchmark-cluster-main-independent.yml",
+                    "주 결과판의 위상 독립 짝(부록) — 노드 블록은 주 결과판과 같고 phaseMode: independent 와 seeds 3 만 다르다. legacy 위상은 "
+                    + "seed 가 전 노드에 같은 상수만 더해 seed 를 늘려도 표본이 늘지 않는 결함이 있어, 노드별 위상을 seed·nodeId 혼합으로 다시 뽑아 "
+                    + "위상 구성 3벌(boards[] 3장, 서로 독립 복제)을 낸다. 방향 판정 자격은 여전히 main 에만 있고, 이 판은 그 방향이 위상 구성에 "
+                    + "따라 흔들리는지를 보는 자리다. Board 사이의 지점을 합쳐 세지 않는다."),
+            new Board(CONVEX_MISRATED_INDEPENDENT, "classpath:scheduler/benchmark-cluster-convex-misrated-independent.yml",
+                    "판정판의 위상 독립 짝(부록) — 노드 블록(엔진에 알려 준 정격 포함)과 생성식 지수는 판정판과 같고 phaseMode: independent 와 "
+                    + "seeds 3 만 다르다. 판정 자격은 여전히 convex-misrated 에만 있고, 이 판은 판정 셀의 값이 위상 구성 3벌에서 어느 폭으로 "
+                    + "흔들리는지를 보는 자리다(중앙값 3값과 범위, 검정 아님). Board 사이의 지점을 합쳐 세지 않는다."));
 
     private static final Map<String, Board> BY_ID = BOARDS.stream()
             .collect(Collectors.toMap(Board::id, Function.identity(),

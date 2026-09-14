@@ -653,13 +653,68 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("같은 판·같은 분포를 두 번 돌리면 숫자가 같다")
     @Test
     void same_input_gives_the_same_numbers() {
-        Map<String, Double> first = flatten(service.compare("main", "heavytail"));
-        Map<String, Double> second = flatten(service.compare("main", "heavytail"));
+        // compareFresh: 캐시를 거치지 않는다 — 공개 경로는 두 번째 호출을 캐시에서 돌려주므로 결정론을 증명하지 못한다
+        Map<String, Double> first = flatten(service.compareFresh("main", "heavytail"));
+        Map<String, Double> second = flatten(service.compareFresh("main", "heavytail"));
 
         assertEquals(first, second,
                 "두 번째 호출의 숫자가 다르다 — 앞 호출이 노드 스냅샷이나 정책을 변이시켰거나 "
                         + "벽시계·난수원 상태가 결과에 새어 들었다");
         assertFalse(first.isEmpty(), "비교할 숫자가 하나도 없다");
+    }
+
+    /**
+     * 공개 경로의 두 번째 호출은 <b>캐시</b>에서 나온다 — 본문(판·전제·설정·지표·한계)은 같은 객체이고 응답 시각만 새로 찍힌다.
+     * 캐시가 응답 시각을 과거로 만들거나 본문을 재계산하지 않는다는 두 성질을 함께 고정한다.
+     */
+    @DisplayName("같은 입력의 두 번째 호출은 캐시에서 나오고 응답 시각만 새로 찍힌다")
+    @Test
+    void second_call_is_served_from_cache_with_a_fresh_timestamp() {
+        var first = service.compare("main", "heavytail");
+        var second = service.compare("main", "heavytail");
+
+        assertSame(first.boards(), second.boards(), "본문은 같은 객체 — 재계산하지 않았다");
+        assertSame(first.assumptions(), second.assumptions());
+        assertEquals(first.engineConfig().configDigest(), second.engineConfig().configDigest());
+        assertFalse(second.evaluatedAt().isBefore(first.evaluatedAt()), "캐시 적중이 응답 시각을 과거로 만들지 않는다");
+        assertEquals(flatten(first), flatten(second));
+    }
+
+    /** 설정이 바뀌면 키가 바뀌어 캐시가 빗나간다 — 옛 설정의 표가 새 설정의 응답으로 나가지 않는다. */
+    @DisplayName("엔진 설정이 바뀌면 캐시가 빗나가고 다시 계산한다")
+    @Test
+    void config_change_misses_the_cache() {
+        SchedulerProperties props = new SchedulerProperties();
+        PlacementBenchmarkService s = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                        new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props));
+        var before = s.compare("main", "heavytail");
+        props.getPower().setMarginalScaleWatts(250.0);
+        var after = s.compare("main", "heavytail");
+
+        assertNotEquals(before.engineConfig().configDigest(), after.engineConfig().configDigest(), "설정이 다르면 다이제스트가 다르다");
+        assertNotSame(before.boards(), after.boards(), "다른 키라 재계산했다");
+    }
+
+    /** 실행 중인 호출이 있으면 두 번째 호출은 기다리지 않고 429 다. */
+    @DisplayName("동시 두 번째 호출은 429 로 거절된다")
+    @Test
+    void concurrent_second_call_is_rejected_with_429() throws Exception {
+        // 실행 슬롯(세마포어)을 시험이 먼저 점유해 "실행 중" 상태를 만든다
+        PlacementBenchmarkService s = newService();
+        java.lang.reflect.Field f = PlacementBenchmarkService.class.getDeclaredField("running");
+        f.setAccessible(true);
+        java.util.concurrent.Semaphore running = (java.util.concurrent.Semaphore) f.get(s);
+        assertTrue(running.tryAcquire(), "시험이 실행 슬롯을 먼저 잡는다");
+        try {
+            com.innogrid.aims.common.exception.BusinessException e = assertThrows(
+                    com.innogrid.aims.common.exception.BusinessException.class, () -> s.compare("main", "heavytail"));
+            assertEquals(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, e.getStatus());
+        } finally {
+            running.release();
+        }
+        assertNotNull(s.compare("main", "heavytail").boards(), "슬롯이 풀리면 정상 계산");
     }
 
     /** 서비스 인스턴스가 달라도 같은 답이어야 한다 — 인스턴스 필드에 상태가 쌓이지 않는다는 뜻. */

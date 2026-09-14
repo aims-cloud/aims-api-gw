@@ -12,6 +12,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -123,6 +125,25 @@ public class PlacementBenchmarkService {
     /** 이 실행이 비교에 넣는 대조군 순서. 운영은 항상 {@link #BASELINE_ORDER} 다. */
     private final List<String> baselineOrder;
 
+    /**
+     * 순수성 캐시 — 키는 {@code 판|분포|판 다이제스트|엔진 설정 다이제스트}.
+     *
+     * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 시험이 지킨다). 그런데 한 번
+     * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU 를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
+     * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
+     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 전부 비운다 — 판 × 분포 × 설정 조합이 작아 실제로는 닿지 않는다.</p>
+     */
+    private final Map<String, PlacementBenchmarkResponse> cache = new ConcurrentHashMap<>();
+    private static final int CACHE_LIMIT = 64;
+
+    /**
+     * 동시 실행 1건 — 두 번째 호출은 기다리지 않고 429 로 돌려보낸다.
+     *
+     * <p>기다리게 하면 요청 스레드가 묶이고 호출자는 응답이 늦는 이유를 모른다. 지금 계산 중인 것과 같은 입력이면 곧 캐시에
+     * 실릴 테니 잠시 뒤 다시 부르면 되고, 다른 입력이면 순서대로 부르는 편이 CPU 를 공유하는 배포 서버에 안전하다.</p>
+     */
+    private final Semaphore running = new Semaphore(1);
+
     /** 스프링이 쓰는 생성자 — 생성자가 둘이라 어느 것인지 표시해야 한다. 대조군은 항상 {@link #BASELINE_ORDER} 전량. */
     @Autowired
     public PlacementBenchmarkService(EngineRegistry engineRegistry, SchedulerProperties properties,
@@ -167,15 +188,54 @@ public class PlacementBenchmarkService {
                     + " (쓸 수 있는 분포: " + new TreeSet<>(DISTRIBUTION_FILES.keySet()) + ")");
         }
         SyntheticCluster cluster = resolveBoard(board);
-        BenchmarkWorkloads workloads = BenchmarkWorkloads.load(location);
+        EngineConfigSnapshot config = engineConfig();
+        String key = board + "|" + dist + "|" + clusters.digest(board) + "|" + config.configDigest();
 
+        PlacementBenchmarkResponse hit = cache.get(key);
+        if (hit != null) return restamped(hit);
+
+        if (!running.tryAcquire()) {
+            throw new BusinessException(HttpStatus.TOO_MANY_REQUESTS,
+                    "배치 비교가 이미 실행 중입니다. 잠시 뒤 다시 호출하세요 — 같은 입력이면 결과가 캐시에서 바로 나옵니다");
+        }
+        try {
+            hit = cache.get(key);   // 기다리던 사이 같은 입력이 끝났을 수 있다
+            if (hit != null) return restamped(hit);
+            PlacementBenchmarkResponse fresh = computeFresh(board, dist, cluster, config);
+            if (cache.size() >= CACHE_LIMIT) cache.clear();
+            cache.put(key, fresh);
+            return fresh;
+        } finally {
+            running.release();
+        }
+    }
+
+    /**
+     * 캐시·동시 제한을 거치지 않는 계산 — <b>시험 전용</b>(패키지 밖에서 보이지 않는다). 결정론 시험이 "두 번 계산해도 같은
+     * 숫자" 를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
+     */
+    PlacementBenchmarkResponse compareFresh(String boardId, String distribution) {
+        String board = blank(boardId) ? BenchmarkClusters.MAIN : boardId;
+        String dist = blank(distribution) ? HEAVYTAIL : distribution;
+        return computeFresh(board, dist, resolveBoard(board), engineConfig());
+    }
+
+    private PlacementBenchmarkResponse computeFresh(String board, String dist, SyntheticCluster cluster,
+                                                    EngineConfigSnapshot config) {
+        BenchmarkWorkloads workloads = BenchmarkWorkloads.load(DISTRIBUTION_FILES.get(dist));
         return new PlacementBenchmarkResponse(
                 OffsetDateTime.now(),
                 assumptions(workloads, cluster),
-                engineConfig(),
+                config,
                 BenchmarkRules.METRICS,
                 List.of(runBoard(board, cluster, workloads)),
                 BenchmarkRules.LIMITATION);
+    }
+
+    /** 캐시 적중 응답 — 본문은 그대로, 응답 시각만 지금으로. 캐시가 응답 시각을 과거로 만들지 않는다. */
+    private static PlacementBenchmarkResponse restamped(PlacementBenchmarkResponse cached) {
+        return new PlacementBenchmarkResponse(OffsetDateTime.now(), cached.assumptions(), cached.engineConfig(),
+                cached.metrics(), cached.boards(), cached.limitation());
     }
 
     private static boolean blank(String s) {

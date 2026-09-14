@@ -900,11 +900,11 @@ class PlacementBenchmarkServiceTest {
      * 엔진이 믿은 비용과 생성식 기준 전력이 <b>다른 함수</b>다. 같은 값이면 주 지표가 엔진 목적함수의
      * 재탕이고, 그 지표에서 그 목적함수를 최대화한 전략이 정의상 이긴다.
      *
-     * <p>한 셀만 보면 그 셀에서 우연히 갈린 것과 구분되지 않는다 — 여섯 판 × 부하율 넷 × 전원 가정 둘을
+     * <p>한 셀만 보면 그 셀에서 우연히 갈린 것과 구분되지 않는다 — 등록된 판 전부 × 부하율 넷 × 전원 가정 둘을
      * 전부 훑는다. 분포는 heavytail 하나만 쓴다: 분포는 요구 워크로드를 바꿀 뿐 두 값을 만드는 함수를
      * 바꾸지 않으므로, 둘째 분포를 더해도 잠기는 성질은 같고 시간만 두 배가 된다.</p>
      */
-    @DisplayName("여섯 판 전 셀에서 엔진이 믿은 비용과 생성식 기준 전력은 다른 함수다")
+    @DisplayName("등록된 판 전 셀에서 엔진이 믿은 비용과 생성식 기준 전력은 다른 함수다")
     @Test
     void engine_belief_and_ground_truth_are_different_functions() {
         BenchmarkClusters clusters = new BenchmarkClusters();
@@ -1737,7 +1737,7 @@ class PlacementBenchmarkServiceTest {
      * <p>요구 코어는 상상하지 않고 <b>실제 워크로드 파일</b>이 쓰는 값만 본다 — 판에 없는 요구량으로
      * 잰 최댓값은 판의 사실이 아니다.</p>
      */
-    @DisplayName("여섯 판 전 지점·전 노드의 실질 한계 전력 최댓값이 계약 상수와 같다")
+    @DisplayName("등록된 판 전 지점·전 노드의 실질 한계 전력 최댓값이 계약 상수와 같다")
     @Test
     void the_maximum_real_marginal_power_on_the_boards_matches_the_contract_constant() {
         PowerModel powerModel = new PowerModel(new SchedulerProperties());
@@ -1804,7 +1804,7 @@ class PlacementBenchmarkServiceTest {
      * {@code u} 는 그 시각의 사용률, {@code δ = 엔진이 믿는 정격/생성식 정격 − 1}. β=1·δ=0 이면 우변이
      * 선언값 그대로가 되어 항등이 되고, 그 항등이 깨지는 판이 이 PR 이 만든 판이다.</p>
      */
-    @DisplayName("여섯 판 전 행·전 지점에서 깨우기 역산이 닫힌 형태와 같다")
+    @DisplayName("등록된 판 전 행·전 지점에서 깨우기 역산이 닫힌 형태와 같다")
     @Test
     void the_wakeup_reconstruction_matches_the_closed_form_on_every_board() {
         BenchmarkClusters clusters = new BenchmarkClusters();

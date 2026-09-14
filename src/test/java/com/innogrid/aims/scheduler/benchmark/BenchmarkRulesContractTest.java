@@ -36,22 +36,24 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class BenchmarkRulesContractTest {
 
-    /** 사전 등록된 지표 키 — 이 집합이 바뀌면 규칙이 바뀐 것이다. */
-    private static final Set<String> DECLARED_KEYS = new TreeSet<>(Set.of(
-            "placementRatePercent", "generatorPowerW", "perWorkloadPowerW",
-            "engineBelievedCostW", "activeNodeDelta", "warnZoneNodeCount",
-            "c3InterventionCount", "measuredTempStdDev",
-            "unmeasuredPlacementRate", "unmeasuredRateSpreadPercentPoints",
-            "gapVsPabfdPercent"));
+    /**
+     * 사전 등록된 지표 키 집합의 다이제스트 — 키를 오름차순으로 정렬해 {@code ,} 로 이은 문자열의 SHA-256 앞 12자.
+     *
+     * <p>예전에는 키 11개를 여기 다시 나열했다(규칙 상수·라벨 상수·시험 목록의 3중 선언). 지표를 더하거나 빼면 규칙이
+     * 바뀐 것이므로 이 값을 <b>먼저</b> 고쳐야 하고, 그 커밋이 결과 코드보다 앞에 있어야 한다는 사전 등록 요건은 그대로다.
+     * 다이제스트가 바뀌는 커밋 메시지에 옛 값 → 새 값을 적는다.</p>
+     */
+    private static final String DECLARED_KEY_DIGEST = "039400bdc3c1";
 
-    @DisplayName("사전 등록된 지표 키 집합이 고정된다")
+    @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록의 다이제스트로")
     @Test
     void metric_keys_are_fixed() {
-        Set<String> actual = BenchmarkRules.METRICS.stream()
-                .map(BenchmarkMetric::key).collect(Collectors.toCollection(TreeSet::new));
+        String joined = BenchmarkRules.METRICS.stream()
+                .map(BenchmarkMetric::key).sorted().collect(Collectors.joining(","));
+        assertEquals(11, BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).distinct().count(), "키 중복 없음");
 
-        assertEquals(DECLARED_KEYS, actual,
-                "지표를 추가·삭제하려면 이 테스트를 먼저 고쳐야 한다 — 결과를 보고 몰래 바꿀 수 없게");
+        assertEquals(DECLARED_KEY_DIGEST, BenchmarkClusters.digestOf(joined),
+                "지표를 추가·삭제하려면 이 다이제스트를 먼저 고쳐야 한다 — 결과를 보고 몰래 바꿀 수 없게. 정렬 키: " + joined);
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")
@@ -656,7 +658,7 @@ class BenchmarkRulesContractTest {
      * 사본이라, 한계 문구에서 지운 문장이 그쪽에 남아 있으면 읽는 사람에게는 그 문장이 여전히 살아 있다.
      * 실제로 옛 온도 문구가 사본 쪽에 남아 있던 적이 있다.
      */
-    @DisplayName("여섯 판의 설명과 전제 문구에도 금지 문장 조각이 없다")
+    @DisplayName("등록된 판 전부의 설명과 전제 문구에도 금지 문장 조각이 없다")
     @Test
     void the_board_roles_and_the_assumption_notes_are_free_of_banned_claims() {
         BenchmarkClusters clusters = new BenchmarkClusters();

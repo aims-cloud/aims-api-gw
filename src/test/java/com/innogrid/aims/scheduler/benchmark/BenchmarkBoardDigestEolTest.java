@@ -64,7 +64,7 @@ class BenchmarkBoardDigestEolTest {
                 "내용이 다르면 다르다");
     }
 
-    @DisplayName("여섯 판의 다이제스트는 저장소 LF 바이트의 해시 리터럴과 같다 — 빌드 PC 가 바뀌어도 표를 대조할 수 있다")
+    @DisplayName("등록된 판의 다이제스트는 저장소 LF 바이트의 해시 리터럴과 같다 — 빌드 PC 가 바뀌어도 표를 대조할 수 있다")
     @Test
     void six_board_digests_match_repository_literals() {
         assertEquals("fb011848258b", clusters.digest(BenchmarkClusters.MAIN));

@@ -36,14 +36,15 @@ class JudgmentBaselineTest {
      * 확인할 수 없다). {@code producedAt} 은 후보 파일을 실제로 산출한 HEAD 의 앞 7자로, 파일 출처의 {@code gitHead} 와 같아야 하며 시험이 그것을 본다.
      * 브랜치 커밋 해시는 머지 방식에 따라 히스토리에 남지 않을 수 있다 — 파일 안의 값이 그 사실을 함께 적는다.</p>
      */
-    record BaselineSeal(String digest, String date, String reason, String engineRevision, String producedAt, String medianShiftFromPrevious) {}
+    record BaselineSeal(String digest, String date, String reason, String engineRevision, String producedAt, String medianShiftFromPrevious,
+                        double judgmentMedian, double directionMedian) {}
 
     /** 마지막 행이 현재 파일이다. 파일을 갱신하는 커밋은 여기 행을 더한다 — 후보는 증거 묶음 시험이 만든다. */
     static final List<BaselineSeal> BASELINE_HISTORY = List.of(
             new BaselineSeal("3fef93c9862b", "2026-09-15",
                     "기준선 봉인 도입 — 소비된 W 눈금 판정 뒤 처음으로 지점 배열째 보존. 판정 셀·방향 셀 × 열 5(power·눈금 3·역산 차단)·위상 짝 판 seed 3·오목 판. "
                             + "값은 이 브랜치의 규칙 커밋 뒤·파일 커밋 전 HEAD 에서 산출했고 규칙 축 다이제스트는 그 시점 값이다 — 브랜치 커밋 해시라 머지 방식에 따라 히스토리에 남지 않을 수 있다",
-                    "294dae4 (develop, 배치 비교 방법론 PR 머지 — 이후 엔진·판 생성 코드 변경 없음)", "f4094c4", "없음(첫 기준선)"));
+                    "294dae4 (develop, 배치 비교 방법론 PR 머지 — 이후 엔진·판 생성 코드 변경 없음)", "f4094c4", "없음(첫 기준선)", 13.4697, 17.5399));
 
     private static JudgmentBaseline load() throws IOException {
         return JudgmentBaselines.readRepositoryBaseline();
@@ -66,6 +67,9 @@ class JudgmentBaselineTest {
         // 산출 HEAD 는 저장소 안 사실이라 기계로 잠긴다 — 파일 출처의 gitHead 가 이력 행이 말하는 커밋에서 나왔어야 한다
         assertTrue(load().provenance().gitHead().startsWith(current.producedAt()),
                 "기준선 파일의 출처 gitHead(" + load().provenance().gitHead() + ")가 이력 행의 산출 HEAD(" + current.producedAt() + ")와 다르다 — 어느 쪽이 거짓인지 가른다");
+        // 이력 행이 적은 두 셀 중앙값은 파일 값과 같아야 한다 — "값이 그대로/얼마나 밀렸다" 는 행의 주장이 손으로 적힌 채 남지 않게
+        assertEquals(current.judgmentMedian(), load().cells().get("judgment").columns().get("power").median(), 1e-12, "이력 행의 판정 셀 중앙값이 파일과 다르다");
+        assertEquals(current.directionMedian(), load().cells().get("direction").columns().get("power").median(), 1e-12, "이력 행의 방향 셀 중앙값이 파일과 다르다");
         assertEquals(BASELINE_HISTORY.size(), BASELINE_HISTORY.stream().map(BaselineSeal::digest).distinct().count(), "같은 다이제스트가 두 행에 있다");
     }
 
@@ -121,6 +125,7 @@ class JudgmentBaselineTest {
         assertEquals(BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, j.medianReductionPp(), 1e-12);
         assertEquals(BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, j.reducedPointRatio(), 1e-12);
         assertEquals(BenchmarkRules.SWEEP_POINTS, j.sweepPoints());
+        assertEquals(BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, j.pointIgnorePp(), 1e-12, "기준선이 산출된 시점의 무시 폭 — 판정 함수 문턱이 파일에 남아야 회차 대조가 된다");
 
         // 등급별 대조 — 무효화 축은 같아야 한다. 부수 보고 축·표기 축은 다르면 보고 목록에 올릴 뿐 실패시키지 않는다(등급 규칙과 같은 엄격도)
         Map<String, String> current = new java.util.TreeMap<>();

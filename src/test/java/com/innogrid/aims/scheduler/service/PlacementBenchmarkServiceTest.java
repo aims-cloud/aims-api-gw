@@ -380,11 +380,12 @@ class PlacementBenchmarkServiceTest {
         MetricValue power = strategy(adversarial, "power").metrics().stream()
                 .filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow();
         assertEquals(5, power.samples(), "짝 지점 수가 변종 열 도입 전(5)과 다르다 — 짝 조건이 override 열까지 보고 있다");
-        assertEquals(6429.0022, power.median(), 1e-4);
+        // 허용 오차는 판정 규칙의 지점 비교 무시 폭(0.0002, 4자리 두 칸)과 같은 근거 — 실수 항등인 변경이 마지막 자리를 한 칸 뒤집을 수 있어 한 칸(1e-4)은 여유가 0 이다
+        assertEquals(6429.0022, power.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
         Cell sparse = cell(service.compare("sparse", "heavytail").boards().get(0), 90, "AVAILABLE");
         MetricValue spread = strategy(sparse, "power").metrics().stream()
                 .filter(m -> m.key().equals(BenchmarkRules.UNMEASURED_SPREAD)).findFirst().orElseThrow();
-        assertEquals(32.3241, spread.median(), 1e-4, "미계측 격차가 변종 열까지 포함해 계산됐다");
+        assertEquals(32.3241, spread.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, "미계측 격차가 변종 열까지 포함해 계산됐다");
     }
 
     /** 순환 배정 — 표본 순서대로 a,b,c,a,b,c… 링크 판만 부여하고 링크 없는 판은 아무것도 하지 않는다. */

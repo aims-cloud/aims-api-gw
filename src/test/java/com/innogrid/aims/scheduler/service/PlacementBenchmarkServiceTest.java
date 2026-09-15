@@ -1610,7 +1610,7 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("판정 셀과 같은 판의 30% 셀에서 총전력 지표가 유효하고 표본이 있다")
     @Test
     void the_judgment_cell_carries_a_usable_total_power_metric() {
-        Board board = service.compare(BenchmarkRules.JUDGMENT_BOARD, "heavytail").boards().get(0);
+        Board board = service.compare(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.JUDGMENT_DISTRIBUTION).boards().get(0);
         String powerControl = BenchmarkRules.JUDGMENT_POWER_CONTROL.name();
 
         for (int loadRatio : List.of(30, BenchmarkRules.JUDGMENT_LOAD_RATIO)) {
@@ -1639,7 +1639,7 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("판정 셀의 격차 열이 유효하고 표본이 있으며 기준선보다 큰 쪽에 있다")
     @Test
     void the_judgment_cell_carries_a_usable_gap_metric() {
-        Cell c = cell(service.compare(BenchmarkRules.JUDGMENT_BOARD, "heavytail").boards().get(0),
+        Cell c = cell(service.compare(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.JUDGMENT_DISTRIBUTION).boards().get(0),
                 BenchmarkRules.JUDGMENT_LOAD_RATIO, BenchmarkRules.JUDGMENT_POWER_CONTROL.name());
         MetricValue m = metric(strategy(c, "power"), BenchmarkRules.GAP_VS_PABFD);
 
@@ -1745,7 +1745,7 @@ class PlacementBenchmarkServiceTest {
                         nullSlotsSeen += m.points().size() - present.size();
 
                         if (m.valid()) {
-                            assertEquals(medianOf(present), m.median(), 1e-9,
+                            assertEquals(BenchmarkRules.median(present), m.median(), 1e-9,
                                     where + ": 중앙값이 지점 배열의 중앙값과 다르다 — 둘 중 하나가 다른 지점을 "
                                             + "보고 있다");
                         }
@@ -2321,19 +2321,6 @@ class PlacementBenchmarkServiceTest {
     private static MetricValue metric(StrategyResult s, String key) {
         return s.metrics().stream().filter(m -> m.key().equals(key)).findFirst()
                 .orElseThrow(() -> new AssertionError(s.strategyId() + " 에 " + key + " 지표가 없다"));
-    }
-
-    /**
-     * 지점 배열의 중앙값 — 응답과 <b>같은 반올림</b>으로 낸다. 반올림을 빼면 짝수 개의 평균에서 마지막
-     * 자리가 갈려 이 시험이 없는 결함을 신고한다.
-     */
-    private static double medianOf(List<Double> values) {
-        List<Double> sorted = values.stream().sorted().toList();
-        int mid = sorted.size() / 2;
-        double m = sorted.size() % 2 == 1
-                ? sorted.get(mid)
-                : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
-        return Math.round(m * 10000.0) / 10000.0;
     }
 
     private static Double median(StrategyResult s, String key) {

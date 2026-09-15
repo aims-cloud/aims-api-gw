@@ -1,7 +1,7 @@
 {
-  "schemaVersion" : 1,
+  "schemaVersion" : 2,
   "provenance" : {
-    "gitHead" : "f4094c4b4d375da5528e4e1bdcae23e5336e197c (refs/heads/feat/judgment-baseline)",
+    "gitHead" : "ca62b5ff05a27a48fe25a3bf17111e8da8ba8258 (refs/heads/feat/judgment-tolerance)",
     "productionPath" : "저장소 시험 · 코드 기본 SchedulerProperties · compareFresh(캐시 우회) — 배포 env 의 덮어쓰기는 반영하지 않는다",
     "distribution" : "heavytail",
     "boardDigests" : {
@@ -21,10 +21,10 @@
     "ruleAxisDigests" : {
       "banned" : "e621e7f43e72",
       "boards" : "9ab95b89dc3e",
-      "judgment" : "cfb639b97e76",
+      "judgment" : "4d55e10c3eb8",
       "measured" : "0189eec53480",
       "metrics" : "0435607b4998",
-      "prose" : "6f8bfe5c389e",
+      "prose" : "e8659f43d2f9",
       "sensitivity" : "3741559c00dd",
       "sweep" : "559301d27583"
     },
@@ -37,7 +37,8 @@
       "minPairedPoints" : 10,
       "medianReductionPp" : 2.0,
       "reducedPointRatio" : 0.8333333333333334,
-      "sweepPoints" : 12
+      "sweepPoints" : 12,
+      "pointIgnorePp" : 2.0E-4
     }
   },
   "cells" : {

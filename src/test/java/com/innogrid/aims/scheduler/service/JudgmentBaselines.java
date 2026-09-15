@@ -40,7 +40,7 @@ final class JudgmentBaselines {
     private JudgmentBaselines() {
     }
 
-    static final int SCHEMA_VERSION = 1;
+    static final int SCHEMA_VERSION = 2;   // 2: 판정 상수에 지점 비교 무시 폭(pointIgnorePp) 칸
 
     /** 기준선이 담는 열 — 판정 열과, 같은 셀에서 나오는 눈금·역산 변종. 열이 늘면 형식 버전을 올린다. */
     static final List<String> COLUMNS = List.of("power",
@@ -64,7 +64,7 @@ final class JudgmentBaselines {
     record ConcaveBlock(String board, Double powerMedian, Double idleFixedMedian) {}
 
     record JudgmentConstants(String board, int loadRatio, String powerControl, String directionCheckBoard, String distribution,
-                             int minPairedPoints, double medianReductionPp, double reducedPointRatio, int sweepPoints) {}
+                             int minPairedPoints, double medianReductionPp, double reducedPointRatio, int sweepPoints, double pointIgnorePp) {}
 
     record Provenance(String gitHead, String productionPath, String distribution, Map<String, String> boardDigests, String workloadDigest,
                       String configDigest, List<String> engineIds, Map<String, String> ruleAxisDigests, JudgmentConstants judgment) {}
@@ -105,7 +105,8 @@ final class JudgmentBaselines {
                 any.engineConfig().configDigest(), any.engineConfig().engineIds(), ruleDigests,
                 new JudgmentConstants(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.JUDGMENT_LOAD_RATIO, BenchmarkRules.JUDGMENT_POWER_CONTROL.name(),
                         BenchmarkRules.DIRECTION_CHECK_BOARD, BenchmarkRules.JUDGMENT_DISTRIBUTION, BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS,
-                        BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, BenchmarkRules.SWEEP_POINTS));
+                        BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, BenchmarkRules.SWEEP_POINTS,
+                        BenchmarkRules.JUDGMENT_POINT_IGNORE_PP));
         return new JudgmentBaseline(SCHEMA_VERSION, provenance, cells, phase, concave);
     }
 

@@ -193,9 +193,9 @@ class JudgmentRoundTest {
           .append(") · 하한 ").append(BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS).append('\n');
         sb.append("2. 표 A 판정 셀 — I 제한 중앙값 ").append(judgment.medianB()).append(" → ").append(judgment.medianN()).append(" · 축소 ").append(judgment.reductionPp())
           .append("%p (문턱 ").append(BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP).append(") · 축소 지점 ").append(judgment.reducedPoints()).append('/')
-          .append(judgment.requiredPoints()).append(" 필요 · 동률 ").append(judgment.tiedPoints()).append('\n');
+          .append(judgment.requiredPoints()).append(" 필요 · 동률 ").append(judgment.tiedPoints()).append(" · 악화 ").append(judgment.worsenedPoints()).append('\n');
         sb.append("3. 표 B 방향 셀 — I 제한 중앙값 ").append(direction.medianB()).append(" → ").append(direction.medianN())
-          .append(" · 부호 조건 ").append(direction.directionHolds() ? "충족" : "미충족").append('\n');
+          .append(" · 방향 조건(무시 폭 두 배 이상) ").append(direction.directionHolds() ? "충족" : "미충족").append('\n');
         sb.append("4. 표 C 민감도 — 눈금 열별 B→N (판정에 넣지 않음)\n");
         for (String col : scaleColumns()) {
             GapCellVerdict onScale = BenchmarkRules.judgeCell(points(baseline, "judgment", col), points(current, "judgment", col));
@@ -236,8 +236,8 @@ class JudgmentRoundTest {
         GapCellVerdict js = BenchmarkRules.judgeCell(points(current, "judgment", s0), points(current, "judgment", "power"));
         GapCellVerdict ds = BenchmarkRules.judgeCell(points(current, "direction", s0), points(current, "direction", "power"));
         sb.append("[관측 · 판정 아님] 한 실행 안 두 설정 열(s0 → power) 중앙값 차: 판정 셀 ").append(js.medianB()).append(" → ").append(js.medianN())
-          .append(" (차 ").append(js.reductionPp()).append("%p, 차가 양인 지점 ").append(js.reducedPoints()).append('/').append(js.pairedCount())
-          .append("), 방향 셀 ").append(ds.medianB()).append(" → ").append(ds.medianN()).append(" (차 ").append(ds.reductionPp()).append("%p, 차가 양인 지점 ")
+          .append(" (차 ").append(js.reductionPp()).append("%p, 차가 무시 폭 이상인 지점 ").append(js.reducedPoints()).append('/').append(js.pairedCount())
+          .append("), 방향 셀 ").append(ds.medianB()).append(" → ").append(ds.medianN()).append(" (차 ").append(ds.reductionPp()).append("%p, 차가 무시 폭 이상인 지점 ")
           .append(ds.reducedPoints()).append('/').append(ds.pairedCount()).append("). 규칙의 B·N 은 두 실행이고 이것은 두 열이다 — 문턱·항 번호와 견주지 않는다.\n");
         return sb.toString();
     }

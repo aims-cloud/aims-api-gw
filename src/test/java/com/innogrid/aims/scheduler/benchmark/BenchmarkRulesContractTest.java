@@ -69,7 +69,8 @@ class BenchmarkRulesContractTest {
             "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리 — 이후 판정 시점 고정값(316) 으로 의미 확정, 현 실측은 축 밖")),
             "sensitivity", List.of(new AxisSeal("3741559c00dd", "2026-09-14", "축 신설 — 한계 전력 눈금 3값(250·1000·0)·역산 차단 열·링크 게이트 열")),
             "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱"),
-                    new AxisSeal("cfb639b97e76", "2026-09-15", "판정 셀 분포(heavytail) 편입 — 소급 명문화: 값은 지금까지의 판정이 쓴 분포와 같고 앞으로의 선택 자유도만 닫는다. 판정 셀·문턱·격차 정의·판정 자격 불변")),
+                    new AxisSeal("cfb639b97e76", "2026-09-15", "판정 셀 분포(heavytail) 편입 — 소급 명문화: 값은 지금까지의 판정이 쓴 분포와 같고 앞으로의 선택 자유도만 닫는다. 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("4d55e10c3eb8", "2026-09-15", "사후 개정(관측 계기)·다음 회차 사전 등록 — 지점 비교 무시 폭 0.0002(4자리 두 칸)와 다음 회차 판정 주어(JUDGMENT_TARGET) 편입. 한계 전력 곡선 평가점 정정의 증거 묶음 대조에서 실수 항등인 변경이 26칸을 한 칸씩 뒤집은 것(전부 순위 근거 아닌 표시 지표, 판정 근거 열은 바이트 동일)을 본 뒤 예방으로 세운 잡음 하한. 소비된 회차는 지점 배열 부재로 이미 판정 불가라 소급 영향이 없고, 다음 회차에 대해서는 결과 코드 앞의 사전 등록이며 판정을 더 엄격하게 하는 방향. 지목이 무효화 축에 있어 판정 PR 은 바꿀 수 없다. 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")),
             "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
             "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)"),
                     new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설"),
@@ -78,7 +79,8 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음"),
                     new AxisSeal("4ecbed57aecb", "2026-09-15", "직전 배포 관측을 본 뒤의 사후 개정 — 기준선 보존(지점 배열째 저장소 파일·출처 인용·결측 적시), B·N 의 생산 경로를 저장소 시험 기본 설정 실행으로 고정(배포 응답은 참고), 기준선 재사용 규칙(판정 PR 은 파일 불변·갱신은 보고 게시 뒤 별도 커밋·이력 행에 중앙값 차), 사전 추정의 산출 방법 기재 의무. 판정 셀·문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("6f8bfe5c389e", "2026-09-15", "규칙 축 대조 등급 신설(사전 등록) — 판정 무효화 축(judgment·sweep·boards·measured)·부수 보고 무효화 축(sensitivity)·표기 축(metrics·banned·prose). 다음 판정의 출처 대조 절차이며 판정 셀·문턱·격차 정의·판정 자격 불변"),
-                    new AxisSeal("8f6dfdcf02e2", "2026-09-15", "기준선 봉인 뒤 규칙 보강(관측 수치와 무관한 절차 보강) — 기준선 재취득 예외(무효화 축·판·워크로드를 바꾸는 PR 은 판정을 게시하지 않는 한 같은 PR 에서 기준선을 다시 뜬다), 이력 행 칸(엔진 동등 리비전·산출 HEAD) 명시, 판정량 비교는 4자리 반올림 차로(부동소수 잡음 제거), 기준선 경로를 값 대신 상수 이름으로 인용. 판정 셀·문턱·격차 정의·판정 자격 불변")));
+                    new AxisSeal("8f6dfdcf02e2", "2026-09-15", "기준선 봉인 뒤 규칙 보강(관측 수치와 무관한 절차 보강) — 기준선 재취득 예외(무효화 축·판·워크로드를 바꾸는 PR 은 판정을 게시하지 않는 한 같은 PR 에서 기준선을 다시 뜬다), 이력 행 칸(엔진 동등 리비전·산출 HEAD) 명시, 판정량 비교는 4자리 반올림 차로(부동소수 잡음 제거), 기준선 경로를 값 대신 상수 이름으로 인용. 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("e8659f43d2f9", "2026-09-15", "사후 개정(관측 계기)·다음 회차 사전 등록 — 3항 축소 지점에 무시 폭, 4항 방향 셀 중앙값 차에 그 두 배(중앙값 축은 반올림이 겹쳐 최대 두 칸 잡음 — 밴드는 두 칸 초과, 여유 한 칸을 더해 네 칸) 적용 문장. 판정 주어를 회차마다 rules: 커밋이 하나로 지목한 결함으로(다음 회차 지목은 JUDGMENT_TARGET 인용), 지목은 judgment 축에 있어 판정 PR 안에서 바꾸면 기준선 판정 불가, 등급 규칙에 같은 단서. 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -106,6 +108,27 @@ class BenchmarkRulesContractTest {
         }
         assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 이력에 행(새 값·날짜·사유)을 더하는 'rules:' 커밋을 결과 코드보다 앞에 둔다\n  "
                 + String.join("\n  ", changed));
+    }
+
+    /** 판정 주어(회차 지목) 이력 — 회차 · 지목 문장 조각 · 등록한 rules: 커밋의 성격. 마지막 행이 현 규칙 문장에 그대로 있어야 한다. */
+    record TargetSeal(String round, String fragment, String note) {}
+
+    private static final List<TargetSeal> JUDGMENT_TARGET_HISTORY = List.of(
+            new TargetSeal("소비된 회차", "깨우기 벌점이 유휴비로 고정되던 일률 편향", "W 눈금 전환(PR #49) — 사전 등록 커밋 뒤 결과 커밋"),
+            new TargetSeal("다음 회차", BenchmarkRules.JUDGMENT_TARGET,
+                    "무시 폭 편입과 함께 결과 코드 앞에 등록 — judgment 축에 편입되어 판정 PR 은 바꿀 수 없다"));
+
+    @DisplayName("판정 주어의 회차 지목이 이력으로 봉인되고 현 규칙 문장에 그대로 있다 — 판정 PR 안에서 바뀌면 그 회차는 판정 불가")
+    @Test
+    void the_judgment_target_history_is_sealed() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        for (TargetSeal s : JUDGMENT_TARGET_HISTORY) {
+            assertTrue(r.contains(s.fragment()), s.round() + " 의 지목 문장이 규칙에서 사라졌다: " + s.fragment());
+        }
+        assertTrue(r.contains("기준선을 다시 뜨지 못한다"), "지목 변경이 기계로 막히는 이유(재취득 불가)가 규칙 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.ruleAxes().get("judgment").contains("target=" + BenchmarkRules.JUDGMENT_TARGET),
+                "지목은 판정 무효화 축에 있어야 판정 PR 이 바꿀 수 없다 — 표기 축이면 명예 규정이다");
+        assertTrue(BenchmarkRules.AXIS_GRADE_RULE.contains("판정 주어"), "등급 규칙에 판정 주어 단서가 있어야 한다");
     }
 
     @DisplayName("규칙 축 등급 세 집합은 서로 겹치지 않고 합이 축 전체와 같다 — 새 축은 등급을 정해야 생긴다")
@@ -545,6 +568,10 @@ class BenchmarkRulesContractTest {
         assertEquals(10, BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS,
                 "짝 하한을 바꾸면 판정 가능·불가의 경계가 움직인다 — 결과를 보고 바꿀 수 없게 여기서 고정한다");
         assertEquals(2.0, BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, 1e-9);
+        assertEquals(0.0002, BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, 1e-12, "무시 폭은 4자리 눈금 두 칸 — 한 칸은 반올림 동점 뒤집힘과 구별되지 않는다");
+        assertTrue(BenchmarkRules.JUDGMENT_POINT_IGNORE_PP <= BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP / 10000,
+                "무시 폭은 잡음 하한이지 문턱이 아니다 — 문턱에 견줄 크기가 되면 진짜 축소를 버린다");
+        assertTrue(BenchmarkRules.ruleAxes().get("judgment").contains("pointIgnorePp="), "무시 폭은 판정 함수의 문턱 상수라 judgment 축에 봉인한다");
         assertEquals(10.0 / 12, BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, 1e-9,
                 "개수가 아니라 비율이다 — 교집합이 하한과 같을 때 전 지점 축소를 요구하는 더 센 기준이 조용히 생기지 않게");
 
@@ -583,7 +610,7 @@ class BenchmarkRulesContractTest {
         // 어휘만 보면 문장을 통째로 갈아치우는 변경이 통과한다. 문턱 셋의 이름과 올림·실패 처리까지
         // 요구해, 절차의 뼈대가 빠진 문장은 빨간불이 되게 한다.
         for (String part : List.of("JUDGMENT_MIN_PAIRED_POINTS", "JUDGMENT_MEDIAN_REDUCTION_PP",
-                "JUDGMENT_REDUCED_POINT_RATIO", "ceil", "실패로 기록")) {
+                "JUDGMENT_REDUCED_POINT_RATIO", "JUDGMENT_POINT_IGNORE_PP", "ceil", "실패로 기록", "회차마다", "지목한 결함", "지목하지 않은 변경")) {
             assertTrue(r.contains(part),
                     "판정 절차에서 '" + part + "' 가 사라졌다 — 문턱을 어떻게 쓰는지가 문장에 없으면 "
                             + "다음 PR 이 같은 상수로 다른 절차를 만든다: " + r);

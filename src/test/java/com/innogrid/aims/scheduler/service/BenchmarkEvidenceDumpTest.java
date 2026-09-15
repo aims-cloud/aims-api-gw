@@ -42,6 +42,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>이 시험은 값을 단언하지 않는다. 산출물이 실제로 쓰였고 매니페스트가 등록부와 일치하는지만 본다 — 값 판정은 규칙·계약
  * 시험의 몫이다. 파일은 {@code build/} 아래라 저장소에 들어가지 않는다.</p>
+ *
+ * <p><b>판정 기준선 후보</b>도 여기서 같은 실행으로 쓴다({@code judgment-baseline-candidate.json}, 형식은 {@link JudgmentBaselines}).
+ * 기준선 파일({@link BenchmarkRules#JUDGMENT_BASELINE_PATH})을 갱신하려면 이 후보를 그 경로로 복사하고 기준선 이력에 행을 더한다 —
+ * 생산 경로가 하나여야 B 와 N 이 같은 조립에서 나온다. 매니페스트의 {@code entries} 는 건드리지 않는다(옛 매니페스트와의 대조 축 보존).</p>
  */
 class BenchmarkEvidenceDumpTest {
 
@@ -67,9 +71,11 @@ class BenchmarkEvidenceDumpTest {
 
         List<Map<String, Object>> entries = new ArrayList<>();
         List<String> engineIds = List.of();
+        Map<String, PlacementBenchmarkResponse> judgmentDistributionResponses = new LinkedHashMap<>();
         for (String board : clusters.boardIds()) {
             for (String dist : DISTRIBUTIONS) {
                 PlacementBenchmarkResponse r = service.compareFresh(board, dist);
+                if (dist.equals(BenchmarkRules.JUDGMENT_DISTRIBUTION)) judgmentDistributionResponses.put(board, r);
                 String configDigest = r.engineConfig().configDigest();
                 String boardDigest = clusters.digest(board);
                 assertEquals(boardDigest, r.boards().get(0).digest(), board + " 응답의 판 다이제스트가 등록부와 다르다");
@@ -96,7 +102,7 @@ class BenchmarkEvidenceDumpTest {
 
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("generatedAt", OffsetDateTime.now().toString());
-        manifest.put("gitHead", gitHead());
+        manifest.put("gitHead", JudgmentBaselines.gitHead());
         manifest.put("gitHeadNote", "커밋되지 않은 변경이 있으면 이 해시가 산출 소스와 다를 수 있다 — 청결 여부는 이 시험이 확인하지 않는다");
         manifest.put("regeneratedBy", "./gradlew test --tests '*BenchmarkEvidenceDumpTest*'");
         manifest.put("representation", "재직렬화 표현 — ApiResponse 봉투 없음, 맵 키 정렬, evaluatedAt 제거. 서빙 응답과 바이트가 같지 않다");
@@ -114,30 +120,21 @@ class BenchmarkEvidenceDumpTest {
         manifest.put("entries", entries);
         // 매니페스트 자신은 해시할 수 없으니(자기참조) entries 의 정규 직렬화 해시를 싣는다 — 보고서는 gitHead + entriesDigest 쌍을 인용한다
         manifest.put("entriesDigest", BenchmarkClusters.digestOf(mapper.writeValueAsString(entries)));
+
+        // 판정 기준선 후보 — entries 와 별도의 최상위 키로. 기준선 파일 갱신은 이 후보를 저장소 경로로 복사하는 것이다
+        String candidateJson = JudgmentBaselines.toJson(JudgmentBaselines.build(judgmentDistributionResponses, JudgmentBaselines.gitHead()));
+        Path candidate = OUT.resolve("judgment-baseline-candidate.json");
+        Files.writeString(candidate, candidateJson, StandardCharsets.UTF_8);
+        Map<String, Object> baselineCandidate = new LinkedHashMap<>();
+        baselineCandidate.put("file", candidate.getFileName().toString());
+        baselineCandidate.put("sha256", BenchmarkClusters.digestOfContent(candidateJson.getBytes(StandardCharsets.UTF_8)));
+        baselineCandidate.put("repositoryPath", BenchmarkRules.JUDGMENT_BASELINE_PATH);
+        baselineCandidate.put("howToAdopt", "후보를 repositoryPath 로 복사하고 JudgmentBaselineTest.BASELINE_HISTORY 에 행(다이제스트·날짜·사유·B 리비전·직전 B 와의 중앙값 차)을 더한다 — 판정 보고를 게시한 뒤 별도 커밋으로");
+        manifest.put("judgmentBaselineCandidate", baselineCandidate);
         Files.writeString(OUT.resolve("manifest.json"), mapper.writeValueAsString(manifest), StandardCharsets.UTF_8);
 
         assertEquals(clusters.boardIds().size() * DISTRIBUTIONS.size(), entries.size());
         assertEquals(entries.size(), entries.stream().map(e -> e.get("file")).distinct().count(), "산출 파일 이름이 겹친다 — 요청 축이 파일명에 빠졌다");
     }
 
-    /** 셸 없이 .git/HEAD 를 읽는다 — 보고서가 "어느 소스 리비전의 표인가" 를 지목할 수 있게. 작업 트리 청결 여부는 알 수 없다. */
-    static String gitHead() {
-        try {
-            Path git = Path.of(".git");
-            String head = Files.readString(git.resolve("HEAD"), StandardCharsets.UTF_8).trim();
-            if (!head.startsWith("ref:")) return head;
-            String ref = head.substring(4).trim();
-            Path refFile = git.resolve(ref);
-            if (Files.exists(refFile)) return Files.readString(refFile, StandardCharsets.UTF_8).trim() + " (" + ref + ")";
-            Path packed = git.resolve("packed-refs");
-            if (Files.exists(packed)) {
-                for (String line : Files.readAllLines(packed, StandardCharsets.UTF_8)) {
-                    if (line.endsWith(" " + ref)) return line.substring(0, line.indexOf(' ')) + " (" + ref + ", packed)";
-                }
-            }
-            return "unknown (" + ref + ")";
-        } catch (IOException e) {
-            return "unknown";
-        }
-    }
 }

@@ -1,0 +1,274 @@
+{
+  "schemaVersion" : 1,
+  "provenance" : {
+    "gitHead" : "f4094c4b4d375da5528e4e1bdcae23e5336e197c (refs/heads/feat/judgment-baseline)",
+    "productionPath" : "저장소 시험 · 코드 기본 SchedulerProperties · compareFresh(캐시 우회) — 배포 env 의 덮어쓰기는 반영하지 않는다",
+    "distribution" : "heavytail",
+    "boardDigests" : {
+      "concave" : "8e45125a043f",
+      "convex-misrated" : "d199d46fa3b0",
+      "convex-misrated-independent" : "ad4eb53bbcad",
+      "main" : "fb011848258b",
+      "main-independent" : "ef2d4c7b28b7"
+    },
+    "workloadDigest" : "5cb1baa7e752",
+    "configDigest" : "1487c10f4e97",
+    "engineIds" : [
+      "power",
+      "temperature",
+      "weighted"
+    ],
+    "ruleAxisDigests" : {
+      "banned" : "e621e7f43e72",
+      "boards" : "9ab95b89dc3e",
+      "judgment" : "cfb639b97e76",
+      "measured" : "0189eec53480",
+      "metrics" : "0435607b4998",
+      "prose" : "6f8bfe5c389e",
+      "sensitivity" : "3741559c00dd",
+      "sweep" : "559301d27583"
+    },
+    "judgment" : {
+      "board" : "convex-misrated",
+      "loadRatio" : 60,
+      "powerControl" : "AVAILABLE",
+      "directionCheckBoard" : "main",
+      "distribution" : "heavytail",
+      "minPairedPoints" : 10,
+      "medianReductionPp" : 2.0,
+      "reducedPointRatio" : 0.8333333333333334,
+      "sweepPoints" : 12
+    }
+  },
+  "cells" : {
+    "direction" : {
+      "board" : "main",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "columns" : {
+        "power" : {
+          "points" : [
+            20.4818,
+            15.6718,
+            15.6187,
+            14.9154,
+            14.9537,
+            16.0169,
+            17.6409,
+            18.3731,
+            17.5644,
+            17.5153,
+            21.5639,
+            21.5854
+          ],
+          "samples" : 12,
+          "median" : 17.5399
+        },
+        "power-idle-fixed" : {
+          "points" : [
+            18.2916,
+            17.5607,
+            17.2633,
+            17.1062,
+            17.2492,
+            13.1261,
+            18.9792,
+            19.7184,
+            14.4767,
+            19.4512,
+            18.5989,
+            18.668
+          ],
+          "samples" : 12,
+          "median" : 17.9262
+        },
+        "power-s0" : {
+          "points" : [
+            20.7497,
+            20.3458,
+            20.3654,
+            20.3105,
+            19.2041,
+            20.2984,
+            22.1358,
+            23.0734,
+            22.974,
+            22.3019,
+            21.8159,
+            21.3234
+          ],
+          "samples" : 12,
+          "median" : 21.0365
+        },
+        "power-s1000" : {
+          "points" : [
+            25.7752,
+            24.9865,
+            25.1498,
+            24.764,
+            24.0036,
+            25.79,
+            27.0041,
+            27.8112,
+            27.0645,
+            27.4965,
+            26.5075,
+            26.1659
+          ],
+          "samples" : 12,
+          "median" : 25.978
+        },
+        "power-s250" : {
+          "points" : [
+            8.0878,
+            7.4476,
+            7.293,
+            6.9701,
+            6.3816,
+            8.0609,
+            9.1367,
+            10.1157,
+            10.0926,
+            9.5578,
+            9.114,
+            8.4494
+          ],
+          "samples" : 12,
+          "median" : 8.2686
+        }
+      }
+    },
+    "judgment" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "columns" : {
+        "power" : {
+          "points" : [
+            13.362,
+            13.2326,
+            11.6745,
+            13.0673,
+            12.4571,
+            13.4101,
+            14.2829,
+            13.6246,
+            13.6116,
+            13.5961,
+            15.1201,
+            13.5293
+          ],
+          "samples" : 12,
+          "median" : 13.4697
+        },
+        "power-idle-fixed" : {
+          "points" : [
+            15.1844,
+            11.2649,
+            10.7268,
+            10.5033,
+            11.6865,
+            12.4355,
+            12.1709,
+            13.1567,
+            12.2938,
+            12.0825,
+            12.3869,
+            14.5127
+          ],
+          "samples" : 12,
+          "median" : 12.2324
+        },
+        "power-s0" : {
+          "points" : [
+            15.6579,
+            15.4844,
+            15.1479,
+            15.9749,
+            17.8957,
+            17.6703,
+            17.9144,
+            17.691,
+            17.588,
+            16.9263,
+            17.4824,
+            15.9792
+          ],
+          "samples" : 12,
+          "median" : 17.2043
+        },
+        "power-s1000" : {
+          "points" : [
+            19.6267,
+            20.2268,
+            19.2527,
+            19.5187,
+            20.0813,
+            22.2988,
+            21.8309,
+            22.0754,
+            21.3251,
+            21.9111,
+            21.0986,
+            19.7191
+          ],
+          "samples" : 12,
+          "median" : 20.6627
+        },
+        "power-s250" : {
+          "points" : [
+            6.5385,
+            6.3904,
+            5.3209,
+            5.691,
+            6.8703,
+            7.1884,
+            7.6864,
+            8.6053,
+            8.5878,
+            7.8239,
+            7.8784,
+            7.1527
+          ],
+          "samples" : 12,
+          "median" : 7.1706
+        }
+      }
+    }
+  },
+  "phase" : {
+    "convex-misrated-independent" : [
+      {
+        "phaseSeed" : 7,
+        "powerMedian" : 13.2058
+      },
+      {
+        "phaseSeed" : 11,
+        "powerMedian" : 13.4799
+      },
+      {
+        "phaseSeed" : 13,
+        "powerMedian" : 12.8288
+      }
+    ],
+    "main-independent" : [
+      {
+        "phaseSeed" : 7,
+        "powerMedian" : 20.7387
+      },
+      {
+        "phaseSeed" : 11,
+        "powerMedian" : 16.9532
+      },
+      {
+        "phaseSeed" : 13,
+        "powerMedian" : 18.8464
+      }
+    ]
+  },
+  "concave" : {
+    "board" : "concave",
+    "powerMedian" : 18.5705,
+    "idleFixedMedian" : 15.4008
+  }
+}

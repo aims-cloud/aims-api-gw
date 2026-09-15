@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -29,6 +30,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PowerAwareScoringTest {
 
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
+
+    /**
+     * 예약이 쌓이면 전력 복합 점수가 움직인다 — 그 폭이 정확히 {@code peiWeight × ΔPEI} 다(비낭비 항은 적격 노드에서 항등, 한계 전력
+     * 동적항은 α=1 에서 불변). 기저를 실측으로 되돌리면 폭이 0 이 되어 여기서 멈춘다.
+     */
+    @DisplayName("예약이 쌓인 노드의 전력 점수 상승분은 peiWeight × ΔPEI 와 같다")
+    @Test
+    void reserved_node_power_score_moves_by_pei_weight_times_delta() {
+        SchedulerProperties props = new SchedulerProperties();
+        PowerModel model = new PowerModel(props);
+        NodeResource plain = node("n", 45, 40, 387, 55);
+        NodeResource reserved = node("n", 45, 40, 387, 55);
+        reserved.reserve(1, 0, 0);
+
+        double dPei = model.placementPei(reserved) - model.placementPei(plain);
+        double dWaste = model.placementWasteScore(reserved) - model.placementWasteScore(plain);
+        double dMarginal = model.marginalScore(reserved, 1) - model.marginalScore(plain, 1);
+        assertTrue(dPei > 0, "판정 판 대표 노드는 예약이 쌓이면 PEI 상승");
+        assertEquals(0.0, dWaste, 1e-9, "비낭비 항등");
+        assertEquals(0.0, dMarginal, 1e-9, "α=1 · 자르기 비발현이라 한계 전력 불변");
+        double expected = props.getPower().getPeiWeight() * dPei;
+        double actual = props.getPower().getPeiWeight() * dPei + props.getPower().getWasteWeight() * dWaste + props.getPower().getMarginalWeight() * dMarginal;
+        assertEquals(expected, actual, 1e-12, "전력 복합 점수의 이동은 PEI 항 하나에서 온다");
+    }
 
     // ── 결함 A — 비례성이 저전력 노드를 벌하던 문제 ────────────────
 

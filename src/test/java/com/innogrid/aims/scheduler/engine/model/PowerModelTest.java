@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.engine.model;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.model.NodeResource;
 
@@ -139,6 +141,77 @@ class PowerModelTest {
     @Test
     void unmeasured_waste_neutral() {
         assertEquals(0.5, model.wasteScore(node(60, 0, 500)), 1e-9);
+    }
+
+    // ── 배치 점수용 실효 기저(PEI·비낭비) ─────────────────────────
+
+    /** 예약 0 이면 실효 입력이 실측과 같아 두 쌍이 비트 단위로 같다 — 첫 배치는 불변. */
+    @DisplayName("예약이 없으면 배치용 PEI·비낭비는 진단용과 비트 단위로 같다")
+    @Test
+    void placement_pei_and_waste_equal_diagnostics_without_reservation() {
+        for (NodeResource n : List.of(node(40, 250, 500), node(60, 440, 500), node(2, 108, 500))) {
+            assertEquals(model.normalizedPei(n), model.placementPei(n), 0.0, "예약 0: PEI 비트 동일");
+            assertEquals(model.wasteScore(n), model.placementWasteScore(n), 0.0, "예약 0: 비낭비 비트 동일");
+        }
+    }
+
+    /**
+     * 비낭비 항의 실수 항등 — 예약분 D·r 이 실효 전력과 이상 곡선 양쪽에 같이 들어가 상쇄된다. 클램프가 걸리지 않는(적격) 노드에서
+     * 두 값은 같고, 그래도 배치 점수가 이 항을 실효로 읽는 이유는 한 식 안에서 항마다 입력이 갈리지 않게 하기 위함이다.
+     */
+    @DisplayName("예약이 있어도 적격 노드에서 배치용 비낭비는 진단용과 같다 — 예약분이 상쇄되는 실수 항등")
+    @Test
+    void placement_waste_is_identical_on_eligible_reserved_nodes() {
+        NodeResource reserved = node(40, 440, 500);
+        reserved.reserve(2, 0, 0);                                   // 실효 65%, 가용 8×0.6−2 = 2.8 ≥ 1: 적격
+        NodeResource plain = node(40, 440, 500);
+
+        assertEquals(model.wasteScore(plain), model.placementWasteScore(reserved), 1e-9, "D·r 상쇄");
+        assertEquals(model.wasteScore(reserved), model.placementWasteScore(reserved), 1e-9, "진단용은 예약을 보지 않으니 같은 값");
+    }
+
+    /**
+     * PEI 는 예약이 쌓이면 움직인다 — 오르는 조건은 {@code 100·P > u·D}. 등록 판정 판의 노드는 전부 이 조건 안이라 상승하고,
+     * 저전력·고정격으로 조건을 깬 합성 노드에서는 내려간다. 기저를 실측으로 되돌리면 두 값이 같아져 여기서 멈춘다.
+     */
+    @DisplayName("예약이 쌓인 적격 노드에서 배치용 PEI 는 100·P > u·D 이면 오르고 아니면 내린다")
+    @Test
+    void placement_pei_moves_with_reservation_by_sign_condition() {
+        NodeResource rising = node(45, 387, 500);                   // 100·387 = 38700 > 45·350 = 15750 → 상승
+        rising.reserve(1, 0, 0);
+        NodeResource falling = node(60, 120, 1000);                 // 100·120 = 12000 < 60·700 = 42000 → 하락(합성 노드)
+        falling.reserve(1, 0, 0);
+
+        assertTrue(model.placementPei(rising) > model.normalizedPei(rising), "판정 판 대표 노드 — 예약이 쌓이면 PEI 상승");
+        assertTrue(model.placementPei(falling) < model.normalizedPei(falling), "저전력·고정격 합성 노드 — 조건 밖에서는 하락");
+        // 상승 폭의 식: ΔPEI = ((u+100r)/(P+D·r) − u/P) / normalizer
+        double r = 1.0 / 8, u = 45, p = 387, d = 500 - model.idlePower(rising);
+        double expected = ((u + 100 * r) / (p + d * r) - u / p) / 0.5;
+        assertEquals(expected, model.placementPei(rising) - model.normalizedPei(rising), 1e-9);
+    }
+
+    /** 실효 사용률이 100 에서 잘리는 노드에서만 비낭비 항등이 깨지고, 그런 노드는 자원 제약이 이미 거른다. */
+    @DisplayName("비낭비 항등이 깨지는 노드는 실효 사용률이 100 에 잘린 노드뿐이고 그 노드는 배치 대상이 아니다")
+    @Test
+    void placement_waste_diverges_only_on_clamped_ineligible_nodes() {
+        NodeResource clamped = node(90, 440, 500);
+        clamped.reserve(2, 0, 0);                                    // 실효 115 → 100 클램프, 가용 8×0.1−2 < 0
+
+        assertEquals(100.0, clamped.effectiveCpuUsagePercent(), 1e-9);
+        assertTrue(clamped.availableCpu() < 1, "가용 코어가 없어 어떤 요구도 수용하지 못한다");
+        assertNotEquals(model.wasteScore(clamped), model.placementWasteScore(clamped), "클램프 노드에서는 두 값이 갈린다");
+    }
+
+    @DisplayName("배치용 PEI·비낭비도 전력 미계측이면 중립값이다")
+    @Test
+    void placement_metrics_are_neutral_without_power() {
+        NodeResource noPower = node(40, 0, 500);
+        noPower.reserve(2, 0, 0);
+        NodeResource noCapacity = new NodeResource("mdc-01", "node-1", 8, 16384, 0, 40, 30, 30, 250, 0, 50, 1000, 500);
+
+        assertEquals(0.5, model.placementPei(noPower), 1e-9);
+        assertEquals(0.5, model.placementWasteScore(noPower), 1e-9);
+        assertEquals(0.5, model.placementWasteScore(noCapacity), 1e-9);
     }
 
     /** 활성 판정 기준은 설정값(기본 5%)이다. */

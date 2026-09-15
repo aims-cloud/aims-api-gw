@@ -110,8 +110,9 @@ public class PowerAwareScheduler implements SchedulingEngine {
             anyPowerMetric |= hasPower;
 
             // ── 전력 복합 점수 ──────────────────────────────────
-            double pei = powerModel.normalizedPei(node);
-            double waste = powerModel.wasteScore(node);
+            // PEI·비낭비도 실효 기저 — 한계 전력·가동 판정·자원 여유와 같은 입력(예약 반영)을 본다
+            double pei = powerModel.placementPei(node);
+            double waste = powerModel.placementWasteScore(node);
             double marginal = powerModel.marginalScore(node, workload.getRequiredCpu());
             double powerScore = hasPower
                     ? props.getPeiWeight() * pei

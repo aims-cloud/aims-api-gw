@@ -76,7 +76,8 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("d06e13cc090c", "2026-09-14", "총량 짝 조건 기준 집합 규칙 — override 없는 기본 설정 열로 고정. 배포 검증에서 변종 열 추가만으로 기존 열의 총량 표본이 5 → 1 로 줄어든 것을 확인한 뒤의 사후 개정. 판정 문턱·판정 셀·격차 정의는 불변"),
                     new AxisSeal("45be90af10f3", "2026-09-14", "배포 검증 수치를 본 뒤의 2차 사후 개정 — 민감도 검정을 두 행의 유효 지점 교집합 위 지점별 차로 정정하고 수준량/판정량 구분을 명시, 위상 구성 범위 보고 의무와 오목 판 결론의 차·역산 기여 슬롯 추가, 총량 짝 제외 지점의 응답 표기 의무. 판정 셀·판정 문턱·격차 정의·판정 자격은 불변"),
                     new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음"),
-                    new AxisSeal("4ecbed57aecb", "2026-09-15", "직전 배포 관측을 본 뒤의 사후 개정 — 기준선 보존(지점 배열째 저장소 파일·출처 인용·결측 적시), B·N 의 생산 경로를 저장소 시험 기본 설정 실행으로 고정(배포 응답은 참고), 기준선 재사용 규칙(판정 PR 은 파일 불변·갱신은 보고 게시 뒤 별도 커밋·이력 행에 중앙값 차), 사전 추정의 산출 방법 기재 의무. 판정 셀·문턱·격차 정의·판정 자격 불변")));
+                    new AxisSeal("4ecbed57aecb", "2026-09-15", "직전 배포 관측을 본 뒤의 사후 개정 — 기준선 보존(지점 배열째 저장소 파일·출처 인용·결측 적시), B·N 의 생산 경로를 저장소 시험 기본 설정 실행으로 고정(배포 응답은 참고), 기준선 재사용 규칙(판정 PR 은 파일 불변·갱신은 보고 게시 뒤 별도 커밋·이력 행에 중앙값 차), 사전 추정의 산출 방법 기재 의무. 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("6f8bfe5c389e", "2026-09-15", "규칙 축 대조 등급 신설(사전 등록) — 판정 무효화 축(judgment·sweep·boards·measured)·부수 보고 무효화 축(sensitivity)·표기 축(metrics·banned·prose). 다음 판정의 출처 대조 절차이며 판정 셀·문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -104,6 +105,22 @@ class BenchmarkRulesContractTest {
         }
         assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 이력에 행(새 값·날짜·사유)을 더하는 'rules:' 커밋을 결과 코드보다 앞에 둔다\n  "
                 + String.join("\n  ", changed));
+    }
+
+    @DisplayName("규칙 축 등급 세 집합은 서로 겹치지 않고 합이 축 전체와 같다 — 새 축은 등급을 정해야 생긴다")
+    @Test
+    void rule_axis_grades_partition_the_axes() {
+        Set<String> all = new TreeSet<>(BenchmarkRules.INVALIDATING_AXES);
+        assertTrue(all.addAll(BenchmarkRules.SECONDARY_REPORT_AXES), "부수 보고 축이 무효화 축과 겹친다");
+        assertTrue(all.addAll(BenchmarkRules.NOTATION_AXES), "표기 축이 다른 등급과 겹친다");
+        assertEquals(BenchmarkRules.INVALIDATING_AXES.size() + BenchmarkRules.SECONDARY_REPORT_AXES.size() + BenchmarkRules.NOTATION_AXES.size(),
+                all.size(), "등급 집합이 겹친다");
+        assertEquals(BenchmarkRules.ruleAxes().keySet(), all, "등급이 정해지지 않은 축이 있다 — 등급표(AXIS_GRADE_RULE)에 넣는 rules: 커밋이 먼저다");
+        assertTrue(BenchmarkRules.INVALIDATING_AXES.contains("judgment"), "판정 셀·문턱이 든 축은 무효화 축이어야 한다");
+        assertTrue(BenchmarkRules.SECONDARY_REPORT_AXES.contains("sensitivity"), "눈금 목록이 바뀌면 민감도 표가 대응하지 않는다");
+        assertTrue(BenchmarkRules.AXIS_GRADE_RULE.contains("판정 불가") && BenchmarkRules.AXIS_GRADE_RULE.contains("부수 보고"), BenchmarkRules.AXIS_GRADE_RULE);
+        assertTrue(BenchmarkRules.ruleAxes().get("prose").contains("axisGradeRule="), "등급표가 prose 축에 봉인돼야 한다");
+        assertFreeOfBannedClaims(BenchmarkRules.AXIS_GRADE_RULE, "축 등급 규칙 문장");
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")

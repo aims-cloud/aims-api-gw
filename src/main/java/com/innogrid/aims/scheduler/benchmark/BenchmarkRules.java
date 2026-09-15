@@ -291,6 +291,30 @@ public final class BenchmarkRules {
      * 변경을 같은 커밋에 담지 않는다. 계약 시험의 축 이력({@code RULE_AXIS_HISTORY})에 행을 더해야 시험이 통과하므로
      * 이력 누락은 기계가 막고, 커밋 순서는 리뷰가 본다.</p>
      */
+    /**
+     * 판정 보고 0단계(출처 대조)에서 규칙 축 8값을 <b>등급별로</b> 읽는다 — 전량 일치를 요구하면 절차 문장이 한 번만 고쳐져도 0단계가
+     * 상시 발동해 무력화된다. 등급표 자체를 규칙 축(prose)에 봉인하고, 세 집합의 합이 {@link #ruleAxes()} 의 키 집합과 같음을 계약 시험이 본다 —
+     * 축이 새로 생기면 등급을 정하지 않고는 시험이 통과하지 않는다.
+     *
+     * <ul>
+     *   <li>판정 무효화 축 — 불일치면 B 와 N 이 다른 규칙으로 산출된 것이라 1~4항 판정 불가.</li>
+     *   <li>부수 보고 무효화 축 — 1~4항 판정은 유효하되 그 축이 정의하는 부수 보고(민감도 표)는 판정 불가로 적는다.</li>
+     *   <li>표기 축 — 옛→새 다이제스트와 사유를 보고에 적고 진행한다.</li>
+     * </ul>
+     */
+    public static final java.util.Set<String> INVALIDATING_AXES = java.util.Set.of("judgment", "sweep", "boards", "measured");
+    public static final java.util.Set<String> SECONDARY_REPORT_AXES = java.util.Set.of("sensitivity");
+    public static final java.util.Set<String> NOTATION_AXES = java.util.Set.of("metrics", "banned", "prose");
+
+    /** 축 등급 규칙 문장 — prose 축에 봉인. 집합의 원소는 정렬해 적어 정규 문자열이 순서에 흔들리지 않게 한다. */
+    public static final String AXIS_GRADE_RULE =
+            "규칙 축 대조 등급. 판정 보고의 출처 대조는 기준선 파일의 규칙 축 다이제스트와 현 실행의 값을 축마다 견주되 등급별로 읽는다. "
+                    + "판정 무효화 축 " + new java.util.TreeSet<>(INVALIDATING_AXES) + " 은 하나라도 다르면 1~4항 판정 불가(B 와 N 이 다른 규칙의 산출물). "
+                    + "부수 보고 무효화 축 " + new java.util.TreeSet<>(SECONDARY_REPORT_AXES) + " 은 다르면 1~4항 판정은 유효하되 그 축이 정의하는 부수 보고(민감도 표)를 판정 불가로 적는다 — "
+                    + "눈금 목록이 바뀌면 기준선의 눈금 열이 현 실행의 열과 대응하지 않기 때문이다. "
+                    + "표기 축 " + new java.util.TreeSet<>(NOTATION_AXES) + " 은 다르면 옛→새 다이제스트와 사유를 보고에 적고 진행한다. "
+                    + "세 집합의 합은 규칙 축 전체와 같아야 하며 새 축은 등급을 정해야 생긴다.";
+
     public static Map<String, String> ruleAxes() {
         java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
         // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(계약 시험 DECLARED_KEY_DIGEST)와는 목적이 달라 값이 같지 않다
@@ -317,7 +341,8 @@ public final class BenchmarkRules {
         axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " ")
                 + "|sensitivityRule=" + SENSITIVITY_RULE.replaceAll("\\s+", " ") + "|phaseRule=" + PHASE_RULE.replaceAll("\\s+", " ")
                 + "|concaveConclusion=" + CONCAVE_CONCLUSION_TEMPLATE.replaceAll("\\s+", " ")
-                + "|pairingRule=" + PAIRING_RULE.replaceAll("\\s+", " "));
+                + "|pairingRule=" + PAIRING_RULE.replaceAll("\\s+", " ")
+                + "|axisGradeRule=" + AXIS_GRADE_RULE.replaceAll("\\s+", " "));
         return axes;
     }
 

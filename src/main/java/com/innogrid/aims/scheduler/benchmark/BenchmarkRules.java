@@ -573,6 +573,145 @@ public final class BenchmarkRules {
                     + "사전 추정을 적을 때는 산출 방법(해석적 추정인지 변경 코드 실행값인지)을 함께 적는다.";
 
 
+    // ── 판정 계산 함수 — 규칙 문장의 1~4항을 식으로. 축 성분이 아니라 다이제스트는 불변이고, 단위 시험이 경계값을 잠근다 ──
+
+    /** 격차 판정의 결말 — 판정 불가는 성공도 실패도 아니다. */
+    public enum GapOutcome { UNJUDGEABLE, PASS, FAIL }
+
+    /**
+     * 셀 하나의 판정 계산 결과({@link #judgeCell}). 규칙 1~3항의 재료를 전부 실어 보고 표가 손계산으로 돌아가지 않게 한다.
+     *
+     * @param pairedCount     |I| — 두 배열 모두 null 이 아닌 지점 수
+     * @param excludedB       B 에서 null 인 지점 수
+     * @param excludedN       N 에서 null 인 지점 수
+     * @param medianB         median{g_i(B): i∈I} — <b>I 제한</b> 중앙값. 응답의 {@code median}(그 행의 유효 지점 전부) 과 다를 수 있다
+     * @param medianN         median{g_i(N): i∈I}
+     * @param reductionPp     medianB − medianN (양수가 축소). 규칙 2항은 reductionPp ≥ JUDGMENT_MEDIAN_REDUCTION_PP
+     * @param reducedPoints   g_i(B) − g_i(N) &gt; 0 인 i 의 수(엄격히 작아진 지점만)
+     * @param tiedPoints      g_i(B) = g_i(N) 인 i 의 수 — 축소가 아니다
+     * @param requiredPoints  ceil(JUDGMENT_REDUCED_POINT_RATIO × |I|)
+     * @param judgeable       1항 — |I| ≥ JUDGMENT_MIN_PAIRED_POINTS
+     * @param medianReduced   2항 — judgeable 이고 reductionPp ≥ 문턱
+     * @param pointsReduced   3항 — judgeable 이고 reducedPoints ≥ requiredPoints
+     * @param directionHolds  4항의 셀 쪽 조건 — judgeable 이고 medianN &lt; medianB(크기 문턱 없음)
+     */
+    public record GapCellVerdict(int pairedCount, int excludedB, int excludedN, Double medianB, Double medianN, Double reductionPp,
+                                 int reducedPoints, int tiedPoints, int requiredPoints,
+                                 boolean judgeable, boolean medianReduced, boolean pointsReduced, boolean directionHolds) {
+    }
+
+    /** 두 셀을 결합한 격차 판정({@link #judgeGap}). {@code reason} 은 결말에 이른 조항을 한 줄로 적는다. */
+    public record GapVerdict(GapOutcome outcome, String reason, GapCellVerdict judgment, GapCellVerdict direction) {
+    }
+
+    /**
+     * 두 행의 유효 지점 교집합 위 <b>지점별 차의 중앙값</b>({@link #SENSITIVITY_RULE} 의 추정량, {@link #medianOfPairedDifferences}).
+     * 두 중앙값의 차({@link GapCellVerdict#reductionPp}) 와 다른 양이다.
+     */
+    public record PairedDifference(int pairedCount, int excludedA, int excludedB, Double median) {
+    }
+
+    /**
+     * 규칙 1~3항과 4항의 셀 쪽 조건을 한 셀에서 계산한다. 입력은 {@link #GAP_VS_PABFD} 의 {@code points}(길이 {@link #SWEEP_POINTS}, null 자리 보존) 둘이다.
+     *
+     * <p>중앙값은 교집합 I 위에서 내고 응답과 같은 4자리 반올림을 한다 — 응답의 {@code median} 은 그 행의 유효 지점 전부로 낸 값이라
+     * 유효 지점 집합이 다르면 여기 값과 다르다. 판정은 이 값으로 한다.</p>
+     *
+     * @throws IllegalArgumentException 배열이 null 이거나 길이가 SWEEP_POINTS 가 아니면 — 지점 지수 i 가 대응하지 않는 배열은 판정 자료가 아니다
+     */
+    public static GapCellVerdict judgeCell(List<Double> baseline, List<Double> next) {
+        requireSweep(baseline, "B");
+        requireSweep(next, "N");
+        List<Double> bOnI = new java.util.ArrayList<>();
+        List<Double> nOnI = new java.util.ArrayList<>();
+        int excludedB = 0, excludedN = 0, reduced = 0, tied = 0;
+        for (int i = 0; i < SWEEP_POINTS; i++) {
+            Double b = baseline.get(i), n = next.get(i);
+            if (b == null) excludedB++;
+            if (n == null) excludedN++;
+            if (b == null || n == null) continue;
+            bOnI.add(b);
+            nOnI.add(n);
+            if (b - n > 0) reduced++;
+            else if (b.doubleValue() == n.doubleValue()) tied++;
+        }
+        int paired = bOnI.size();
+        boolean judgeable = paired >= JUDGMENT_MIN_PAIRED_POINTS;
+        Double medianB = median(bOnI), medianN = median(nOnI);
+        Double reduction = (medianB == null || medianN == null) ? null : round4(medianB - medianN);
+        int required = (int) Math.ceil(JUDGMENT_REDUCED_POINT_RATIO * paired);
+        boolean medianReduced = judgeable && reduction != null && reduction >= JUDGMENT_MEDIAN_REDUCTION_PP;
+        boolean pointsReduced = judgeable && reduced >= required;
+        boolean directionHolds = judgeable && medianN != null && medianB != null && medianN < medianB;
+        return new GapCellVerdict(paired, excludedB, excludedN, medianB, medianN, reduction, reduced, tied, required,
+                judgeable, medianReduced, pointsReduced, directionHolds);
+    }
+
+    /**
+     * 규칙 1~4항의 결합. 한 셀이라도 판정 불가면 전체 판정 불가(성공으로 쓰지 않는다). 판정 셀이 2·3항을 모두 만족하고 방향 셀에서
+     * medianN &lt; medianB 이면 성공, 그 밖은 실패 — 판정판만 좋아진 결과는 실패로 기록한다.
+     */
+    public static GapVerdict judgeGap(GapCellVerdict judgment, GapCellVerdict direction) {
+        if (judgment == null || direction == null) throw new IllegalArgumentException("판정 셀과 방향 셀의 결과가 모두 필요하다");
+        if (!judgment.judgeable() || !direction.judgeable()) {
+            return new GapVerdict(GapOutcome.UNJUDGEABLE, "1항 — 교집합 |I| 가 " + JUDGMENT_MIN_PAIRED_POINTS + " 미만인 셀이 있다(판정 셀 "
+                    + judgment.pairedCount() + ", 방향 셀 " + direction.pairedCount() + "). 성공도 실패도 아니다", judgment, direction);
+        }
+        if (!judgment.medianReduced()) {
+            return new GapVerdict(GapOutcome.FAIL, "2항 — 판정 셀 중앙값 축소 " + judgment.reductionPp() + "%p 가 문턱 " + JUDGMENT_MEDIAN_REDUCTION_PP + "%p 에 못 미친다",
+                    judgment, direction);
+        }
+        if (!judgment.pointsReduced()) {
+            return new GapVerdict(GapOutcome.FAIL, "3항 — 판정 셀 축소 지점 " + judgment.reducedPoints() + " 이 필요 " + judgment.requiredPoints() + " 에 못 미친다(동률 "
+                    + judgment.tiedPoints() + ")", judgment, direction);
+        }
+        if (!direction.directionHolds()) {
+            return new GapVerdict(GapOutcome.FAIL, "4항 — 방향 셀 중앙값이 줄지 않았다(B " + direction.medianB() + " → N " + direction.medianN()
+                    + "). 판정판만 좋아진 결과는 판이 우리 엔진 쪽으로 기울었을 가능성을 배제하지 못한다", judgment, direction);
+        }
+        return new GapVerdict(GapOutcome.PASS, "1~4항 충족 — 판정 셀 축소 " + judgment.reductionPp() + "%p(지점 " + judgment.reducedPoints() + "/" + judgment.pairedCount()
+                + "), 방향 셀 " + direction.medianB() + " → " + direction.medianN(), judgment, direction);
+    }
+
+    /**
+     * {@link #SENSITIVITY_RULE} 의 추정량 — 두 행의 유효 지점 교집합 I' 위 지점별 차 {@code a_i − b_i} 의 중앙값. 교집합이 비면 median 은 null.
+     * 판정량(두 중앙값의 차)이 아니라 수준량이다.
+     */
+    public static PairedDifference medianOfPairedDifferences(List<Double> a, List<Double> b) {
+        requireSweep(a, "a");
+        requireSweep(b, "b");
+        List<Double> diffs = new java.util.ArrayList<>();
+        int excludedA = 0, excludedB = 0;
+        for (int i = 0; i < SWEEP_POINTS; i++) {
+            Double x = a.get(i), y = b.get(i);
+            if (x == null) excludedA++;
+            if (y == null) excludedB++;
+            if (x != null && y != null) diffs.add(x - y);
+        }
+        return new PairedDifference(diffs.size(), excludedA, excludedB, median(diffs));
+    }
+
+    /** null 을 뺀 값들의 중앙값을 응답과 같은 4자리 반올림으로. 비면 null. 시험의 손 구현을 대신하는 단일 정의다. */
+    public static Double median(List<Double> values) {
+        List<Double> sorted = values.stream().filter(java.util.Objects::nonNull).sorted().toList();
+        if (sorted.isEmpty()) return null;
+        int mid = sorted.size() / 2;
+        double m = sorted.size() % 2 == 1 ? sorted.get(mid) : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
+        return round4(m);
+    }
+
+    private static Double round4(double v) {
+        if (!Double.isFinite(v)) return null;
+        return Math.round(v * 10000.0) / 10000.0;
+    }
+
+    private static void requireSweep(List<Double> points, String name) {
+        if (points == null || points.size() != SWEEP_POINTS) {
+            throw new IllegalArgumentException(name + " 의 지점 배열은 길이 " + SWEEP_POINTS + "(null 자리 보존) 이어야 한다: "
+                    + (points == null ? "null" : "길이 " + points.size()));
+        }
+    }
+
     /**
      * 한계 전력 눈금 민감도 3열의 {@code marginalScaleWatts} — 250(포화 발현: {@link #MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT} 아래) ·
      * 1000(무포화) · 0(0 이하 = 노드 정격 분모, 구 방식). 한 열은 "달라졌다" 까지만 말하고 방향을 가르지 못한다 — 세 열이어야

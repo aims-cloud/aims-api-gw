@@ -77,7 +77,8 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("45be90af10f3", "2026-09-14", "배포 검증 수치를 본 뒤의 2차 사후 개정 — 민감도 검정을 두 행의 유효 지점 교집합 위 지점별 차로 정정하고 수준량/판정량 구분을 명시, 위상 구성 범위 보고 의무와 오목 판 결론의 차·역산 기여 슬롯 추가, 총량 짝 제외 지점의 응답 표기 의무. 판정 셀·판정 문턱·격차 정의·판정 자격은 불변"),
                     new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음"),
                     new AxisSeal("4ecbed57aecb", "2026-09-15", "직전 배포 관측을 본 뒤의 사후 개정 — 기준선 보존(지점 배열째 저장소 파일·출처 인용·결측 적시), B·N 의 생산 경로를 저장소 시험 기본 설정 실행으로 고정(배포 응답은 참고), 기준선 재사용 규칙(판정 PR 은 파일 불변·갱신은 보고 게시 뒤 별도 커밋·이력 행에 중앙값 차), 사전 추정의 산출 방법 기재 의무. 판정 셀·문턱·격차 정의·판정 자격 불변"),
-                    new AxisSeal("6f8bfe5c389e", "2026-09-15", "규칙 축 대조 등급 신설(사전 등록) — 판정 무효화 축(judgment·sweep·boards·measured)·부수 보고 무효화 축(sensitivity)·표기 축(metrics·banned·prose). 다음 판정의 출처 대조 절차이며 판정 셀·문턱·격차 정의·판정 자격 불변")));
+                    new AxisSeal("6f8bfe5c389e", "2026-09-15", "규칙 축 대조 등급 신설(사전 등록) — 판정 무효화 축(judgment·sweep·boards·measured)·부수 보고 무효화 축(sensitivity)·표기 축(metrics·banned·prose). 다음 판정의 출처 대조 절차이며 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("8f6dfdcf02e2", "2026-09-15", "기준선 봉인 뒤 규칙 보강(관측 수치와 무관한 절차 보강) — 기준선 재취득 예외(무효화 축·판·워크로드를 바꾸는 PR 은 판정을 게시하지 않는 한 같은 PR 에서 기준선을 다시 뜬다), 이력 행 칸(엔진 동등 리비전·산출 HEAD) 명시, 판정량 비교는 4자리 반올림 차로(부동소수 잡음 제거), 기준선 경로를 값 대신 상수 이름으로 인용. 판정 셀·문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -608,9 +609,9 @@ class BenchmarkRulesContractTest {
     @Test
     void the_gap_judgment_rule_states_how_the_baseline_is_kept() {
         String r = BenchmarkRules.GAP_JUDGMENT_RULE;
-        for (String part : List.of("기준선 보존", "지점 배열째", BenchmarkRules.JUDGMENT_BASELINE_PATH, "출처", "결측 항목",
-                "같은 생산 경로", "판정 PR 은 기준선 파일을 수정하지 않는다", "판정 보고를 게시한 뒤", "중앙값 차", "산출 방법",
-                "JUDGMENT_DISTRIBUTION")) {
+        for (String part : List.of("기준선 보존", "지점 배열째", "JUDGMENT_BASELINE_PATH", "출처", "결측 항목",
+                "같은 생산 경로", "1~4항 판정을 게시하는 PR 은 기준선 파일을 수정하지 않는다", "판정 보고를 게시한 뒤", "예외:", "판정을 게시하지 않는 한",
+                "중앙값 차", "산출 HEAD", "4자리로 반올림한 값으로 문턱과 견준다", "산출 방법", "JUDGMENT_DISTRIBUTION")) {
             assertTrue(r.contains(part), "판정 절차에서 '" + part + "' 가 사라졌다: " + r);
         }
         assertEquals(com.innogrid.aims.scheduler.service.PlacementBenchmarkService.HEAVYTAIL, BenchmarkRules.JUDGMENT_DISTRIBUTION,

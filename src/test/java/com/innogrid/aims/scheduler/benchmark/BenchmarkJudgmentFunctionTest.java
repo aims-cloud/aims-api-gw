@@ -75,6 +75,20 @@ class BenchmarkJudgmentFunctionTest {
         assertEquals(pp, BenchmarkRules.judgeCell(b, shifted(b, pp)).reductionPp(), 1e-12, "축소 폭은 B − N 이며 양수가 축소다");
     }
 
+    /**
+     * 두 중앙값은 각각 4자리라 차는 0.0001 의 배수인데, 부동소수 뺄셈은 그 아래 자리에 잡음을 남긴다 — 2.0012 − 0.0012 는
+     * 1.9999999999999998 이다. 반올림 없이 견주면 정확히 문턱만큼 줄어든 실행이 미달로 접힌다.
+     */
+    @DisplayName("2항 — 비교는 4자리로 반올림한 차로 한다: 2.0012 → 0.0012 는 잡음 아래 1.9999…이지만 축소 2.0 으로 충족이다")
+    @Test
+    void the_threshold_comparison_uses_the_rounded_difference() {
+        GapCellVerdict v = BenchmarkRules.judgeCell(constant(2.0012, 0), constant(0.0012, 0));
+
+        assertTrue(2.0012 - 0.0012 < 2.0, "이 시험의 전제 — 원시 뺄셈은 2.0 아래로 떨어진다");
+        assertEquals(2.0, v.reductionPp(), 1e-12);
+        assertTrue(v.medianReduced(), "반올림 없이 견주면 잡음이 판정을 뒤집는다");
+    }
+
     @DisplayName("3항 — 엄격히 작아진 지점만 세고 동률은 축소가 아니며 음수로 내려간 것도 축소다")
     @Test
     void reduced_points_are_strict_and_signed() {

@@ -89,6 +89,41 @@ class BenchmarkJudgmentFunctionTest {
         assertTrue(v.medianReduced(), "반올림 없이 견주면 잡음이 판정을 뒤집는다");
     }
 
+    /**
+     * 4자리 눈금 한 칸(0.0001)은 실수 항등인 변경이 반올림 동점을 뒤집어 만들 수 있는 차라 축소로 세지 않는다. 두 칸(0.0002)부터 축소다 —
+     * 경계는 포함(≥). 무시 폭 안의 차는 동률로 센다. 4항의 방향 셀도 같은 폭이다.
+     */
+    @DisplayName("3·4항 — 4자리 한 칸 차는 동률, 두 칸부터 축소이며 경계는 포함이다")
+    @Test
+    void one_display_step_is_a_tie_and_two_steps_are_a_reduction() {
+        List<Double> b = ramp();
+        GapCellVerdict oneStep = BenchmarkRules.judgeCell(b, shifted(b, 0.0001));
+        GapCellVerdict twoSteps = BenchmarkRules.judgeCell(b, shifted(b, 0.0002));
+        GapCellVerdict oneStepWorse = BenchmarkRules.judgeCell(b, shifted(b, -0.0001));
+
+        GapCellVerdict twoStepsWorse = BenchmarkRules.judgeCell(b, shifted(b, -0.0002));
+        GapCellVerdict threeSteps = BenchmarkRules.judgeCell(b, shifted(b, 0.0003));
+        GapCellVerdict fourSteps = BenchmarkRules.judgeCell(b, shifted(b, 0.0004));
+
+        assertEquals(0, oneStep.reducedPoints(), "한 칸 차는 반올림 동점 뒤집힘과 구별되지 않는다");
+        assertEquals(N, oneStep.tiedPoints());
+        assertFalse(oneStep.directionHolds(), "4항도 한 칸 차로는 방향이 성립하지 않는다");
+        assertEquals(N, twoSteps.reducedPoints(), "두 칸부터 축소 — 경계 포함");
+        assertEquals(0, twoSteps.tiedPoints());
+        assertFalse(twoSteps.directionHolds(), "4항은 중앙값 축이라 두 칸 잡음이 가능 — 폭의 두 배 미만은 방향이 아니다");
+        assertFalse(threeSteps.directionHolds(), "타이트 하한은 세 칸이지만 여유 한 칸을 둔 결과 — 세 칸은 아직 방향이 아니다");
+        assertTrue(fourSteps.directionHolds(), "무시 폭의 두 배(네 칸)부터 방향 성립 — 경계 포함");
+        assertEquals(0, oneStepWorse.reducedPoints());
+        assertEquals(N, oneStepWorse.tiedPoints(), "한 칸 악화도 동률이다 — 악화로 세면 잡음이 방향을 만든다");
+        assertEquals(0, oneStepWorse.worsenedPoints());
+        assertEquals(0, twoStepsWorse.reducedPoints());
+        assertEquals(0, twoStepsWorse.tiedPoints(), "두 칸 악화는 동률이 아니다 — 동률로 접으면 악화가 보고에서 사라진다");
+        assertEquals(N, twoStepsWorse.worsenedPoints());
+        for (GapCellVerdict v : List.of(oneStep, twoSteps, oneStepWorse, twoStepsWorse, threeSteps)) {
+            assertEquals(v.pairedCount(), v.reducedPoints() + v.tiedPoints() + v.worsenedPoints(), "회계 항등 — 세 칸의 합은 |I| 다");
+        }
+    }
+
     @DisplayName("3항 — 엄격히 작아진 지점만 세고 동률은 축소가 아니며 음수로 내려간 것도 축소다")
     @Test
     void reduced_points_are_strict_and_signed() {
@@ -101,6 +136,7 @@ class BenchmarkJudgmentFunctionTest {
         GapCellVerdict v = BenchmarkRules.judgeCell(b, n);
         assertEquals(N - 2, v.reducedPoints());
         assertEquals(1, v.tiedPoints());
+        assertEquals(1, v.worsenedPoints(), "악화 지점은 따로 센다");
         assertEquals((int) Math.ceil(BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO * N), v.requiredPoints(), "필요 지점 수는 ceil(비율 × |I|)");
         assertTrue(v.pointsReduced(), "10/12 이상이면 충족");
 
@@ -155,8 +191,10 @@ class BenchmarkJudgmentFunctionTest {
         GapCellVerdict directionFlat = BenchmarkRules.judgeCell(ramp(), ramp());
         GapCellVerdict directionUp = BenchmarkRules.judgeCell(ramp(), shifted(ramp(), -1.0));
 
-        assertEquals(GapOutcome.PASS, BenchmarkRules.judgeGap(judgment, directionDown).outcome(), "방향 셀은 크기 문턱 없이 부호만 본다");
+        assertEquals(GapOutcome.PASS, BenchmarkRules.judgeGap(judgment, directionDown).outcome(), "방향 셀은 무시 폭의 두 배 밖에서 크기 문턱 없이 부호만 본다");
         assertEquals(GapOutcome.FAIL, BenchmarkRules.judgeGap(judgment, directionFlat).outcome(), "같으면 줄지 않은 것이다");
+        GapCellVerdict directionNoise = BenchmarkRules.judgeCell(ramp(), shifted(ramp(), 0.0003));
+        assertEquals(GapOutcome.FAIL, BenchmarkRules.judgeGap(judgment, directionNoise).outcome(), "무시 폭의 두 배 미만은 방향이 아니다");
         GapVerdict up = BenchmarkRules.judgeGap(judgment, directionUp);
         assertEquals(GapOutcome.FAIL, up.outcome());
         assertTrue(up.reason().startsWith("4항"), up.reason());

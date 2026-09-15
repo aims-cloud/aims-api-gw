@@ -313,7 +313,9 @@ public final class BenchmarkRules {
                     + "부수 보고 무효화 축 " + new java.util.TreeSet<>(SECONDARY_REPORT_AXES) + " 은 다르면 1~4항 판정은 유효하되 그 축이 정의하는 부수 보고(민감도 표)를 판정 불가로 적는다 — "
                     + "눈금 목록이 바뀌면 기준선의 눈금 열이 현 실행의 열과 대응하지 않기 때문이다. "
                     + "표기 축 " + new java.util.TreeSet<>(NOTATION_AXES) + " 은 다르면 옛→새 다이제스트와 사유를 보고에 적고 진행한다. "
-                    + "세 집합의 합은 규칙 축 전체와 같아야 하며 새 축은 등급을 정해야 생긴다.";
+                    + "세 집합의 합은 규칙 축 전체와 같아야 하며 새 축은 등급을 정해야 생긴다. "
+                    + "단서: 판정 주어(회차 지목)는 judgment 축에 편입되어 있어 바뀌면 판정 무효화 축 불일치로 기준선이 판정 불가가 된다 — 판정을 게시하는 PR 은 "
+                    + "기준선을 다시 뜨지 못하므로 그 PR 안에서 지목을 바꿀 수 없다.";
 
     public static Map<String, String> ruleAxes() {
         java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
@@ -335,7 +337,8 @@ public final class BenchmarkRules {
         axes.put("judgment", "board=" + JUDGMENT_BOARD + "|loadRatio=" + JUDGMENT_LOAD_RATIO + "|powerControl=" + JUDGMENT_POWER_CONTROL
                 + "|minPairedPoints=" + JUDGMENT_MIN_PAIRED_POINTS + "|medianReductionPp=" + JUDGMENT_MEDIAN_REDUCTION_PP
                 + "|reducedPointRatio=" + JUDGMENT_REDUCED_POINT_RATIO + "|directionCheckBoard=" + DIRECTION_CHECK_BOARD
-                + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP + "|distribution=" + JUDGMENT_DISTRIBUTION);
+                + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP + "|distribution=" + JUDGMENT_DISTRIBUTION
+                + "|pointIgnorePp=" + JUDGMENT_POINT_IGNORE_PP + "|target=" + JUDGMENT_TARGET);
         axes.put("banned", String.join(",", BANNED_CLAIMS));
         // 절차·정의 문장은 공백을 하나로 접어 따로 봉인한다 — 서식 편집 소음은 걸러지고, 문장을 바꿔 쓰면 이 축만 깨진다
         axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " ")
@@ -524,8 +527,30 @@ public final class BenchmarkRules {
     public static final double JUDGMENT_REDUCED_POINT_RATIO = 10.0 / 12;
 
     /**
+     * 지점 비교의 <b>무시 폭</b>(%p) — 4자리 눈금 두 칸. 지점값 g_i 는 응답과 같은 4자리라 차는 0.0001 의 배수인데, 실수에서 항등인 변경이
+     * binary64 마지막 비트로 4자리 반올림 동점을 뒤집어 정확히 한 칸(0.0001)을 움직이는 것이 관측됐다(한계 전력 곡선 평가점 정정의 증거 묶음 대조에서
+     * 26칸 — 전부 순위 근거가 아닌 표시 지표였고 판정 근거 열은 바이트 동일이었다. 판정량에 같은 뒤집힘이 오는 것은 같은 기전의 외삽이라 이 폭은
+     * 관측이 아니라 예방으로 세운다).
+     * 지점값 g_i 는 반올림 전 전력에서 한 번만 4자리로 양자화되므로(단일 양자화가 이 폭의 전제다) 한 칸 차는 반올림 경계 하나로 설명되고
+     * 두 칸부터는 그렇지 않다 — 두 칸 미만의 차는 축소도 악화도 아닌 동률로 본다. 3항(축소 지점 수)에 이 폭을, 4항(방향 셀 중앙값 차)에는
+     * 그 두 배를 적용한다: 중앙값은 짝수 개 지점의 평균에 반올림이 한 번 더 겹쳐 지점 한 칸 잡음이 중앙값을 최대 두 칸 움직이므로 방향 밴드는 두 칸을
+     * 넘어야 하고(타이트 하한 세 칸), 여유 한 칸을 더해 네 칸(폭의 두 배)으로 둔다 — "두 배" 는 규칙이 아니라 이 유도의 결과다. 2항(중앙값 문턱
+     * 2.0%p)에는 적용하지 않는다 — 문턱이 이 폭의 만 배라 무의미하다. 이 값은 잡음 하한이지 문턱이 아니며, 판정을 더 엄격하게 만드는 방향이라
+     * 결과를 보고 넓힐 수 없다. 관측을 계기로 세운 값이라 소비된 회차에 대해서는 사후 개정이고(그 회차는 이미 지점 배열 부재로 판정 불가라
+     * 소급 영향 없음) 다음 회차에 대해서는 사전 등록이다.
+     */
+    public static final double JUDGMENT_POINT_IGNORE_PP = 0.0002;
+
+    /**
+     * 다음 회차의 <b>판정 주어</b>(고치는 결함의 지목). judgment 축(판정 무효화 축)에 편입한다 — 지목이 바뀌면 기준선이 판정 불가가 되고,
+     * 판정을 게시하는 PR 은 기준선을 다시 뜨지 못하므로 그 PR 안에서 주어를 바꾸는 길이 기계로 막힌다. 지목을 바꾸는 것은 판정 없는 PR 의 재취득 예외
+     * 경로다. 규칙 문장이 이 값을 그대로 인용한다.
+     */
+    public static final String JUDGMENT_TARGET = "배치 점수의 PEI·비낭비 두 항이 실측 CPU·실측 W 로 고정되어 같은 점수 안에서 예약을 반영하는 항(isActive·동적항·실효 여유율)과 기저가 갈리던 결함";
+
+    /**
      * <b>방향만</b> 확인하는 판 — 주 결과판이다. 판정 자체는 {@link #JUDGMENT_BOARD} 한 곳에서만 하고
-     * (진실 원본이 둘이 되면 유리한 판을 고르는 자유도가 생긴다), 이 판에서는 크기 문턱 없이 부호가 같은지만 본다.
+     * (진실 원본이 둘이 되면 유리한 판을 고르는 자유도가 생긴다), 이 판에서는 무시 폭의 두 배(중앙값 축 잡음 하한) 밖에서 부호가 같은지만 본다.
      * 판정판만 좋아진 결과는 판이 우리 엔진 쪽으로 기울었을 가능성을 배제하지 못하므로 <b>실패</b>로 적는다.
      */
     public static final String DIRECTION_CHECK_BOARD = BenchmarkClusters.MAIN;
@@ -549,14 +574,21 @@ public final class BenchmarkRules {
                     + "통과가 성립하지 않으므로 전체를 성공으로 쓰지 않는다. "
                     + "2. 중앙값 — median{g_i(N): i∈I} ≤ median{g_i(B): i∈I} − JUDGMENT_MEDIAN_REDUCTION_PP. "
                     + "두 중앙값은 같은 집합 I 위에서 낸다. "
-                    + "3. 지점 — g_i(B) − g_i(N) > 0 인 i 가 ceil(JUDGMENT_REDUCED_POINT_RATIO × |I|) 이상. "
+                    + "3. 지점 — round4(g_i(B) − g_i(N)) ≥ JUDGMENT_POINT_IGNORE_PP 인 i 가 ceil(JUDGMENT_REDUCED_POINT_RATIO × |I|) 이상. "
                     + "'축소' 는 부호 있는 값이 작아지는 것이며(LOWER_IS_BETTER), 절댓값이 아니다 — 음수가 되는 것도 "
-                    + "축소다. 기준선보다 엄격히 작은 지점만 센다(같으면 축소가 아니다). "
+                    + "축소다. 기준선보다 무시 폭 이상 엄격히 작은 지점만 센다 — 무시 폭 미만의 차(4자리 한 칸)는 반올림 동점 뒤집힘과 구별되지 않아 "
+                    + "동률로 본다(같으면 축소가 아니다). "
                     + "4. 방향 일치 — DIRECTION_CHECK_BOARD(주 결과판) 의 같은 셀에서 1 을 만족하고 "
-                    + "median{g_i(N)} < median{g_i(B)}(같은 I 위) 이어야 한다. 크기 문턱은 두지 않는다. "
+                    + "round4(median{g_i(B)} − median{g_i(N)}) ≥ 2 × JUDGMENT_POINT_IGNORE_PP(같은 I 위) 이어야 한다 — 중앙값은 반올림이 한 번 더 겹쳐 최대 두 칸 잡음이 "
+                    + "가능하므로 밴드는 두 칸을 넘어야 하고(최소 세 칸) 여유 한 칸을 더해 폭의 두 배(네 칸)로 둔다. 그 밖의 크기 문턱은 두지 않는다. "
                     + "불일치면 실패로 기록한다(판정판만 좋아진 결과는 판이 우리 엔진 쪽으로 기울었을 가능성을 "
                     + "배제하지 못한다). "
-                    + "고치는 대상은 일률 편향 하나이며 포화는 판정 대상이 아니다. 기준선 값은 상수에 넣지 않는다 — "
+                    + "고치는 대상은 회차마다 그 회차의 rules: 커밋이 하나로 지목한 결함이며, 포화는 어느 회차에서도 판정 대상이 아니다. "
+                    + "회차별 지목 — 소비된 회차: 깨우기 벌점이 유휴비로 고정되던 일률 편향. 다음 회차(JUDGMENT_TARGET): " + JUDGMENT_TARGET + ". "
+                    + "지목하지 않은 변경은 같은 회차의 판정에 얹지 않는다. "
+                    + "지목은 judgment 축(판정 무효화 축)에 편입되어 있어 판정을 게시하는 PR 안에서 바꾸면 기준선이 판정 불가가 되고 그 PR 은 기준선을 다시 뜨지 못한다 — "
+                    + "지목을 바꾸는 것은 판정 없는 PR 의 재취득 경로다. 지목 이력은 계약 시험이 봉인한다. "
+                    + "기준선 값은 상수에 넣지 않는다 — "
                     + "값은 판을 실행해야 나오고, 상수에 박으면 실행 순서가 커밋 순서를 강제한다. "
                     + "이 지표의 정의와 문턱 상수는 이 PR 에서만 바뀌고 다음 PR 은 참조만 한다. "
                     + "판정 자격(폐쇄형): 판정·방향 판정은 JUDGMENT_BOARD·DIRECTION_CHECK_BOARD 두 판의 power 행에서만 성립하며, "
@@ -594,16 +626,17 @@ public final class BenchmarkRules {
      * @param medianN         median{g_i(N): i∈I}
      * @param reductionPp     round4(medianB − medianN) (양수가 축소). 규칙 2항은 이 값 ≥ JUDGMENT_MEDIAN_REDUCTION_PP — 두 중앙값이 이미 4자리라
      *                        차도 0.0001 의 배수이고, 반올림은 부동소수 잡음만 없앤다(예: 2.0012 − 0.0012 = 1.9999999999999998 을 2.0 으로)
-     * @param reducedPoints   g_i(B) − g_i(N) &gt; 0 인 i 의 수(엄격히 작아진 지점만)
-     * @param tiedPoints      g_i(B) = g_i(N) 인 i 의 수 — 축소가 아니다
+     * @param reducedPoints   round4(g_i(B) − g_i(N)) ≥ JUDGMENT_POINT_IGNORE_PP 인 i 의 수(무시 폭 이상 작아진 지점만)
+     * @param tiedPoints      |round4(g_i(B) − g_i(N))| &lt; JUDGMENT_POINT_IGNORE_PP 인 i 의 수 — 무시 폭 안은 동률이고 축소가 아니다
+     * @param worsenedPoints  round4(g_i(B) − g_i(N)) ≤ −JUDGMENT_POINT_IGNORE_PP 인 i 의 수 — reduced + tied + worsened = pairedCount
      * @param requiredPoints  ceil(JUDGMENT_REDUCED_POINT_RATIO × |I|)
      * @param judgeable       1항 — |I| ≥ JUDGMENT_MIN_PAIRED_POINTS
      * @param medianReduced   2항 — judgeable 이고 reductionPp ≥ 문턱
      * @param pointsReduced   3항 — judgeable 이고 reducedPoints ≥ requiredPoints
-     * @param directionHolds  4항의 셀 쪽 조건 — judgeable 이고 medianN &lt; medianB(크기 문턱 없음)
+     * @param directionHolds  4항의 셀 쪽 조건 — judgeable 이고 round4(medianB − medianN) ≥ 2 × JUDGMENT_POINT_IGNORE_PP(그 밖의 크기 문턱 없음)
      */
     public record GapCellVerdict(int pairedCount, int excludedB, int excludedN, Double medianB, Double medianN, Double reductionPp,
-                                 int reducedPoints, int tiedPoints, int requiredPoints,
+                                 int reducedPoints, int tiedPoints, int worsenedPoints, int requiredPoints,
                                  boolean judgeable, boolean medianReduced, boolean pointsReduced, boolean directionHolds) {
     }
 
@@ -631,7 +664,7 @@ public final class BenchmarkRules {
         requireSweep(next, "N");
         List<Double> bOnI = new java.util.ArrayList<>();
         List<Double> nOnI = new java.util.ArrayList<>();
-        int excludedB = 0, excludedN = 0, reduced = 0, tied = 0;
+        int excludedB = 0, excludedN = 0, reduced = 0, tied = 0, worsened = 0;
         for (int i = 0; i < SWEEP_POINTS; i++) {
             Double b = baseline.get(i), n = next.get(i);
             if (b == null) excludedB++;
@@ -639,8 +672,10 @@ public final class BenchmarkRules {
             if (b == null || n == null) continue;
             bOnI.add(b);
             nOnI.add(n);
-            if (b - n > 0) reduced++;
-            else if (b.doubleValue() == n.doubleValue()) tied++;
+            double d = round4(b - n);
+            if (d >= JUDGMENT_POINT_IGNORE_PP) reduced++;
+            else if (Math.abs(d) < JUDGMENT_POINT_IGNORE_PP) tied++;
+            else worsened++;
         }
         int paired = bOnI.size();
         boolean judgeable = paired >= JUDGMENT_MIN_PAIRED_POINTS;
@@ -649,14 +684,14 @@ public final class BenchmarkRules {
         int required = (int) Math.ceil(JUDGMENT_REDUCED_POINT_RATIO * paired);
         boolean medianReduced = judgeable && reduction != null && reduction >= JUDGMENT_MEDIAN_REDUCTION_PP;
         boolean pointsReduced = judgeable && reduced >= required;
-        boolean directionHolds = judgeable && medianN != null && medianB != null && medianN < medianB;
-        return new GapCellVerdict(paired, excludedB, excludedN, medianB, medianN, reduction, reduced, tied, required,
+        boolean directionHolds = judgeable && reduction != null && reduction >= 2 * JUDGMENT_POINT_IGNORE_PP;
+        return new GapCellVerdict(paired, excludedB, excludedN, medianB, medianN, reduction, reduced, tied, worsened, required,
                 judgeable, medianReduced, pointsReduced, directionHolds);
     }
 
     /**
      * 규칙 1~4항의 결합. 한 셀이라도 판정 불가면 전체 판정 불가(성공으로 쓰지 않는다). 판정 셀이 2·3항을 모두 만족하고 방향 셀에서
-     * medianN &lt; medianB 이면 성공, 그 밖은 실패 — 판정판만 좋아진 결과는 실패로 기록한다.
+     * round4(medianB − medianN) ≥ 2 × JUDGMENT_POINT_IGNORE_PP 이면 성공, 그 밖은 실패 — 판정판만 좋아진 결과는 실패로 기록한다.
      */
     public static GapVerdict judgeGap(GapCellVerdict judgment, GapCellVerdict direction) {
         if (judgment == null || direction == null) throw new IllegalArgumentException("판정 셀과 방향 셀의 결과가 모두 필요하다");
@@ -670,10 +705,10 @@ public final class BenchmarkRules {
         }
         if (!judgment.pointsReduced()) {
             return new GapVerdict(GapOutcome.FAIL, "3항 — 판정 셀 축소 지점 " + judgment.reducedPoints() + " 이 필요 " + judgment.requiredPoints() + " 에 못 미친다(동률 "
-                    + judgment.tiedPoints() + ")", judgment, direction);
+                    + judgment.tiedPoints() + " · 악화 " + judgment.worsenedPoints() + ")", judgment, direction);
         }
         if (!direction.directionHolds()) {
-            return new GapVerdict(GapOutcome.FAIL, "4항 — 방향 셀 중앙값이 줄지 않았다(B " + direction.medianB() + " → N " + direction.medianN()
+            return new GapVerdict(GapOutcome.FAIL, "4항 — 방향 셀 중앙값이 무시 폭의 두 배 이상 줄지 않았다(B " + direction.medianB() + " → N " + direction.medianN()
                     + "). 판정판만 좋아진 결과는 판이 우리 엔진 쪽으로 기울었을 가능성을 배제하지 못한다", judgment, direction);
         }
         return new GapVerdict(GapOutcome.PASS, "1~4항 충족 — 판정 셀 축소 " + judgment.reductionPp() + "%p(지점 " + judgment.reducedPoints() + "/" + judgment.pairedCount()

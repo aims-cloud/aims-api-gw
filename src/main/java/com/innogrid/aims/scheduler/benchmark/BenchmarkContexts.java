@@ -122,6 +122,15 @@ public final class BenchmarkContexts {
     }
 
     /**
+     * 판이 선언한 링크 행렬을 실은 사본 — 링크 판의 전략 컨텍스트와 <b>제외 프로브 컨텍스트 둘 다</b> 이 오버로드를 쓴다.
+     * 프로브만 행렬 없이 만들면 C5 제외가 프로브 분포에서 빠져 {@code probeExclusionReasons} 가 실제와 달라진다.
+     */
+    public static PlacementContext copyOf(List<NodeResource> base, SchedulingPolicy policy,
+                                          ConstraintEvaluator evaluator, LinkMatrix links) {
+        return build(base, policy, evaluator, links == null ? LinkMatrix.EMPTY : links);
+    }
+
+    /**
      * <b>유일한 조립 지점.</b> 두 공개 {@code copyOf} 가 모두 여기를 지난다 — 노드 사본·정렬·평가기 검사가 한 곳에 있고,
      * 링크 원장은 인자로 받는다. 노드 목록에서 만드는 경로는 원장이 없어 {@link LinkMatrix#EMPTY} 를 넘기고, 컨텍스트에서
      * 잇는 경로는 그 컨텍스트의 원장을 넘긴다. 판 파일이 링크를 선언하게 되면 이 인자에 판의 행렬을 넣는 오버로드 하나로

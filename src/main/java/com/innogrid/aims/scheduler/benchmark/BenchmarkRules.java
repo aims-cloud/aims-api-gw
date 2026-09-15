@@ -27,7 +27,13 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
  * 통전·격차 판정 문턱 고정, 문구 사실성 정정 등. 판정 상수(격차 문턱·지점 수 비율)는 비교 API 가 이미 실행 가능한
  * 상태에서 등록됐다. 따라서 "결과를 볼 수 없는 상태에서 규칙을 정했다" 가 아니라 <b>"규칙 클래스가 결과 코드보다
  * 먼저 존재했고 이후 개정은 전부 커밋 이력에 남아 있다"</b> 가 이 저장소가 주장할 수 있는 전부다.
- * 새 판이나 새 판정 셀을 더할 때는 그 규칙 커밋을 결과·판 파일 커밋보다 앞에 둔다.</p>
+ * 새 판이나 새 판정 셀을 더할 때는 그 규칙 커밋을 결과·판 파일 커밋보다 앞에 둔다. 2026-09-14 개정(방법론 변경 PR 의
+ * {@code rules:} 커밋): 민감도 눈금 3값·역산 차단 열·링크 판·위상 독립 판 2장·오목 판 상수, 실측 불변조건을 판정 시점
+ * 고정값과 현 실측값으로 분리, 판정 자격을 폐쇄형 문장으로 — 여기까지는 해당 판 파일·결과 코드보다 앞선 커밋이다.
+ * <b>예외 둘</b>(같은 날, 배포 검증 수치를 본 뒤의 <b>사후 개정</b>): 총량 짝 조건의 기준 집합({@link #PAIRING_RULE} — 변종 열 추가만으로
+ * 기존 열의 총량 표본이 5 → 1 로 줄어드는 것을 보고 고정)과, 민감도 검정의 추정량 정정·위상 범위 보고 의무·오목 판 결론 슬롯·짝 제외
+ * 표기 의무(부수 검정의 추정량 정의와 보고 의무만 바뀌었고 판정 셀·판정 문턱·격차 정의·판정 자격은 불변). 두 경우 모두 결과 코드 커밋이
+ * 규칙 커밋 바로 뒤에 온다.</p>
  */
 public final class BenchmarkRules {
 
@@ -132,6 +138,62 @@ public final class BenchmarkRules {
     public static final double CONVEX_POWER_EXPONENT = 1.6;
 
     /**
+     * 오목 생성식 판의 지수 β = 1/{@link #CONVEX_POWER_EXPONENT}. 볼록 판이 엔진의 선형 가정을 한쪽으로 기울였다면 이 판은
+     * 정확히 반대쪽으로 기울인다 — 한 문장으로 설명되는 대칭이 근거의 전부이고 <b>물리적 근거는 없다</b>. 이 판은 세 경로(생성
+     * 전력·역산 유휴·오라클)가 함께 바뀌므로 판정·방향 판정 자격이 없고 요인 분해용이다({@link #CONCAVE_CONCLUSION_TEMPLATE}).
+     * 판 파일이 진실이고 이 상수는 사본이다.
+     */
+    public static final double CONCAVE_POWER_EXPONENT = 0.625;
+
+    /** 오목 판 id. 판 등록부의 같은 문자열과 계약 시험이 대조한다. seed 는 하나(legacy 위상) — β 와 위상 두 축을 한 판에 걸지 않는다. */
+    public static final String CONCAVE_BOARD = "concave";
+
+    /**
+     * 링크 판 id. 주 결과판의 노드 블록을 바이트 그대로 재사용하고 {@code links:} 절과 워크로드 데이터 MDC 순환 배정만 더한 판이다.
+     * 링크 점수를 섞는 엔진은 {@code weighted} 하나뿐이라 이 판에서 값이 달라지는 열은 {@code weighted} 계열뿐이며, 비교는 판 사이가
+     * 아니라 <b>같은 판 안의 게이트 on/off 열 쌍</b>({@code weighted} · {@code weighted-affinity})으로 한다 — netScore 경로의
+     * 작동 확인이며 전력 판정과 무관하다.
+     */
+    public static final String LINK_BOARD = "link";
+
+    /** 링크 게이트를 켠 가중 점수 열 id. override 는 {@code affinityEnabled=true} 하나다. */
+    public static final String WEIGHTED_AFFINITY_COLUMN = "weighted-affinity";
+
+    /**
+     * 위상 독립 판 2장 — 방향판·판정판과 노드 블록이 바이트 동일하고 {@code phaseMode: independent}·{@code seeds:} 만 다르다.
+     * legacy 위상은 {@code (seed·31^L + hash(nodeId)) mod 1000} 이라 nodeId 길이가 같은 판에서 seed 는 전 노드에 같은 상수만 더한다 —
+     * seed 를 늘려도 표본이 늘지 않는 결함이고, 판정 경로(두 판) 에서 그 결함을 닫는 것이 이 두 판의 존재 이유다.
+     */
+    public static final List<String> PHASE_INDEPENDENT_BOARDS = List.of("main-independent", "convex-misrated-independent");
+
+    /** 위상 독립 판이 선언하는 seed 수 — 판 파일 {@code seeds:} 의 길이. 값 자체는 판 파일이 진실이고 여기는 개수만 사전 등록한다. */
+    public static final int PHASE_SEED_COUNT = 3;
+
+    /**
+     * 위상 독립 혼합 — SplitMix64 마무리 함수를 <b>코드 안에</b> 둔다(JDK {@code SplittableRandom} 의 값열에 기대지 않는다).
+     * {@code z = seed × GOLDEN ^ hash(nodeId); z = (z ^ z>>>30) × M1; z = (z ^ z>>>27) × M2; z ^= z>>>31} 의 하위 10진 3자리를 위상으로.
+     * 상수를 여기 적어 규칙 축에 봉인한다 — 상수가 바뀌면 위상 독립 판의 값이 통째로 바뀌기 때문이다.
+     */
+    public static final long PHASE_MIX_GOLDEN = 0x9E3779B97F4A7C15L;
+    public static final long PHASE_MIX_M1 = 0xBF58476D1CE4E5B9L;
+    public static final long PHASE_MIX_M2 = 0x94D049BB133111EBL;
+
+    /**
+     * 위상 구성 규칙 — 결과보다 먼저. seed 별 Board 는 서로 <b>독립 복제</b>이고 판정 규칙(교집합 I·중앙값·지점 비율·방향)은
+     * 한 Board 안의 지점 지수 i 위에서만 정의된다. 한 Board 의 12지점을 seed 수만큼 겹쳐 세지 않는다. seed 사이의 결합은 Board 별
+     * 중앙값 수준에서만 하며, 보고는 중앙값 n값과 최소~최대 범위(기술통계, 검정 아님) 로 한정한다 — n=3 으로는 어떤 검정도 하지 않는다.
+     */
+    public static final String PHASE_RULE =
+            "위상 구성 규칙. phaseMode=independent 판은 seeds 마다 Board 를 하나씩 내며(boards[].phaseSeed), 각 Board 는 독립 복제다. "
+                    + "판정 규칙의 지점 지수 i 는 한 Board 안에서만 정의되고 Board 사이의 지점을 합쳐 세지 않는다. "
+                    + "seed 사이의 결합은 Board 별 중앙값 수준에서만 하고, 보고는 중앙값 n값과 최소~최대 범위(기술통계)로 한정한다 — "
+                    + "n=3 으로는 검정하지 않는다. legacy 판(phaseMode 없음)은 seed 가 전 노드 위상에 같은 상수만 더하므로 seed 를 늘려도 표본이 아니다. "
+                    + "위상 독립 판은 판정·방향 판정 자격이 없고 판정을 뒤집지도 구제하지도 않는다. 다만 판정을 보고할 때 짝 판(main-independent · "
+                    + "convex-misrated-independent)의 같은 좌표 셀 중앙값 3값과 그 범위를 함께 싣는 것은 의무이며 생략은 판정 보고의 결격 사유다 — "
+                    + "방향 일치 항의 폭 참고로만 읽고 통과/실패 판정에는 넣지 않는다. 그 범위가 JUDGMENT_MEDIAN_REDUCTION_PP 를 넘으면 단일 legacy 판 값은 "
+                    + "그 폭 안의 한 점이라는 사실을 판정 보고에 함께 적는다(문턱과 같은 크기의 변동이 위상 구성 하나에 붙어 있다는 뜻이다).";
+
+    /**
      * 정격 어긋남 판에서 엔진에게 알려 주는 정격의 어긋남 크기 — 한쪽은 {@code ×(1+r)} 로 과대,
      * 다른 쪽은 {@code ×(1−r)} 로 과소 믿게 한다. 생성식이 쓰는 정격은 그대로다.
      *
@@ -217,17 +279,25 @@ public final class BenchmarkRules {
         axes.put("sweep", "loadRatios=" + LOAD_RATIOS + "|sweepPoints=" + SWEEP_POINTS + "|randomSeeds=" + RANDOM_SEEDS
                 + "|memoryMbPerCore=" + MEMORY_MB_PER_CORE + "|poweredOnCpuPercent=" + POWERED_ON_CPU_PERCENT
                 + "|cooldownMinutes=" + COOLDOWN_MINUTES_FOR_BENCHMARK);
-        axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO);
-        // 판 실측에서 온 불변조건 — 규칙 문턱과 성격이 달라 따로 둔다(바뀌면 "규칙 변경" 이 아니라 "판 데이터 변경" 이다).
-        // 값 자체는 계약 시험의 실측 대조가 지킨다
-        axes.put("measured", "maxRealMarginalWatts=" + MAX_REAL_MARGINAL_WATTS);
+        // 판 파일 값의 사전 등록(교차 검증) — 지수·비율·위상 방식·seed 수·혼합 상수. 판 파일이 진실이고 계약 시험이 대조한다
+        axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO
+                + "|concaveExponent=" + CONCAVE_POWER_EXPONENT + "|concaveBoard=" + CONCAVE_BOARD + "|linkBoard=" + LINK_BOARD
+                + "|phaseIndependentBoards=" + PHASE_INDEPENDENT_BOARDS + "|phaseSeedCount=" + PHASE_SEED_COUNT
+                + "|phaseMix=" + Long.toHexString(PHASE_MIX_GOLDEN) + "," + Long.toHexString(PHASE_MIX_M1) + "," + Long.toHexString(PHASE_MIX_M2));
+        // 판정 시점 고정값 — 판정 전제가 걸리는 값. 현 실측(MAX_REAL_MARGINAL_WATTS)은 판 데이터라 축에 넣지 않는다
+        axes.put("measured", "maxRealMarginalWatts=" + MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT);
+        axes.put("sensitivity", "marginalScaleWatts=" + SENSITIVITY_MARGINAL_SCALE_WATTS + "|idleReconstructionDisabledColumn="
+                + IDLE_RECONSTRUCTION_DISABLED_COLUMN + "|weightedAffinityColumn=" + WEIGHTED_AFFINITY_COLUMN);
         axes.put("judgment", "board=" + JUDGMENT_BOARD + "|loadRatio=" + JUDGMENT_LOAD_RATIO + "|powerControl=" + JUDGMENT_POWER_CONTROL
                 + "|minPairedPoints=" + JUDGMENT_MIN_PAIRED_POINTS + "|medianReductionPp=" + JUDGMENT_MEDIAN_REDUCTION_PP
                 + "|reducedPointRatio=" + JUDGMENT_REDUCED_POINT_RATIO + "|directionCheckBoard=" + DIRECTION_CHECK_BOARD
                 + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP);
         axes.put("banned", String.join(",", BANNED_CLAIMS));
         // 절차·정의 문장은 공백을 하나로 접어 따로 봉인한다 — 서식 편집 소음은 걸러지고, 문장을 바꿔 쓰면 이 축만 깨진다
-        axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " "));
+        axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " ")
+                + "|sensitivityRule=" + SENSITIVITY_RULE.replaceAll("\\s+", " ") + "|phaseRule=" + PHASE_RULE.replaceAll("\\s+", " ")
+                + "|concaveConclusion=" + CONCAVE_CONCLUSION_TEMPLATE.replaceAll("\\s+", " ")
+                + "|pairingRule=" + PAIRING_RULE.replaceAll("\\s+", " "));
         return axes;
     }
 
@@ -271,13 +341,14 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(GENERATOR_POWER, "총전력(생성식 기준)", "W",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
-                    "전 전략의 배치 건수가 같을 때만 총량을 비교한다. 건수가 다르면 건당 값을 쓴다. "
+                    "기본 설정 열(override 없는 열 — 엔진·자원전용·대조군) 전부의 배치 건수가 같은 지점에서만 총량을 비교한다. "
+                            + "override 열은 그 지점에서 자기 건수가 같을 때만 낸다. 건수가 다르면 건당 값을 쓴다. "
                             + "클러스터 파일 생성식으로 계산한 값이라 실측 서버의 전력이 아니다"),
 
             new BenchmarkMetric(GAP_VS_PABFD, "총전력 격차(전력 인지 최적적합 대비)", "%",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
                     "두 전략(이 행·pabfd)의 배치 건수가 같은 지점만 값을 내며 pabfd 총전력이 0 이면 제외한다 — "
-                            + "짝 정의가 총량 열(전 전략 일치)보다 느슨해 표본 수가 총량 열 이상일 수 있다. "
+                            + "짝 정의가 총량 열(기본 설정 열 전부 일치)보다 느슨해 표본 수가 총량 열 이상일 수 있다. "
                             + "pabfd 행 자신은 0 이 값이 아니라 기준이므로 무효. "
                             + "지점별 비의 중앙값이라 '총전력 중앙값의 비' 와 다른 숫자다"),
 
@@ -296,7 +367,7 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(WARN_ZONE_NODES, "경고 구간 노드 수(생성식 온도 · 정책 경계)", "대",
                     Direction.LOWER_IS_BETTER, Role.SECONDARY,
-                    "계측 노드가 있을 때만, 그리고 총량 지표와 같이 전 전략의 배치 건수가 같은 시각 지점에서만 — "
+                    "계측 노드가 있을 때만, 그리고 총량 지표와 같이 기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만 — "
                             + "덜 배치한 전략은 CPU 를 덜 얹어 생성식 온도가 낮으므로 건수가 다르면 열이 아니라 배치량을 "
                             + "재게 된다. 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다. "
                             + "온도는 클러스터 생성식으로 내지만 경고 경계는 정책·설정값(기본 65℃)이라 "
@@ -314,7 +385,7 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(TEMP_STDDEV, "계측 노드 온도 표준편차(생성식)", "℃",
                     Direction.LOWER_IS_BETTER, Role.SECONDARY,
-                    "계측 노드가 둘 이상일 때만, 그리고 총량 지표와 같이 전 전략의 배치 건수가 같은 시각 지점에서만 — "
+                    "계측 노드가 둘 이상일 때만, 그리고 총량 지표와 같이 기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만 — "
                             + "덜 배치한 전략은 CPU 를 덜 얹어 분포가 덜 벌어지므로 건수가 다르면 열이 아니라 배치량을 재게 된다. "
                             + "값은 배치 후 CPU 분포를 생성식에 넣어 낸 것이지 센서 판독이 아니다. 분모는 계측 노드 수 n(모집단 표준편차)이다. "
                             + "평균은 배치로 거의 안 움직이지만 분산은 움직인다"),
@@ -331,7 +402,21 @@ public final class BenchmarkRules {
     // ── 판정 ─────────────────────────────────────────────────
 
     /**
-     * 총량 비교가 유효한가 — <b>전 전략의 배치 건수가 같을 때만</b>.
+     * 총량 짝 조건의 <b>기준 집합</b> 규칙 — 결과보다 먼저. 짝 조건과 미계측 격차는 override 없는 열(기본 설정 열: 엔진 전량·자원전용 2·
+     * 대조군 6 — 판정 자격 집합을 포함한다)의 배치 건수로만 정한다. override 열(링크 게이트·눈금·역산 차단)은 그 마스크를 받아 자기
+     * 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. 이유: 짝 조건을 전 열로 잡으면 <b>열을 더하는 것만으로 기존 열의 값이
+     * 바뀐다</b>(반증판·계측 공백판에서 실제로 표본 수가 5 → 1 로 줄었다) — 기존 표와의 대조가 깨진다.
+     */
+    public static final String PAIRING_RULE =
+            "총량 짝 조건 규칙. 총량 열(" + GENERATOR_POWER + "·" + ACTIVE_NODE_DELTA + "·" + WARN_ZONE_NODES + "·" + TEMP_STDDEV + ")의 짝 조건과 미계측 격차는 "
+                    + "override 없는 기본 설정 열(엔진 전량·자원전용 2·대조군 6) 전부의 배치 건수가 같은 시각 지점으로 정한다. "
+                    + "override 열은 그 마스크를 받아 자기 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. "
+                    + "열을 더하는 것이 기존 열의 값을 바꾸지 않게 하기 위한 규칙이며, 격차 열(pabfd 짝)은 이 규칙과 무관하다. "
+                    + "override 열이 기준 집합과 건수가 달라 총량을 내지 못한 지점이 있으면 그 사실을 응답에 싣는다 — 전 지점 제외면 그 열 총량 지표의 "
+                    + "invalidReason 에, 일부 제외면 셀의 totalsIncomparableReason 에 제외 열과 지점 수를 적는다. 표본이 줄어든 사실이 응답에 보이지 않으면 이 규칙은 검증 불가다.";
+
+    /**
+     * 총량 비교가 유효한가 — <b>기준 집합(기본 설정 열) 전부의 배치 건수가 같을 때만</b>. 호출자가 기준 집합의 건수만 넘긴다.
      *
      * <p>적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다. 건수가 다르면 총량 열을
      * {@code valid=false} 로 내리고 건당 값으로 비교한다.</p>
@@ -380,6 +465,9 @@ public final class BenchmarkRules {
     /**
      * 격차 중앙값이 줄어야 하는 최소 폭(%p). 이 지표가 <b>이미 백분율</b>이라 단위는 %p 다.
      * 값이 0 이면 부호만으로 성공이 되어 잡음이 곧 결론이 된다.
+     *
+     * <p>이 값은 {@link #SENSITIVITY_RULE}(수준 의존 판단)과 {@link #PHASE_RULE}(위상 폭 경고)에도 <b>같은 문턱</b>으로 쓰인다 —
+     * 바꾸면 세 문장이 동시에 움직인다. 재사용 근거: 우리가 개선이라 부르는 크기만큼 노브·위상이 흔들면 계기가 교란된 것이다.</p>
      */
     public static final double JUDGMENT_MEDIAN_REDUCTION_PP = 2.0;
 
@@ -425,7 +513,57 @@ public final class BenchmarkRules {
                     + "배제하지 못한다). "
                     + "고치는 대상은 일률 편향 하나이며 포화는 판정 대상이 아니다. 기준선 값은 상수에 넣지 않는다 — "
                     + "값은 판을 실행해야 나오고, 상수에 박으면 실행 순서가 커밋 순서를 강제한다. "
-                    + "이 지표의 정의와 문턱 상수는 이 PR 에서만 바뀌고 다음 PR 은 참조만 한다.";
+                    + "이 지표의 정의와 문턱 상수는 이 PR 에서만 바뀌고 다음 PR 은 참조만 한다. "
+                    + "판정 자격(폐쇄형): 판정·방향 판정은 JUDGMENT_BOARD·DIRECTION_CHECK_BOARD 두 판의 power 행에서만 성립하며, "
+                    + "그 밖의 판·열·지표는 전부 자격 없음이다 — 판이나 열이 늘어도 이 문장은 바뀌지 않는다.";
+
+    /**
+     * 한계 전력 눈금 민감도 3열의 {@code marginalScaleWatts} — 250(포화 발현: {@link #MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT} 아래) ·
+     * 1000(무포화) · 0(0 이하 = 노드 정격 분모, 구 방식). 한 열은 "달라졌다" 까지만 말하고 방향을 가르지 못한다 — 세 열이어야
+     * 포화 때문인지 눈금 자체 때문인지 갈리고, 0 열은 눈금 도입 변경 자체의 사후 검증이 된다.
+     */
+    public static final List<Double> SENSITIVITY_MARGINAL_SCALE_WATTS = List.of(250.0, 1000.0, 0.0);
+
+    /** 민감도 열 id 접두 — {@code power-s250}·{@code power-s1000}·{@code power-s0}. */
+    public static final String SENSITIVITY_COLUMN_PREFIX = "power-s";
+
+    /**
+     * 역산 차단 열 id — {@code idleFromMeasurement=false} 만 다른 전력 모델을 쓴 {@code power} 엔진. 같은 판·같은 지점에서 역산
+     * 유무만 갈린 짝 비교가 된다(판을 나누면 짝이 깨진다). {@link #SENSITIVITY_MARGINAL_SCALE_WATTS} 의 0 열과 함께 <b>독립 증거가
+     * 아니다</b> — 이미 소비된 판정을 같은 자료로 재확인하는 열이라 라벨에 그 사실을 적는다.
+     */
+    public static final String IDLE_RECONSTRUCTION_DISABLED_COLUMN = "power-idle-fixed";
+
+    /**
+     * 민감도 검정 문장 — 문턱은 하나({@link #JUDGMENT_MEDIAN_REDUCTION_PP} 와 같은 2.0pp): 우리가 개선이라 부르는 크기만큼 노브가
+     * 흔들면 계기가 교란된 것이다. 이하는 "영향의 증거를 못 찾음" 이고 부재 주장이 아니다(귀무 채택 금지).
+     */
+    public static final String SENSITIVITY_RULE =
+            "민감도 검정. 판정 셀에서 power 행과 power-s250 행의 " + GAP_VS_PABFD + " 유효 지점 교집합 I' = { i : g_i(power) ≠ null ∧ g_i(s250) ≠ null } 을 "
+                    + "먼저 잡고, median{ g_i(power) − g_i(s250) : i∈I' } 가 JUDGMENT_MEDIAN_REDUCTION_PP 를 넘으면 격차 수준이 눈금에 의존한다고 읽는다 "
+                    + "(두 행의 중앙값을 따로 내어 빼지 않는다 — 유효 지점 집합이 다르면 서로 다른 지점을 견주게 된다). |I'| 와 각 행의 제외 지점 수를 함께 적는다. "
+                    + "넘지 않으면 이 판에서 영향의 증거를 못 찾은 것이며 영향이 없다는 주장이 아니다. "
+                    + "판정량은 두 실행의 중앙값 차(Δ)이고 이 검정은 한 실행의 수준량을 재므로, 수준 의존이 곧 판정 의존은 아니다 — 판정의 눈금 의존은 "
+                    + "기준선 B 와 새 실행 N 을 같은 눈금 열에서 각각 내어 Δ 를 두 눈금에서 견주어야 하며, 그 자료가 없으면 '판정량에 대해서는 재지 않았다'로 적는다. "
+                    + "세 눈금 — 기본 눈금 500W(power 열, 엔진 설정 기본값)·power-s250·power-s1000 — 의 중앙값이 눈금에 대해 단조이면 그 사실과 전 구간 폭을 적고, "
+                    + "수준의 눈금 의존과 부호의 눈금 무관을 갈라 서술한다. power-s0(정격 분모)은 이 사다리 밖이다. "
+                    + "power-s1000 은 포화 없는 눈금, power-s0 은 노드 정격 분모(구 방식)이고 power-idle-fixed 는 역산 차단이다 — "
+                    + "power-s0 과 power-idle-fixed 는 같은 자료를 재확인하는 열이라 독립 증거가 아니다.";
+
+    /**
+     * 오목 판 결론 문안 — 결과를 보기 전에 형식을 고정한다. 이 판은 원인을 지목하지 않는다.
+     */
+    public static final String CONCAVE_CONCLUSION_TEMPLATE =
+            "오목 판 결론 형식. β=" + CONCAVE_POWER_EXPONENT + " 판의 판정 셀과 같은 좌표 셀 power 행 " + GAP_VS_PABFD + " 중앙값은 X%p(β=1.0 판 Y%p), "
+                    + "차는 |X−Y| = Z%p 로 JUDGMENT_MEDIAN_REDUCTION_PP [이상/미만]이며 부호가 [같다/다르다] — 관측 범위에서 부호 일치는 통과하기 쉬운 조건이므로 결론은 Z 로 적는다. "
+                    + "역산 경로 기여는 같은 셀의 power-idle-fixed − power = W%p 로 적고 β=1.0 판의 같은 차와 나란히 둔다(부호가 판마다 다를 수 있어 크기와 부호를 함께 적는다). "
+                    + "이 판은 생성 전력·역산 유휴·오라클 세 경로가 함께 바뀌므로 원인을 지목하지 않으며, 결론의 적용 범위가 β<1 생성식까지 뻗는지만 서술한다.";
+
+    /**
+     * <b>판정 시점</b>의 등록 판 집합에서 잰 실질 한계 전력 최댓값(W) — 고정값. 판정 전제({@code S ≥ 이 값})는 이 값에만 걸린다.
+     * 판이 늘어도 바뀌지 않으며, 바꾸는 것은 판정 규칙 개정이다. 현재 전 판의 실측은 {@link #MAX_REAL_MARGINAL_WATTS} 가 따로 든다.
+     */
+    public static final double MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT = 316.0;
 
     /**
      * 등록된 판 전부에서 실측한 {@code PowerModel.realMarginalPower} 의 <b>최댓값(W)</b>.
@@ -438,8 +576,12 @@ public final class BenchmarkRules {
      * 포화한다. 포화는 노드를 구별하지 못하게 만드는 <b>다른 결함</b>이라, 일률 편향 하나만 고치는
      * 변경이 되려면 {@code S ≥ MAX_REAL_MARGINAL_WATTS} 여야 한다. 운영에서는 정격이 큰 미계측 노드의
      * 대체값이 S 를 넘을 수 있고 그때는 점수가 0 으로 포화한다 — 노브로 올려 대응한다.</p>
+     *
+     * <p><b>이 값은 판 데이터의 사실이고 판정 규칙이 아니다.</b> 판이 늘면 실측과 함께 갱신되며 규칙 축에는 들어가지 않는다 —
+     * 판정 전제가 걸리는 고정값은 {@link #MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT} 다. 갱신값이 기본 {@code marginalScaleWatts}(500W)를
+     * 넘으면 포화가 기본 설정에서 발현한다는 뜻이므로 그 판의 도입을 보류하고, 기본 S 변경은 판정 규칙 개정으로 별도 처리한다.</p>
      */
-    public static final double MAX_REAL_MARGINAL_WATTS = 316.0;
+    public static final double MAX_REAL_MARGINAL_WATTS = 345.5437131040917;   // 오목 판(β=0.625) bm-14 4코어 t=2400s. 오목 판 이전 316.0
 
     /**
      * 미계측 비율의 전략 간 격차가 이 값(%p)을 넘으면 전력·온도 비교의 유효성을 의심한다.

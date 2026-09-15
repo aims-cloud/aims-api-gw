@@ -64,11 +64,17 @@ class BenchmarkRulesContractTest {
     private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
             "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할")),
             "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
-            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율")),
-            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리")),
+            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율"),
+                    new AxisSeal("9ab95b89dc3e", "2026-09-14", "방법론 변경 사전 등록 — 오목 지수 0.625·오목/링크 판 id·위상 독립 판 2장·seed 수 3·SplitMix64 혼합 상수")),
+            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리 — 이후 판정 시점 고정값(316) 으로 의미 확정, 현 실측은 축 밖")),
+            "sensitivity", List.of(new AxisSeal("3741559c00dd", "2026-09-14", "축 신설 — 한계 전력 눈금 3값(250·1000·0)·역산 차단 열·링크 게이트 열")),
             "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱")),
             "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
-            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)")));
+            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)"),
+                    new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설"),
+                    new AxisSeal("d06e13cc090c", "2026-09-14", "총량 짝 조건 기준 집합 규칙 — override 없는 기본 설정 열로 고정. 배포 검증에서 변종 열 추가만으로 기존 열의 총량 표본이 5 → 1 로 줄어든 것을 확인한 뒤의 사후 개정. 판정 문턱·판정 셀·격차 정의는 불변"),
+                    new AxisSeal("45be90af10f3", "2026-09-14", "배포 검증 수치를 본 뒤의 2차 사후 개정 — 민감도 검정을 두 행의 유효 지점 교집합 위 지점별 차로 정정하고 수준량/판정량 구분을 명시, 위상 구성 범위 보고 의무와 오목 판 결론의 차·역산 기여 슬롯 추가, 총량 짝 제외 지점의 응답 표기 의무. 판정 셀·판정 문턱·격차 정의·판정 자격은 불변"),
+                    new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -205,7 +211,7 @@ class BenchmarkRulesContractTest {
     @DisplayName("온도 분포 두 지표는 배치 건수가 같은 지점에서만 유효하고 개입 횟수는 그 조건을 받지 않는다")
     @Test
     void the_temperature_distribution_metrics_share_the_pairing_condition_of_the_totals() {
-        String pairing = "전 전략의 배치 건수가 같은 시각 지점에서만";
+        String pairing = "기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만";
 
         for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
             assertTrue(metric(key).validity().contains(pairing),
@@ -213,7 +219,7 @@ class BenchmarkRulesContractTest {
         }
         assertFalse(metric(BenchmarkRules.C3_INTERVENTIONS).validity().contains(pairing),
                 "개입 횟수는 시도당 계수라 배치량에 비례하지 않는다 — 같은 조건을 걸면 없는 결함을 고치는 것이다");
-        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같을 때만"),
+        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같은 지점에서만"),
                 "총량 쪽 조건이 사라졌다면 '같은 조건' 이라는 위 문구의 기준이 없어진다");
     }
 
@@ -564,6 +570,43 @@ class BenchmarkRulesContractTest {
         }
         assertFreeOfBannedClaims(r,
                 "격차 판정 규칙 — 금지 조각 순회는 한계 문구와 지표 유효성 조건만 보므로 이 상수는 여기서 따로 본다");
+    }
+
+    @DisplayName("판정 자격은 폐쇄형이다 — 두 판의 power 행 밖은 전부 자격 없음")
+    @Test
+    void the_judgment_qualification_is_closed_form() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        assertTrue(r.contains("판정 자격(폐쇄형)"), r);
+        assertTrue(r.contains("그 밖의 판·열·지표는 전부 자격 없음"), "판·열이 늘 때 규칙을 다시 고치지 않도록 폐쇄형이어야 한다: " + r);
+    }
+
+    @DisplayName("방법론 변경 상수가 결과보다 먼저 등록되어 있다 — 오목 지수는 볼록 지수의 역수, 민감도 눈금 3값, 위상 독립 판 2장")
+    @Test
+    void the_methodology_constants_are_pre_registered() {
+        assertEquals(1.0 / BenchmarkRules.CONVEX_POWER_EXPONENT, BenchmarkRules.CONCAVE_POWER_EXPONENT, 1e-12, "대칭 응력 — 한 문장 근거");
+        assertTrue(BenchmarkRules.CONCAVE_POWER_EXPONENT < 1.0);
+        assertEquals(3, BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.stream().distinct().count());
+        assertTrue(BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.contains(0.0), "구 방식(정격 분모) 열이 있어야 눈금 도입 자체가 검증된다");
+        assertTrue(BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.stream().anyMatch(s -> s > 0 && s < BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT),
+                "포화를 발현시키는 눈금이 하나 있어야 한다");
+        assertEquals(2, BenchmarkRules.PHASE_INDEPENDENT_BOARDS.size());
+        assertTrue(BenchmarkRules.PHASE_INDEPENDENT_BOARDS.contains(BenchmarkRules.DIRECTION_CHECK_BOARD + "-independent"));
+        assertTrue(BenchmarkRules.PHASE_INDEPENDENT_BOARDS.contains(BenchmarkRules.JUDGMENT_BOARD + "-independent"));
+        assertEquals(316.0, BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT, 1e-9, "판정 시점 고정값은 판이 늘어도 바뀌지 않는다");
+        for (String s : List.of(BenchmarkRules.SENSITIVITY_RULE, BenchmarkRules.PHASE_RULE, BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE)) {
+            assertFreeOfBannedClaims(s, "방법론 규칙 문장");
+        }
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("독립 증거가 아니다"));
+        assertTrue(BenchmarkRules.PHASE_RULE.contains("검정하지 않는다"));
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("원인을 지목하지 않"));
+        assertTrue(BenchmarkRules.PAIRING_RULE.contains("override 없는 기본 설정 열"), "짝 조건 기준 집합이 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.PAIRING_RULE.contains("totalsIncomparableReason"), "짝 제외 지점의 응답 표기 의무가 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("유효 지점 교집합"), "민감도 검정은 교집합 위 지점별 차로 정의돼야 한다");
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("수준 의존이 곧 판정 의존은 아니다"));
+        assertTrue(BenchmarkRules.PHASE_RULE.contains("생략은 판정 보고의 결격 사유"), "위상 판 범위 보고 의무");
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("|X−Y| = Z%p"), "오목 판 결론은 차 Z 로 적는다");
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("power-idle-fixed − power = W%p"), "역산 기여 슬롯");
+        assertFreeOfBannedClaims(BenchmarkRules.PAIRING_RULE, "짝 조건 규칙 문장");
     }
 
     /**

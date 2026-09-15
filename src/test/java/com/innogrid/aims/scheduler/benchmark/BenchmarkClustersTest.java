@@ -39,9 +39,10 @@ class BenchmarkClustersTest {
 
     @DisplayName("등록된 판이 모두 읽힌다 — 순서 고정")
     @Test
-    void six_boards_load() {
+    void board_registry_loads_in_order() {
         assertEquals(List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL, BenchmarkClusters.SPARSE,
-                        BenchmarkClusters.CONVEX, BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED),
+                        BenchmarkClusters.CONVEX, BenchmarkClusters.MISRATED, BenchmarkClusters.CONVEX_MISRATED, BenchmarkClusters.LINK,
+                        BenchmarkClusters.MAIN_INDEPENDENT, BenchmarkClusters.CONVEX_MISRATED_INDEPENDENT, BenchmarkClusters.CONCAVE),
                 clusters.boardIds(), "판 순서는 고정 — 표의 열 순서가 호출마다 달라지면 두 실행을 대조할 수 없다");
         // 판 수는 여기 다시 적지 않는다 — 순서·파일·역할이 등록부 한 레코드 목록에 있어 어긋날 수 없다
         for (String boardId : clusters.boardIds()) {
@@ -284,6 +285,22 @@ class BenchmarkClustersTest {
      * 요인 하나만 다르다는 것이 이 판들의 존재 이유다. 노드 값이 한 칸이라도 함께 움직이면 판 사이의 차이를
      * 그 요인으로 돌릴 수 없고, 부록판은 귀속이 아니라 또 다른 판이 된다.
      */
+    @DisplayName("오목 판은 주 결과판과 생성식 지수만 다르고 지수는 볼록 지수의 역수다 — seed 하나·legacy 위상")
+    @Test
+    void the_concave_board_differs_from_main_only_by_the_reciprocal_exponent() {
+        SyntheticCluster main = clusters.get(BenchmarkClusters.MAIN);
+        SyntheticCluster concave = clusters.get(BenchmarkClusters.CONCAVE);
+        assertEquals(main.nodes(), concave.nodes(), "노드 블록은 한 글자도 다르지 않아야 판 사이 차이를 지수로 돌릴 수 있다");
+        assertEquals(BenchmarkRules.CONCAVE_POWER_EXPONENT, concave.powerExponent(), 1e-12);
+        assertEquals(1.0 / BenchmarkRules.CONVEX_POWER_EXPONENT, concave.powerExponent(), 1e-12);
+        assertEquals(main.seed(), concave.seed());
+        assertEquals(1, concave.seeds().size(), "β 와 위상 두 축을 한 판에 걸지 않는다");
+        assertEquals(SyntheticCluster.PhaseMode.LEGACY, concave.phaseMode());
+        assertEquals(BenchmarkRules.CONCAVE_BOARD, BenchmarkClusters.CONCAVE);
+        assertEquals(BenchmarkRules.LINK_BOARD, BenchmarkClusters.LINK);
+        assertEquals(BenchmarkRules.PHASE_INDEPENDENT_BOARDS, List.of(BenchmarkClusters.MAIN_INDEPENDENT, BenchmarkClusters.CONVEX_MISRATED_INDEPENDENT));
+    }
+
     @DisplayName("볼록 판은 주 결과판과 생성식 지수만 다르다")
     @Test
     void convex_board_differs_from_main_only_by_the_exponent() {

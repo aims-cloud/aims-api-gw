@@ -1,0 +1,36 @@
+# 배치 비교 — 오목 생성식 판(부록). 주 결과판에 생성식 지수 하나만 얹어, 엔진의 선형 가정이 볼록 판과 정확히 반대쪽으로 어긋났을 때를 본다.
+# 결과 순위를 이 판에서 보고하지 않는다(벤치마크 하네스만 읽는다. 운영·시연 경로는 synthetic-cluster.yml 그대로).
+#
+# 생성식: 전력(W) = idleWatts + (capacityWatts - idleWatts) × (CPU 사용률/100)^β, β = powerExponent = 0.625 = 1/1.6 · 온도(℃) = baseTemperature + 0.3 × CPU 사용률.
+# β 는 볼록 판 지수(1.6)의 역수다 — 볼록 판이 엔진 가정을 한쪽으로 기울였으면 이 판은 정확히 반대쪽으로 기울인다는 대칭이 근거의 전부이고,
+# 값 자체에 물리적 근거는 없다(상수 BenchmarkRules.CONCAVE_POWER_EXPONENT 에 사전 등록). u^0.625 > u 라 저부하에서 전력이 선형보다 높다.
+#
+# 판정·방향 판정 자격 없음(폐쇄형 자격 문장). 이 판은 생성 전력·역산 유휴·오라클 세 경로가 함께 바뀌므로 원인을 지목하지 않는다 —
+# 결론은 BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE 의 형식으로만 적고, power-idle-fixed 열이 역산 경로의 기여를 분리한다.
+# seed 는 하나(legacy 위상)다 — β 와 위상 두 축을 한 판에 걸면 요인이 교락한다.
+#
+# 이 판이 늘리는 실질 한계 전력 최댓값은 판 데이터의 사실이라 MAX_REAL_MARGINAL_WATTS(시험 전용)만 갱신하고, 판정 전제가 걸린 고정값
+# MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT(316) 는 바뀌지 않는다. 실측이 기본 눈금 500W 를 넘으면 이 판은 도입하지 않는다.
+#
+# 그 밖의 값은 주 결과판(benchmark-cluster-main.yml)과 한 글자도 다르지 않다 — 이 판이 주 결과판과 다른 것은 이름과 powerExponent 한 줄뿐이다.
+name: benchmark-concave-14nodes
+job: mdc-nodes
+periodMinutes: 60
+swing: 15
+seed: 7
+powerExponent: 0.625
+nodes:
+  - { mdcId: bm-mdc-a, nodeId: "bm-01:9100", cores: 48, memoryMb: 196608, gpus: 2, cpuUsage: 45, memoryUsage: 50, diskTotalGb: 4000, diskUsage: 30, ipmi: true,  idleWatts: 189, capacityWatts: 900, baseTemperature: 44, swing: 15, trait: "큰 정격·고효율 — 14.8W/코어, 유휴비 0.21. GPU 2" }
+  - { mdcId: bm-mdc-a, nodeId: "bm-02:9100", cores: 16, memoryMb: 65536,  gpus: 0, cpuUsage: 55, memoryUsage: 58, diskTotalGb: 2000, diskUsage: 26, ipmi: true,  idleWatts: 298, capacityWatts: 850, baseTemperature: 52, swing: 15, trait: "큰 정격·저효율 — 34.5W/코어, 유휴비 0.35. 경고 구간(최고 73.0℃)" }
+  - { mdcId: bm-mdc-a, nodeId: "bm-03:9100", cores: 24, memoryMb: 98304,  gpus: 0, cpuUsage: 30, memoryUsage: 35, diskTotalGb: 3000, diskUsage: 22, ipmi: true,  idleWatts: 120, capacityWatts: 400, baseTemperature: 40, swing: 15, trait: "작은 정격·고효율 — 11.7W/코어, 유휴비 0.30" }
+  - { mdcId: bm-mdc-b, nodeId: "bm-04:9100", cores: 8,  memoryMb: 32768,  gpus: 0, cpuUsage: 25, memoryUsage: 30, diskTotalGb: 2000, diskUsage: 18, ipmi: true,  idleWatts: 135, capacityWatts: 450, baseTemperature: 36, swing: 15, trait: "작은 정격·저효율 — 39.4W/코어, 유휴비 0.30" }
+  - { mdcId: bm-mdc-b, nodeId: "bm-05:9100", cores: 64, memoryMb: 262144, gpus: 4, cpuUsage: 65, memoryUsage: 62, diskTotalGb: 6000, diskUsage: 34, ipmi: true,  idleWatts: 360, capacityWatts: 900, baseTemperature: 48, swing: 15, trait: "최대 노드·최고효율 — 8.4W/코어인데 유휴비는 0.40. 경고 구간(최고 72.0℃). GPU 4" }
+  - { mdcId: bm-mdc-b, nodeId: "bm-06:9100", cores: 32, memoryMb: 131072, gpus: 0, cpuUsage: 35, memoryUsage: 40, diskTotalGb: 4000, diskUsage: 28, ipmi: true,  idleWatts: 154, capacityWatts: 700, baseTemperature: 42, swing: 15, trait: "일반 — 17.1W/코어, 유휴비 0.22" }
+  - { mdcId: bm-mdc-c, nodeId: "bm-07:9100", cores: 32, memoryMb: 131072, gpus: 0, cpuUsage: 20, memoryUsage: 25, diskTotalGb: 3000, diskUsage: 16, ipmi: true,  idleWatts: 240, capacityWatts: 600, baseTemperature: 38, swing: 15, trait: "여유 — 11.3W/코어인데 유휴비 0.40(코어당은 싸고 상시 전력은 비싸다)" }
+  - { mdcId: bm-mdc-c, nodeId: "bm-08:9100", cores: 12, memoryMb: 49152,  gpus: 0, cpuUsage: 50, memoryUsage: 55, diskTotalGb: 2000, diskUsage: 24, ipmi: true,  idleWatts: 225, capacityWatts: 500, baseTemperature: 41, swing: 15, trait: "유휴비 최대 0.45 — 켜 두는 값이 비싼 노드" }
+  - { mdcId: bm-mdc-c, nodeId: "bm-09:9100", cores: 24, memoryMb: 98304,  gpus: 0, cpuUsage: 70, memoryUsage: 68, diskTotalGb: 3000, diskUsage: 38, ipmi: true,  idleWatts: 138, capacityWatts: 550, baseTemperature: 37, swing: 15, trait: "최다 부하(최고 85%) — 정책 CPU 상한 80% 를 스쳐 제약이 실제로 작동하는 자리" }
+  - { mdcId: bm-mdc-a, nodeId: "bm-10:9100", cores: 16, memoryMb: 65536,  gpus: 0, cpuUsage: 2,  memoryUsage: 15, diskTotalGb: 2000, diskUsage: 15, ipmi: true,  idleWatts: 100, capacityWatts: 500, baseTemperature: 35, swing: 1,  trait: "유휴 — 유휴비 최소 0.20, 깨우기가 싼 노드" }
+  - { mdcId: bm-mdc-b, nodeId: "bm-11:9100", cores: 8,  memoryMb: 32768,  gpus: 0, cpuUsage: 1,  memoryUsage: 12, diskTotalGb: 2000, diskUsage: 17, ipmi: true,  idleWatts: 176, capacityWatts: 400, baseTemperature: 36, swing: 1,  trait: "유휴 — 유휴비 0.44, 깨우기가 비싼 노드(반납 후보)" }
+  - { mdcId: bm-mdc-c, nodeId: "bm-12:9100", cores: 48, memoryMb: 196608, gpus: 2, cpuUsage: 2,  memoryUsage: 18, diskTotalGb: 5000, diskUsage: 20, ipmi: true,  idleWatts: 200, capacityWatts: 800, baseTemperature: 37, swing: 1,  trait: "유휴 GPU 노드 — 12.5W/코어. GPU 요구가 오면 깨울 수밖에 없는 자리. GPU 2" }
+  - { mdcId: bm-mdc-a, nodeId: "bm-13:9100", cores: 24, memoryMb: 98304,  gpus: 0, cpuUsage: 1,  memoryUsage: 14, diskTotalGb: 3000, diskUsage: 19, ipmi: true,  idleWatts: 228, capacityWatts: 650, baseTemperature: 38, swing: 1,  trait: "유휴 — 유휴비 0.35" }
+  - { mdcId: bm-mdc-b, nodeId: "bm-14:9100", cores: 16, memoryMb: 65536,  gpus: 0, cpuUsage: 2,  memoryUsage: 16, diskTotalGb: 2000, diskUsage: 21, ipmi: true,  idleWatts: 165, capacityWatts: 750, baseTemperature: 39, swing: 1,  trait: "유휴 — 36.6W/코어로 코어당 전력이 가장 비싼 노드" }

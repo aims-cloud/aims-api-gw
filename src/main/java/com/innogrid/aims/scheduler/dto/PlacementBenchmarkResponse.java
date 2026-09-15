@@ -59,6 +59,8 @@ public record PlacementBenchmarkResponse(
      * @param engineIds    비교에 참가한 엔진 id(정렬). 레지스트리가 자동 수집하므로 실행마다 확인해야 한다
      * @param power        전력 모델 노브. 하네스가 회계에 쓰는 문턱을 엔진 노브와 나란히 싣는다
      * @param thermal      온도 모델 노브
+     * @param network      네트워크(링크 점수) 노브. 링크를 선언한 판에서 결과에 반영되므로 다이제스트 성분이고, 성분은 응답에
+     *                     노출된다는 규약에 따라 여기 싣는다
      * @param policies     전략이 보는 정책 변종 셋 — 저장되지 않는 사본이다
      */
     public record EngineConfigSnapshot(
@@ -66,12 +68,24 @@ public record PlacementBenchmarkResponse(
             List<String> engineIds,
             PowerKnobs power,
             ThermalKnobs thermal,
+            NetworkKnobs network,
             List<PolicySnapshot> policies
     ) {
         public EngineConfigSnapshot {
             engineIds = engineIds == null ? List.of() : List.copyOf(engineIds);
             policies = policies == null ? List.of() : List.copyOf(policies);
         }
+    }
+
+    /**
+     * 네트워크(링크 점수) 노브 — {@code NetworkModel} 이 읽는 넷.
+     *
+     * @param latencyScaleMs   지연을 1 로 자르는 눈금(ms)
+     * @param degradedPenalty  DEGRADED 링크 가산 비용
+     * @param linkWeight       트래픽 점수와 링크 점수를 섞는 가중치
+     * @param unknownLinkScore 원장에 없는 원격 쌍의 링크 점수
+     */
+    public record NetworkKnobs(double latencyScaleMs, double degradedPenalty, double linkWeight, double unknownLinkScore) {
     }
 
     /**
@@ -151,6 +165,8 @@ public record PlacementBenchmarkResponse(
      * @param powerControlNote     전원 제어 두 판의 뜻
      * @param randomSeedCount      무작위 대조군에 쓴 시드 수
      * @param policyBasis          어느 정책으로 돌렸는가 — 배포된 활성 정책이 아니라는 사실을 밝힌다
+     * @param workloadDataMdcAssignment 워크로드에 데이터 MDC 를 어떻게 부여했는가 — 링크 판만 순환 배정이고 나머지는 부여하지 않아
+     *                             링크 게이트가 꺼져 있다. 이 판의 워크로드가 어느 MDC 에 붙었는지가 응답에서 보여야 한다
      */
     public record Assumptions(
             String workloadDistribution,
@@ -166,7 +182,8 @@ public record PlacementBenchmarkResponse(
             String generatorFormula,
             String powerControlNote,
             int randomSeedCount,
-            String policyBasis
+            String policyBasis,
+            String workloadDataMdcAssignment
     ) {
         public Assumptions {
             workloadClasses = workloadClasses == null ? List.of() : List.copyOf(workloadClasses);
@@ -227,6 +244,9 @@ public record PlacementBenchmarkResponse(
      * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식(℃·K 두 눈금)과 생성식을 나란히.
      *                              격차·비율·판정은 없다. 두 엔진 값이 다르다는 것이 척도 의존의 증거다
      * @param wakeupReconstructionCheck 유휴 노드의 깨우기 비용 역산 — 선언값과 엔진 역산의 범위를 나란히
+     * @param phaseMode             위상 방식 — {@code LEGACY}(옛 식) 또는 {@code INDEPENDENT}(seed·nodeId 혼합). 같은 판의 Board 가
+     *                              여럿이면 전부 INDEPENDENT 이고 서로 독립 복제다 — 지점 지수는 Board 안에서만 뜻이 있다
+     * @param phaseSeed             이 Board 의 위상 seed. legacy 판은 파일의 seed 하나
      * @param cells                 부하율 × 전원 상태 가정의 격자
      */
     public record Board(
@@ -234,6 +254,8 @@ public record PlacementBenchmarkResponse(
             String role,
             String clusterName,
             String digest,
+            String phaseMode,
+            long phaseSeed,
             int nodeCount,
             int measuredNodeCount,
             double powerExponent,
@@ -344,8 +366,9 @@ public record PlacementBenchmarkResponse(
      * @param activeNodesBefore       배치 전부터 부하가 돌던 노드 수(중앙값). {@code activeNodeDelta} 가
      *                                무엇에 대한 증감인지 이 값 없이는 알 수 없다. 전원 제어가 있다는
      *                                가정에서도 <b>이 노드들은 끌 수 없으므로</b> 총전력의 바닥이 된다
-     * @param totalsComparable        총량 열을 비교해도 되는가 — 전 전략의 배치 건수가 같을 때만 참
-     * @param totalsIncomparableReason 비교할 수 없을 때의 사유
+     * @param totalsComparable        총량 열을 비교해도 되는가 — 기준 집합(override 없는 기본 설정 열) 전부의 배치 건수가 전 지점에서 같을 때만 참
+     * @param totalsIncomparableReason 비교할 수 없을 때의 사유. <b>{@code totalsComparable=true} 여도 채워질 수 있다</b> — override 열이
+     *                                기준 집합과 건수가 달라 총량 짝에서 빠진 지점이 있으면 그 열·지점 수·남은 표본을 여기에 적는다(짝 조건 규칙의 표기 의무)
      * @param unmeasuredCaution       미계측 비율이 전략 간에 크게 갈릴 때의 경고. 아니면 null
      * @param probeExclusionReasons   표본 첫 워크로드로 재 본 제외 사유 분포 — 이 판이 왜 막히는지
      * @param strategies              전략별 결과
@@ -376,6 +399,8 @@ public record PlacementBenchmarkResponse(
      * @param label         사람이 읽는 이름
      * @param kind          {@code ENGINE}(운영 엔진) 또는 {@code BASELINE}(비교용 대조군)
      * @param policyVariant 이 전략이 본 정책 변종
+     * @param engineConfigOverride 이 열만 다르게 준 노브(이름 → 값). 기본 설정 그대로인 열은 빈 맵. 여기 실린 값은 설정 다이제스트의
+     *                             {@code overrides=} 세그먼트에 그대로 들어간다 — 응답이 자기 입력을 지목한다는 원칙을 열 단위로 지킨다
      * @param metrics       지표별 값
      */
     public record StrategyResult(
@@ -383,9 +408,11 @@ public record PlacementBenchmarkResponse(
             String label,
             String kind,
             String policyVariant,
+            Map<String, String> engineConfigOverride,
             List<MetricValue> metrics
     ) {
         public StrategyResult {
+            engineConfigOverride = engineConfigOverride == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(engineConfigOverride));
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
         }
     }

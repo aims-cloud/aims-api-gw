@@ -26,7 +26,7 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  * 0.3 가정·"큰 노드는 비효율" 편향)을 제거한 자리이고, <b>반증판은 우리 엔진이 지도록 설계</b>했고,
  * 계측 공백판은 주 결과판과 {@code ipmi} 플래그만 달라 두 판의 차이가 곧 센서 공백의 크기다.</p>
  *
- * <p>뒤의 세 판은 <b>엔진의 가정이 틀렸을 때</b>를 재는 자리다. 생성식 지수만 바꾼 볼록 판과 엔진에 알려 준
+ * <p>볼록·정격 어긋남·복합 세 판은 <b>엔진의 가정이 틀렸을 때</b>를 재는 자리다. 생성식 지수만 바꾼 볼록 판과 엔진에 알려 준
  * 정격만 어긋나게 둔 판이 요인 하나씩을 귀속시키는 부록이고, 둘을 함께 건 복합 판이 다음 엔진 변경을 판정할
  * 판이다. 셋 다 주 결과판과 <b>노드 구성이 같아</b>(그 값들을 한 글자도 바꾸지 않았다) 판 사이의 차이를
  * 요인으로 읽을 수 있다 — 모집단이 다르면 그 읽기가 성립하지 않는다.</p>
@@ -59,6 +59,18 @@ public class BenchmarkClusters {
 
     /** 복합판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판. 판정 셀이 여기 있다. */
     public static final String CONVEX_MISRATED = "convex-misrated";
+
+    /** 링크 판 — 주 결과판 노드 블록 + links 절 + 데이터 MDC 순환 배정. {@code BenchmarkRules.LINK_BOARD} 와 같은 문자열. */
+    public static final String LINK = "link";
+
+    /** 주 결과판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
+    public static final String MAIN_INDEPENDENT = "main-independent";
+
+    /** 판정판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
+    public static final String CONVEX_MISRATED_INDEPENDENT = "convex-misrated-independent";
+
+    /** 오목 생성식판 — 주 결과판과 생성식 지수(0.625 = 1/1.6)만 다른 판. {@code BenchmarkRules.CONCAVE_BOARD} 와 같은 문자열. */
+    public static final String CONCAVE = "concave";
 
     /** 다이제스트로 남길 자릿수. 12자면 등록된 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
     private static final int DIGEST_LENGTH = 12;
@@ -106,7 +118,26 @@ public class BenchmarkClusters {
                     + "60% · 전원 제어 있음)이 여기 있다. 두 부록판이 요인 하나씩을 귀속시키고 판정은 이 판에서 한다. 두 오차항은 "
                     + "노드에 따라 상쇄하므로(과소 믿음 노드에서는 부호가 반대다) 유휴 역산이 선언값에 가까워지는 행을 '항등이 "
                     + "살아남았다' 로 읽으면 안 된다. 판정 셀은 현 시스템에 없는 전원 제어를 가정한 값이라 배포 환경에서 "
-                    + "재현되지 않는다."));
+                    + "재현되지 않는다."),
+            new Board(LINK, "classpath:scheduler/benchmark-cluster-link.yml",
+                    "링크 판(부록) — 주 결과판과 노드 구성이 같고 links 절(a-b UP 8ms · a-c DEGRADED 45ms/1.5% · b-c 미등록)과 워크로드 "
+                    + "데이터 MDC 순환 배정만 더했다. 링크 점수를 섞는 엔진은 weighted 하나뿐이라 이 판에서 값이 달라지는 열은 weighted 계열이고, "
+                    + "비교는 같은 판 안의 게이트 on/off 열 쌍(weighted · weighted-affinity)으로 한다 — netScore 경로의 작동 확인이며 전력 "
+                    + "판정과 무관하다. 판정·방향 판정 자격 없음. 링크는 이 판 파일이 원장 노릇을 하고 DB 원장(0건)과 무관하다."),
+            new Board(MAIN_INDEPENDENT, "classpath:scheduler/benchmark-cluster-main-independent.yml",
+                    "주 결과판의 위상 독립 짝(부록) — 노드 블록은 주 결과판과 같고 phaseMode: independent 와 seeds 3 만 다르다. legacy 위상은 "
+                    + "seed 가 전 노드에 같은 상수만 더해 seed 를 늘려도 표본이 늘지 않는 결함이 있어, 노드별 위상을 seed·nodeId 혼합으로 다시 뽑아 "
+                    + "위상 구성 3벌(boards[] 3장, 서로 독립 복제)을 낸다. 방향 판정 자격은 여전히 main 에만 있고, 이 판은 그 방향이 위상 구성에 "
+                    + "따라 흔들리는지를 보는 자리다. Board 사이의 지점을 합쳐 세지 않는다."),
+            new Board(CONVEX_MISRATED_INDEPENDENT, "classpath:scheduler/benchmark-cluster-convex-misrated-independent.yml",
+                    "판정판의 위상 독립 짝(부록) — 노드 블록(엔진에 알려 준 정격 포함)과 생성식 지수는 판정판과 같고 phaseMode: independent 와 "
+                    + "seeds 3 만 다르다. 판정 자격은 여전히 convex-misrated 에만 있고, 이 판은 판정 셀의 값이 위상 구성 3벌에서 어느 폭으로 "
+                    + "흔들리는지를 보는 자리다(중앙값 3값과 범위, 검정 아님). Board 사이의 지점을 합쳐 세지 않는다."),
+            new Board(CONCAVE, "classpath:scheduler/benchmark-cluster-concave.yml",
+                    "오목 생성식판(부록) — 주 결과판과 생성식 지수(powerExponent 0.625 = 1/1.6)만 다르다. 볼록 판 지수의 역수라는 대칭이 "
+                    + "근거의 전부이고 물리적 근거는 없다. 저부하에서 전력이 선형보다 높아 엔진의 유휴 역산이 선언값보다 높게 본다. 생성 전력·"
+                    + "역산 유휴·오라클 세 경로가 함께 바뀌는 판이라 원인을 지목하지 않고 결론 적용 범위가 β<1 까지 뻗는지만 서술한다 — "
+                    + "역산 경로의 기여는 power-idle-fixed 열이 분리한다. 판정·방향 판정 자격 없음. seed 하나(legacy 위상)."));
 
     private static final Map<String, Board> BY_ID = BOARDS.stream()
             .collect(Collectors.toMap(Board::id, Function.identity(),
@@ -166,7 +197,7 @@ public class BenchmarkClusters {
      * 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 시험이 같은 식으로 기대값을 만든다.
      *
      * <p><b>정규화 대상은 {@code \r\n} 개행만이다.</b> UTF-8 BOM·단독 {@code \r}·파일 끝 개행 유무는 내용의 일부로
-     * 해시된다 — 지금 판 파일 아홉 장은 BOM 없음·단독 CR 없음·끝 개행 1개다. BOM 을 붙이는 편집기로 저장하면 값이
+     * 해시된다 — 등록된 판 파일 전부는 BOM 없음·단독 CR 없음·끝 개행 1개다(수는 등록부가 진실이라 여기 적지 않는다). BOM 을 붙이는 편집기로 저장하면 값이
      * 조용히 바뀌므로 리터럴 시험이 그것을 잡는다.</p>
      */
     public static String digestOfContent(byte[] fileBytes) {

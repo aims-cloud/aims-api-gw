@@ -68,13 +68,15 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("9ab95b89dc3e", "2026-09-14", "방법론 변경 사전 등록 — 오목 지수 0.625·오목/링크 판 id·위상 독립 판 2장·seed 수 3·SplitMix64 혼합 상수")),
             "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리 — 이후 판정 시점 고정값(316) 으로 의미 확정, 현 실측은 축 밖")),
             "sensitivity", List.of(new AxisSeal("3741559c00dd", "2026-09-14", "축 신설 — 한계 전력 눈금 3값(250·1000·0)·역산 차단 열·링크 게이트 열")),
-            "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱")),
+            "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱"),
+                    new AxisSeal("cfb639b97e76", "2026-09-15", "판정 셀 분포(heavytail) 편입 — 소급 명문화: 값은 지금까지의 판정이 쓴 분포와 같고 앞으로의 선택 자유도만 닫는다. 판정 셀·문턱·격차 정의·판정 자격 불변")),
             "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
             "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)"),
                     new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설"),
                     new AxisSeal("d06e13cc090c", "2026-09-14", "총량 짝 조건 기준 집합 규칙 — override 없는 기본 설정 열로 고정. 배포 검증에서 변종 열 추가만으로 기존 열의 총량 표본이 5 → 1 로 줄어든 것을 확인한 뒤의 사후 개정. 판정 문턱·판정 셀·격차 정의는 불변"),
                     new AxisSeal("45be90af10f3", "2026-09-14", "배포 검증 수치를 본 뒤의 2차 사후 개정 — 민감도 검정을 두 행의 유효 지점 교집합 위 지점별 차로 정정하고 수준량/판정량 구분을 명시, 위상 구성 범위 보고 의무와 오목 판 결론의 차·역산 기여 슬롯 추가, 총량 짝 제외 지점의 응답 표기 의무. 판정 셀·판정 문턱·격차 정의·판정 자격은 불변"),
-                    new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음")));
+                    new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음"),
+                    new AxisSeal("4ecbed57aecb", "2026-09-15", "직전 배포 관측을 본 뒤의 사후 개정 — 기준선 보존(지점 배열째 저장소 파일·출처 인용·결측 적시), B·N 의 생산 경로를 저장소 시험 기본 설정 실행으로 고정(배포 응답은 참고), 기준선 재사용 규칙(판정 PR 은 파일 불변·갱신은 보고 게시 뒤 별도 커밋·이력 행에 중앙값 차), 사전 추정의 산출 방법 기재 의무. 판정 셀·문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -578,6 +580,27 @@ class BenchmarkRulesContractTest {
         String r = BenchmarkRules.GAP_JUDGMENT_RULE;
         assertTrue(r.contains("판정 자격(폐쇄형)"), r);
         assertTrue(r.contains("그 밖의 판·열·지표는 전부 자격 없음"), "판·열이 늘 때 규칙을 다시 고치지 않도록 폐쇄형이어야 한다: " + r);
+    }
+
+    /**
+     * 기준선을 중앙값 두 개로만 남긴 판정은 3·4항을 영원히 재구성할 수 없었다. 문장이 지점 배열 보존·출처 인용·같은 생산 경로·
+     * 재사용 순서를 들고 있어야 다음 판정이 같은 결손을 반복하지 않는다. 분포는 서비스 기본 분포와 같은 문자열이어야 한다 —
+     * 규칙 클래스가 서비스를 참조하지 않으므로 둘의 일치는 여기서 묶는다.
+     */
+    @DisplayName("격차 판정 규칙이 기준선 보존·출처·생산 경로·재사용 순서를 문장으로 밝히고 판정 분포가 서비스 기본 분포와 같다")
+    @Test
+    void the_gap_judgment_rule_states_how_the_baseline_is_kept() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        for (String part : List.of("기준선 보존", "지점 배열째", BenchmarkRules.JUDGMENT_BASELINE_PATH, "출처", "결측 항목",
+                "같은 생산 경로", "판정 PR 은 기준선 파일을 수정하지 않는다", "판정 보고를 게시한 뒤", "중앙값 차", "산출 방법",
+                "JUDGMENT_DISTRIBUTION")) {
+            assertTrue(r.contains(part), "판정 절차에서 '" + part + "' 가 사라졌다: " + r);
+        }
+        assertEquals(com.innogrid.aims.scheduler.service.PlacementBenchmarkService.HEAVYTAIL, BenchmarkRules.JUDGMENT_DISTRIBUTION,
+                "판정 분포가 서비스 기본 분포와 갈렸다 — 규칙 값이 관행과 다르면 소급 명문화가 아니다");
+        assertTrue(BenchmarkRules.ruleAxes().get("judgment").contains("distribution=" + BenchmarkRules.JUDGMENT_DISTRIBUTION),
+                "분포가 judgment 축에 실려야 보고자가 분포를 고를 수 없다");
+        assertTrue(BenchmarkRules.JUDGMENT_BASELINE_PATH.startsWith("src/test/resources/"), "기준선은 시험 자원이다 — 배포 jar 에 실리지 않는다");
     }
 
     @DisplayName("방법론 변경 상수가 결과보다 먼저 등록되어 있다 — 오목 지수는 볼록 지수의 역수, 민감도 눈금 3값, 위상 독립 판 2장")

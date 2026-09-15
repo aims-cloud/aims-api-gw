@@ -30,10 +30,17 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
  * 새 판이나 새 판정 셀을 더할 때는 그 규칙 커밋을 결과·판 파일 커밋보다 앞에 둔다. 2026-09-14 개정(방법론 변경 PR 의
  * {@code rules:} 커밋): 민감도 눈금 3값·역산 차단 열·링크 판·위상 독립 판 2장·오목 판 상수, 실측 불변조건을 판정 시점
  * 고정값과 현 실측값으로 분리, 판정 자격을 폐쇄형 문장으로 — 여기까지는 해당 판 파일·결과 코드보다 앞선 커밋이다.
- * <b>예외 둘</b>(같은 날, 배포 검증 수치를 본 뒤의 <b>사후 개정</b>): 총량 짝 조건의 기준 집합({@link #PAIRING_RULE} — 변종 열 추가만으로
- * 기존 열의 총량 표본이 5 → 1 로 줄어드는 것을 보고 고정)과, 민감도 검정의 추정량 정정·위상 범위 보고 의무·오목 판 결론 슬롯·짝 제외
- * 표기 의무(부수 검정의 추정량 정의와 보고 의무만 바뀌었고 판정 셀·판정 문턱·격차 정의·판정 자격은 불변). 두 경우 모두 결과 코드 커밋이
- * 규칙 커밋 바로 뒤에 온다.</p>
+ * <b>사후 개정</b>(관측 수치를 본 뒤 고친 규칙 — 개수는 세지 않고 목록으로 둔다, 전량은 계약 시험의 축 이력에 있다):
+ * <ul>
+ *   <li>2026-09-14 — 총량 짝 조건의 기준 집합({@link #PAIRING_RULE}). 배포 검증에서 변종 열 추가만으로 기존 열의 총량 표본이
+ *       5 → 1 로 줄어드는 것을 보고 고정.</li>
+ *   <li>2026-09-14 — 민감도 검정의 추정량 정정·위상 범위 보고 의무·오목 판 결론 슬롯·짝 제외 표기 의무. 부수 검정의 추정량 정의와
+ *       보고 의무만 바뀌었다.</li>
+ *   <li>2026-09-15 — 직전 배포 관측을 본 뒤: 판정 셀 분포({@link #JUDGMENT_DISTRIBUTION})의 <b>소급 명문화</b>(값은 지금까지의 판정이
+ *       쓴 분포와 같고 앞으로의 선택 자유도만 닫는다)와 기준선 보존·출처·재사용 의무({@link #GAP_JUDGMENT_RULE} 뒷부분). 소비된 W 눈금
+ *       판정의 지점 배열이 어디에도 남지 않은 것을 관측이 드러낸 뒤의 개정이다.</li>
+ * </ul>
+ * 어느 경우에도 판정 셀·판정 문턱·격차 정의·판정 자격은 바뀌지 않았고, 결과 코드 커밋은 규칙 커밋 뒤에 온다.</p>
  */
 public final class BenchmarkRules {
 
@@ -241,6 +248,19 @@ public final class BenchmarkRules {
             GroundTruthOracle.PowerControl.AVAILABLE;
 
     /**
+     * 판정 셀의 워크로드 분포. 분포는 판정 결과를 바꾸는 입력인데 규칙 축 밖에 있어 보고자가 고를 수 있었다 — <b>소급 명문화</b>다(2026-09-15):
+     * 값은 지금까지의 판정·관측이 전부 쓴 분포와 같고, 이 상수는 앞으로의 선택 자유도만 닫는다. 서비스의 기본 분포 상수와 같은 문자열이며
+     * 계약 시험이 둘의 일치를 본다(이 클래스는 서비스를 참조하지 않는다 — 의존 방향을 지키기 위해 시험이 대신 묶는다).
+     */
+    public static final String JUDGMENT_DISTRIBUTION = "heavytail";
+
+    /**
+     * 판정 기준선 파일의 저장소 경로(시험 자원). 값은 배포 jar 에 실리지 않는다 — 판정은 저장소 시험이 하는 일이고 배포 응답은 재현 참고다.
+     * 파일 형식과 갱신 이력({@code BASELINE_HISTORY})은 시험 쪽에 있다: 파일 내용은 결과이므로 규칙 클래스가 값을 들지 않는다.
+     */
+    public static final String JUDGMENT_BASELINE_PATH = "src/test/resources/scheduler/judgment/judgment-baseline.json";
+
+    /**
      * <b>판정 규칙과 그 사본</b>(한계 문구·지표 문구·판 설명·전제 문구·Swagger 설명)에 있으면 안 되는
      * 문장 조각 — 상수와 그 사본이 갈라지지 않게 <!-- ban-ok-block: 금지 조각을 정의하는 자리 — 블록 전체가 인용이다 -->
      * <b>한 배열</b>로 둔다. 조각으로 적는 이유는 "…없다"/"…없습니다" 같은 어미 차이로 검사가
@@ -291,7 +311,7 @@ public final class BenchmarkRules {
         axes.put("judgment", "board=" + JUDGMENT_BOARD + "|loadRatio=" + JUDGMENT_LOAD_RATIO + "|powerControl=" + JUDGMENT_POWER_CONTROL
                 + "|minPairedPoints=" + JUDGMENT_MIN_PAIRED_POINTS + "|medianReductionPp=" + JUDGMENT_MEDIAN_REDUCTION_PP
                 + "|reducedPointRatio=" + JUDGMENT_REDUCED_POINT_RATIO + "|directionCheckBoard=" + DIRECTION_CHECK_BOARD
-                + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP);
+                + "|unmeasuredSpreadCautionPp=" + UNMEASURED_SPREAD_CAUTION_PP + "|distribution=" + JUDGMENT_DISTRIBUTION);
         axes.put("banned", String.join(",", BANNED_CLAIMS));
         // 절차·정의 문장은 공백을 하나로 접어 따로 봉인한다 — 서식 편집 소음은 걸러지고, 문장을 바꿔 쓰면 이 축만 깨진다
         axes.put("prose", "headroom=" + HEADROOM_DEFINITION.replaceAll("\\s+", " ") + "|gapRule=" + GAP_JUDGMENT_RULE.replaceAll("\\s+", " ")
@@ -515,7 +535,18 @@ public final class BenchmarkRules {
                     + "값은 판을 실행해야 나오고, 상수에 박으면 실행 순서가 커밋 순서를 강제한다. "
                     + "이 지표의 정의와 문턱 상수는 이 PR 에서만 바뀌고 다음 PR 은 참조만 한다. "
                     + "판정 자격(폐쇄형): 판정·방향 판정은 JUDGMENT_BOARD·DIRECTION_CHECK_BOARD 두 판의 power 행에서만 성립하며, "
-                    + "그 밖의 판·열·지표는 전부 자격 없음이다 — 판이나 열이 늘어도 이 문장은 바뀌지 않는다.";
+                    + "그 밖의 판·열·지표는 전부 자격 없음이다 — 판이나 열이 늘어도 이 문장은 바뀌지 않는다. "
+                    + "판정 셀의 워크로드 분포는 JUDGMENT_DISTRIBUTION 이다. "
+                    + "기준선 보존: B 는 두 셀의 지점 배열째(null 자리 보존) 저장소 파일 " + JUDGMENT_BASELINE_PATH + " 에 두고, 상수·커밋 본문·중앙값만으로 "
+                    + "대신하지 않는다 — 중앙값만 남으면 3·4항은 영원히 재구성 불가다. 파일은 출처(소스 리비전·판/워크로드/설정 다이제스트·규칙 축 다이제스트)를 "
+                    + "함께 담고, 판정 보고는 파일과 출처를 인용한다. 판정 불가로 적을 때는 결측 항목(어느 실행의 어느 배열이 없는지)을 적시한다. "
+                    + "B 와 N 은 같은 생산 경로 — 저장소 시험의 코드 기본 설정 실행 — 에서 낸 값이며 배포 응답은 재현 확인용 참고다. 두 값이 다르면 차를 "
+                    + "보고에 적되 판정은 저장소 실행으로 한다. "
+                    + "기준선 재사용: 판정 PR 은 기준선 파일을 수정하지 않는다(B 는 N 이전에 이미 머지된 파일이어야 한다 — 저장소 밖 검사라 리뷰 항목이다). "
+                    + "기준선 갱신은 판정 보고를 게시한 뒤 별도 커밋으로 하고 판정의 성패와 무관하게 직전 머지 리비전으로 한다. 갱신 이력 행에는 직전 B 와의 "
+                    + "두 셀 중앙값 차를 적는다 — 판정 없는 변경이 기준을 얼마나 밀었는지가 보여야 한다. "
+                    + "사전 추정을 적을 때는 산출 방법(해석적 추정인지 변경 코드 실행값인지)을 함께 적는다.";
+
 
     /**
      * 한계 전력 눈금 민감도 3열의 {@code marginalScaleWatts} — 250(포화 발현: {@link #MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT} 아래) ·

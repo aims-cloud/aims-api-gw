@@ -208,7 +208,9 @@ public class PowerModel {
      *
      * <p><b>한 숫자 안에 기준선이 둘이다 — 의도된 절충.</b> 동적항은 {@link #idlePower}(선언 기준선, 진단 지표와
      * 볼록 곡선을 보호), 깨우기항만 {@link #wakeupPower}(실측 역산)다. 이 비일관은 비교 판에서 측정된 효과가 있다
-     * (균일 분포 판에서 깨운 노드에 얼마나 얹을지가 달라진다) — 생성식이 볼록한 비교판(convex·convex-misrated)에서 재판단한다.</p>
+     * (균일 분포 판에서 깨운 노드에 얼마나 얹을지가 달라진다) — 생성식이 볼록한 비교판(convex·convex-misrated)에서 재판단한다.
+     * 이 절충(선언 유휴 vs 실측 역산)은 그대로 남는다 — 동적항의 <b>사용률</b> 기저를 실효로 맞춘 것({@link #marginalPowerOnCurve})은
+     * 이 절충과 다른 축이다.</p>
      */
     public double realMarginalPower(NodeResource node, int requiredCpu) {
         double dynamic = marginalPowerOnCurve(node, requiredCpu);
@@ -251,13 +253,28 @@ public class PowerModel {
      * 곡선을 볼록으로 <b>가정</b>한 결과이며, 실측 서버가 그렇다는 단정은 아니다(판정 규칙의 한계 문구가
      * 밝히듯 문헌에는 반대 방향의 보고도 있다). 기존 {@code marginalPower} 는 현재 부하를 아예 보지 않아
      * 같은 사양이면 모든 노드가 같은 값이었다.</p>
+     *
+     * <p><b>곡선 위의 평가점 u 는 실효 사용률(예약분 반영)이다.</b> {@link #realMarginalPower} 한 식 안에서 "깨우기를 물릴지"
+     * ({@link #isActive})는 실효로 정하면서 "얼마나 늘지" 만 실측으로 재면, 한 실행에서 같은 노드에 워크로드를 잇달아 얹을 때
+     * 곡선 위 평가점이 첫 배치 자리에 머문다 — {@link #effectivePowerWatts}·{@link #effectiveHeadroomPercent} 가 이미 고친 것과 같은
+     * 부류의 결함이다. 깨우기항 {@link #wakeupPower} 의 역산은 여전히 실측 u 를 쓴다: 그쪽은 "같은 순간에 관측한 (P, u)" 가
+     * 전제라 실효를 넣으면 식이 성립하지 않는다(다른 근거, 같은 노드).</p>
+     *
+     * <p><b>기본 α=1 에서는 값이 바뀌지 않는다.</b> 두 기저가 갈리는 것은 {@code u + ΔU} 가 1 에서 잘리는 노드뿐이고,
+     * 제약 C1(가용 코어 = 총코어 × (1 − 실측) − 예약 ≥ 요구 코어)이 적격 노드에 {@code u_실효 + ΔU ≤ 1} 을 보장하므로 그런 노드는
+     * 전부 부적격이다. 배치는 적격 노드에서만 일어나므로 배치 결정·비교 판의 값은 그대로이고, 부적격 후보의 표시값(점수·정렬 순서)만
+     * 예약이 쌓인 실행에서 달라질 수 있다(예약으로 실효가 100% 에 닿은 부적격 노드는 동적항이 0 이 되어 전력 점수가 최고로 표시된다 — 선택 대상은
+     * 아니다). 항등은 실수에서 성립하고 binary64 에서는 마지막 비트까지 성립하지 않는다 — {@code (u+ΔU)−u} 가 평가점 u 에 따라 1 ULP 달라지므로,
+     * 지점값을 소수 4자리로 먼저 반올림하는 집계에서 4자리 동점에 앉은 칸(median 은 반올림된 두 지점값의 평균)은 표시값이 0.0001 뒤집힌다(잡음이 아니라
+     * 재현되는 동점 처리다). 그 마지막 비트는 통합 권고의 반납 경계와 전력 인지 선택의 동점 처리도 지나므로 "선택 불변" 은 무조건문이 아니라
+     * 관측 범위의 진술이다 — 회차별 관측은 배치 비교 계약 §10 의 행에 적는다. α&gt;1 이면 예약이 있는 적격 노드에서도 값이 갈린다 — 그것이 이 정정의 관측 가능한 효과다.</p>
      */
     public double marginalPowerOnCurve(NodeResource node, int requiredCpu) {
         double pMax = node.getPowerCapacityWatts();
         if (pMax <= 0) return 0;
 
         double alpha = props.getCurveAlpha();
-        double u = Math.min(1.0, Math.max(0, node.getCpuUsagePercent() / 100.0));
+        double u = Math.min(1.0, Math.max(0, node.effectiveCpuUsagePercent() / 100.0));   // 실효 — isActive 와 같은 기저
         double u2 = Math.min(1.0, u + (double) requiredCpu / Math.max(node.getTotalCpu(), 1));
 
         return (pMax - idlePower(node)) * (Math.pow(u2, alpha) - Math.pow(u, alpha));

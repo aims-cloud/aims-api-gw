@@ -24,5 +24,6 @@ public record WorkloadRequest(
         String preferredMdcId,
         Double maxPowerBudgetWatts,
         Double maxTemperatureCelsius,
+        Double requiredBandwidthMbps,
         String priority
 ) {}

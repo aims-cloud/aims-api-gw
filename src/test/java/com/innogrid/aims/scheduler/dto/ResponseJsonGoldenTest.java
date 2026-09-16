@@ -32,12 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 @SpringBootTest
 public class ResponseJsonGoldenTest {
 
-    /** 워크로드 응답 필드 21개. */
+    /** 워크로드 응답 필드 23개. */
     public static final Set<String> WORKLOAD_FIELDS = new TreeSet<>(Set.of(
             "id", "name", "description",
             "requiredCpu", "requiredMemoryMb", "requiredGpu", "requiredDiskGb",
             "resourceType", "dataMdcId", "preferredMdcId",
-            "maxPowerBudgetWatts", "maxTemperatureCelsius", "priority",
+            "maxPowerBudgetWatts", "maxTemperatureCelsius", "requiredBandwidthMbps", "priority",
             "assignedMdcId", "assignedNodeId", "status",
             "schedulingScore", "schedulingReason", "retryCount", "lastFailedAt",
             "createdAt", "scheduledAt"));
@@ -72,6 +72,7 @@ public class ResponseJsonGoldenTest {
         assertEquals("GPU", json.get("resourceType"));
         assertEquals(0, json.get("retryCount"), "배치 성공 시 재시도 횟수가 0 으로 초기화된다");
         assertEquals(0.8123, json.get("schedulingScore"));
+        assertEquals(1000.0, json.get("requiredBandwidthMbps"), "요구 대역폭은 엔티티 값 그대로 나간다");
         // resolve* 헬퍼는 get 접두어가 없어 응답에 나오지 않는다
         assertEquals(false, json.containsKey("resolveResourceType"));
     }
@@ -84,6 +85,7 @@ public class ResponseJsonGoldenTest {
         assertEquals(WORKLOAD_FIELDS, new TreeSet<>(json.keySet()), "값이 비어도 키는 전부 있어야 한다");
         assertNull(json.get("retryCount"), "기존 행처럼 null 이면 null 로 나간다 — 0 으로 바꾸면 계약 위반");
         assertNull(json.get("resourceType"));
+        assertNull(json.get("requiredBandwidthMbps"), "안 준 워크로드는 null — 예전 행과 같다");
         assertEquals("PENDING", json.get("status"));
         assertEquals("NORMAL", json.get("priority"));
     }
@@ -156,6 +158,7 @@ public class ResponseJsonGoldenTest {
             w.setPreferredMdcId("mdc-01");
             w.setMaxPowerBudgetWatts(450.0);
             w.setMaxTemperatureCelsius(70.0);
+            w.setRequiredBandwidthMbps(1000.0);
             w.setPriority(Workload.WorkloadPriority.HIGH);
             w.assignTo("mdc-01", "node-1", 0.8123, "최고 점수");
             return w;

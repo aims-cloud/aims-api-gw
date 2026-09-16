@@ -78,6 +78,9 @@ public class WorkloadService {
         if (request.maxTemperatureCelsius() != null) {
             workload.setMaxTemperatureCelsius(requirePositive(request.maxTemperatureCelsius(), "온도 상한(°C)"));
         }
+        if (request.requiredBandwidthMbps() != null) {
+            workload.setRequiredBandwidthMbps(requirePositive(request.requiredBandwidthMbps(), "요구 대역폭(Mbps)"));
+        }
         return workloadRepository.save(workload);
     }
 

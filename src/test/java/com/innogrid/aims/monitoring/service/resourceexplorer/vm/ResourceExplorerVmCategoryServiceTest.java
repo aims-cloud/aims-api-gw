@@ -99,7 +99,7 @@ class ResourceExplorerVmCategoryServiceTest {
                 .isInstanceOf(BusinessException.class);
 
         verify(metrics, never()).cpuSummary(any());
-        verify(metrics, never()).memoryTrend(any(), any(), any(), any(), any());
+        verify(metrics, never()).memoryTrend(any(VmMemoryMetric.class), any(), any(), any(), any());
         verify(metrics, never()).networkTrend(any(), any(), any(), any(), any());
     }
 

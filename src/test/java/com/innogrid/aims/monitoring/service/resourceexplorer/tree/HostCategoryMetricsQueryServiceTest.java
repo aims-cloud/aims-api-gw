@@ -8,6 +8,7 @@ import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.network.VmNetworkMetric;
@@ -108,6 +109,27 @@ class HostCategoryMetricsQueryServiceTest {
 
         when(client.queryResults(anyString())).thenReturn(List.of());
         assertThat(service.cpuInventory(SEL)).isEqualTo(CpuInventory.EMPTY);
+    }
+
+    @Test
+    void 노드_Memory_지표는_MemAvailable_기준으로_Used와_Free가_Total을_이룬다() {
+        String total = "node_memory_MemTotal_bytes{" + LABELS + "}";
+        String avail = "node_memory_MemAvailable_bytes{" + LABELS + "}";
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_USED, SEL))
+                .isEqualTo("(" + total + " - " + avail + ") / 1073741824");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_USED_PERCENT, SEL))
+                .isEqualTo("(1 - " + avail + " / " + total + ") * 100");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_FREE, SEL))
+                .isEqualTo(avail + " / 1073741824");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_FREE_PERCENT, SEL))
+                .isEqualTo(avail + " / " + total + " * 100");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_TOTAL, SEL))
+                .isEqualTo(total + " / 1073741824");
+
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "251.96")))));
+        assertThat(service.memoryTrend(MemoryMetric.MEMORY_USED, SEL, Instant.EPOCH, Instant.EPOCH, "5m"))
+                .containsExactly(new DataPoint(1_700_000_000L, 252.0));
     }
 
     @Test

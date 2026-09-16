@@ -13,6 +13,7 @@ import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.network.VmNetworkMetric;
@@ -94,6 +95,19 @@ public class HostCategoryMetricsQueryService {
         };
     }
 
+    /** 노드 Memory 지표 5종 — Free 는 MemAvailable 기준이라 Used + Free = Total 이 성립한다 */
+    static String memoryQuery(MemoryMetric metric, MetricSelector s) {
+        String total = "node_memory_MemTotal_bytes" + s.braces();
+        String avail = "node_memory_MemAvailable_bytes" + s.braces();
+        return switch (metric) {
+            case MEMORY_USED -> "(" + total + " - " + avail + ") / " + (long) GB;
+            case MEMORY_USED_PERCENT -> "(1 - " + avail + " / " + total + ") * 100";
+            case MEMORY_FREE -> avail + " / " + (long) GB;
+            case MEMORY_FREE_PERCENT -> avail + " / " + total + " * 100";
+            case MEMORY_TOTAL -> total + " / " + (long) GB;
+        };
+    }
+
     /** NIC 합산 초당 증가율 — lo·가상 인터페이스는 제외 */
     static String networkQuery(VmNetworkMetric metric, MetricSelector s, String window) {
         String counter = switch (metric) {
@@ -171,8 +185,13 @@ public class HostCategoryMetricsQueryService {
         return points(cpuQuery(metric, s, HostDetailMetricsQueryService.rateWindow(step)), from, to, step);
     }
 
-    /** 메모리 지표 시계열(GB 또는 %) — 미수집이면 빈 목록 */
+    /** 메모리 지표 시계열(GB 또는 %, VM 지표 세트) — 미수집이면 빈 목록 */
     public List<DataPoint> memoryTrend(VmMemoryMetric metric, MetricSelector s, Instant from, Instant to, String step) {
+        return points(memoryQuery(metric, s), from, to, step);
+    }
+
+    /** 메모리 지표 시계열(GB 또는 %, 노드 지표 세트) — 미수집이면 빈 목록 */
+    public List<DataPoint> memoryTrend(MemoryMetric metric, MetricSelector s, Instant from, Instant to, String step) {
         return points(memoryQuery(metric, s), from, to, step);
     }
 

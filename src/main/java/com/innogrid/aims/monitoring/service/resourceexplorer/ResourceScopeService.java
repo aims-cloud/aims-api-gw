@@ -21,6 +21,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostStatusJudge;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MonitoringCapabilityResolver;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MonitoringCapabilityResolver.Snapshot;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.PhysicalTreeBuilder;
@@ -192,38 +193,9 @@ public class ResourceScopeService {
         }
     }
 
-    /**
-     * 물리 호스트 실행 상태 판정.
-     * <ol>
-     *   <li>자산 상태 INACTIVE/DECOMMISSIONED → STOP, MAINTENANCE → PENDING</li>
-     *   <li>Thanos 정상 스냅샷이 없음(기동 직후 장애) → PENDING (관측 계통 장애를 호스트 오류로 집계하지 않는다)</li>
-     *   <li>ipmi_exporter 가 있고 섀시 전원이 꺼져 있으면 → STOP</li>
-     *   <li>exporter 미등록 → PENDING (상태 미확정)</li>
-     *   <li>exporter 중 하나라도 수집 중 → RUNNING, 전부 미수집 → ERROR</li>
-     * </ol>
-     */
-    // TODO:: 1세부가 물리 호스트 실행 상태를 별도 API 로 제공하면 그 값을 우선 사용하도록 교체
+    /** 물리 호스트 실행 상태 — 트리(PhysicalTreeBuilder)와 같은 규칙({@link HostStatusJudge}) */
     static ResourceStatus hostStatus(Asset asset, List<MonitoringTarget> targets, Snapshot metrics) {
-        switch (asset.getStatus()) {
-            case INACTIVE, DECOMMISSIONED -> { return ResourceStatus.STOP; }
-            case MAINTENANCE -> { return ResourceStatus.PENDING; }
-            case ACTIVE -> { }
-        }
-        if (metrics.degraded()) {
-            return ResourceStatus.PENDING;
-        }
-        for (MonitoringTarget target : targets) {
-            if (target.getExporterType() == ExporterType.IPMI_EXPORTER
-                    && Boolean.FALSE.equals(metrics.chassisPowerOn(target.getScrapeEndpoint()))) {
-                return ResourceStatus.STOP;
-            }
-        }
-        if (targets.isEmpty()) {
-            return ResourceStatus.PENDING;
-        }
-        boolean anyCollecting = targets.stream()
-                .anyMatch(t -> metrics.statusOf(t.getScrapeEndpoint()) == MonitoringStatus.COLLECTING);
-        return anyCollecting ? ResourceStatus.RUNNING : ResourceStatus.ERROR;
+        return HostStatusJudge.judge(asset, targets, metrics);
     }
 
     /** 1세부 VM 상태 — 우리 4종 이름과 같으면 그대로, 아니면 Tumblebug 어휘 매핑을 재사용 */

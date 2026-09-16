@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 /**
  * Thanos 에서 트리 구성에 필요한 수집 상태를 한 번에 읽어 스냅샷으로 제공한다 (docs/06 §5.1, §9.4).
  *
- * 호스트·VM 마다 질의하지 않고 전체에 대해 7개 쿼리만 수행한 뒤 라벨로 조인한다.
+ * 호스트·VM 마다 질의하지 않고 전체에 대해 9개 쿼리만 수행한 뒤 라벨로 조인한다.
  * <ul>
  *   <li>물리 호스트(1세부): {@code instance} 라벨 = monitoring_target 의 {@code address:port}</li>
  *   <li>Tumblebug VM(2세부): exporter 등록 시 relabel 로 심는 {@code tb_ns / tb_infra / tb_node} 라벨 (docs/06 §9.6).
@@ -30,8 +30,10 @@ import org.springframework.stereotype.Component;
  *
  * "존재"와 "현재 상태"를 분리한다 — 일시적 수집 실패만으로 기존 항목을 제거하지 않기 위해서다.
  * <ul>
- *   <li>존재(항목 생성 여부): GPU 장치·하드웨어 센서·Tumblebug VM 등록은 {@code count_over_time(...[presenceWindow])}
- *       (기본 24시간)로 판단한다. exporter 가 죽어 즉시 쿼리에서 사라져도 하루 안에 수집 이력이 있으면 항목을 유지한다.</li>
+ *   <li>존재(항목 생성 여부): GPU 장치·하드웨어 센서·Tumblebug VM 등록·node_exporter 항목별 지표군은
+ *       {@code count_over_time(...[presenceWindow])}(기본 24시간)로 판단한다. exporter 가 죽어 즉시 쿼리에서 사라져도
+ *       하루 안에 수집 이력이 있으면 항목을 유지한다. node_exporter 항목은 exporter 가 살아 있는데 그 항목 지표만 없으면
+ *       NO_DATA 로 표시한다(Service Status 는 systemd 콜렉터, Swap 은 SwapTotal &gt; 0 이 있어야 한다).</li>
  *   <li>현재 상태: {@code up} 즉시 쿼리 — 1 이면 COLLECTING, 0 이거나 lookback(5분) 안에 샘플이 없으면 UNAVAILABLE.</li>
  * </ul>
  * 스냅샷은 설정된 TTL(기본 1분) 동안 캐시하며, Thanos 장애 시 마지막 정상 스냅샷을 유지한다.
@@ -50,6 +52,16 @@ public class MonitoringCapabilityResolver {
     /** Tumblebug VM 현재 수집 상태 — relabel 라벨(tb_ns/tb_infra/tb_node)이 있는 시계열만 */
     public static final String TB_UP_QUERY = "max by (tb_ns, tb_infra, tb_node) (up{tb_node!=\"\"})";
 
+    /**
+     * node_exporter 항목별 존재 판정 지표 (docs/06 §5.2 항목 ↔ 대표 지표). 하나라도 표본이 있으면 그 항목은 데이터가 있다.
+     * Swap 은 별도 — 지표는 항상 있지만 SwapTotal 이 0 이면 의미가 없어 {@link #SWAP_TOTAL_METRIC} 값 &gt; 0 으로 판정한다.
+     */
+    public static final List<String> NODE_PRESENCE_METRICS = List.of(
+            "node_cpu_seconds_total", "node_memory_MemTotal_bytes", "node_disk_read_bytes_total",
+            "node_filesystem_size_bytes", "node_network_receive_bytes_total", "node_procs_running",
+            "node_systemd_unit_state", "node_load1");
+    public static final String SWAP_TOTAL_METRIC = "node_memory_SwapTotal_bytes";
+
     /** GPU 장치 존재 — presenceWindow 안에 한 번이라도 수집된 (instance, UUID, gpu) */
     public static String gpuDeviceQuery(String window) {
         return "count by (instance, UUID, gpu) (count_over_time(DCGM_FI_DEV_GPU_UTIL[" + window + "]))";
@@ -62,6 +74,21 @@ public class MonitoringCapabilityResolver {
     public static String ipmiMetricQuery(String window) {
         return "count by (instance, metric) (count_over_time(label_replace({__name__=~\"ipmi_.*\"}, \"metric\", \"$1\", \"__name__\", \"(.*)\")["
                 + window + ":5m]))";
+    }
+
+    /**
+     * node_exporter 항목별 지표군 존재 — presenceWindow 안에 한 번이라도 수집된 (instance, tb 라벨, 메트릭 이름).
+     * 물리 호스트와 Tumblebug VM 시계열을 한 번에 읽는다(VM 시계열은 instance 와 tb_* 라벨을 모두 가진다).
+     */
+    public static String nodeMetricQuery(String window) {
+        return "count by (instance, tb_ns, tb_infra, tb_node, metric) (count_over_time(label_replace({__name__=~\""
+                + String.join("|", NODE_PRESENCE_METRICS) + "\"}, \"metric\", \"$1\", \"__name__\", \"(.*)\")["
+                + window + ":5m]))";
+    }
+
+    /** Swap 존재 — presenceWindow 안의 SwapTotal 최대값. 0 이면 스왑이 없는 호스트라 Swap 항목은 NO_DATA */
+    public static String swapPresenceQuery(String window) {
+        return "max by (instance, tb_ns, tb_infra, tb_node) (max_over_time(" + SWAP_TOTAL_METRIC + "[" + window + "]))";
     }
 
     /** Tumblebug VM exporter 등록 여부 — presenceWindow 안에 up 시계열이 한 번이라도 있었던 VM */
@@ -85,10 +112,26 @@ public class MonitoringCapabilityResolver {
                            Map<String, Boolean> upByTbNode,
                            Set<String> registeredTbNodes,
                            Map<String, List<GpuDevice>> gpuDevicesByTbNode,
+                           Map<String, Set<String>> nodeMetricsByInstance,
+                           Map<String, Set<String>> nodeMetricsByTbNode,
                            boolean degraded) {
 
+        /** node_exporter 항목 지표군 정보 없이 만드는 생성자 — 항목 NO_DATA 판정을 쓰지 않는 호출자(역할 스코프 등)용 */
+        public Snapshot(Instant loadedAt,
+                        Map<String, Boolean> upByInstance,
+                        Map<String, List<GpuDevice>> gpuDevicesByInstance,
+                        Map<String, Set<String>> ipmiMetricsByInstance,
+                        Map<String, Boolean> chassisPowerOnByInstance,
+                        Map<String, Boolean> upByTbNode,
+                        Set<String> registeredTbNodes,
+                        Map<String, List<GpuDevice>> gpuDevicesByTbNode,
+                        boolean degraded) {
+            this(loadedAt, upByInstance, gpuDevicesByInstance, ipmiMetricsByInstance, chassisPowerOnByInstance,
+                    upByTbNode, registeredTbNodes, gpuDevicesByTbNode, Map.of(), Map.of(), degraded);
+        }
+
         static Snapshot empty(Instant at, boolean degraded) {
-            return new Snapshot(at, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), Map.of(), degraded);
+            return new Snapshot(at, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), Map.of(), Map.of(), Map.of(), degraded);
         }
 
         /** IPMI 섀시 전원 — true 켜짐, false 꺼짐, null 미확인(ipmi_exporter 없음 또는 샘플 없음) */
@@ -111,6 +154,16 @@ public class MonitoringCapabilityResolver {
         public boolean hasAnyMetric(String instance, List<String> metricNames) {
             Set<String> names = ipmiMetricsByInstance.get(instance);
             return names != null && metricNames.stream().anyMatch(names::contains);
+        }
+
+        /** presenceWindow 안에 확인된 물리 호스트(instance)의 node_exporter 지표군 — 없으면 빈 집합 */
+        public Set<String> nodeMetrics(String instance) {
+            return nodeMetricsByInstance.getOrDefault(instance, Set.of());
+        }
+
+        /** presenceWindow 안에 확인된 Tumblebug VM 의 node_exporter 지표군 — 없으면 빈 집합 */
+        public Set<String> tbNodeMetrics(String nsId, String infraId, String nodeId) {
+            return nodeMetricsByTbNode.getOrDefault(tbKey(nsId, infraId, nodeId), Set.of());
         }
 
         /**
@@ -240,9 +293,22 @@ public class MonitoringCapabilityResolver {
                     tbGpus.computeIfAbsent(key, k -> new ArrayList<>()).add(new GpuDevice(uuid, label(row, "gpu")));
                 }
             }
+            Map<String, Set<String>> nodeMetrics = new HashMap<>();
+            Map<String, Set<String>> tbNodeMetrics = new HashMap<>();
+            for (Map<String, Object> row : client.queryResults(nodeMetricQuery(window))) {
+                String name = label(row, "metric");
+                if (name != null) {
+                    addNodeMetric(row, name, nodeMetrics, tbNodeMetrics);
+                }
+            }
+            for (Map<String, Object> row : client.queryResults(swapPresenceQuery(window))) {
+                if (isPositive(value(row))) {
+                    addNodeMetric(row, SWAP_TOTAL_METRIC, nodeMetrics, tbNodeMetrics);
+                }
+            }
             gpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
             tbGpus.values().forEach(list -> list.sort(MonitoringCapabilityResolver::compareGpu));
-            return new Snapshot(now, up, gpus, ipmi, power, tbUp, tbRegistered, tbGpus, false);
+            return new Snapshot(now, up, gpus, ipmi, power, tbUp, tbRegistered, tbGpus, nodeMetrics, tbNodeMetrics, false);
         } catch (RuntimeException e) {
             if (previous != null) {
                 // 마지막 정상 결과를 유지하되 TTL 만 갱신해 장애 중 Thanos 를 반복 호출하지 않는다
@@ -250,10 +316,26 @@ public class MonitoringCapabilityResolver {
                 return new Snapshot(now, previous.upByInstance(), previous.gpuDevicesByInstance(),
                         previous.ipmiMetricsByInstance(), previous.chassisPowerOnByInstance(),
                         previous.upByTbNode(), previous.registeredTbNodes(), previous.gpuDevicesByTbNode(),
+                        previous.nodeMetricsByInstance(), previous.nodeMetricsByTbNode(),
                         previous.degraded());
             }
             log.warn("Thanos 수집 상태 조회 실패 — 정상 스냅샷이 없어 상태 미확정으로 표시합니다: {}", e.getMessage());
             return Snapshot.empty(now, true);
+        }
+    }
+
+    /** 한 행의 지표 이름을 instance 키와(tb 라벨이 있으면) Tumblebug VM 키 양쪽에 기록한다 */
+    private static void addNodeMetric(Map<String, Object> row,
+                                      String metricName,
+                                      Map<String, Set<String>> byInstance,
+                                      Map<String, Set<String>> byTbNode) {
+        String instance = label(row, "instance");
+        if (instance != null && !instance.isBlank()) {
+            byInstance.computeIfAbsent(instance, k -> new HashSet<>()).add(metricName);
+        }
+        String tbKey = tbKey(row);
+        if (tbKey != null) {
+            byTbNode.computeIfAbsent(tbKey, k -> new HashSet<>()).add(metricName);
         }
     }
 
@@ -272,7 +354,7 @@ public class MonitoringCapabilityResolver {
         String ns = label(row, "tb_ns");
         String infra = label(row, "tb_infra");
         String node = label(row, "tb_node");
-        if (ns == null || infra == null || node == null) {
+        if (ns == null || infra == null || node == null || ns.isBlank() || infra.isBlank() || node.isBlank()) {
             return null;
         }
         return Snapshot.tbKey(ns, infra, node);
@@ -283,6 +365,17 @@ public class MonitoringCapabilityResolver {
             return Integer.compare(Integer.parseInt(a.index()), Integer.parseInt(b.index()));
         } catch (NumberFormatException e) {
             return String.valueOf(a.index()).compareTo(String.valueOf(b.index()));
+        }
+    }
+
+    private static boolean isPositive(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        try {
+            return Double.parseDouble(raw) > 0;
+        } catch (NumberFormatException e) {
+            return false;
         }
     }
 

@@ -278,19 +278,20 @@ public class TumblebugTreeBuilder {
                                                    TbNode node,
                                                    Snapshot metrics) {
         String vmNodeId = "tbvm:" + role + ":" + nsId + ":" + infraId + ":" + node.id();
+        String vmResourceId = "TB:" + nsId + "/" + infraId + "/" + node.id();
         MonitoringStatus status = metrics.tbStatusOf(nsId, infraId, node.id());
 
-        List<ResourceTreeNodeResponse> items = new ArrayList<>();
-        if (status != MonitoringStatus.NOT_CONFIGURED) {
-            items.addAll(PhysicalTreeBuilder.nodeExporterItems(vmNodeId, role, null, status));
-            List<GpuDevice> gpus = metrics.tbGpuDevices(nsId, infraId, node.id());
-            ResourceTreeNodeResponse gpuGroup = PhysicalTreeBuilder.gpuGroup(vmNodeId, role, null, gpus, status);
-            if (gpuGroup != null) {
-                items.add(gpuGroup);
-            }
-        }
+        // 항목은 exporter 이력이 없어도(NOT_CONFIGURED) 항상 만든다. NO_DATA 판정은 exporter 이력이 있고 Thanos 정상 스냅샷일 때만
+        Set<String> presentMetrics = status == MonitoringStatus.NOT_CONFIGURED || metrics.degraded()
+                ? null : metrics.tbNodeMetrics(nsId, infraId, node.id());
+        List<ResourceTreeNodeResponse> items = new ArrayList<>(
+                PhysicalTreeBuilder.nodeExporterItems(vmNodeId, vmResourceId, role, null, status, presentMetrics));
+        // VM 은 dcgm 등록 원장이 없어 장치 이력이 없으면 "dcgm 미설치"(NOT_CONFIGURED)로 본다
+        List<GpuDevice> gpus = metrics.tbGpuDevices(nsId, infraId, node.id());
+        items.add(PhysicalTreeBuilder.gpuGroup(vmNodeId, vmResourceId, role, null, gpus,
+                gpus.isEmpty() ? MonitoringStatus.NOT_CONFIGURED : status));
         return ResourceTreeNodeResponse.of(vmNodeId, groupNodeId, node.name(), ResourceTreeNodeType.VIRTUAL_MACHINE,
-                "TB:" + nsId + "/" + infraId + "/" + node.id(), role, null, node.provider(), node.status(), status, items);
+                vmResourceId, role, null, node.provider(), node.status(), status, items);
     }
 
     // ── Tumblebug 조회·캐시 ─────────────────────────────────────

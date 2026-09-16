@@ -32,27 +32,35 @@ class PowerAwareScoringTest {
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
     /**
-     * 예약이 쌓이면 전력 복합 점수가 움직인다 — 그 폭이 정확히 {@code peiWeight × ΔPEI} 다(비낭비 항은 적격 노드에서 항등, 한계 전력
-     * 동적항은 α=1 에서 불변). 기저를 실측으로 되돌리면 폭이 0 이 되어 여기서 멈춘다.
+     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 칸이 배치용 실효 PEI 와 같고, 비낭비 칸은 항등,
+     * 전력점수의 이동은 {@code peiWeight × ΔPEI} 다(한계 전력 동적항은 α=1 에서 불변). 엔진 배선을 진단용 두 함수로 되돌리면
+     * PEI 칸이 예약 전과 같아져 여기서 멈춘다.
      */
-    @DisplayName("예약이 쌓인 노드의 전력 점수 상승분은 peiWeight × ΔPEI 와 같다")
+    @DisplayName("예약이 쌓인 노드의 후보 상세 PEI 는 배치용 실효 PEI 이고 전력점수 상승분은 peiWeight × ΔPEI 다")
     @Test
     void reserved_node_power_score_moves_by_pei_weight_times_delta() {
         SchedulerProperties props = new SchedulerProperties();
         PowerModel model = new PowerModel(props);
-        NodeResource plain = node("n", 45, 40, 387, 55);
-        NodeResource reserved = node("n", 45, 40, 387, 55);
-        reserved.reserve(1, 0, 0);
+        NodeResource node = node("n", 45, 40, 387, 55);
+        List<NodeResource> nodes = List.of(node);
 
-        double dPei = model.placementPei(reserved) - model.placementPei(plain);
-        double dWaste = model.placementWasteScore(reserved) - model.placementWasteScore(plain);
-        double dMarginal = model.marginalScore(reserved, 1) - model.marginalScore(plain, 1);
+        SchedulingResult before = scheduler.schedule(workload(1), nodes, policy());
+        node.reserve(1, 0, 0);
+        SchedulingResult after = scheduler.schedule(workload(1), nodes, policy());
+
+        double dPei = model.placementPei(node) - model.normalizedPei(node);
         assertTrue(dPei > 0, "판정 판 대표 노드는 예약이 쌓이면 PEI 상승");
-        assertEquals(0.0, dWaste, 1e-9, "비낭비 항등");
-        assertEquals(0.0, dMarginal, 1e-9, "α=1 · 자르기 비발현이라 한계 전력 불변");
-        double expected = props.getPower().getPeiWeight() * dPei;
-        double actual = props.getPower().getPeiWeight() * dPei + props.getPower().getWasteWeight() * dWaste + props.getPower().getMarginalWeight() * dMarginal;
-        assertEquals(expected, actual, 1e-12, "전력 복합 점수의 이동은 PEI 항 하나에서 온다");
+        assertEquals(round4(model.normalizedPei(node)), detail(before, "n", "PEI"), 0.0, "예약 0: 상세 PEI = 실측 PEI");
+        assertEquals(round4(model.placementPei(node)), detail(after, "n", "PEI"), 0.0, "예약 후: 상세 PEI = 배치용 실효 PEI");
+        assertTrue(detail(after, "n", "PEI") > detail(before, "n", "PEI"), "상세 PEI 가 예약을 따라 움직인다");
+        assertEquals(detail(before, "n", "비낭비"), detail(after, "n", "비낭비"), 0.0, "비낭비 항등(적격 노드)");
+        assertEquals(props.getPower().getPeiWeight() * dPei,
+                detail(after, "n", "전력점수") - detail(before, "n", "전력점수"), 2e-4,
+                "전력점수의 이동은 PEI 항 하나에서 온다(4자리 반올림 두 번의 여유)");
+    }
+
+    private static double round4(double v) {
+        return Math.round(v * 10000.0) / 10000.0;
     }
 
     // ── 결함 A — 비례성이 저전력 노드를 벌하던 문제 ────────────────

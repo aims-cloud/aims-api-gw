@@ -202,6 +202,15 @@ class PowerModelTest {
         assertNotEquals(model.wasteScore(clamped), model.placementWasteScore(clamped), "클램프 노드에서는 두 값이 갈린다");
     }
 
+    @DisplayName("배치용 PEI 도 정규화 뒤 1.0 에서 포화한다")
+    @Test
+    void placement_pei_saturates_at_one() {
+        NodeResource frugal = node(90, 10, 500);                     // 90/10 = 9 %/W ≫ normalizer 0.5
+        assertEquals(1.0, model.placementPei(frugal), 0.0);
+        frugal.reserve(1, 0, 0);
+        assertEquals(1.0, model.placementPei(frugal), 0.0, "예약이 쌓여도 포화 상한은 그대로");
+    }
+
     @DisplayName("배치용 PEI·비낭비도 전력 미계측이면 중립값이다")
     @Test
     void placement_metrics_are_neutral_without_power() {

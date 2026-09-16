@@ -59,6 +59,21 @@ class PowerAwareScoringTest {
                 "전력점수의 이동은 PEI 항 하나에서 온다(4자리 반올림 두 번의 여유)");
     }
 
+    /**
+     * 비낭비 배선을 잡는 유일한 자리 — 적격 노드에서는 두 함수가 항등이라, 실효 사용률이 100 에서 잘리는 부적격 후보에서만 갈린다.
+     * u=90 · P=440 · 예약 2/8: P_eff 527.5, 실효 이상 곡선 500 → overdraw 27.5 → 0.945. 진단용은 P_ideal 465 → 1.0.
+     */
+    @DisplayName("실효 사용률이 잘린 부적격 후보의 상세 비낭비 칸은 배치용 실효값 0.945 다")
+    @Test
+    void clamped_ineligible_candidate_reports_placement_waste() {
+        NodeResource clamped = node("c", 90, 40, 440, 55);
+        clamped.reserve(2, 0, 0);
+        SchedulingResult result = scheduler.schedule(workload(1), List.of(clamped), policy());
+
+        assertEquals(0.945, detail(result, "c", "비낭비"), 0.0);
+        assertEquals(1.0, new PowerModel(new SchedulerProperties()).wasteScore(clamped), 1e-9, "진단용은 예약을 보지 않아 1.0");
+    }
+
     private static double round4(double v) {
         return Math.round(v * 10000.0) / 10000.0;
     }

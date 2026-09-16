@@ -374,9 +374,10 @@ class PlacementBenchmarkServiceTest {
      * 총전력 표본이 5 → 1 로 줄어든 것이 이 규칙의 계기다. 리터럴의 출처는 두 겹이다: 처음은 변종 열 도입 전(위생 정비 PR jar) 응답의
      * 표본 5 · 6429.0022 · 32.3241 이었고, 배치 점수 PEI·비낭비 항의 기저를 실효로 바꾼 판정 회차 1 에서 power 열의 배치가 달라져
      * 기준 집합 짝 지점이 5 → 6 으로 늘고 두 중앙값이 6412.2625 · 32.2913 으로 움직였다 — 지금 리터럴은 그 회차의 값이다.
-     * 이 시험이 잡는 것은 여전히 "override 열이 기준 집합 열을 움직이지 않는다" 이며, 값의 이동은 배치 점수 변경에 귀속된다.
+     * 값의 이동은 배치 점수 변경에 귀속된다. 현 리터럴은 변종 열이 있는 실행에서 온 값이라 override 열 독립성의 교차 증거는
+     * 첫 출처에서 소모됐고, 이 시험은 이후 회차에 대해 "값이 조용히 움직이지 않는다" 를 지킨다.
      */
-    @DisplayName("변종 열을 더해도 기준 집합 열의 총량 표본 수와 값이 변종 열 없이 낸 값과 같다")
+    @DisplayName("변종 열을 더해도 기준 집합 열의 총량 표본 수와 값이 사전 등록 리터럴과 같다")
     @Test
     void adding_override_columns_does_not_move_core_column_totals() {
         Cell adversarial = cell(service.compare("adversarial", "heavytail").boards().get(0), 90, "AVAILABLE");

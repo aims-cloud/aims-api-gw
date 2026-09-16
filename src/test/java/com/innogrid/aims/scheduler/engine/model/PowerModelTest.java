@@ -185,7 +185,7 @@ class PowerModelTest {
         assertTrue(model.placementPei(rising) > model.normalizedPei(rising), "판정 판 대표 노드 — 예약이 쌓이면 PEI 상승");
         assertTrue(model.placementPei(falling) < model.normalizedPei(falling), "저전력·고정격 합성 노드 — 조건 밖에서는 하락");
         // 상승 폭의 식: ΔPEI = ((u+100r)/(P+D·r) − u/P) / normalizer
-        double r = 1.0 / 8, u = 45, p = 387, d = 500 - model.idlePower(rising);
+        double r = 1.0 / 8, u = 45, p = 387, d = 350;                // D = 정격 500 − 유휴 150 (리터럴 — idlePower 재호출로 검산하지 않는다)
         double expected = ((u + 100 * r) / (p + d * r) - u / p) / 0.5;
         assertEquals(expected, model.placementPei(rising) - model.normalizedPei(rising), 1e-9);
     }
@@ -200,6 +200,19 @@ class PowerModelTest {
         assertEquals(100.0, clamped.effectiveCpuUsagePercent(), 1e-9);
         assertTrue(clamped.availableCpu() < 1, "가용 코어가 없어 어떤 요구도 수용하지 못한다");
         assertNotEquals(model.wasteScore(clamped), model.placementWasteScore(clamped), "클램프 노드에서는 두 값이 갈린다");
+    }
+
+    /** 유휴 노드에 첫 예약이 잡히면 실효 경로 둘(PEI·가동 판정)이 같이 움직인다 — 14.5 / 151.75 / 0.5. */
+    @DisplayName("유휴 노드에 예약이 잡히면 배치용 PEI 가 실효 값으로 오르고 가동 판정도 같은 예약을 본다")
+    @Test
+    void idle_node_with_reservation_moves_placement_pei_and_activity_together() {
+        NodeResource idle = node(2, 108, 500);
+        assertFalse(model.isActive(idle), "예약 0: 유휴");
+        idle.reserve(1, 0, 0);                                       // 실효 14.5%, P_eff 108 + 350 × 0.125 = 151.75
+
+        assertEquals(0.1911038, model.placementPei(idle), 1e-7);
+        assertEquals(0.0370370, model.normalizedPei(idle), 1e-7, "진단용은 그대로 2 / 108 / 0.5");
+        assertTrue(model.isActive(idle), "같은 예약으로 가동 판정도 뒤집힌다");
     }
 
     @DisplayName("배치용 PEI 도 정규화 뒤 1.0 에서 포화한다")

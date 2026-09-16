@@ -54,9 +54,10 @@ class PowerAwareScoringTest {
         assertEquals(round4(model.placementPei(node)), detail(after, "n", "PEI"), 0.0, "예약 후: 상세 PEI = 배치용 실효 PEI");
         assertTrue(detail(after, "n", "PEI") > detail(before, "n", "PEI"), "상세 PEI 가 예약을 따라 움직인다");
         assertEquals(detail(before, "n", "비낭비"), detail(after, "n", "비낭비"), 0.0, "비낭비 항등(적격 노드)");
+        assertEquals(detail(before, "n", "실질한계전력점수"), detail(after, "n", "실질한계전력점수"), 0.0, "α=1 · 자르기 비발현이라 한계항 불변");
         assertEquals(props.getPower().getPeiWeight() * dPei,
-                detail(after, "n", "전력점수") - detail(before, "n", "전력점수"), 2e-4,
-                "전력점수의 이동은 PEI 항 하나에서 온다(4자리 반올림 두 번의 여유)");
+                detail(after, "n", "전력점수") - detail(before, "n", "전력점수"), 1.01e-4,
+                "전력점수의 이동은 PEI 항 하나에서 온다(4자리 반올림 두 번의 상한 1e-4 에 1% 여유)");
     }
 
     /**
@@ -70,7 +71,7 @@ class PowerAwareScoringTest {
         clamped.reserve(2, 0, 0);
         SchedulingResult result = scheduler.schedule(workload(1), List.of(clamped), policy());
 
-        assertEquals(0.945, detail(result, "c", "비낭비"), 0.0);
+        assertEquals(0.945, detail(result, "c", "비낭비"), 0.0, "설정 기본값(유휴비 0.3 · 정격 500) 전제 — 기본값이 바뀌면 리터럴도 함께 고친다");
         assertEquals(1.0, new PowerModel(new SchedulerProperties()).wasteScore(clamped), 1e-9, "진단용은 예약을 보지 않아 1.0");
     }
 

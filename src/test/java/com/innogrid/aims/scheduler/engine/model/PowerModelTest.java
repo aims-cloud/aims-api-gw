@@ -41,6 +41,16 @@ class PowerModelTest {
         assertEquals(0.0, model.rawPei(node), 1e-9);
     }
 
+    /** 이 파일의 손 검산 리터럴이 전제하는 설정 기본값 — 값이 바뀌면 여기서 먼저 멈춰 원인을 가리킨다. */
+    @DisplayName("손 검산 리터럴이 전제하는 설정 기본값은 정규화 0.5 · 유휴비 0.3 · 곡선 α 1.0 이다")
+    @Test
+    void literals_assume_default_power_settings() {
+        SchedulerProperties.Power defaults = new SchedulerProperties().getPower();
+        assertEquals(0.5, defaults.getPeiNormalizer(), 0.0);
+        assertEquals(0.3, defaults.getIdleRatio(), 0.0);
+        assertEquals(1.0, defaults.getCurveAlpha(), 0.0);
+    }
+
     @DisplayName("이상적인 전력 곡선과 일치하면 비례성이 1이다")
     @Test
     void ideal_curve_proportionality_1() {
@@ -210,7 +220,7 @@ class PowerModelTest {
         assertFalse(model.isActive(idle), "예약 0: 유휴");
         idle.reserve(1, 0, 0);                                       // 실효 14.5%, P_eff 108 + 350 × 0.125 = 151.75
 
-        assertEquals(0.1911038, model.placementPei(idle), 1e-7);
+        assertEquals(0.1911038, model.placementPei(idle), 1e-7, "설정 기본값(정규화 0.5 · 유휴비 0.3) 전제");
         assertEquals(0.0370370, model.normalizedPei(idle), 1e-7, "진단용은 그대로 2 / 108 / 0.5");
         assertTrue(model.isActive(idle), "같은 예약으로 가동 판정도 뒤집힌다");
     }

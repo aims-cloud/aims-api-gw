@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>정상 반환 → SUCCESS (async 면 IN_PROGRESS), 예외 → FAILURE + 메시지. 예외는 그대로 다시 던진다.</li>
  *   <li>트랜잭션 Aspect 보다 바깥({@code @Order} 낮은 값)에서 감싸 커밋 시점 예외도 FAILURE 로 잡는다.</li>
+ *   <li>사용자는 SecurityContext 의 인증 주체이고, 애너테이션의 {@code userId} 식이 있으면(로그인·가입) 그 값으로 대신한다.</li>
  *   <li>기록했음을 요청 속성에 남겨 {@link PortalLogFallbackInterceptor} 가 중복 기록하지 않게 한다.</li>
  * </ul>
  */
@@ -48,7 +49,7 @@ public class PortalLogAspect {
         OffsetDateTime startedAt = OffsetDateTime.now();
         Method method = ((MethodSignature) pjp.getSignature()).getMethod();
         Object[] args = pjp.getArgs();
-        PortalLogContext ctx = contextResolver.resolve();
+        PortalLogContext ctx = context(portalLog, method, args);
         markRecorded();
 
         Object result;
@@ -73,6 +74,15 @@ public class PortalLogAspect {
         }
         writer.write(builder.build());
         return result;
+    }
+
+    /** 공통 문맥 — {@code userId} 식이 있으면 요청 인자에서 사용자 ID 를 뽑아 인증 주체 대신 쓴다(로그인 시도 기록) */
+    private PortalLogContext context(PortalLog portalLog, Method method, Object[] args) {
+        if (portalLog.userId().isBlank()) {
+            return contextResolver.resolve();
+        }
+        String userId = spel.evaluate(portalLog.userId(), method, args, null, null, null);
+        return contextResolver.resolveAs(userId);
     }
 
     private static PortalLogEntry.Builder entry(PortalLog portalLog, PortalLogContext ctx, OffsetDateTime startedAt, String content) {

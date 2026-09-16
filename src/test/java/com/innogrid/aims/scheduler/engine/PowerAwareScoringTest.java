@@ -7,7 +7,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -73,6 +75,21 @@ class PowerAwareScoringTest {
 
         assertEquals(0.945, detail(result, "c", "비낭비"), 0.0, "설정 기본값(유휴비 0.3 · 정격 500) 전제 — 기본값이 바뀌면 리터럴도 함께 고친다");
         assertEquals(1.0, new PowerModel(new SchedulerProperties()).wasteScore(clamped), 1e-9, "진단용은 예약을 보지 않아 1.0");
+    }
+
+    /** 설정 오류(정규화 상수 0)가 엔진까지 번지지 않는다 — 옛 코드는 상세 PEI 1.0 포화·전력점수 과대였다. */
+    @DisplayName("PEI 정규화 상수가 0 인 설정에서도 후보 상세 PEI 는 대체값으로 정규화된 값이다")
+    @Test
+    void zero_pei_normalizer_setting_does_not_saturate_engine_pei() {
+        SchedulerProperties broken = new SchedulerProperties();
+        broken.getPower().setPeiNormalizer(0);
+        PowerAwareScheduler guarded = new PowerAwareScheduler(new PowerModel(broken), new ThermalModel(broken), new NetworkModel(broken), broken);
+        NodeResource node = node("n", 10, 40, 200, 55);
+
+        SchedulingResult result = guarded.schedule(workload(1), List.of(node), policy());
+        assertEquals(0.10, detail(result, "n", "PEI"), 0.0, "(10 / 200) / 0.5 — 1.0 포화가 아니다");
+        assertEquals(detail(scheduler.schedule(workload(1), List.of(node("n", 10, 40, 200, 55)), policy()), "n", "전력점수"),
+                detail(result, "n", "전력점수"), 0.0, "기본 설정 엔진과 같은 전력점수");
     }
 
     private static double round4(double v) {

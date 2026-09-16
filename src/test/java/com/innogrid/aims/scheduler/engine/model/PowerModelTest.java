@@ -246,6 +246,54 @@ class PowerModelTest {
         assertEquals(0.5, model.placementWasteScore(noCapacity), 1e-9);
     }
 
+    /** 정격 0 이면 D = 0 이라 실효 전력이 실측에 머물고 분자만 실효가 된다 — 그 혼재를 계산하지 않고 중립값을 준다(비낭비와 대칭). */
+    @DisplayName("정격을 모르는 노드는 예약이 있어도 배치용 PEI 가 중립값이다")
+    @Test
+    void placement_pei_is_neutral_without_capacity_even_when_reserved() {
+        NodeResource noCapacity = new NodeResource("mdc-01", "node-1", 8, 16384, 0, 40, 30, 30, 250, 0, 50, 1000, 500);
+        noCapacity.reserve(2, 0, 0);                                 // 실효 65%, P_eff = 250 (D = 0)
+
+        assertEquals(0.5, model.placementPei(noCapacity), 0.0);
+        assertEquals(0.5, model.placementWasteScore(noCapacity), 0.0);
+        assertEquals(0.32, model.normalizedPei(noCapacity), 1e-9, "진단용은 정격과 무관하게 실측 (40 / 250) / 0.5");
+    }
+
+    /** 설정이 0 이면 min(1, x/0) 이 사용률 &gt; 0 노드에 1.0, 사용률 0 노드에 NaN(엔진 반올림에서 0.0)을 준다 — 대체값으로 되돌린다. */
+    @DisplayName("PEI 정규화 상수가 0 이하이면 두 PEI 모두 대체값 0.5 로 정규화한다")
+    @Test
+    void pei_normalizer_at_or_below_zero_falls_back() {
+        for (double broken : new double[] {0.0, -1.0}) {
+            SchedulerProperties props = new SchedulerProperties();
+            props.getPower().setPeiNormalizer(broken);
+            PowerModel guarded = new PowerModel(props);
+            NodeResource node = node(10, 200, 500);
+            NodeResource reserved = node(10, 200, 500);
+            reserved.reserve(1, 0, 0);
+
+            assertEquals(0.5, guarded.effectivePeiNormalizer(), 0.0, "대체값");
+            assertEquals(0.10, guarded.normalizedPei(node), 1e-9, "0.05 / 0.5 — 1.0 이 되면 안 된다");
+            assertEquals(0.1846154, guarded.placementPei(reserved), 1e-7, "22.5 / 243.75 / 0.5 — 포화도 음수도 아니다");
+            assertEquals(model.placementPei(reserved), guarded.placementPei(reserved), 0.0, "기본 설정 모델과 비트 동일");
+            NodeResource idle = node(0, 150, 500);
+            assertEquals(0.0, guarded.normalizedPei(idle), 0.0, "사용률 0: 0/0 NaN 이 아니라 0");
+            assertEquals(0.0, guarded.placementPei(idle), 0.0);
+        }
+        assertEquals(0.5, model.effectivePeiNormalizer(), 0.0, "기본 설정은 그대로 0.5");
+    }
+
+    /** 대체값은 0 이하에서만 — 양수 설정은 그대로 흘러야 하고, 기본값과 대체값이 같은 수라 이 한 줄이 없으면 상수 통째 대체가 살아남는다. */
+    @DisplayName("PEI 정규화 상수가 양수이면 설정값이 그대로 쓰인다")
+    @Test
+    void positive_pei_normalizer_is_used_as_is() {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getPower().setPeiNormalizer(3.5);
+        PowerModel custom = new PowerModel(props);
+
+        assertEquals(3.5, custom.effectivePeiNormalizer(), 0.0);
+        assertEquals(0.05 / 3.5, custom.normalizedPei(node(10, 200, 500)), 1e-12);
+        assertEquals(0.05 / 3.5, custom.placementPei(node(10, 200, 500)), 1e-12);
+    }
+
     /** 활성 판정 기준은 설정값(기본 5%)이다. */
     @DisplayName("활성 노드 판정은 CPU 기준을 따른다")
     @Test

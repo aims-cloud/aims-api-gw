@@ -6,11 +6,15 @@ import java.util.Map;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.network.NetworkMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.network.VmNetworkMetric;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuDevice;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuInventory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -82,6 +86,83 @@ class HostCategoryMetricsQueryServiceTest {
 
         when(client.queryResults(anyString())).thenReturn(List.of());
         assertThat(service.cpuDevices(SEL)).isEmpty();
+    }
+
+    @Test
+    void CPU_인벤토리는_목록을_만든_표본의_시각을_함께_돌려준다() {
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            return q.startsWith("node_cpu_info")
+                    ? List.of(cpuInfo("0", "0", "0", "GenuineIntel", "Xeon Gold 6338"))
+                    : List.of();
+        });
+        CpuInventory fromInfo = service.cpuInventory(SEL);
+        assertThat(fromInfo.devices()).containsExactly(new CpuDevice(0, "GenuineIntel", "Xeon Gold 6338", 1, 1));
+        assertThat(fromInfo.collectedAt()).isEqualTo(Instant.ofEpochSecond(1_700_000_000L));
+
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            return q.startsWith("count by (instance) (node_cpu_seconds_total") ? vector("8") : List.of();
+        });
+        CpuInventory fromCount = service.cpuInventory(SEL);
+        assertThat(fromCount.devices()).containsExactly(new CpuDevice(0, null, null, 8, 8));
+        assertThat(fromCount.collectedAt()).isEqualTo(Instant.ofEpochSecond(1_700_000_000L));
+
+        when(client.queryResults(anyString())).thenReturn(List.of());
+        assertThat(service.cpuInventory(SEL)).isEqualTo(CpuInventory.EMPTY);
+    }
+
+    @Test
+    void 노드_Memory_지표는_MemAvailable_기준으로_Used와_Free가_Total을_이룬다() {
+        String total = "node_memory_MemTotal_bytes{" + LABELS + "}";
+        String avail = "node_memory_MemAvailable_bytes{" + LABELS + "}";
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_USED, SEL))
+                .isEqualTo("(" + total + " - " + avail + ") / 1073741824");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_USED_PERCENT, SEL))
+                .isEqualTo("(1 - " + avail + " / " + total + ") * 100");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_FREE, SEL))
+                .isEqualTo(avail + " / 1073741824");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_FREE_PERCENT, SEL))
+                .isEqualTo(avail + " / " + total + " * 100");
+        assertThat(HostCategoryMetricsQueryService.memoryQuery(MemoryMetric.MEMORY_TOTAL, SEL))
+                .isEqualTo(total + " / 1073741824");
+
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "251.96")))));
+        assertThat(service.memoryTrend(MemoryMetric.MEMORY_USED, SEL, Instant.EPOCH, Instant.EPOCH, "5m"))
+                .containsExactly(new DataPoint(1_700_000_000L, 252.0));
+    }
+
+    @Test
+    void 노드_Network_지표는_물리_NIC_합산_rate이고_TOTAL은_수신_송신_합이다() {
+        String filter = "{device!~\"lo|veth.*|docker.*|br.*|virbr.*\"," + LABELS + "}";
+        String recv = "sum by (instance) (rate(node_network_receive_bytes_total" + filter + "[5m]))";
+        String sent = "sum by (instance) (rate(node_network_transmit_bytes_total" + filter + "[5m]))";
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_TOTAL, SEL, "5m"))
+                .isEqualTo(recv + " + " + sent);
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_RECV, SEL, "5m")).isEqualTo(recv);
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_ERROR_IN, SEL, "1h"))
+                .isEqualTo("sum by (instance) (rate(node_network_receive_errs_total" + filter + "[1h]))");
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_DROP_OUT, SEL, "5m"))
+                .isEqualTo(HostCategoryMetricsQueryService.networkQuery(VmNetworkMetric.NETWORK_DROP_OUT, SEL, "5m"));
+
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "1048576.44")))));
+        assertThat(service.networkTrend(NetworkMetric.NETWORK_TOTAL, SEL, Instant.EPOCH, Instant.EPOCH, "30s"))
+                .containsExactly(new DataPoint(1_700_000_000L, 1_048_576.4));
+    }
+
+    @Test
+    void 노드_CPU_지표는_VM과_같은_mode_PromQL을_쓴다() {
+        assertThat(HostCategoryMetricsQueryService.cpuQuery(CpuMetric.CPU_USED, SEL, "5m"))
+                .isEqualTo(HostCategoryMetricsQueryService.cpuQuery(VmCpuMetric.CPU_USED, SEL, "5m"));
+        assertThat(HostCategoryMetricsQueryService.cpuQuery(CpuMetric.CPU_SOFT_IRQ, SEL, "1h"))
+                .isEqualTo("avg by (instance) (rate(node_cpu_seconds_total{mode=\"softirq\"," + LABELS + "}[1h])) * 100");
+
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "3.33")))));
+        assertThat(service.cpuTrend(CpuMetric.CPU_STEAL, SEL, Instant.EPOCH, Instant.EPOCH, "30s"))
+                .containsExactly(new DataPoint(1_700_000_000L, 3.3));
     }
 
     @Test

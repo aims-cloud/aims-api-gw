@@ -260,7 +260,7 @@ VM 배포(Infra 생성) 기능은 아래를 **배포 후처리**로 수행해야
 - **publicIP 변동**: floating IP 를 바꾸면 Tumblebug 원격 명령(§3.2)과 스크랩 타겟(§4)이 모두 옛 주소를 가리킨다. 배포 기능은 IP 변경 시 타겟 파일을 갱신해야 한다. 백엔드 조인은 라벨 기반이라 영향이 없다.
 - **Tumblebug rate limit**: Tumblebug 은 짧은 시간에 연속 요청이 들어오면 `429 rate limit exceeded` 를 낸다(4요청/20ms 에서 발생). 백엔드 트리 조회는 매핑된 Namespace 만 조회하고 429 시 재시도하도록 되어 있지만, 배포 기능이 Tumblebug API 를 연속 호출할 때도 같은 대비가 필요하다.
 - **GPU VM**: dcgm_exporter 를 VM 에 설치하는 경우 같은 타겟 라벨(`tb_*`)로 `:9400` 을 등록하면 트리의 GPU 그룹·VRAM 카드가 채워진다. 백엔드는 node_exporter 와 dcgm_exporter 에 같은 선택자를 쓴다.
-- **1세부 VM 과 구분**: 이 절차는 Tumblebug 가지 전용이다. 물리 호스트 하위 1세부 가상자원은 `SEBU1:{externalId}` 경로이며 라벨 규약이 다르다(미확정).
+- **물리 호스트 하위 가상 자원과 구분**: 이 절차는 Tumblebug 가지 전용이다. 물리 호스트 하위 가상 자원(CB-Spider, `SPIDER:{connectionName}/{systemId}`, docs/06 §9.3)은 라벨 규약이 다르다(미확정 — 1세부 데이터 확정 시 재작업).
 
 ---
 

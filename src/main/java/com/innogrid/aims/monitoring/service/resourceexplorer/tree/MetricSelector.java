@@ -14,13 +14,17 @@ public record MetricSelector(String matchers) {
 
     /** monitoring_target scrape 주소(address:port)로 물리 호스트 exporter 하나를 가리킨다 */
     public static MetricSelector instance(String instance) {
-        return new MetricSelector("instance=\"" + escape(instance) + "\"");
+        return new MetricSelector(label("instance", instance));
     }
 
     /** Tumblebug Namespace/Infra/Node ID 로 VM 하나를 가리킨다 */
     public static MetricSelector tumblebugNode(String nsId, String infraId, String nodeId) {
-        return new MetricSelector("tb_ns=\"" + escape(nsId) + "\",tb_infra=\"" + escape(infraId)
-                + "\",tb_node=\"" + escape(nodeId) + "\"");
+        return new MetricSelector(label("tb_ns", nsId) + "," + label("tb_infra", infraId) + "," + label("tb_node", nodeId));
+    }
+
+    /** 완전 일치 라벨 매처 한 개 — {@code name="value"}. 값의 역슬래시·큰따옴표는 이스케이프한다 */
+    public static String label(String name, String value) {
+        return name + "=\"" + escape(value) + "\"";
     }
 
     /** 이 선택자에 라벨 매처를 덧붙인다 (예: {@code mode="idle"}) */

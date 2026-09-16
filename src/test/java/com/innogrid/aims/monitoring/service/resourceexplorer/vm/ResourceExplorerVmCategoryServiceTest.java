@@ -99,8 +99,8 @@ class ResourceExplorerVmCategoryServiceTest {
                 .isInstanceOf(BusinessException.class);
 
         verify(metrics, never()).cpuSummary(any());
-        verify(metrics, never()).memoryTrend(any(), any(), any(), any(), any());
-        verify(metrics, never()).networkTrend(any(), any(), any(), any(), any());
+        verify(metrics, never()).memoryTrend(any(VmMemoryMetric.class), any(), any(), any(), any());
+        verify(metrics, never()).networkTrend(any(VmNetworkMetric.class), any(), any(), any(), any());
     }
 
     // ── CPU ─────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ class ResourceExplorerVmCategoryServiceTest {
         assertThat(res.series().get(0).name()).isEqualTo("cpu");
         assertThat(res.series().get(0).dataPoints()).containsExactly(new DataPoint(1L, 1.5));
 
-        when(metrics.cpuTrend(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(metrics.cpuTrend(any(VmCpuMetric.class), any(), any(), any(), any())).thenReturn(List.of());
         assertThat(cpu.getCpuMetricTrend(null, NS, INFRA, NODE, VmCpuMetric.CPU_USED, NodeMetricInterval.LAST_10M)
                 .series()).isEmpty();
     }

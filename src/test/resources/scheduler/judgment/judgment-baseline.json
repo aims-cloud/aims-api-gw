@@ -1,7 +1,7 @@
 {
-  "schemaVersion" : 2,
+  "schemaVersion" : 3,
   "provenance" : {
-    "gitHead" : "f5b7d4c19a454480882e9c9eb19f09e56cbd7264 (refs/heads/rules/judgment-round2-target)",
+    "gitHead" : "c5430891ec4b698b69c65f2538b83942bbbf6171 (refs/heads/rules/judgment-target-idle-baseline)",
     "productionPath" : "저장소 시험 · 코드 기본 SchedulerProperties · compareFresh(캐시 우회) — 배포 env 의 덮어쓰기는 반영하지 않는다",
     "distribution" : "heavytail",
     "boardDigests" : {
@@ -21,10 +21,10 @@
     "ruleAxisDigests" : {
       "banned" : "e621e7f43e72",
       "boards" : "9ab95b89dc3e",
-      "judgment" : "106525cdf288",
+      "judgment" : "3a9290f91dd7",
       "measured" : "0189eec53480",
       "metrics" : "0435607b4998",
-      "prose" : "f60c6d7d04ff",
+      "prose" : "7fad731af40a",
       "sensitivity" : "3741559c00dd",
       "sweep" : "559301d27583"
     },
@@ -49,93 +49,93 @@
       "columns" : {
         "power" : {
           "points" : [
-            15.9517,
-            14.9565,
-            15.1091,
+            16.9712,
+            15.6884,
+            13.7124,
             14.907,
-            12.6221,
-            12.2107,
-            9.5268,
-            10.0577,
-            9.6305,
-            15.9825,
-            16.7421,
-            16.4161
+            14.1624,
+            15.7364,
+            15.8566,
+            16.5423,
+            18.1142,
+            17.3538,
+            16.5726,
+            22.1024
           ],
           "samples" : 12,
-          "median" : 14.9318
+          "median" : 16.1995
         },
         "power-idle-fixed" : {
           "points" : [
-            17.7938,
-            17.5822,
-            17.156,
-            17.4254,
-            12.3363,
-            13.2345,
-            14.8124,
-            15.2707,
-            14.2834,
-            14.1202,
-            18.5715,
-            18.3193
+            17.8969,
+            17.607,
+            12.5892,
+            17.1363,
+            11.7213,
+            17.873,
+            14.4207,
+            15.1567,
+            14.7062,
+            18.9648,
+            18.402,
+            18.9437
           ],
           "samples" : 12,
-          "median" : 16.2133
+          "median" : 17.3717
         },
         "power-s0" : {
           "points" : [
-            16.9466,
-            16.6683,
-            16.1849,
-            14.3414,
-            15.2365,
-            16.8951,
-            18.3736,
-            18.8368,
-            18.1788,
-            17.1131,
-            17.7227,
-            22.1153
+            16.5392,
+            16.2404,
+            16.1283,
+            15.3762,
+            15.2449,
+            16.3166,
+            18.2502,
+            18.5288,
+            18.3258,
+            22.2254,
+            23.0383,
+            21.6957
           ],
           "samples" : 12,
-          "median" : 17.0299
+          "median" : 17.3947
         },
         "power-s1000" : {
           "points" : [
-            27.6995,
-            21.7908,
-            15.669,
-            15.8602,
-            20.8374,
-            26.2351,
-            27.8417,
-            28.2476,
-            23.7154,
-            28.3972,
-            28.3072,
-            27.1326
+            27.2491,
+            26.1869,
+            21.817,
+            26.0578,
+            24.9148,
+            25.726,
+            27.9367,
+            28.4208,
+            28.4663,
+            28.1532,
+            27.4041,
+            27.8426
           ],
           "samples" : 12,
-          "median" : 26.6839
+          "median" : 27.3266
         },
         "power-s250" : {
           "points" : [
-            8.4853,
+            8.1083,
             7.6328,
-            7.1706,
-            6.9625,
-            7.1202,
-            7.797,
-            9.3513,
-            10.1635,
-            9.7689,
-            9.6951,
-            9.1059,
-            8.8058
+            7.5967,
+            7.1536,
+            6.5646,
+            7.9699,
+            9.2023,
+            10.2052,
+            10.0926,
+            9.5336,
+            9.2185,
+            8.818
           ],
           "samples" : 12,
-          "median" : 8.6456
+          "median" : 8.4631
         }
       }
     },
@@ -146,93 +146,93 @@
       "columns" : {
         "power" : {
           "points" : [
-            11.9936,
-            10.4694,
-            11.1864,
-            12.5858,
-            10.98,
-            7.3642,
-            7.7279,
-            8.8112,
-            8.2241,
-            7.782,
-            14.9846,
-            12.8574
+            12.857,
+            13.2261,
+            10.6342,
+            11.1426,
+            12.2567,
+            10.859,
+            11.5212,
+            11.7563,
+            12.6385,
+            15.4536,
+            16.1027,
+            14.6322
           ],
           "samples" : 12,
-          "median" : 10.7247
+          "median" : 12.4476
         },
         "power-idle-fixed" : {
           "points" : [
-            11.0485,
-            11.3958,
-            10.435,
-            10.4693,
-            10.5349,
-            11.1286,
-            8.0766,
-            8.5808,
-            8.2178,
-            11.9722,
-            12.4331,
-            14.9778
+            10.8393,
+            10.9776,
+            9.6664,
+            10.3713,
+            11.0606,
+            11.1799,
+            12.4024,
+            12.9613,
+            12.9194,
+            12.3376,
+            16.6671,
+            14.9051
           ],
           "samples" : 12,
-          "median" : 10.7917
+          "median" : 11.7587
         },
         "power-s0" : {
           "points" : [
-            14.3783,
-            12.3501,
-            11.1864,
-            10.9501,
-            11.8496,
-            10.8003,
-            11.5734,
-            12.0994,
-            12.166,
-            15.0851,
-            15.7127,
-            18.2563
+            17.9667,
+            14.7831,
+            14.1266,
+            13.7465,
+            14.0731,
+            15.1061,
+            16.1359,
+            16.2021,
+            15.803,
+            20.026,
+            19.6383,
+            18.0864
           ],
           "samples" : 12,
-          "median" : 12.1327
+          "median" : 15.9695
         },
         "power-s1000" : {
           "points" : [
-            18.8257,
-            14.8415,
-            12.6268,
-            12.3149,
-            14.0288,
-            21.046,
-            20.3183,
-            16.1426,
-            16.6593,
-            18.9867,
-            19.7945,
-            19.3083
+            17.8092,
+            18.1789,
+            17.9737,
+            17.3385,
+            17.459,
+            17.8441,
+            19.0007,
+            20.0111,
+            19.9199,
+            19.683,
+            19.8862,
+            19.6925
           ],
           "samples" : 12,
-          "median" : 17.7425
+          "median" : 18.5898
         },
         "power-s250" : {
           "points" : [
-            6.7457,
-            6.5069,
-            5.6374,
-            5.7705,
-            7.0997,
-            6.966,
-            6.1221,
-            7.6798,
-            8.5526,
-            7.9151,
-            7.8784,
-            7.3112
+            7.1617,
+            7.0583,
+            5.5321,
+            5.6882,
+            5.7314,
+            7.0685,
+            7.8938,
+            8.6127,
+            8.1787,
+            7.8419,
+            8.216,
+            7.49
           ],
           "samples" : 12,
-          "median" : 7.0329
+          "median" : 7.3259
         }
       }
     }
@@ -241,35 +241,405 @@
     "convex-misrated-independent" : [
       {
         "phaseSeed" : 7,
-        "powerMedian" : 11.5508
+        "powerMedian" : 13.0185
       },
       {
         "phaseSeed" : 11,
-        "powerMedian" : 12.4176
+        "powerMedian" : 12.7021
       },
       {
         "phaseSeed" : 13,
-        "powerMedian" : 10.4231
+        "powerMedian" : 12.3288
       }
     ],
     "main-independent" : [
       {
         "phaseSeed" : 7,
-        "powerMedian" : 15.283
+        "powerMedian" : 16.0768
       },
       {
         "phaseSeed" : 11,
-        "powerMedian" : 14.4653
+        "powerMedian" : 15.9563
       },
       {
         "phaseSeed" : 13,
-        "powerMedian" : 15.784
+        "powerMedian" : 16.5212
       }
     ]
   },
   "concave" : {
     "board" : "concave",
-    "powerMedian" : 14.9095,
-    "idleFixedMedian" : 15.5067
+    "powerMedian" : 16.0398,
+    "idleFixedMedian" : 15.7629
+  },
+  "outside" : {
+    "convex-misrated:110:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 110,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 0,
+        "median" : null
+      }
+    },
+    "convex-misrated:110:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 110,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 0,
+        "median" : null
+      }
+    },
+    "convex-misrated:30:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 30,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          4.9499,
+          4.9881,
+          6.9269,
+          6.0301,
+          6.0854,
+          6.1487,
+          6.5614,
+          6.6357,
+          13.1248,
+          7.4725,
+          4.5352,
+          5.2457
+        ],
+        "samples" : 12,
+        "median" : 6.1171
+      }
+    },
+    "convex-misrated:30:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 30,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          1.9469,
+          1.9218,
+          3.5257,
+          2.757,
+          2.8072,
+          2.9092,
+          3.3459,
+          3.4769,
+          4.2153,
+          4.2534,
+          1.7145,
+          2.2617
+        ],
+        "samples" : 12,
+        "median" : 2.8582
+      }
+    },
+    "convex-misrated:60:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          12.857,
+          13.2261,
+          10.6342,
+          11.1426,
+          12.2567,
+          10.859,
+          11.5212,
+          11.7563,
+          12.6385,
+          15.4536,
+          16.1027,
+          14.6322
+        ],
+        "samples" : 12,
+        "median" : 12.4476
+      }
+    },
+    "convex-misrated:60:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 60,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          6.0666,
+          6.2924,
+          3.9732,
+          4.404,
+          5.3268,
+          4.1737,
+          4.8321,
+          5.1416,
+          5.9485,
+          8.4592,
+          8.9606,
+          7.6847
+        ],
+        "samples" : 12,
+        "median" : 5.6377
+      }
+    },
+    "convex-misrated:90:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 90,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          8.8472,
+          8.9264,
+          10.4702,
+          7.7625,
+          11.3116,
+          12.6627,
+          14.789,
+          14.4185,
+          14.1444,
+          13.2866,
+          14.0306,
+          9.5772
+        ],
+        "samples" : 12,
+        "median" : 11.9872
+      }
+    },
+    "convex-misrated:90:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 90,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          5.7102,
+          5.7448,
+          4.1827,
+          4.5771,
+          4.9292,
+          6.2094,
+          8.1993,
+          7.9623,
+          7.7411,
+          6.9784,
+          7.6672,
+          6.4483
+        ],
+        "samples" : 12,
+        "median" : 6.3288
+      }
+    },
+    "main:110:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 110,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          0.4211,
+          null,
+          null,
+          null,
+          0.1855,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 2,
+        "median" : 0.3033
+      }
+    },
+    "main:110:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 110,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          0.4211,
+          null,
+          null,
+          null,
+          0.1855,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 2,
+        "median" : 0.3033
+      }
+    },
+    "main:30:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 30,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          6.9513,
+          7.8239,
+          7.3859,
+          6.7627,
+          6.9612,
+          7.1709,
+          7.3558,
+          8.844,
+          10.0295,
+          10.5602,
+          10.3831,
+          7.806
+        ],
+        "samples" : 12,
+        "median" : 7.596
+      }
+    },
+    "main:30:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 30,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          3.9302,
+          4.612,
+          4.1656,
+          3.6022,
+          3.7844,
+          4.0149,
+          4.2366,
+          5.5969,
+          6.6816,
+          7.1742,
+          7.0076,
+          4.735
+        ],
+        "samples" : 12,
+        "median" : 4.4243
+      }
+    },
+    "main:60:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          16.9712,
+          15.6884,
+          13.7124,
+          14.907,
+          14.1624,
+          15.7364,
+          15.8566,
+          16.5423,
+          18.1142,
+          17.3538,
+          16.5726,
+          22.1024
+        ],
+        "samples" : 12,
+        "median" : 16.1995
+      }
+    },
+    "main:60:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 60,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          10.0679,
+          8.8854,
+          7.0526,
+          8.0808,
+          7.4106,
+          8.7936,
+          8.9188,
+          9.5802,
+          11.013,
+          10.4219,
+          9.7527,
+          11.5588
+        ],
+        "samples" : 12,
+        "median" : 9.2495
+      }
+    },
+    "main:90:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 90,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          9.5777,
+          8.7764,
+          13.2141,
+          12.9905,
+          12.7905,
+          13.5701,
+          15.0711,
+          15.1589,
+          14.5236,
+          9.9653,
+          9.7629,
+          8.881
+        ],
+        "samples" : 12,
+        "median" : 12.8905
+      }
+    },
+    "main:90:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 90,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          6.6718,
+          5.8723,
+          7.1878,
+          6.9627,
+          6.7941,
+          7.5169,
+          8.9,
+          9.0291,
+          8.4445,
+          7.1106,
+          6.9193,
+          6.054
+        ],
+        "samples" : 12,
+        "median" : 7.0367
+      }
+    }
   }
 }

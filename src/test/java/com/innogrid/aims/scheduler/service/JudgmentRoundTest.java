@@ -32,6 +32,7 @@ import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.service.JudgmentBaselines.CellBlock;
 import com.innogrid.aims.scheduler.service.JudgmentBaselines.Column;
 import com.innogrid.aims.scheduler.service.JudgmentBaselines.JudgmentBaseline;
+import com.innogrid.aims.scheduler.service.JudgmentBaselines.OutsideCell;
 import com.innogrid.aims.scheduler.service.JudgmentBaselines.PhaseEntry;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -63,6 +64,8 @@ class JudgmentRoundTest {
     @BeforeAll
     void computeCurrentRunAndWriteTheReport() throws IOException {
         baseline = JudgmentBaselines.readRepositoryBaseline();
+        assertEquals(JudgmentBaselines.SCHEMA_VERSION, baseline.schemaVersion(),
+                "기준선 파일의 형식이 코드와 다르다 — 옛 형식으로 초안을 쓰면 표 G 가 전 셀을 짝 집합 변화로 잘못 적는다. 기준선을 새 형식으로 다시 뜬다");
         SchedulerProperties props = new SchedulerProperties();
         PlacementBenchmarkService service = new PlacementBenchmarkService(
                 new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(), new TemperatureAwareScheduler())),
@@ -137,7 +140,7 @@ class JudgmentRoundTest {
         assertFalse(verdict.reason().isBlank());
         assertTrue(Files.exists(REPORT), "보고 초안 파일이 없다 — 판정 PR 은 이 파일에서 표를 옮긴다");
         String written = Files.readString(REPORT, StandardCharsets.UTF_8);
-        for (String section : List.of("0. 출처", "표 A", "표 B", "표 C", "표 D", "표 E", "표 F", "결말")) {
+        for (String section : List.of("0. 출처", "표 A", "표 B", "표 C", "표 D", "표 E", "표 F", "표 G", "결말", "지점별 차 중앙값", "최소 동률")) {
             assertTrue(written.contains(section), "보고 초안에 '" + section + "' 이 없다");
         }
     }
@@ -164,6 +167,113 @@ class JudgmentRoundTest {
         }
         assertNotNull(current.concave().powerMedian());
         assertNotNull(current.concave().idleFixedMedian());
+        assertEquals(16, current.outside().size(), "판정 자격 두 판 × 부하율 4 × 전원 제어 2 = 16 셀");
+        assertEquals(baseline.outside().keySet(), current.outside().keySet(), "기준선과 현 실행의 셀 키 집합이 다르다");
+        for (OutsideCell c : current.outside().values()) {
+            assertNotNull(c.power(), c.board() + " 셀의 power 열이 없다");
+        }
+    }
+
+    /** 최소 동률 지점 수의 특수값 — 교집합이 하한 미달이라 판정 불가 / 지점이 너무 많아 전수 계산을 생략. */
+    static final int TIE_UNJUDGEABLE = -1, TIE_TOO_MANY = -2;
+
+    /** 2항이 미달이 되도록 동률(g_i(N) := g_i(B))로 돌릴 수 있는 지점의 최소 개수 — 모든 조합 중 최소. 이미 미달이면 null. */
+    static Integer minTieCountToFail(List<Double> b, List<Double> n) {
+        List<Integer> paired = new ArrayList<>();
+        for (int i = 0; i < b.size(); i++) if (b.get(i) != null && n.get(i) != null) paired.add(i);
+        if (paired.size() < BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS) return TIE_UNJUDGEABLE;
+        if (paired.size() > 20) return TIE_TOO_MANY;
+        Double medianB = BenchmarkRules.median(paired.stream().map(b::get).toList());
+        int m = paired.size();
+        for (int k = 0; k <= m; k++) {
+            for (int mask = 0; mask < (1 << m); mask++) {
+                if (Integer.bitCount(mask) != k) continue;
+                List<Double> tied = new ArrayList<>();
+                for (int j = 0; j < m; j++) tied.add(((mask >> j) & 1) == 1 ? b.get(paired.get(j)) : n.get(paired.get(j)));
+                double reduction = Math.round((medianB - BenchmarkRules.median(tied)) * 10000.0) / 10000.0;
+                if (reduction < BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP) return k == 0 ? null : k;
+            }
+        }
+        return m;
+    }
+
+    @DisplayName("최소 동률 지점 수 — 항등은 해당 없음, 전 지점 10%p 축소는 7지점을 돌려야 미달, 교집합 하한 미달은 판정 불가")
+    @Test
+    void the_minimum_tie_count_behaves_at_the_edges() {
+        List<Double> b = points(baseline, "judgment", "power");
+        assertNull(minTieCountToFail(b, b), "항등은 2항이 이미 미달");
+        List<Double> big = b.stream().map(v -> v == null ? null : v - 10.0).toList();
+        // 12지점 전부 −10.0 이면 중앙값 차 10.0. k 지점을 B 로 되돌리면 되돌린 값들이 위쪽 절반을 차지해 중앙값이 오른다 — 7지점(절반 초과)에서 2.0 미달
+        assertEquals(7, minTieCountToFail(b, big), "전 지점 10%p 축소면 절반을 넘는 7지점을 돌려야 미달");
+        List<Double> sparse = new ArrayList<>(b);
+        for (int i = 0; i < 3; i++) sparse.set(i, null);
+        assertEquals(TIE_UNJUDGEABLE, minTieCountToFail(sparse, big), "교집합 9 < 하한 10 은 판정 불가로 따로 표기");
+    }
+
+    /** 표 G 분류 집계 — 판정 셀·방향 셀 자신은 제외(표 A·B 에 있다), 차 = B − N(격차는 낮을수록 좋음). */
+    record OutsideSummary(int excluded, int worse, int better, int tied, int changedPairing, int unpaired, List<String> lines) {}
+
+    static OutsideSummary classifyOutside(JudgmentBaseline b, JudgmentBaseline n) {
+        int excluded = 0, worse = 0, better = 0, tied = 0, changedPairing = 0, unpaired = 0;
+        List<String> lines = new ArrayList<>();
+        for (Map.Entry<String, OutsideCell> e : new TreeMap<>(n.outside()).entrySet()) {
+            OutsideCell nCell = e.getValue();
+            OutsideCell bCell = b.outside().get(e.getKey());
+            boolean isJudgment = nCell.loadRatioPercent() == BenchmarkRules.JUDGMENT_LOAD_RATIO
+                    && BenchmarkRules.JUDGMENT_POWER_CONTROL.name().equals(nCell.powerControl());
+            Double bm = bCell == null ? null : bCell.power().median();
+            Double nm = nCell.power().median();
+            int bn = bCell == null ? 0 : bCell.power().samples();
+            int nn = nCell.power().samples();
+            String tag;
+            if (isJudgment) { tag = nCell.board().equals(BenchmarkRules.JUDGMENT_BOARD) ? "판정 셀(표 A)" : "방향 셀(표 B)"; excluded++; }
+            else if (bm == null && nm == null) { tag = "둘 다 짝 없음"; unpaired++; }
+            else if (bm == null || nm == null) { tag = "짝 집합 변화"; changedPairing++; }
+            else {
+                double d = Math.round((bm - nm) * 10000.0) / 10000.0;
+                if (d <= -BenchmarkRules.JUDGMENT_POINT_IGNORE_PP) { tag = "악화 " + d; worse++; }
+                else if (d >= BenchmarkRules.JUDGMENT_POINT_IGNORE_PP) { tag = "축소 " + d; better++; }
+                else { tag = "동률"; tied++; }
+                if (bCell.power().points() != null && nCell.power().points() != null) {
+                    PairedDifference pd = BenchmarkRules.medianOfPairedDifferences(bCell.power().points(), nCell.power().points());
+                    tag += " · I 제한 지점별 차 중앙값 " + pd.median() + " (|I| " + pd.pairedCount() + ")";
+                }
+            }
+            lines.add("   " + e.getKey() + ": " + bm + "(n=" + bn + ") → " + nm + "(n=" + nn + ") · " + tag);
+        }
+        return new OutsideSummary(excluded, worse, better, tied, changedPairing, unpaired, lines);
+    }
+
+    /** 표 G 분류의 갈림 — 한쪽만 값이 없으면 짝 집합 변화(악화 아님), N 이 커지면 악화, 작아지면 축소. 항등 실행에는 없는 갈래를 합성 사본으로 고정한다. */
+    @DisplayName("표 G 분류 — 한쪽만 값이 없는 셀은 짝 집합 변화이고, N 이 크면 악화·작으면 축소다")
+    @Test
+    void outside_classification_distinguishes_pairing_change_from_worsening() {
+        String worseKey = JudgmentBaselines.outsideKey(BenchmarkRules.DIRECTION_CHECK_BOARD, 30, "AVAILABLE");
+        String betterKey = JudgmentBaselines.outsideKey(BenchmarkRules.DIRECTION_CHECK_BOARD, 90, "AVAILABLE");
+        String droppedKey = JudgmentBaselines.outsideKey(BenchmarkRules.JUDGMENT_BOARD, 30, "UNAVAILABLE");
+        Map<String, OutsideCell> modified = new TreeMap<>(baseline.outside());
+        OutsideCell w = modified.get(worseKey), be = modified.get(betterKey), d = modified.get(droppedKey);
+        modified.put(worseKey, new OutsideCell(w.board(), w.loadRatioPercent(), w.powerControl(), new Column(w.power().points(), w.power().samples(), w.power().median() + 1.0)));
+        modified.put(betterKey, new OutsideCell(be.board(), be.loadRatioPercent(), be.powerControl(), new Column(be.power().points(), be.power().samples(), be.power().median() - 1.0)));
+        modified.put(droppedKey, new OutsideCell(d.board(), d.loadRatioPercent(), d.powerControl(), new Column(null, 0, null)));
+        JudgmentBaseline n = new JudgmentBaseline(baseline.schemaVersion(), baseline.provenance(), baseline.cells(), baseline.phase(), baseline.concave(), modified);
+
+        OutsideSummary s = classifyOutside(baseline, n);
+        assertEquals(1, s.worse(), "N 이 1.0 크면 악화(격차는 낮을수록 좋음)");
+        assertEquals(1, s.better(), "N 이 1.0 작으면 축소");
+        assertEquals(1, s.changedPairing(), "B 에만 값이 있는 셀은 짝 집합 변화 — 악화로 세지 않는다");
+        assertEquals(2, s.excluded());
+        assertEquals(baseline.outside().size(), s.excluded() + s.worse() + s.better() + s.tied() + s.changedPairing() + s.unpaired(), "분류 회계");
+    }
+
+    @DisplayName("표 G 항등 — 기준선을 자기 자신과 견주면 판정 셀 둘 제외 · 동률 12 · 둘 다 짝 없음 2 · 악화·축소·짝 집합 변화 0")
+    @Test
+    void outside_classification_of_the_baseline_against_itself() {
+        OutsideSummary s = classifyOutside(baseline, baseline);
+        assertEquals(2, s.excluded(), "판정 셀·방향 셀 자신은 표 A·B 에 있어 뺀다");
+        assertEquals(0, s.worse()); assertEquals(0, s.better()); assertEquals(0, s.changedPairing());
+        assertEquals(baseline.outside().size() - 2 - s.unpaired(), s.tied(), "나머지는 전부 동률");
+        assertEquals(baseline.outside().size(), s.excluded() + s.worse() + s.better() + s.tied() + s.changedPairing() + s.unpaired(), "분류 회계");
     }
 
     @DisplayName("관측 — 현 실행의 정격 분모 열(s0)을 B 대역, 기본 눈금 열을 N 대역으로 두면 소급 W 눈금 판정의 재료가 재구성되지만 판정이 아니라 관측이다")
@@ -195,6 +305,14 @@ class JudgmentRoundTest {
         sb.append("2. 표 A 판정 셀 — I 제한 중앙값 ").append(judgment.medianB()).append(" → ").append(judgment.medianN()).append(" · 축소 ").append(judgment.reductionPp())
           .append("%p (문턱 ").append(BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP).append(") · 축소 지점 ").append(judgment.reducedPoints()).append('/')
           .append(judgment.requiredPoints()).append(" 필요 · 동률 ").append(judgment.tiedPoints()).append(" · 악화 ").append(judgment.worsenedPoints()).append('\n');
+        PairedDifference pairedJudgment = BenchmarkRules.medianOfPairedDifferences(points(baseline, "judgment", "power"), points(current, "judgment", "power"));
+        PairedDifference pairedDirection = BenchmarkRules.medianOfPairedDifferences(points(baseline, "direction", "power"), points(current, "direction", "power"));
+        Integer minTie = minTieCountToFail(points(baseline, "judgment", "power"), points(current, "judgment", "power"));
+        String tieText = minTie == null ? "해당 없음(2항이 이미 미달)" : minTie == TIE_UNJUDGEABLE ? "판정 불가(|I| 하한 미달)"
+                : minTie == TIE_TOO_MANY ? "계산 생략(지점 수 초과)" : minTie + "/" + judgment.pairedCount();
+        sb.append("   병기(관측) — 지점별 차 중앙값(B − N) 판정 셀 ").append(pairedJudgment.median()).append("%p · 방향 셀 ").append(pairedDirection.median())
+          .append("%p · 2항 미달까지의 최소 동률 지점 수 ").append(tieText)
+          .append(" · 지점은 한 주기의 시각 지점이라 독립 복제가 아니다\n");
         sb.append("3. 표 B 방향 셀 — I 제한 중앙값 ").append(direction.medianB()).append(" → ").append(direction.medianN())
           .append(" · 방향 조건(무시 폭 두 배 이상) ").append(direction.directionHolds() ? "충족" : "미충족").append('\n');
         sb.append("4. 표 C 민감도 — 눈금 열별 B→N (판정에 넣지 않음)\n");
@@ -231,6 +349,12 @@ class JudgmentRoundTest {
                 sb.append("   ").append(cell.board()).append(' ').append(e.getKey()).append(": ").append(BenchmarkRules.SWEEP_POINTS - e.getValue().samples()).append('\n');
             }
         }
+        sb.append("7-1. 표 G 판정 셀 밖 — 두 판 power 행 격차 중앙값 B(n) → N(n), 차 = B − N(격차는 낮을수록 좋음 — 음수가 악화), 판정 셀·방향 셀 자신 제외\n");
+        OutsideSummary outside = classifyOutside(baseline, current);
+        for (String line : outside.lines()) sb.append(line).append('\n');
+        sb.append("   집계 — 밖 셀 악화 ").append(outside.worse()).append(" · 축소 ").append(outside.better()).append(" · 동률 ").append(outside.tied())
+          .append(" · 짝 집합 변화 ").append(outside.changedPairing()).append(" · 둘 다 짝 없음 ").append(outside.unpaired())
+          .append(" · 제외(판정·방향 셀) ").append(outside.excluded()).append('\n');
         sb.append("8. 결말 — ").append(verdict.outcome()).append(": ").append(verdict.reason()).append('\n');
         sb.append("   판정 자격(폐쇄형): ").append(BenchmarkRules.JUDGMENT_BOARD).append(" · ").append(BenchmarkRules.DIRECTION_CHECK_BOARD).append(" 두 판의 power 행만\n");
         String s0 = BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "0";

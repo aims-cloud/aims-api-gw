@@ -95,6 +95,12 @@ com.innogrid.aims
 | `CB_TUMBLEBUG_URL` | CB-Tumblebug API URL | `http://localhost:1323/tumblebug` |
 | `CB_TUMBLEBUG_USER` | CB-Tumblebug 인증 사용자 | `default` |
 | `CB_TUMBLEBUG_PASS` | CB-Tumblebug 인증 비밀번호 | `default` |
+| `SPRING_MAIL_HOST` | 알람 Email SMTP 호스트. 비우면 Email 전송은 "메일 서버 미구성" FAILED | (없음 — 로컬은 `application-local.yml`) |
+| `SPRING_MAIL_PORT` | SMTP 포트 | `25` |
+| `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | SMTP 인증 계정(아마란스는 그룹웨어 이메일/비밀번호) | (빈 값) |
+| `AIMS_MAIL_SMTP_AUTH` / `AIMS_MAIL_SMTP_STARTTLS` | SMTP 인증·STARTTLS 사용 | `true` |
+| `AIMS_ALARM_MAIL_FROM` | 알람 메일 From. 인증 계정과 같게 | (빈 값) |
+| `AIMS_ALARM_NOTIFICATION_ENABLED` | 알람 전송 파이프라인 사용 | `true` |
 
 ## 브랜치 전략
 

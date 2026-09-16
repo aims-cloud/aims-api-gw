@@ -196,6 +196,17 @@ class PowerAwareScoringTest {
         assertEquals(round4(thermalModel.predictedTemperature(node, 1)), detail(after, "n", "배치후예상온도C"), 0.0, "예상 온도 칸은 이미 실효 기저");
     }
 
+    /** 실효 온도가 임계(75℃)를 넘으면 냉각 항이 0 으로 잘려 열점수 0 — 음수가 아니다. 온도 인지를 끈 정책에서는 제약이 막지 않아 이 구역에 닿을 수 있다. */
+    @DisplayName("실효 온도가 임계를 넘는 후보의 열점수는 0 으로 포화하고 음수가 되지 않는다")
+    @Test
+    void thermal_score_saturates_at_zero_above_max_temperature() {
+        NodeResource node = node("n", 40, 40, 300, 74.0);
+        node.reserve(4, 0, 0);                                        // r = 0.5 → T_eff = 74 × 1.075 = 79.55 > 75
+        SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
+        assertEquals(0.0, detail(result, "n", "열점수"), 0.0);
+        assertTrue(result.candidateScores().get(0).totalScore() >= 0.0, "총점은 음수가 되지 않는다");
+    }
+
     private static double round4(double v) {
         return Math.round(v * 10000.0) / 10000.0;
     }

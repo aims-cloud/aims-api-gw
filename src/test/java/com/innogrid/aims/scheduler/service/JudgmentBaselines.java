@@ -40,7 +40,7 @@ final class JudgmentBaselines {
     private JudgmentBaselines() {
     }
 
-    static final int SCHEMA_VERSION = 2;   // 2: 판정 상수에 지점 비교 무시 폭(pointIgnorePp) 칸
+    static final int SCHEMA_VERSION = 3;   // 2: 판정 상수에 지점 비교 무시 폭(pointIgnorePp) 칸 · 3: 판정 자격 두 판의 전 셀 power 행(outside)
 
     /** 기준선이 담는 열 — 판정 열과, 같은 셀에서 나오는 눈금·역산 변종. 열이 늘면 형식 버전을 올린다. */
     static final List<String> COLUMNS = List.of("power",
@@ -69,8 +69,15 @@ final class JudgmentBaselines {
     record Provenance(String gitHead, String productionPath, String distribution, Map<String, String> boardDigests, String workloadDigest,
                       String configDigest, List<String> engineIds, Map<String, String> ruleAxisDigests, JudgmentConstants judgment) {}
 
+    /** 판정 자격 두 판의 셀 하나 — power 행만. 키는 {@code 판:부하율:전원제어}. 판정 셀·방향 셀 자신도 들어 있고 표 G 가 그 둘을 뺀다. */
+    record OutsideCell(String board, int loadRatioPercent, String powerControl, Column power) {}
+
     record JudgmentBaseline(int schemaVersion, Provenance provenance, Map<String, CellBlock> cells, Map<String, List<PhaseEntry>> phase,
-                            ConcaveBlock concave) {}
+                            ConcaveBlock concave, Map<String, OutsideCell> outside) {}
+
+    static String outsideKey(String board, int loadRatioPercent, String powerControl) {
+        return board + ":" + loadRatioPercent + ":" + powerControl;
+    }
 
     /** 응답(판 → 응답, 전부 판정 분포) 에서 기준선 형식을 만든다. */
     static JudgmentBaseline build(Map<String, PlacementBenchmarkResponse> byBoard, String gitHead) {
@@ -107,7 +114,15 @@ final class JudgmentBaselines {
                         BenchmarkRules.DIRECTION_CHECK_BOARD, BenchmarkRules.JUDGMENT_DISTRIBUTION, BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS,
                         BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, BenchmarkRules.SWEEP_POINTS,
                         BenchmarkRules.JUDGMENT_POINT_IGNORE_PP));
-        return new JudgmentBaseline(SCHEMA_VERSION, provenance, cells, phase, concave);
+        Map<String, OutsideCell> outside = new TreeMap<>();
+        for (String b : List.of(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.DIRECTION_CHECK_BOARD)) {
+            for (Cell c : byBoard.get(b).boards().get(0).cells()) {
+                MetricValue m = gap(c, "power");
+                outside.put(outsideKey(b, c.loadRatioPercent(), c.powerControl()),
+                        new OutsideCell(b, c.loadRatioPercent(), c.powerControl(), new Column(m.points(), m.samples(), m.median())));
+            }
+        }
+        return new JudgmentBaseline(SCHEMA_VERSION, provenance, cells, phase, concave, outside);
     }
 
     private static CellBlock cellBlock(String boardId, Board board) {

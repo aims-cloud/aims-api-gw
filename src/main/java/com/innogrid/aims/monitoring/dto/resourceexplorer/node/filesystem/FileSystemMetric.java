@@ -1,8 +1,9 @@
 package com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem;
 
 /**
- * File system 카테고리 모니터링 탭의 차트 지표.
- * TODO:: 모니터링 탭 화면 설계 확정 시 지표 세트 조정 (Memory 패턴 기준 잠정 6종)
+ * File system 카테고리 모니터링 탭의 차트 지표 6종 — Memory 패턴 기준.
+ * Used 는 size - avail(예약 블록 제외), Free 는 avail 이라 Used + Free = Total 이 성립한다.
+ * INODE_USAGE_PERCENT 는 node_filesystem_files / files_free 기준이며 inode 를 보고하지 않는 파일시스템은 빈 시리즈다.
  */
 public enum FileSystemMetric {
     FS_USED("GB"),

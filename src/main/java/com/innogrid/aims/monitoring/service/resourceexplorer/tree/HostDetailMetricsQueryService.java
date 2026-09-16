@@ -29,7 +29,7 @@ public class HostDetailMetricsQueryService {
     private static final double GB = 1024.0 * 1024 * 1024;
     private static final double MB_TO_GB = 1024.0;
     private static final String RATE_WINDOW = "5m";
-    private static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
+    static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
     static final String NET_FILTER = "device!~\"lo|veth.*|docker.*|br.*|virbr.*\"";
 
     /** 주요 지표 카드용 현재값 — null 은 미수집 */

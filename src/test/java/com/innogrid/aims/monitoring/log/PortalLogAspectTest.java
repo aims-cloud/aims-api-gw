@@ -50,10 +50,21 @@ class PortalLogAspectTest {
             return new Job("job-7");
         }
 
+        @PortalLog(type = PortalLogType.AUTH, screen = "로그인", action = "로그인",
+                   content = "'로그인: ' + #request.email", userId = "#request.email")
+        public String login(LoginRequest request) {
+            if (request.password().isBlank()) {
+                throw new BusinessException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다");
+            }
+            return "token";
+        }
+
         public String plain() {
             return "no log";
         }
     }
+
+    record LoginRequest(String email, String password) {}
 
     PortalLogContextResolver resolver = mock(PortalLogContextResolver.class);
     PortalLogWriter writer = mock(PortalLogWriter.class);
@@ -133,6 +144,24 @@ class PortalLogAspectTest {
         controller.plain();
 
         verify(writer, org.mockito.Mockito.never()).write(any());
+    }
+
+    @Test
+    void userId_식이_있으면_요청_인자의_사용자로_문맥을_만들고_실패해도_그_사용자로_남긴다() {
+        when(resolver.resolveAs("guest@innogrid.com")).thenReturn(new PortalLogContext("guest@innogrid.com", "게스트",
+                "10.0.0.9", "req-2", "POST", "/api/v1/auth/login"));
+
+        assertThatThrownBy(() -> controller.login(new LoginRequest("guest@innogrid.com", " ")))
+                .isInstanceOf(BusinessException.class);
+
+        PortalLogEntry entry = written();
+        assertThat(entry.getType()).isEqualTo(PortalLogType.AUTH);
+        assertThat(entry.getResult()).isEqualTo(PortalLogResult.FAILURE);
+        assertThat(entry.getUserId()).isEqualTo("guest@innogrid.com");
+        assertThat(entry.getUserName()).isEqualTo("게스트");
+        assertThat(entry.getContent()).isEqualTo("로그인: guest@innogrid.com");
+        assertThat(entry.getDescription()).isEqualTo("이메일 또는 비밀번호가 올바르지 않습니다");
+        verify(resolver, org.mockito.Mockito.never()).resolve();
     }
 
     @Test

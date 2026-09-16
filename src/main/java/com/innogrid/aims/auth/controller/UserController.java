@@ -9,6 +9,7 @@ import com.innogrid.aims.auth.repository.RoleRepository;
 import com.innogrid.aims.auth.repository.UserRepository;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.log.PortalLog;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,6 +20,9 @@ import org.springframework.web.bind.annotation.*;
  * [요구사항 #3] 사용자 등록 신청
  * [요구사항 #4] 관리자 사용자 추가
  * [요구사항 #5] 사용자 관리
+ *
+ * 포털 로그(docs/08 §10.1 묶음 2): 생성·수정·삭제·상태 변경·역할 부여/해제는 {@code @PortalLog(AUDIT)} 로 남긴다(ref = USER).
+ * 조회는 남기지 않고, 비밀번호는 내용에 넣지 않는다.
  */
 @Tag(name = "사용자 관리", description = "사용자 CRUD, 역할 할당, 상태 변경")
 @RestController
@@ -50,6 +54,8 @@ public class UserController {
         return ApiResponse.ok(toResponse(user));
     }
 
+    @PortalLog(screen = "사용자 관리", action = "생성", content = "'사용자 생성: ' + #request.email",
+               refType = "USER", refId = "#result.data.id")
     @PostMapping
     public ApiResponse<AuthDto.UserResponse> createUser(@RequestBody AuthDto.CreateUserRequest request) {
         if (userRepository.existsByEmail(request.email())) {
@@ -61,6 +67,8 @@ public class UserController {
         return ApiResponse.ok(toResponse(user));
     }
 
+    @PortalLog(screen = "사용자 관리", action = "수정", content = "'사용자 수정: id ' + #p0",
+               refType = "USER", refId = "#p0")
     @PutMapping("/{userId}")
     public ApiResponse<AuthDto.UserResponse> updateUser(@PathVariable Long userId,
                                                         @RequestBody AuthDto.UpdateUserRequest request) {
@@ -71,12 +79,17 @@ public class UserController {
         return ApiResponse.ok(toResponse(user));
     }
 
+    @PortalLog(screen = "사용자 관리", action = "삭제", content = "'사용자 삭제: id ' + #p0",
+               refType = "USER", refId = "#p0")
     @DeleteMapping("/{userId}")
     public ApiResponse<Void> deleteUser(@PathVariable Long userId) {
         userRepository.deleteById(userId);
         return ApiResponse.ok(null);
     }
 
+    @PortalLog(screen = "사용자 관리", action = "상태 변경",
+               content = "'사용자 상태 변경: id ' + #p0 + ' → ' + #status",
+               refType = "USER", refId = "#p0")
     @PatchMapping("/{userId}/status")
     public ApiResponse<Void> changeStatus(@PathVariable Long userId, @RequestParam String status) {
         User user = findUser(userId);
@@ -85,6 +98,9 @@ public class UserController {
         return ApiResponse.ok(null);
     }
 
+    @PortalLog(screen = "사용자 관리", action = "역할 부여",
+               content = "'역할 부여: 사용자 id ' + #p0 + ', 역할 id ' + #roleId",
+               refType = "USER", refId = "#p0")
     @PostMapping("/{userId}/roles/{roleId}")
     public ApiResponse<Void> assignRole(@PathVariable Long userId, @PathVariable Long roleId) {
         User user = findUser(userId);
@@ -95,6 +111,9 @@ public class UserController {
         return ApiResponse.ok(null);
     }
 
+    @PortalLog(screen = "사용자 관리", action = "역할 해제",
+               content = "'역할 해제: 사용자 id ' + #p0 + ', 역할 id ' + #roleId",
+               refType = "USER", refId = "#p0")
     @DeleteMapping("/{userId}/roles/{roleId}")
     public ApiResponse<Void> removeRole(@PathVariable Long userId, @PathVariable Long roleId) {
         User user = findUser(userId);

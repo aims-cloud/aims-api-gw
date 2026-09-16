@@ -9,6 +9,7 @@ import com.innogrid.aims.auth.repository.PermissionRepository;
 import com.innogrid.aims.auth.repository.RoleRepository;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.log.PortalLog;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
  * 역할/권한 관리 API.
  * [요구사항 #7] 역할 관리
  * [요구사항 #8] 자원 권한 조회
+ *
+ * 포털 로그(docs/08 §10.1 묶음 2): 역할 생성·수정·삭제·권한 추가는 {@code @PortalLog(AUDIT)} 로 남긴다(ref = ROLE). 조회는 남기지 않는다.
  */
 @Tag(name = "역할/권한", description = "역할 CRUD, 권한 관리")
 @RestController
@@ -39,6 +42,8 @@ public class RoleController {
         return ApiResponse.ok(roles);
     }
 
+    @PortalLog(screen = "역할/권한", action = "생성", content = "'역할 생성: ' + #request.name",
+               refType = "ROLE", refId = "#result.data.id")
     @PostMapping
     public ApiResponse<AuthDto.RoleResponse> createRole(@RequestBody AuthDto.CreateRoleRequest request) {
         Role role = new Role(request.name(), request.description());
@@ -52,6 +57,8 @@ public class RoleController {
         return ApiResponse.ok(toResponse(role));
     }
 
+    @PortalLog(screen = "역할/권한", action = "수정", content = "'역할 수정: ' + #request.name + ' (id ' + #roleId + ')'",
+               refType = "ROLE", refId = "#roleId")
     @PutMapping("/{roleId}")
     public ApiResponse<AuthDto.RoleResponse> updateRole(@PathVariable Long roleId,
                                                         @RequestBody AuthDto.CreateRoleRequest request) {
@@ -62,12 +69,17 @@ public class RoleController {
         return ApiResponse.ok(toResponse(role));
     }
 
+    @PortalLog(screen = "역할/권한", action = "삭제", content = "'역할 삭제: id ' + #roleId",
+               refType = "ROLE", refId = "#roleId")
     @DeleteMapping("/{roleId}")
     public ApiResponse<Void> deleteRole(@PathVariable Long roleId) {
         roleRepository.deleteById(roleId);
         return ApiResponse.ok(null);
     }
 
+    @PortalLog(screen = "역할/권한", action = "권한 추가",
+               content = "'권한 추가: 역할 id ' + #roleId + ', ' + #request.resource + ':' + #request.action",
+               refType = "ROLE", refId = "#roleId")
     @PostMapping("/{roleId}/permissions")
     public ApiResponse<Void> addPermission(@PathVariable Long roleId,
                                            @RequestBody AuthDto.CreatePermissionRequest request) {

@@ -42,8 +42,8 @@ public class PowerModel {
      *
      * <p>예약이 0 이면 {@code u_eff = u}, {@code P_eff = P} 라 값이 비트 단위로 같다. 예약 비율 r 이 있으면
      * {@code (u + 100r) / (P + D·r)} (D = 정격 − 유휴) 이고, 이 값이 실측 {@code u/P} 보다 큰 조건은 {@code 100·P > u·D} 다 —
-     * 등록된 판정 자격 두 판의 노드는 전부 이 조건을 만족해 예약이 쌓일수록 PEI 가 오른다(판 파일 값으로 계산, 하락·포화 노드 없음).
-     * 그 조건이 깨지는 노드(저전력·고정격)에서는 내려간다.</p>
+     * 등록된 판정 자격 두 판의 노드는 전부 이 조건을 만족해 예약이 쌓일수록 PEI 가 오른다(판 파일 값으로 계산, 하락·포화 노드 없음 —
+     * 두 판의 생성식처럼 P ≥ P_idle + D·u/100 이면 대수적으로 항상 성립). 조건이 깨지는 노드는 이상 곡선 아래로 쓰는 노드고 거기서는 내려간다.</p>
      */
     public double placementPei(NodeResource node) {
         double powerEff = effectivePowerWatts(node);
@@ -207,8 +207,8 @@ public class PowerModel {
      *
      * <p>적격 노드에서는 <b>실수 항등</b>이다: {@code (P + D·r) − (P_idle + D·(u/100 + r)) = P − P_ideal} 이라 예약분이 분자에서
      * 상쇄된다. 갈리는 것은 {@code u/100 + r} 이 1 을 넘어 실효 사용률이 100 에서 잘리는 노드뿐인데, 그런 노드는 제약 C1
-     * (가용 코어 = 총코어 × (1 − u/100) − 예약 ≥ 요구)에서 이미 부적격이다. 그래도 같은 기저로 두는 이유는 점수 한 식 안에서
-     * 항마다 입력이 갈리지 않게 하기 위함이고, binary64 마지막 비트는 실수 항등과 다를 수 있다.</p>
+     * (가용 코어 = 총코어 × (1 − u/100) − 예약 ≥ 요구)에서 이미 부적격이다 — 부적격 후보도 점수는 계산·표시되므로 그 표시값은 갈린다.
+     * 그래도 같은 기저로 두는 이유는 점수 한 식 안에서 항마다 입력이 갈리지 않게 하기 위함이고, binary64 마지막 비트는 실수 항등과 다를 수 있다.</p>
      */
     public double placementWasteScore(NodeResource node) {
         double pMax = node.getPowerCapacityWatts();

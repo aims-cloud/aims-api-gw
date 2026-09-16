@@ -104,9 +104,10 @@ class JudgmentRoundTest {
         assertEquals(baseline.provenance().distribution(), current.provenance().distribution());
         assertEquals(baseline.provenance().boardDigests(), current.provenance().boardDigests(), "판 다이제스트가 다르면 같은 판이 아니다 — 판정 불가");
         assertEquals(baseline.provenance().workloadDigest(), current.provenance().workloadDigest(), "워크로드 파일이 다르다 — 판정 불가");
-        // 부수 보고·표기 축과 설정 다이제스트의 차이는 실패가 아니라 보고 항목이다 — 보고 초안 0단계가 싣는다
+        // 부수 보고·표기 축의 차이는 실패가 아니라 보고 항목이다 — 보고 초안 0단계가 싣는다. 설정 다이제스트는 규칙이 불변을 요구한다(노브로 얻은 축소 차단)
         assertNotNull(JudgmentBaselineTest.axisDrift(b, n, BenchmarkRules.SECONDARY_REPORT_AXES));
-        assertNotNull(current.provenance().configDigest());
+        assertEquals(baseline.provenance().configDigest(), current.provenance().configDigest(),
+                "설정 다이제스트가 다르다 — 지목 정정은 기본 설정 불변으로 내며 노브 변경의 효과는 민감도 표로만 낸다(규칙 문장). 이 기준선으로는 1~4항 판정 불가");
     }
 
     @DisplayName("항등 — 기준선을 자기 자신과 견주면 축소 0·동률 전 지점·실패다 (기준선 값이 무엇이든 성립하는 산술)")

@@ -54,7 +54,12 @@ class JudgmentBaselineTest {
                     "판정 무효화 축 변경에 따른 재산출(재취득 예외 — 이 PR 은 판정을 게시하지 않는다)이며 회차 1 판정 게시 뒤의 정례 재취득을 겸한다(정례 의무의 직전 머지 리비전은 엔진 동등 리비전 칸). 회차 2 판정 주어 교체로 judgment 축이 돌아 ab38cd38ad62 는 더는 B 로 쓸 수 없다. "
                             + "두 셀 중앙값 이동(13.4697 → 10.7247 / 17.5399 → 14.9318)은 전부 회차 1 정정(배치 점수 PEI·비낭비 항의 실효 기저, PASS)에서 온 것이고 이 PR 의 규칙 변경 기여는 0 — "
                             + "두 셀 power 행 지점 배열이 회차 1 회전 초안의 N 배열과 지점별로 같고 증거 묶음 entriesDigest 1753d94dad6b 도 그대로다. 산출 HEAD 는 이 PR 의 규칙 커밋 자체(그 커밋에서 낸 값이며 파일 커밋 전)로 브랜치 커밋이지만 머지 커밋 방식이라 머지 뒤에도 도달 가능",
-                    "5e2da67 (develop, 배치용 PEI 가드 PR 머지 — 기본 설정 값 불변; 그 아래 모니터링 PR 머지 55720c8 은 엔진 무관, 회차 1 정정 PR 머지 2f6af39)", "f5b7d4c", "2.7450 / 2.6081", 10.7247, 14.9318));
+                    "5e2da67 (develop, 배치용 PEI 가드 PR 머지 — 기본 설정 값 불변; 그 아래 모니터링 PR 머지 55720c8 은 엔진 무관, 회차 1 정정 PR 머지 2f6af39)", "f5b7d4c", "2.7450 / 2.6081", 10.7247, 14.9318),
+            new BaselineSeal("17c8e496a4b5", "2026-09-16",
+                    "판정 무효화 축 변경에 따른 재산출(재취득 예외 — 이 PR 은 판정을 게시하지 않는다)이며 열 항 판정 게시 뒤의 정례 재취득을 겸한다. 다음 판정 주어 교체로 judgment 축이 돌아 27d5b1373690 은 더는 B 로 쓸 수 없다. "
+                            + "두 셀 중앙값 이동(10.7247 → 12.4476 / 14.9318 → 16.1995, 확대)은 전부 열 항 실효 온도 기저 정정(FAIL)에서 온 것이고 이 PR 의 규칙·형식 변경 기여는 0 — "
+                            + "두 셀 power 행 지점 배열이 그 판정의 회전 초안 N 배열과 지점별로 같다. 형식 3(두 판의 전 셀 power 행 배열 outside)은 파일 다이제스트를 바꾸되 값은 바꾸지 않는다. 산출 HEAD 는 이 PR 의 형식 커밋 뒤 브랜치 커밋(머지 커밋 방식이라 머지 뒤에도 도달 가능)",
+                    "0f1eb88 (develop, 열 항 실효 온도 기저 PR 머지 — 이후 엔진·판 생성 코드 변경 없음)", "c543089", "-1.7229 / -1.2677", 12.4476, 16.1995));
 
     private static JudgmentBaseline load() throws IOException {
         return JudgmentBaselines.readRepositoryBaseline();
@@ -89,6 +94,27 @@ class JudgmentBaselineTest {
         JudgmentBaseline b = load();
         assertEquals(JudgmentBaselines.SCHEMA_VERSION, b.schemaVersion());
         assertEquals(List.of("direction", "judgment"), new ArrayList<>(new java.util.TreeMap<>(b.cells()).keySet()));
+        assertNotNull(b.outside(), "형식 3 은 두 판의 전 셀 power 행을 담는다");
+        assertEquals(16, b.outside().size(), "판정 자격 두 판 × 부하율 4 × 전원 제어 2");
+        assertTrue(b.outside().containsKey(JudgmentBaselines.outsideKey(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.JUDGMENT_LOAD_RATIO, BenchmarkRules.JUDGMENT_POWER_CONTROL.name())));
+        for (String cellKey : List.of("judgment", "direction")) {
+            CellBlock block = b.cells().get(cellKey);
+            Column outsidePower = b.outside().get(JudgmentBaselines.outsideKey(block.board(), block.loadRatioPercent(), block.powerControl())).power();
+            assertEquals(block.columns().get("power").points(), outsidePower.points(), cellKey + " 셀의 power 지점 배열이 두 블록에서 다르다");
+            assertEquals(block.columns().get("power").median(), outsidePower.median(), cellKey + " 셀의 power 중앙값이 두 블록에서 다르다");
+        }
+        for (Map.Entry<String, JudgmentBaselines.OutsideCell> e : b.outside().entrySet()) {
+            Column c = e.getValue().power();
+            String where = "outside " + e.getKey();
+            if (c.points() != null) {
+                assertEquals(BenchmarkRules.SWEEP_POINTS, c.points().size(), where + ": 지점 배열 길이");
+                assertEquals(c.samples(), c.points().stream().filter(p -> p != null).count(), where + ": samples 가 null 아닌 지점 수와 다르다");
+                assertEquals(c.median(), BenchmarkRules.median(c.points()), where + ": 중앙값이 지점 배열과 어긋난다");
+            } else {
+                assertEquals(0, c.samples(), where + ": 배열 없는 셀은 표본 0");
+                assertNull(c.median(), where + ": 배열 없는 셀은 중앙값 없음");
+            }
+        }
 
         CellBlock judgment = b.cells().get("judgment");
         CellBlock direction = b.cells().get("direction");

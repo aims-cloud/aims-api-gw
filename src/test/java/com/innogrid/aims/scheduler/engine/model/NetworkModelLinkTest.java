@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 지연 100ms UP               → cost 1.0 (상한)   → 0.5
  * 지연 0 손실 10% UP           → cost 0.1          → 0.909
  * DOWN                        → 0 (C5 가 제외하므로 실제로는 쓰이지 않음)
+ * 원장 대역폭                  → 비용에 들어가지 않는다 (저장·응답 전용)
  * 같은 MDC                    → 1.0
  * 미등록 원격 · 라벨 없는 노드 · 빈 스냅샷 → unknownLinkScore (기본 0.5 = 50ms UP 과 같다)
  * </pre>
@@ -55,6 +56,23 @@ class NetworkModelLinkTest {
         assertEquals(1.0, model.linkScore("a", "a", null), EPS, "같은 MDC 판정은 행렬보다 먼저");
         assertEquals(0.714, model.linkScore("b", "a", m), EPS, "방향 무관");
         assertTrue(model.linkScore("a", "b", m) > model.linkScore("a", "z", m), "측정된 양호 링크가 미등록을 이긴다");
+    }
+
+    @DisplayName("원장의 대역폭은 링크 비용에 들어가지 않는다")
+    @Test
+    void ledger_bandwidth_is_not_part_of_the_cost() {
+        LinkMatrix wide = LinkMatrix.of(List.of(link(10000.0)));
+        LinkMatrix narrow = LinkMatrix.of(List.of(link(10.0)));
+
+        assertEquals(0.714, model.linkScore("a", "b", wide), EPS);
+        assertEquals(model.linkScore("a", "b", wide), model.linkScore("a", "b", narrow), EPS,
+                "대역폭이 1000배 달라도 같은 점수다 — 원장·응답에만 있고 비용 식에는 없다");
+    }
+
+    private static MdcLink link(double bandwidthMbps) {
+        MdcLink l = new MdcLink("a", "b", 20);
+        l.setBandwidthMbps(bandwidthMbps);
+        return l;
     }
 
     @DisplayName("등록 여부 조회는 점수와 같은 행렬을 본다")

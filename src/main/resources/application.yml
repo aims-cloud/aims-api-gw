@@ -13,8 +13,14 @@ spring:
     driver-class-name: ${AIMS_DB_DRIVER:org.postgresql.Driver}
 
   # ── 알람 Email 발송 (docs/09 A.5.4) ─────────────────────────
-  # host 는 환경 변수(SPRING_MAIL_HOST)로만 넣는다. host 가 없으면 JavaMailSender 빈이 만들어지지 않고 Email 전송은 "미구성" FAILED.
+  # host 는 환경 변수(SPRING_MAIL_HOST)로만 넣고 여기에 키를 두지 않는다 — 빈 값이라도 키가 있으면 Boot 가 JavaMailSender 를
+  # 만들어 "미구성" 판정이 깨진다. host 가 없으면 Email 전송은 "메일 서버 미구성" FAILED 로만 남고 평가·이력은 그대로 동작한다.
+  # 사내 아마란스 SMTP(2026-09-16 확인): wblock.innogrid.com:25, 그룹웨어 이메일/비밀번호 인증, STARTTLS. From 은 인증 계정과 같게.
+  # 자체 서명 인증서면 SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_TRUST=<host> 환경 변수로 신뢰 호스트를 준다(빈 값으로 두면 TLS 가 깨져 키를 두지 않는다).
   mail:
+    port: ${SPRING_MAIL_PORT:25}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail.smtp.auth: ${AIMS_MAIL_SMTP_AUTH:true}
       mail.smtp.starttls.enable: ${AIMS_MAIL_SMTP_STARTTLS:true}

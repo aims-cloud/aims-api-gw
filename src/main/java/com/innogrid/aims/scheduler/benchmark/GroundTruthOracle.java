@@ -9,7 +9,7 @@ import java.util.Set;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 /**
- * 생성식 오라클 — 합성 클러스터 <b>생성식</b>으로 전력·온도를 계산하는 평가자 전용 계산기.
+ * 생성식 오라클 — 합성 클러스터 <b>생성식</b>으로 전력·온도를 계산하는 평가자 전용 계산기. <!-- ban-ok: 클래스 이름의 뜻을 설명한다 -->
  * 클래스 이름의 "지상진실"은 <b>엔진 모델의 반대편</b>이라는 뜻이지 실측이라는 뜻이 아니다 —
  * 생성식의 계수는 실데이터 없이 정한 가정이다.
  *
@@ -87,7 +87,7 @@ public final class GroundTruthOracle {
         this.sortedNodeIds = byId.keySet().stream().sorted().toList();
     }
 
-    // ── 노드 단위 물리량 ──────────────────────────────────────
+    // ── 노드 단위 모델 계산값 (생성식 기준) ────────────────────
 
     /**
      * 노드 한 대의 생성식 기준 소비 전력(W). {@code cpuPercent} 는 0~100. 실측이 아니다.

@@ -67,10 +67,10 @@ public class WorkloadService {
             workload.setPriority(EnumSupport.parse(Workload.WorkloadPriority.class, request.priority(), "우선순위"));
         }
         if (request.preferredMdcId() != null) {
-            workload.setPreferredMdcId(limit(request.preferredMdcId(), "선호 MDC", MDC_ID_MAX));
+            workload.setPreferredMdcId(optionalMdcId(request.preferredMdcId(), "선호 MDC"));
         }
         if (request.dataMdcId() != null) {
-            workload.setDataMdcId(limit(request.dataMdcId(), "데이터 MDC", MDC_ID_MAX));
+            workload.setDataMdcId(optionalMdcId(request.dataMdcId(), "데이터 MDC"));
         }
         if (request.maxPowerBudgetWatts() != null) {
             workload.setMaxPowerBudgetWatts(requirePositive(request.maxPowerBudgetWatts(), "노드 전력 상한(W)"));
@@ -109,6 +109,19 @@ public class WorkloadService {
     private static String requireText(String value, String label, int max) {
         if (value == null || value.isBlank()) throw badRequest(label + "은(는) 필수입니다");
         return limit(value.trim(), label, max);
+    }
+
+    /**
+     * 선택 MDC 식별자 — 앞뒤 공백을 지우고, 비면 {@code null}(지정 안 함)로 본다.
+     *
+     * <p>링크 원장은 MDC 이름을 다듬어 저장하고, 배치는 데이터 MDC 와 노드 MDC 를 <b>정확히 비교</b>해 같은 MDC 와
+     * 미등록 원격을 가른다. 여기서 다듬지 않으면 {@code " mdc-01 "} 이 같은 MDC 로 인식되지 않아 조용히 미등록
+     * 점수(기본 0.5)를 받고, 빈 문자열은 게이트를 열지 못한 채 값만 남는다.</p>
+     */
+    private static String optionalMdcId(String value, String label) {
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) return null;
+        return limit(trimmed, label, MDC_ID_MAX);
     }
 
     private static String limit(String value, String label, int max) {

@@ -116,6 +116,28 @@ class WorkloadRequestValidationTest {
         cleanup(body);
     }
 
+    @DisplayName("데이터 MDC 와 선호 MDC 는 앞뒤 공백을 지우고 저장한다 — 링크 판정이 정확 비교라 공백이 미등록으로 새지 않게")
+    @Test
+    void mdc_ids_are_trimmed() throws Exception {
+        String body = create("{\"name\":\"w-trim\",\"requiredCpu\":1,\"requiredMemoryMb\":512,"
+                + "\"dataMdcId\":\"  mdc-01 \",\"preferredMdcId\":\" mdc-02\\t\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dataMdcId").value("mdc-01"))
+                .andExpect(jsonPath("$.data.preferredMdcId").value("mdc-02"))
+                .andReturn().getResponse().getContentAsString();
+        cleanup(body);
+    }
+
+    @DisplayName("데이터 MDC 가 공백만이면 지정하지 않은 것으로 본다 — 링크 게이트가 열리지 않는다")
+    @Test
+    void blank_data_mdc_becomes_null() throws Exception {
+        String body = create("{\"name\":\"w-blank\",\"requiredCpu\":1,\"requiredMemoryMb\":512,\"dataMdcId\":\"   \"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dataMdcId").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        cleanup(body);
+    }
+
     @DisplayName("상태 전이 요청에 status 가 없으면 400")
     @Test
     void status_transition_without_status_400() throws Exception {

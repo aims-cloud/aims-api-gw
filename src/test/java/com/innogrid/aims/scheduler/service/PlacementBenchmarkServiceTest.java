@@ -15,8 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
+import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -88,10 +89,11 @@ class PlacementBenchmarkServiceTest {
         assertTrue(base.activeNodesBefore() > 0, "가동 노드가 0 이면 이 시험이 아무것도 보지 않는다");
         assertEquals(base.activeNodesBefore(), moved.activeNodesBefore(), 1e-9,
                 "기준선이 설정을 따라 움직이면 증감이 알고리즘이 아니라 설정의 함수가 된다");
-        assertEquals(medians(base, BenchmarkRules.ACTIVE_NODE_DELTA),
-                medians(moved, BenchmarkRules.ACTIVE_NODE_DELTA), "가동 노드 증감이 엔진 노브를 따라 움직였다");
-        assertEquals(medians(base, BenchmarkRules.GENERATOR_POWER),
-                medians(moved, BenchmarkRules.GENERATOR_POWER),
+        // 전력 엔진 변종 4열은 하네스가 설정 사본으로 새로 조립하는 엔진이라 노브를 따라 배치가 달라진다 — 이 시험의 대상이 아니다
+        assertEquals(mediansExcept(base, BenchmarkRules.ACTIVE_NODE_DELTA, "power-"),
+                mediansExcept(moved, BenchmarkRules.ACTIVE_NODE_DELTA, "power-"), "가동 노드 증감이 엔진 노브를 따라 움직였다");
+        assertEquals(mediansExcept(base, BenchmarkRules.GENERATOR_POWER, "power-"),
+                mediansExcept(moved, BenchmarkRules.GENERATOR_POWER, "power-"),
                 "전원 제어 판의 통전 집합이 엔진 노브를 따라 움직이면 주 지표가 설정의 함수다");
     }
 
@@ -234,8 +236,10 @@ class PlacementBenchmarkServiceTest {
         EngineConfigSnapshot other = serviceWith(tuned).compare("main", "heavytail").engineConfig();
 
         assertEquals(500.0, mine.power().marginalScaleWatts(), 1e-9, "출하 기본값이 바뀌면 판정 기준선도 무효다");
+        assertTrue(mine.power().marginalScaleWatts() >= BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT,
+                "기본 눈금이 판정 시점 실질 한계 전력 최댓값보다 작으면 점수가 0 으로 포화해 다른 결함이 섞인다");
         assertTrue(mine.power().marginalScaleWatts() >= BenchmarkRules.MAX_REAL_MARGINAL_WATTS,
-                "기본 눈금이 판의 실질 한계 전력 최댓값보다 작으면 점수가 0 으로 포화해 다른 결함이 섞인다");
+                "현 등록 판의 실측 최댓값이 기본 눈금을 넘었다 — 포화가 기본 설정에서 발현하므로 그 판의 도입을 보류한다");
         assertEquals(700.0, other.power().marginalScaleWatts(), 1e-9);
         assertNotEquals(mine.configDigest(), other.configDigest(),
                 "눈금이 다른데 다이제스트가 같다 — 두 표를 같은 설정으로 오독하게 된다");
@@ -265,11 +269,11 @@ class PlacementBenchmarkServiceTest {
         tweaks.put("idleFromMeasurement", pw -> pw.setIdleFromMeasurement(false));
         tweaks.put("marginalScaleWatts", pw -> pw.setMarginalScaleWatts(700.0));
 
-        String base = service.compare("main", "heavytail").engineConfig().configDigest();
+        String base = service.engineConfig().configDigest();   // 스냅샷만 — 판 계산 없이 다이제스트를 읽는다
         tweaks.forEach((name, tweak) -> {
             SchedulerProperties props = new SchedulerProperties();
             tweak.accept(props.getPower());
-            assertNotEquals(base, serviceWith(props).compare("main", "heavytail").engineConfig().configDigest(),
+            assertNotEquals(base, serviceWith(props).engineConfig().configDigest(),
                     name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
         });
 
@@ -280,6 +284,187 @@ class PlacementBenchmarkServiceTest {
                 .map(java.lang.reflect.RecordComponent::getName).collect(Collectors.toSet());
         assertEquals(components, covered,
                 "노브 성분과 민감도 표가 어긋났다 — 새 노브를 더했으면 canonical 과 이 표에도 넣는다");
+    }
+
+    /**
+     * 네트워크 노브 성분 <b>전량</b>이 다이제스트에 반응하고 응답 레코드에 노출된다 — 전력 노브와 같은 규약.
+     * 링크를 선언한 판에서 이 노브가 결과에 반영되므로, 빠지면 같은 다이제스트로 다른 표가 나온다.
+     */
+    @DisplayName("네트워크 노브 성분 전량이 다이제스트를 움직이고 응답 레코드와 성분 집합이 같다")
+    @Test
+    void every_network_knob_component_moves_the_digest() {
+        Map<String, java.util.function.Consumer<SchedulerProperties.Network>> tweaks = new LinkedHashMap<>();
+        tweaks.put("latencyScaleMs", n -> n.setLatencyScaleMs(80.0));
+        tweaks.put("degradedPenalty", n -> n.setDegradedPenalty(0.4));
+        tweaks.put("linkWeight", n -> n.setLinkWeight(0.6));
+        tweaks.put("unknownLinkScore", n -> n.setUnknownLinkScore(0.4));
+
+        String base = service.engineConfig().configDigest();
+        tweaks.forEach((name, tweak) -> {
+            SchedulerProperties props = new SchedulerProperties();
+            tweak.accept(props.getNetwork());
+            assertNotEquals(base, serviceWith(props).engineConfig().configDigest(),
+                    name + " 을 바꿨는데 다이제스트가 그대로다 — 설정 다이제스트에서 빠진 성분이다");
+        });
+        Set<String> components = java.util.Arrays.stream(
+                        PlacementBenchmarkResponse.NetworkKnobs.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).collect(Collectors.toSet());
+        assertEquals(components, tweaks.keySet(), "네트워크 노브 성분과 민감도 표가 어긋났다");
+        assertEquals(0.5, service.engineConfig().network().unknownLinkScore(), 1e-9);
+    }
+
+    /** 위상 독립 판은 seed 마다 Board 하나 — 서로 독립 복제라 값이 다르고, legacy 판은 Board 하나다. */
+    @DisplayName("위상 독립 판은 seeds 수만큼 Board 를 내고 seed 별 값이 서로 다르며, legacy 판은 Board 하나다")
+    @Test
+    void independent_boards_yield_one_board_per_seed() {
+        var main = service.compare("main", "heavytail");
+        assertEquals(1, main.boards().size());
+        assertEquals("LEGACY", main.boards().get(0).phaseMode());
+        assertEquals(7L, main.boards().get(0).phaseSeed());
+
+        var ind = service.compare("main-independent", "heavytail");
+        assertEquals(List.of(7L, 11L, 13L), ind.boards().stream().map(b -> b.phaseSeed()).toList());
+        assertTrue(ind.boards().stream().allMatch(b -> "INDEPENDENT".equals(b.phaseMode())));
+        assertEquals(1, ind.boards().stream().map(b -> b.digest()).distinct().count(), "같은 판 파일 — 다이제스트 하나");
+        assertEquals(3, ind.boards().stream().map(PlacementBenchmarkServiceTest::flattenBoard).distinct().count(),
+                "seed 별 Board 의 값이 전부 같다 — 위상이 seed 에 반응하지 않는다");
+    }
+
+    /**
+     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·변종 7 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
+     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762} 였다.
+     */
+    @DisplayName("기본 설정의 configDigest 리터럴이 고정된다 — 바뀌면 계약 §10 행이 따른다")
+    @Test
+    void the_default_config_digest_is_pinned() {
+        assertEquals("1487c10f4e97", service.compare("main", "heavytail").engineConfig().configDigest(),
+                "설정 다이제스트가 바뀌었다 — canonical 성분·열·노브가 바뀐 것이며 계약 §10 에 옛 → 새 행을 적는다");
+    }
+
+    /** 링크 게이트 열은 링크 판에서만 weighted 와 갈린다 — 링크 없는 판에서는 게이트가 켜질 수 없어 같은 값이다(구조적 사실). */
+    @DisplayName("weighted-affinity 는 링크 없는 판에서 weighted 와 값이 같고 링크 판에서만 다르다")
+    @Test
+    void the_affinity_column_differs_from_weighted_only_on_the_link_board() {
+        for (String board : new BenchmarkClusters().boardIds()) {
+            if (BenchmarkClusters.LINK.equals(board)) continue;
+            for (var b : service.compare(board, "heavytail").boards()) {
+                assertEquals(columnOf(b, "weighted"), columnOf(b, "weighted-affinity"), board + " seed " + b.phaseSeed() + " — 데이터 MDC 를 배정하지 않은 판인데 두 열이 다르다");
+            }
+        }
+        var link = service.compare("link", "heavytail").boards().get(0);
+        assertNotEquals(columnOf(link, "weighted"), columnOf(link, "weighted-affinity"), "링크 판에서 게이트 on/off 열이 같다 — netScore 경로가 작동하지 않는다");
+    }
+
+    /**
+     * 민감도 3열은 실제로 다른 눈금으로 돈다 — 표기만 다르고 값이 같으면 열이 죽어 있는 것이다. 주 결과판에서 250W 눈금은
+     * 실질 한계 전력 최댓값(316W) 아래라 포화가 발현해 1000W 열과 갈라져야 하고, 정격 분모(0) 열도 W 눈금 열과 갈라져야 한다.
+     */
+    @DisplayName("민감도 3열의 값이 서로 다르다 — 표기만 다른 열이 아니다")
+    @Test
+    void the_sensitivity_columns_actually_differ() {
+        var main = service.compare("main", "heavytail").boards().get(0);
+        Map<String, String> s250 = columnOf(main, "power-s250"), s1000 = columnOf(main, "power-s1000"), s0 = columnOf(main, "power-s0");
+        assertNotEquals(s250, s1000, "250W 눈금 열이 1000W 열과 같다 — 포화가 발현하지 않거나 눈금이 적용되지 않았다");
+        assertNotEquals(s0, s1000, "정격 분모 열이 1000W 열과 같다 — 구 방식이 적용되지 않았다");
+        assertNotEquals(columnOf(main, "power-idle-fixed"), columnOf(main, "power"), "역산 차단 열이 power 와 같다 — 계측 유휴 노드가 있는 판에서는 역산이 값을 바꿔야 한다");
+    }
+
+    /**
+     * 열을 더해도 기존 열의 값이 바뀌지 않는다 — 짝 조건은 기준 집합으로만 정한다. 배포 검증에서 반증판 90%·전원 제어 셀의 power
+     * 총전력 표본이 5 → 1 로 줄어든 것이 이 규칙의 계기다. 리터럴은 변종 열 도입 전(위생 정비 PR jar) 응답에서 가져왔다.
+     */
+    @DisplayName("변종 열을 더해도 기준 집합 열의 총량 표본 수와 값이 변종 열 도입 전과 같다")
+    @Test
+    void adding_override_columns_does_not_move_core_column_totals() {
+        Cell adversarial = cell(service.compare("adversarial", "heavytail").boards().get(0), 90, "AVAILABLE");
+        MetricValue power = strategy(adversarial, "power").metrics().stream()
+                .filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow();
+        assertEquals(5, power.samples(), "짝 지점 수가 변종 열 도입 전(5)과 다르다 — 짝 조건이 override 열까지 보고 있다");
+        // 허용 오차는 판정 규칙의 지점 비교 무시 폭(0.0002, 4자리 두 칸)과 같은 근거 — 실수 항등인 변경이 마지막 자리를 한 칸 뒤집을 수 있어 한 칸(1e-4)은 여유가 0 이다
+        assertEquals(6429.0022, power.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
+        Cell sparse = cell(service.compare("sparse", "heavytail").boards().get(0), 90, "AVAILABLE");
+        MetricValue spread = strategy(sparse, "power").metrics().stream()
+                .filter(m -> m.key().equals(BenchmarkRules.UNMEASURED_SPREAD)).findFirst().orElseThrow();
+        assertEquals(32.3241, spread.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, "미계측 격차가 변종 열까지 포함해 계산됐다");
+    }
+
+    /** 순환 배정 — 표본 순서대로 a,b,c,a,b,c… 링크 판만 부여하고 링크 없는 판은 아무것도 하지 않는다. */
+    @DisplayName("데이터 MDC 는 표본 순서대로 순환 배정되고 링크 없는 판은 부여하지 않는다")
+    @Test
+    void data_mdc_is_assigned_round_robin_only_on_the_link_board() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        List<Workload> sample = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignDataMdc(sample, clusters.get(BenchmarkClusters.LINK));
+        List<String> ids = clusters.get(BenchmarkClusters.LINK).workloadDataMdcIds();
+        for (int i = 0; i < sample.size(); i++) assertEquals(ids.get(i % ids.size()), sample.get(i).getDataMdcId(), "표본 " + i);
+        assertTrue(sample.size() > ids.size(), "표본이 배정 목록보다 길어야 순환이 검증된다");
+
+        List<Workload> plain = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignDataMdc(plain, clusters.get(BenchmarkClusters.MAIN));
+        assertTrue(plain.stream().allMatch(w -> w.getDataMdcId() == null), "링크 없는 판은 dataMdcId 를 부여하지 않는다");
+    }
+
+    /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */
+    private static Map<String, String> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (var cell : board.cells()) for (var s : cell.strategies()) if (s.strategyId().equals(strategyId)) for (var m : s.metrics()) {
+            out.put(cell.loadRatioPercent() + "/" + cell.powerControl() + "/" + m.key(), m.median() + "|" + m.samples() + "|" + m.valid());
+        }
+        return out;
+    }
+
+    /**
+     * override 열이 기준 집합과 건수가 다른 지점에서 총량을 내지 못하면 그 사실이 응답에 보인다 — PAIRING_RULE 의 표기 의무.
+     * 등록 판 전부를 훑어 그런 셀을 찾고, 있으면 셀 문장에 열 이름과 지점 수가 적혀 있는지 본다(없으면 규칙이 검증 불가다).
+     */
+    @DisplayName("override 열의 총량 표본이 기준 집합보다 적은 셀은 그 사실을 셀 문장에 적는다")
+    @Test
+    void dropped_override_points_are_reported_in_the_cell() {
+        int found = 0;
+        for (String board : new BenchmarkClusters().boardIds()) {
+            for (var b : service.compare(board, "heavytail").boards()) {
+                for (var cell : b.cells()) {
+                    int core = strategy(cell, "power").metrics().stream().filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow().samples();
+                    for (var s : cell.strategies()) {
+                        if (s.engineConfigOverride().isEmpty()) continue;
+                        int mine = s.metrics().stream().filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow().samples();
+                        if (mine < core) {
+                            found++;
+                            assertNotNull(cell.totalsIncomparableReason(), board + " " + cell.loadRatioPercent() + " " + s.strategyId() + " — 표본이 줄었는데 셀 문장이 없다");
+                            assertTrue(cell.totalsIncomparableReason().contains(s.strategyId() + " " + (core - mine) + "곳 제외(표본 " + mine + ")"),
+                                    board + " " + cell.loadRatioPercent() + " — 셀 문장에 열과 지점 수가 없다: " + cell.totalsIncomparableReason());
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(found > 0, "표본이 줄어든 override 열이 한 곳도 없다 — 이 시험이 아무것도 보지 않는다(판 구성이 바뀌었으면 시험을 다시 본다)");
+    }
+
+    private static Map<String, Double> flattenBoard(PlacementBenchmarkResponse.Board board) {
+        Map<String, Double> out = new LinkedHashMap<>();
+        for (var cell : board.cells()) for (var s : cell.strategies()) for (var m : s.metrics()) {
+            out.put(cell.loadRatioPercent() + "/" + cell.powerControl() + "/" + s.strategyId() + "/" + m.key(), m.median());
+        }
+        return out;
+    }
+
+    /** 엔진 쪽 변종 열의 순서 리터럴 — 열을 더하면 이 목록과 응답 열 수 단언이 함께 바뀐다. */
+    @DisplayName("엔진 변종 열 순서가 고정되고 기본 설정 열은 override 가 비어 있다")
+    @Test
+    void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
+        assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity",
+                "power-s250", "power-s1000", "power-s0", "power-idle-fixed"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+        Map<String, Map<String, String>> expected = Map.of(
+                "weighted-affinity", Map.of("affinityEnabled", "true"),
+                "power-s250", Map.of("marginalScaleWatts", "250.0"),
+                "power-s1000", Map.of("marginalScaleWatts", "1000.0"),
+                "power-s0", Map.of("marginalScaleWatts", "0.0"),
+                "power-idle-fixed", Map.of("idleFromMeasurement", "false"));
+        var cell = service.compare("main", "heavytail").boards().get(0).cells().get(0);
+        for (var s : cell.strategies()) {
+            assertEquals(expected.getOrDefault(s.strategyId(), Map.of()), s.engineConfigOverride(), s.strategyId());
+        }
     }
 
     /**
@@ -355,7 +540,8 @@ class PlacementBenchmarkServiceTest {
 
         int compared = 0;
         for (StrategyResult s : mine.strategies()) {
-            if (s.strategyId().equals("power")) continue;   // 유일하게 움직여야 하는 열
+            // 전력 엔진 계열(power·눈금 변종·역산 차단)만 움직여야 한다 — 변종 열은 기본 설정 사본이라 눈금을 고정하지 않은 열은 따라간다
+            if (s.strategyId().equals("power") || s.strategyId().startsWith("power-")) continue;
             StrategyResult t = other.strategies().stream()
                     .filter(x -> x.strategyId().equals(s.strategyId())).findFirst()
                     .orElseThrow(() -> new AssertionError(s.strategyId() + " 열이 사라졌다"));
@@ -653,13 +839,87 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("같은 판·같은 분포를 두 번 돌리면 숫자가 같다")
     @Test
     void same_input_gives_the_same_numbers() {
-        Map<String, Double> first = flatten(service.compare("main", "heavytail"));
-        Map<String, Double> second = flatten(service.compare("main", "heavytail"));
+        // compareFresh: 캐시를 거치지 않는다 — 공개 경로는 두 번째 호출을 캐시에서 돌려주므로 결정론을 증명하지 못한다
+        Map<String, Double> first = flatten(service.compareFresh("main", "heavytail"));
+        Map<String, Double> second = flatten(service.compareFresh("main", "heavytail"));
 
         assertEquals(first, second,
                 "두 번째 호출의 숫자가 다르다 — 앞 호출이 노드 스냅샷이나 정책을 변이시켰거나 "
                         + "벽시계·난수원 상태가 결과에 새어 들었다");
         assertFalse(first.isEmpty(), "비교할 숫자가 하나도 없다");
+    }
+
+    /**
+     * 공개 경로의 두 번째 호출은 <b>캐시</b>에서 나온다 — 본문(판·전제·설정·지표·한계)은 같은 객체이고 응답 시각만 새로 찍힌다.
+     * 캐시가 응답 시각을 과거로 만들거나 본문을 재계산하지 않는다는 두 성질을 함께 고정한다.
+     */
+    @DisplayName("같은 입력의 두 번째 호출은 캐시에서 나오고 응답 시각만 새로 찍힌다")
+    @Test
+    void second_call_is_served_from_cache_with_a_fresh_timestamp() {
+        var first = service.compare("main", "heavytail");
+        var second = service.compare("main", "heavytail");
+
+        assertSame(first.boards(), second.boards(), "본문은 같은 객체 — 재계산하지 않았다");
+        assertSame(first.assumptions(), second.assumptions());
+        assertEquals(first.engineConfig().configDigest(), second.engineConfig().configDigest());
+        assertFalse(second.evaluatedAt().isBefore(first.evaluatedAt()), "캐시 적중이 응답 시각을 과거로 만들지 않는다");
+        assertEquals(flatten(first), flatten(second));
+    }
+
+    /** 설정이 바뀌면 키가 바뀌어 캐시가 빗나간다 — 옛 설정의 표가 새 설정의 응답으로 나가지 않는다. */
+    @DisplayName("엔진 설정이 바뀌면 캐시가 빗나가고 다시 계산한다")
+    @Test
+    void config_change_misses_the_cache() {
+        SchedulerProperties props = new SchedulerProperties();
+        PlacementBenchmarkService s = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                        new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), new ThermalModel(props));
+        var before = s.compare("main", "heavytail");
+        props.getPower().setMarginalScaleWatts(250.0);
+        var after = s.compare("main", "heavytail");
+
+        assertNotEquals(before.engineConfig().configDigest(), after.engineConfig().configDigest(), "설정이 다르면 다이제스트가 다르다");
+        assertNotSame(before.boards(), after.boards(), "다른 키라 재계산했다");
+    }
+
+    /**
+     * 캐시 키의 입력 축 — 이름 목록을 리터럴로 고정한다. 축 하나가 빠지면 다른 입력이 같은 표를 받는다(워크로드 파일
+     * 다이제스트가 그렇게 빠졌던 전례). 요청 축이 늘어나면(예: seeds·phaseMode) 이 리터럴이 먼저 바뀌어야 한다.
+     */
+    @DisplayName("캐시 키는 여섯 축(판·분포·판 파일·워크로드 파일·설정·규칙 다이제스트)이고 어느 축이 바뀌어도 키가 바뀐다")
+    @Test
+    void cache_key_covers_every_input_axis() {
+        assertEquals(List.of("board", "distribution", "boardDigest", "workloadDigest", "configDigest", "rulesDigest"),
+                PlacementBenchmarkService.CACHE_AXES, "축을 더하거나 빼면 이 리터럴과 계약 §8 을 함께 고친다");
+        String[] base = {"main", "heavytail", "b1", "w1", "c1", "r1"};
+        String key = PlacementBenchmarkService.cacheKey(base);
+        assertEquals(PlacementBenchmarkService.CACHE_AXES.size(), key.split("\\|").length);
+        for (int i = 0; i < base.length; i++) {
+            String[] changed = base.clone(); changed[i] = changed[i] + "x";
+            assertNotEquals(key, PlacementBenchmarkService.cacheKey(changed), "축 " + PlacementBenchmarkService.CACHE_AXES.get(i) + " 가 키에 반영되지 않는다");
+        }
+        assertThrows(IllegalStateException.class, () -> PlacementBenchmarkService.cacheKey("main", "heavytail"), "축 수가 다르면 키를 만들지 않는다");
+    }
+
+    /** 실행 중인 호출이 있으면 두 번째 호출은 기다리지 않고 429 다. */
+    @DisplayName("동시 두 번째 호출은 429 로 거절된다")
+    @Test
+    void concurrent_second_call_is_rejected_with_429() throws Exception {
+        // 실행 슬롯(세마포어)을 시험이 먼저 점유해 "실행 중" 상태를 만든다
+        PlacementBenchmarkService s = newService();
+        java.lang.reflect.Field f = PlacementBenchmarkService.class.getDeclaredField("running");
+        f.setAccessible(true);
+        java.util.concurrent.Semaphore running = (java.util.concurrent.Semaphore) f.get(s);
+        assertTrue(running.tryAcquire(), "시험이 실행 슬롯을 먼저 잡는다");
+        try {
+            com.innogrid.aims.common.exception.BusinessException e = assertThrows(
+                    com.innogrid.aims.common.exception.BusinessException.class, () -> s.compare("main", "heavytail"));
+            assertEquals(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, e.getStatus());
+        } finally {
+            running.release();
+        }
+        assertNotNull(s.compare("main", "heavytail").boards(), "슬롯이 풀리면 정상 계산");
     }
 
     /** 서비스 인스턴스가 달라도 같은 답이어야 한다 — 인스턴스 필드에 상태가 쌓이지 않는다는 뜻. */
@@ -900,11 +1160,11 @@ class PlacementBenchmarkServiceTest {
      * 엔진이 믿은 비용과 생성식 기준 전력이 <b>다른 함수</b>다. 같은 값이면 주 지표가 엔진 목적함수의
      * 재탕이고, 그 지표에서 그 목적함수를 최대화한 전략이 정의상 이긴다.
      *
-     * <p>한 셀만 보면 그 셀에서 우연히 갈린 것과 구분되지 않는다 — 여섯 판 × 부하율 넷 × 전원 가정 둘을
+     * <p>한 셀만 보면 그 셀에서 우연히 갈린 것과 구분되지 않는다 — 등록된 판 전부 × 부하율 넷 × 전원 가정 둘을
      * 전부 훑는다. 분포는 heavytail 하나만 쓴다: 분포는 요구 워크로드를 바꿀 뿐 두 값을 만드는 함수를
      * 바꾸지 않으므로, 둘째 분포를 더해도 잠기는 성질은 같고 시간만 두 배가 된다.</p>
      */
-    @DisplayName("여섯 판 전 셀에서 엔진이 믿은 비용과 생성식 기준 전력은 다른 함수다")
+    @DisplayName("등록된 판 전 셀에서 엔진이 믿은 비용과 생성식 기준 전력은 다른 함수다")
     @Test
     void engine_belief_and_ground_truth_are_different_functions() {
         BenchmarkClusters clusters = new BenchmarkClusters();
@@ -1351,7 +1611,7 @@ class PlacementBenchmarkServiceTest {
     @DisplayName("판정 셀과 같은 판의 30% 셀에서 총전력 지표가 유효하고 표본이 있다")
     @Test
     void the_judgment_cell_carries_a_usable_total_power_metric() {
-        Board board = service.compare(BenchmarkRules.JUDGMENT_BOARD, "heavytail").boards().get(0);
+        Board board = service.compare(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.JUDGMENT_DISTRIBUTION).boards().get(0);
         String powerControl = BenchmarkRules.JUDGMENT_POWER_CONTROL.name();
 
         for (int loadRatio : List.of(30, BenchmarkRules.JUDGMENT_LOAD_RATIO)) {
@@ -1373,14 +1633,14 @@ class PlacementBenchmarkServiceTest {
      * 판정 셀에서 격차 열이 <b>쓸 수 있는 칸</b>인지 본다 — 다음 PR 의 판정이 읽을 자리라 여기가 비면
      * 결과가 나쁜 것이 아니라 판을 못 쓰는 것이다.
      *
-     * <p>부호도 함께 못 박는다. 지금 이 판에서 우리 전력 엔진은 문헌 기준선보다 전력을 <b>더</b> 쓰고
+     * <p>부호도 함께 못 박는다. 지금 이 판에서 우리 전력 엔진은 ΔP 단독 대조군(pabfd)보다 전력을 <b>더</b> 쓰고
      * (격차 &gt; 0), 그것이 다음 PR 이 줄이려는 값이다. 이 부호가 뒤집히면 세계가 달라진 것이거나 식의
      * 분모·부호가 바뀐 것이므로, 조용히 지나가지 않고 여기서 멈춰 시험을 함께 고치게 한다.</p>
      */
     @DisplayName("판정 셀의 격차 열이 유효하고 표본이 있으며 기준선보다 큰 쪽에 있다")
     @Test
     void the_judgment_cell_carries_a_usable_gap_metric() {
-        Cell c = cell(service.compare(BenchmarkRules.JUDGMENT_BOARD, "heavytail").boards().get(0),
+        Cell c = cell(service.compare(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.JUDGMENT_DISTRIBUTION).boards().get(0),
                 BenchmarkRules.JUDGMENT_LOAD_RATIO, BenchmarkRules.JUDGMENT_POWER_CONTROL.name());
         MetricValue m = metric(strategy(c, "power"), BenchmarkRules.GAP_VS_PABFD);
 
@@ -1486,7 +1746,7 @@ class PlacementBenchmarkServiceTest {
                         nullSlotsSeen += m.points().size() - present.size();
 
                         if (m.valid()) {
-                            assertEquals(medianOf(present), m.median(), 1e-9,
+                            assertEquals(BenchmarkRules.median(present), m.median(), 1e-9,
                                     where + ": 중앙값이 지점 배열의 중앙값과 다르다 — 둘 중 하나가 다른 지점을 "
                                             + "보고 있다");
                         }
@@ -1737,7 +1997,7 @@ class PlacementBenchmarkServiceTest {
      * <p>요구 코어는 상상하지 않고 <b>실제 워크로드 파일</b>이 쓰는 값만 본다 — 판에 없는 요구량으로
      * 잰 최댓값은 판의 사실이 아니다.</p>
      */
-    @DisplayName("여섯 판 전 지점·전 노드의 실질 한계 전력 최댓값이 계약 상수와 같다")
+    @DisplayName("등록된 판 전 지점·전 노드의 실질 한계 전력 최댓값이 계약 상수와 같다")
     @Test
     void the_maximum_real_marginal_power_on_the_boards_matches_the_contract_constant() {
         PowerModel powerModel = new PowerModel(new SchedulerProperties());
@@ -1804,7 +2064,7 @@ class PlacementBenchmarkServiceTest {
      * {@code u} 는 그 시각의 사용률, {@code δ = 엔진이 믿는 정격/생성식 정격 − 1}. β=1·δ=0 이면 우변이
      * 선언값 그대로가 되어 항등이 되고, 그 항등이 깨지는 판이 이 PR 이 만든 판이다.</p>
      */
-    @DisplayName("여섯 판 전 행·전 지점에서 깨우기 역산이 닫힌 형태와 같다")
+    @DisplayName("등록된 판 전 행·전 지점에서 깨우기 역산이 닫힌 형태와 같다")
     @Test
     void the_wakeup_reconstruction_matches_the_closed_form_on_every_board() {
         BenchmarkClusters clusters = new BenchmarkClusters();
@@ -2064,19 +2324,6 @@ class PlacementBenchmarkServiceTest {
                 .orElseThrow(() -> new AssertionError(s.strategyId() + " 에 " + key + " 지표가 없다"));
     }
 
-    /**
-     * 지점 배열의 중앙값 — 응답과 <b>같은 반올림</b>으로 낸다. 반올림을 빼면 짝수 개의 평균에서 마지막
-     * 자리가 갈려 이 시험이 없는 결함을 신고한다.
-     */
-    private static double medianOf(List<Double> values) {
-        List<Double> sorted = values.stream().sorted().toList();
-        int mid = sorted.size() / 2;
-        double m = sorted.size() % 2 == 1
-                ? sorted.get(mid)
-                : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
-        return Math.round(m * 10000.0) / 10000.0;
-    }
-
     private static Double median(StrategyResult s, String key) {
         return metric(s, key).median();
     }
@@ -2084,6 +2331,13 @@ class PlacementBenchmarkServiceTest {
     private static List<Double> medians(Cell cell, String key) {
         List<Double> values = new ArrayList<>();
         for (StrategyResult s : cell.strategies()) values.add(median(s, key));
+        return values;
+    }
+
+    /** 접두가 맞는 열(전력 엔진 변종)은 제외한 중앙값 목록. */
+    private static List<Double> mediansExcept(Cell cell, String key, String excludedPrefix) {
+        List<Double> values = new ArrayList<>();
+        for (StrategyResult s : cell.strategies()) if (!s.strategyId().startsWith(excludedPrefix)) values.add(median(s, key));
         return values;
     }
 }

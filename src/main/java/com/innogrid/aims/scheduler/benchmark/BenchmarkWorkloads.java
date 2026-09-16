@@ -52,6 +52,21 @@ public final class BenchmarkWorkloads {
 
     // ── 로딩 ──────────────────────────────────────────────────
 
+    /** 위치 → 다이제스트 메모이즈. 캐시 적중 경로가 매 호출 파일을 다시 읽지 않게 — 판 다이제스트와 같은 방식. */
+    private static final Map<String, String> DIGESTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 워크로드 분포 파일 내용의 다이제스트 — 판 파일과 같은 규칙({@link BenchmarkClusters#digestOfContent}). 캐시 키·증거 묶음이 쓴다. */
+    public static String digestOf(String location) {
+        return DIGESTS.computeIfAbsent(location, loc -> {
+            Resource resource = new DefaultResourceLoader().getResource(loc);
+            try (InputStream in = resource.getInputStream()) {
+                return BenchmarkClusters.digestOfContent(in.readAllBytes());
+            } catch (IOException e) {
+                throw new IllegalArgumentException("워크로드 분포 파일을 읽을 수 없습니다: " + loc, e);
+            }
+        });
+    }
+
     /** {@code classpath:} 또는 파일 경로에서 읽는다. 잘못된 파일은 {@link IllegalArgumentException}. */
     public static BenchmarkWorkloads load(String location) {
         Resource resource = new DefaultResourceLoader().getResource(location);

@@ -13,6 +13,7 @@ import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 
@@ -117,6 +118,26 @@ public final class BenchmarkContexts {
      */
     public static PlacementContext copyOf(List<NodeResource> base, SchedulingPolicy policy,
                                           ConstraintEvaluator evaluator) {
+        return build(base, policy, evaluator, LinkMatrix.EMPTY);
+    }
+
+    /**
+     * 판이 선언한 링크 행렬을 실은 사본 — 링크 판의 전략 컨텍스트와 <b>제외 프로브 컨텍스트 둘 다</b> 이 오버로드를 쓴다.
+     * 프로브만 행렬 없이 만들면 C5 제외가 프로브 분포에서 빠져 {@code probeExclusionReasons} 가 실제와 달라진다.
+     */
+    public static PlacementContext copyOf(List<NodeResource> base, SchedulingPolicy policy,
+                                          ConstraintEvaluator evaluator, LinkMatrix links) {
+        return build(base, policy, evaluator, links == null ? LinkMatrix.EMPTY : links);
+    }
+
+    /**
+     * <b>유일한 조립 지점.</b> 두 공개 {@code copyOf} 가 모두 여기를 지난다 — 노드 사본·정렬·평가기 검사가 한 곳에 있고,
+     * 링크 원장은 인자로 받는다. 노드 목록에서 만드는 경로는 원장이 없어 {@link LinkMatrix#EMPTY} 를 넘기고, 컨텍스트에서
+     * 잇는 경로는 그 컨텍스트의 원장을 넘긴다. 판 파일이 링크를 선언하게 되면 이 인자에 판의 행렬을 넣는 오버로드 하나로
+     * 끝난다 — 두 경로 중 한쪽만 링크를 전달하던 갈림을 없애기 위한 자리다.
+     */
+    private static PlacementContext build(List<NodeResource> base, SchedulingPolicy policy,
+                                          ConstraintEvaluator evaluator, LinkMatrix links) {
         Objects.requireNonNull(evaluator, "평가기를 호출자가 지정해야 한다 — 2인자 of 는 설정을 잃는다");
 
         List<NodeResource> copies = (base == null ? List.<NodeResource>of() : base).stream()
@@ -125,7 +146,7 @@ public final class BenchmarkContexts {
                         Comparator.nullsLast(Comparator.<String>naturalOrder())))
                 .toList();
 
-        return PlacementContext.of(copies, policy, evaluator);
+        return PlacementContext.of(copies, policy, evaluator).withLinkMatrix(links);
     }
 
     /**
@@ -138,9 +159,8 @@ public final class BenchmarkContexts {
     public static PlacementContext copyOf(PlacementContext source, ConstraintEvaluator evaluator) {
         Objects.requireNonNull(source, "기준 컨텍스트가 없다");
 
-        return copyOf(source.nodes(), source.policy(), evaluator)
+        return build(source.nodes(), source.policy(), evaluator, source.linkMatrix())
                 .withExcluded(source.excludedNodes())
-                .withLinkMatrix(source.linkMatrix())
                 .withMdcBudgets(source.mdcBudgets())
                 .withPowerBudget(source.powerBudgetWatts());
     }

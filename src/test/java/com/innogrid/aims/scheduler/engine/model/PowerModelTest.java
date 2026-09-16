@@ -187,6 +187,46 @@ class PowerModelTest {
     }
 
     /**
+     * 영구 항등 — α=1 이고 자르기가 걸리지 않는 노드(u_실효 + ΔU ≤ 1, 곧 C1 적격 노드)에서는 곡선 위 동적항이 선형 한계 전력과
+     * 같고 <b>예약이 있어도</b> 같다. 이것이 "기본 설정에서 이 정정은 배치 결정과 비교 판의 값을 바꾸지 않는다" 의 산술 근거다.
+     * 기저를 되돌려도 항등이라 이 시험은 기저 변조를 잡지 못한다 — 그 몫은 아래 볼록 시험이다.
+     */
+    @DisplayName("볼록 지수 1 · 자르기 비발현 노드에서는 예약 유무와 무관하게 곡선 동적항이 선형 한계전력과 같다")
+    @Test
+    void convex_exponent_1_is_linear_regardless_of_reservation_when_not_clamped() {
+        NodeResource reserved = node(40, 250, 500);
+        reserved.reserve(2, 0, 0);                                   // 실효 65%, 요구 2/8 → 90% ≤ 100%: 적격 노드의 상태
+        NodeResource plain = node(40, 250, 500);
+
+        assertEquals(model.marginalPower(reserved, 2), model.marginalPowerOnCurve(reserved, 2), 1e-9, "예약 노드도 선형과 같다");
+        assertEquals(model.marginalPowerOnCurve(plain, 2), model.marginalPowerOnCurve(reserved, 2), 1e-9, "α=1 에서는 예약이 값을 바꾸지 않는다");
+        assertEquals(87.5, model.marginalPowerOnCurve(reserved, 2), 1e-9);   // (500 − 500×0.3) × 2/8 = 87.5W
+    }
+
+    /**
+     * 정정의 관측 가능한 효과 — α&gt;1 이면 곡선 위 평가점이 실효 사용률이라 <b>예약이 있는 적격 노드</b>에서 값이 갈린다.
+     * 예약 2/8 인 20% 노드는 곡선 위 45% 지점에서 평가되어(45→70%) 예약 없는 노드(20→45%)보다 증가분이 크다.
+     * 기저를 실측으로 되돌리면 두 값이 같아져 여기서 멈춘다.
+     */
+    @DisplayName("볼록 지수가 1 보다 크면 예약이 있는 적격 노드의 동적항은 실효 사용률 지점에서 평가된다")
+    @Test
+    void convex_exponent_evaluates_reserved_eligible_node_at_effective_usage() {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getPower().setCurveAlpha(1.8);
+        PowerModel convex = new PowerModel(props);
+        NodeResource reserved = node(20, 250, 500);
+        reserved.reserve(2, 0, 0);                                   // 실효 45%, 가용 8×0.8−2 = 4.4 ≥ 2: C1 적격
+        NodeResource plain = node(20, 250, 500);
+
+        double expected = (500 - convex.idlePower(reserved)) * (Math.pow(0.70, 1.8) - Math.pow(0.45, 1.8));
+        assertEquals(expected, convex.marginalPowerOnCurve(reserved, 2), 1e-9, "평가점은 실효 45% 다");
+        assertTrue(convex.marginalPowerOnCurve(reserved, 2) > convex.marginalPowerOnCurve(plain, 2),
+                "볼록 곡선에서 더 높은 지점의 같은 폭은 더 큰 증가분이다");
+        assertEquals(convex.marginalPowerOnCurve(node(45, 250, 500), 2), convex.marginalPowerOnCurve(reserved, 2), 1e-9,
+                "예약 2/8 인 20% 노드와 예약 없는 45% 노드는 곡선 위 같은 자리다");
+    }
+
+    /**
      * 결함 C — 기존 한계 전력은 현재 부하를 보지 않아 같은 사양이면 모든 노드가 같은 값이었다.
      * 볼록 지수를 올리면 부하에 따라 갈린다.
      */
@@ -209,8 +249,59 @@ class PowerModelTest {
                 model.marginalPowerOnCurve(node(20, 250, 500), 2), 1e-9);
     }
 
-    /** 사용률이 100% 를 넘어가지 않도록 자른다. */
-    @DisplayName("요구량이 남은 용량보다 커도 100퍼센트를 넘지 않는다")
+    /**
+     * 음수 사용률(계측 결함)은 0 으로 자른다. α=1 에서는 자르기가 없어도 차가 같아 보이지 않지만, α 가 정수가 아니면 음수의 거듭제곱이
+     * NaN 이 되고 정수면 부호가 뒤집힌 유한 오답이 된다 — 하한 클램프가 지키는 것은 그 경계다.
+     */
+    @DisplayName("음수 사용률은 0 으로 자른다 — 볼록 지수에서 NaN 이 되지 않는다")
+    @Test
+    void negative_usage_is_clamped_to_zero_on_the_curve() {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getPower().setCurveAlpha(1.8);
+        PowerModel convex = new PowerModel(props);
+
+        double broken = convex.marginalPowerOnCurve(node(-5, 250, 500), 2);
+        assertTrue(Double.isFinite(broken), "음수 사용률에서 NaN 이 나왔다: " + broken);
+        assertEquals(convex.marginalPowerOnCurve(node(0, 250, 500), 2), broken, 1e-9, "음수는 0 과 같은 자리다");
+    }
+
+    /**
+     * 깨우기 여부와 동적항이 <b>같은 기저</b>다 — 예약으로만 문턱을 넘은 노드(실측 2%, 예약 2/8)는 가동 노드로 보아 깨우기 비용을
+     * 물리지 않는다. 깨우기 판정을 실측으로 되돌리면 이 노드에 깨우기 비용이 붙어 실질 한계 전력이 커진다.
+     */
+    @DisplayName("예약으로만 가동 문턱을 넘은 노드는 깨우기 비용을 물리지 않는다 — 깨우기 판정과 동적항이 같은 기저")
+    @Test
+    void a_node_active_only_by_reservation_pays_no_wakeup_power() {
+        NodeResource reservedOnly = node(2, 250, 500);
+        reservedOnly.reserve(2, 0, 0);                               // 실측 2% < 문턱 5% < 실효 27%
+        NodeResource idle = node(2, 250, 500);
+
+        assertTrue(model.isActive(reservedOnly));
+        assertFalse(model.isActive(idle));
+        assertEquals(model.marginalPowerOnCurve(reservedOnly, 2), model.realMarginalPower(reservedOnly, 2), 1e-9, "동적항만 — 깨우기 없음");
+        assertTrue(model.realMarginalPower(idle, 2) > model.realMarginalPower(reservedOnly, 2), "유휴 노드는 깨우기 비용이 더 붙는다");
+    }
+
+    /**
+     * 총 코어를 못 읽은 노드(0)에서 분모 가드가 없으면 요구량 0 일 때 {@code 0/0 = NaN} 이 점수 전체로 번진다. 요구량이 있으면
+     * {@code min(1, ∞) = 1} 로 가드 유무가 같아 보이므로, 이 시험만이 가드를 잠근다.
+     */
+    @DisplayName("총 코어를 모르는 노드에 요구량 0 이면 동적항은 0 이다 — NaN 이 아니다")
+    @Test
+    void zero_total_cpu_with_zero_demand_is_zero_not_nan() {
+        NodeResource unknownCores = new NodeResource("mdc-01", "node-1", 0, 16384, 0,
+                40, 30, 30, 250, 500, 50, 1000, 500);
+
+        double w = model.marginalPowerOnCurve(unknownCores, 0);
+        assertTrue(Double.isFinite(w), "0 코어 노드에서 NaN 이 나왔다: " + w);
+        assertEquals(0.0, w, 1e-9);
+    }
+
+    /**
+     * 사용률이 100% 를 넘어가지 않도록 자른다. 이 상태(가용 코어 &lt; 요구 코어)는 제약 C1 이 거르므로 배치는 도달하지 않는다 —
+     * 여기서 잠그는 것은 식의 정의이고, 응답에서는 <b>부적격 후보의 표시값</b>으로만 나타난다.
+     */
+    @DisplayName("요구량이 남은 용량보다 커도 100퍼센트를 넘지 않는다 — 부적격 노드의 표시값")
     @Test
     void demand_over_capacity_caps_at_100() {
         NodeResource node = node(90, 250, 500);

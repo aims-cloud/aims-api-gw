@@ -14,5 +14,5 @@ public record ServiceLogTrendResponse(
 ) {
     /** 시간 버킷 1개 — timestamp 는 버킷 시작(Unix 초) */
     public record Bucket(long timestamp, long infoCount, long warningCount,
-                         long debugCount, long errorCount) {}
+                         long debugCount, long errorCount, long unknownCount) {}
 }

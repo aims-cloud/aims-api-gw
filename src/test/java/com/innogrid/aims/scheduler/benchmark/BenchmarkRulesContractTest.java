@@ -36,22 +36,115 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class BenchmarkRulesContractTest {
 
-    /** 사전 등록된 지표 키 — 이 집합이 바뀌면 규칙이 바뀐 것이다. */
-    private static final Set<String> DECLARED_KEYS = new TreeSet<>(Set.of(
-            "placementRatePercent", "generatorPowerW", "perWorkloadPowerW",
-            "engineBelievedCostW", "activeNodeDelta", "warnZoneNodeCount",
-            "c3InterventionCount", "measuredTempStdDev",
-            "unmeasuredPlacementRate", "unmeasuredRateSpreadPercentPoints",
-            "gapVsPabfdPercent"));
+    /**
+     * 사전 등록된 지표 키 집합의 다이제스트 — 키를 오름차순으로 정렬해 {@code ,} 로 이은 문자열의 SHA-256 앞 12자.
+     *
+     * <p>예전에는 키 11개를 여기 다시 나열했다(규칙 상수·라벨 상수·시험 목록의 3중 선언). 지표를 더하거나 빼면 규칙이
+     * 바뀐 것이므로 이 값을 <b>먼저</b> 고쳐야 하고, 그 커밋이 결과 코드보다 앞에 있어야 한다는 사전 등록 요건은 그대로다.
+     * 다이제스트가 바뀌는 커밋 메시지에 옛 값 → 새 값을 적는다.</p>
+     */
+    private static final String DECLARED_KEY_DIGEST = "039400bdc3c1";
 
-    @DisplayName("사전 등록된 지표 키 집합이 고정된다")
+    /** 사람이 읽는 사전 등록 목록(정렬). 다이제스트는 이 목록에서 계산해 리터럴과 맞춘다 — 두 줄이 같이 바뀌는 것이 이중 서명이다. */
+    private static final List<String> DECLARED_KEYS = List.of(
+            "activeNodeDelta", "c3InterventionCount", "engineBelievedCostW", "gapVsPabfdPercent", "generatorPowerW",
+            "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "unmeasuredPlacementRate",
+            "unmeasuredRateSpreadPercentPoints", "warnZoneNodeCount");
+
+    /** 규칙 축 봉인 한 줄 — 다이제스트 · 날짜 · 사유. 이력의 마지막 행이 현재 값이다. */
+    record AxisSeal(String digest, String date, String reason) {}
+
+    /**
+     * 판정 규칙 축별 다이제스트 <b>이력</b> — 지표 키 외의 규칙 값(부하율·지점 수·시드·판 상수·판정 문턱·금지 조각·절차 문장)도
+     * 봉인한다. 축마다 행을 쌓고 마지막 행이 현재 값이어야 한다. 규칙을 바꾸는 커밋은 여기 행을 더하고(옛 → 새 값과 사유가
+     * 남는다), 제목을 {@code rules:} 로 시작하며, 결과 코드 변경을 같은 커밋에 담지 않는다 — 이력 누락은 시험이 막고 커밋
+     * 순서는 리뷰가 본다. 증거 묶음 매니페스트가 같은 값을 실으므로 옛 매니페스트의 다이제스트를 이 표로 해석한다.
+     * {@code metrics} 축(키:방향:역할)은 키 집합만의 {@link #DECLARED_KEY_DIGEST} 와 목적이 달라 값이 다르다.
+     */
+    private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
+            "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할")),
+            "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
+            "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율"),
+                    new AxisSeal("9ab95b89dc3e", "2026-09-14", "방법론 변경 사전 등록 — 오목 지수 0.625·오목/링크 판 id·위상 독립 판 2장·seed 수 3·SplitMix64 혼합 상수")),
+            "measured", List.of(new AxisSeal("0189eec53480", "2026-09-14", "판 실측 불변조건을 규칙 문턱과 분리 — 이후 판정 시점 고정값(316) 으로 의미 확정, 현 실측은 축 밖")),
+            "sensitivity", List.of(new AxisSeal("3741559c00dd", "2026-09-14", "축 신설 — 한계 전력 눈금 3값(250·1000·0)·역산 차단 열·링크 게이트 열")),
+            "judgment", List.of(new AxisSeal("e1601b21aca2", "2026-09-14", "축 봉인 도입 — 판정 셀·문턱"),
+                    new AxisSeal("cfb639b97e76", "2026-09-15", "판정 셀 분포(heavytail) 편입 — 소급 명문화: 값은 지금까지의 판정이 쓴 분포와 같고 앞으로의 선택 자유도만 닫는다. 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("4d55e10c3eb8", "2026-09-15", "사후 개정(관측 계기)·다음 회차 사전 등록 — 지점 비교 무시 폭 0.0002(4자리 두 칸)와 다음 회차 판정 주어(JUDGMENT_TARGET) 편입. 한계 전력 곡선 평가점 정정의 증거 묶음 대조에서 실수 항등인 변경이 26칸을 한 칸씩 뒤집은 것(전부 순위 근거 아닌 표시 지표, 판정 근거 열은 바이트 동일)을 본 뒤 예방으로 세운 잡음 하한. 소비된 회차는 지점 배열 부재로 이미 판정 불가라 소급 영향이 없고, 다음 회차에 대해서는 결과 코드 앞의 사전 등록이며 판정을 더 엄격하게 하는 방향. 지목이 무효화 축에 있어 판정 PR 은 바꿀 수 없다. 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")),
+            "banned", List.of(new AxisSeal("e621e7f43e72", "2026-09-14", "축 봉인 도입 — 금지 조각 10")),
+            "prose", List.of(new AxisSeal("ae0fbae7a919", "2026-09-14", "여유 정의·격차 판정 절차 문장(공백 접음)"),
+                    new AxisSeal("b37d0ec2006e", "2026-09-14", "폐쇄형 판정 자격 문장 추가, 민감도 검정·위상 구성·오목 판 결론 형식 문장 신설"),
+                    new AxisSeal("d06e13cc090c", "2026-09-14", "총량 짝 조건 기준 집합 규칙 — override 없는 기본 설정 열로 고정. 배포 검증에서 변종 열 추가만으로 기존 열의 총량 표본이 5 → 1 로 줄어든 것을 확인한 뒤의 사후 개정. 판정 문턱·판정 셀·격차 정의는 불변"),
+                    new AxisSeal("45be90af10f3", "2026-09-14", "배포 검증 수치를 본 뒤의 2차 사후 개정 — 민감도 검정을 두 행의 유효 지점 교집합 위 지점별 차로 정정하고 수준량/판정량 구분을 명시, 위상 구성 범위 보고 의무와 오목 판 결론의 차·역산 기여 슬롯 추가, 총량 짝 제외 지점의 응답 표기 의무. 판정 셀·판정 문턱·격차 정의·판정 자격은 불변"),
+                    new AxisSeal("7f4153f1a489", "2026-09-15", "문장 명확화 — 민감도 '세 눈금' 을 기본 500W(power)·s250·s1000 으로 명시하고 s0 은 사다리 밖으로. 의미 변경 없음"),
+                    new AxisSeal("4ecbed57aecb", "2026-09-15", "직전 배포 관측을 본 뒤의 사후 개정 — 기준선 보존(지점 배열째 저장소 파일·출처 인용·결측 적시), B·N 의 생산 경로를 저장소 시험 기본 설정 실행으로 고정(배포 응답은 참고), 기준선 재사용 규칙(판정 PR 은 파일 불변·갱신은 보고 게시 뒤 별도 커밋·이력 행에 중앙값 차), 사전 추정의 산출 방법 기재 의무. 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("6f8bfe5c389e", "2026-09-15", "규칙 축 대조 등급 신설(사전 등록) — 판정 무효화 축(judgment·sweep·boards·measured)·부수 보고 무효화 축(sensitivity)·표기 축(metrics·banned·prose). 다음 판정의 출처 대조 절차이며 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("8f6dfdcf02e2", "2026-09-15", "기준선 봉인 뒤 규칙 보강(관측 수치와 무관한 절차 보강) — 기준선 재취득 예외(무효화 축·판·워크로드를 바꾸는 PR 은 판정을 게시하지 않는 한 같은 PR 에서 기준선을 다시 뜬다), 이력 행 칸(엔진 동등 리비전·산출 HEAD) 명시, 판정량 비교는 4자리 반올림 차로(부동소수 잡음 제거), 기준선 경로를 값 대신 상수 이름으로 인용. 판정 셀·문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("e8659f43d2f9", "2026-09-15", "사후 개정(관측 계기)·다음 회차 사전 등록 — 3항 축소 지점에 무시 폭, 4항 방향 셀 중앙값 차에 그 두 배(중앙값 축은 반올림이 겹쳐 최대 두 칸 잡음 — 밴드는 두 칸 초과, 여유 한 칸을 더해 네 칸) 적용 문장. 판정 주어를 회차마다 rules: 커밋이 하나로 지목한 결함으로(다음 회차 지목은 JUDGMENT_TARGET 인용), 지목은 judgment 축에 있어 판정 PR 안에서 바꾸면 기준선 판정 불가, 등급 규칙에 같은 단서. 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
+
+    @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
     void metric_keys_are_fixed() {
-        Set<String> actual = BenchmarkRules.METRICS.stream()
-                .map(BenchmarkMetric::key).collect(Collectors.toCollection(TreeSet::new));
+        List<String> actual = BenchmarkRules.METRICS.stream().map(BenchmarkMetric::key).sorted().toList();
+        assertEquals(BenchmarkRules.METRICS.size(), actual.stream().distinct().count(), "키 중복 없음");
+        assertEquals(DECLARED_KEYS, actual, "지표 키 집합이 사전 등록 목록과 다르다 — 목록·다이제스트를 결과 코드보다 앞선 커밋에서 먼저 고친다");
+        assertEquals(DECLARED_KEY_DIGEST, BenchmarkClusters.digestOf(String.join(",", DECLARED_KEYS)),
+                "목록과 다이제스트가 어긋난다 — 둘을 같은 커밋에서 함께 고친다(옛 → 새 값을 메시지에)");
+    }
 
-        assertEquals(DECLARED_KEYS, actual,
-                "지표를 추가·삭제하려면 이 테스트를 먼저 고쳐야 한다 — 결과를 보고 몰래 바꿀 수 없게");
+    @DisplayName("판정 규칙의 축별 정규 문자열이 다이제스트 리터럴과 같다 — 규칙 변경은 결과 코드보다 앞선 커밋에서만")
+    @Test
+    void rule_axes_are_sealed() {
+        Map<String, String> axes = BenchmarkRules.ruleAxes();
+        assertEquals(RULE_AXIS_HISTORY.keySet(), axes.keySet(), "축 집합이 다르다");
+        List<String> changed = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> e : axes.entrySet()) {
+            List<AxisSeal> history = RULE_AXIS_HISTORY.get(e.getKey());
+            String current = history.get(history.size() - 1).digest();
+            String actual = BenchmarkClusters.digestOf(e.getValue());
+            if (!actual.equals(current)) {
+                changed.add(e.getKey() + ": " + current + " → " + actual + "  정규 문자열: " + e.getValue());
+            }
+        }
+        assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 이력에 행(새 값·날짜·사유)을 더하는 'rules:' 커밋을 결과 코드보다 앞에 둔다\n  "
+                + String.join("\n  ", changed));
+    }
+
+    /** 판정 주어(회차 지목) 이력 — 회차 · 지목 문장 조각 · 등록한 rules: 커밋의 성격. 마지막 행이 현 규칙 문장에 그대로 있어야 한다. */
+    record TargetSeal(String round, String fragment, String note) {}
+
+    private static final List<TargetSeal> JUDGMENT_TARGET_HISTORY = List.of(
+            new TargetSeal("소비된 회차", "깨우기 벌점이 유휴비로 고정되던 일률 편향", "W 눈금 전환(PR #49) — 사전 등록 커밋 뒤 결과 커밋"),
+            new TargetSeal("다음 회차", BenchmarkRules.JUDGMENT_TARGET,
+                    "무시 폭 편입과 함께 결과 코드 앞에 등록 — judgment 축에 편입되어 판정 PR 은 바꿀 수 없다"));
+
+    @DisplayName("판정 주어의 회차 지목이 이력으로 봉인되고 현 규칙 문장에 그대로 있다 — 판정 PR 안에서 바뀌면 그 회차는 판정 불가")
+    @Test
+    void the_judgment_target_history_is_sealed() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        for (TargetSeal s : JUDGMENT_TARGET_HISTORY) {
+            assertTrue(r.contains(s.fragment()), s.round() + " 의 지목 문장이 규칙에서 사라졌다: " + s.fragment());
+        }
+        assertTrue(r.contains("기준선을 다시 뜨지 못한다"), "지목 변경이 기계로 막히는 이유(재취득 불가)가 규칙 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.ruleAxes().get("judgment").contains("target=" + BenchmarkRules.JUDGMENT_TARGET),
+                "지목은 판정 무효화 축에 있어야 판정 PR 이 바꿀 수 없다 — 표기 축이면 명예 규정이다");
+        assertTrue(BenchmarkRules.AXIS_GRADE_RULE.contains("판정 주어"), "등급 규칙에 판정 주어 단서가 있어야 한다");
+    }
+
+    @DisplayName("규칙 축 등급 세 집합은 서로 겹치지 않고 합이 축 전체와 같다 — 새 축은 등급을 정해야 생긴다")
+    @Test
+    void rule_axis_grades_partition_the_axes() {
+        Set<String> all = new TreeSet<>(BenchmarkRules.INVALIDATING_AXES);
+        assertTrue(all.addAll(BenchmarkRules.SECONDARY_REPORT_AXES), "부수 보고 축이 무효화 축과 겹친다");
+        assertTrue(all.addAll(BenchmarkRules.NOTATION_AXES), "표기 축이 다른 등급과 겹친다");
+        assertEquals(BenchmarkRules.INVALIDATING_AXES.size() + BenchmarkRules.SECONDARY_REPORT_AXES.size() + BenchmarkRules.NOTATION_AXES.size(),
+                all.size(), "등급 집합이 겹친다");
+        assertEquals(BenchmarkRules.ruleAxes().keySet(), all, "등급이 정해지지 않은 축이 있다 — 등급표(AXIS_GRADE_RULE)에 넣는 rules: 커밋이 먼저다");
+        assertTrue(BenchmarkRules.INVALIDATING_AXES.contains("judgment"), "판정 셀·문턱이 든 축은 무효화 축이어야 한다");
+        assertTrue(BenchmarkRules.SECONDARY_REPORT_AXES.contains("sensitivity"), "눈금 목록이 바뀌면 민감도 표가 대응하지 않는다");
+        assertTrue(BenchmarkRules.AXIS_GRADE_RULE.contains("판정 불가") && BenchmarkRules.AXIS_GRADE_RULE.contains("부수 보고"), BenchmarkRules.AXIS_GRADE_RULE);
+        assertTrue(BenchmarkRules.ruleAxes().get("prose").contains("axisGradeRule="), "등급표가 prose 축에 봉인돼야 한다");
+        assertFreeOfBannedClaims(BenchmarkRules.AXIS_GRADE_RULE, "축 등급 규칙 문장");
     }
 
     @DisplayName("지표마다 정의와 단위와 유효성 조건이 비어 있지 않다")
@@ -83,7 +176,7 @@ class BenchmarkRulesContractTest {
     }
 
     /**
-     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가
+     * 평가자도 생성식을 쓴다. "지상진실"이라는 이름은 실측을 암시하고, 표만 잘라 인용되면 그 암시가 <!-- ban-ok: 이름 금지 사유 -->
      * 사실로 굳는다 — 이름·라벨 어디에도 그 단어가 없어야 한다.
      */
     @DisplayName("총전력의 주 지표는 엔진 점수가 아니라 생성식 기준값이고, 실측을 암시하는 이름을 쓰지 않는다")
@@ -161,7 +254,7 @@ class BenchmarkRulesContractTest {
     @DisplayName("온도 분포 두 지표는 배치 건수가 같은 지점에서만 유효하고 개입 횟수는 그 조건을 받지 않는다")
     @Test
     void the_temperature_distribution_metrics_share_the_pairing_condition_of_the_totals() {
-        String pairing = "전 전략의 배치 건수가 같은 시각 지점에서만";
+        String pairing = "기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만";
 
         for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
             assertTrue(metric(key).validity().contains(pairing),
@@ -169,7 +262,7 @@ class BenchmarkRulesContractTest {
         }
         assertFalse(metric(BenchmarkRules.C3_INTERVENTIONS).validity().contains(pairing),
                 "개입 횟수는 시도당 계수라 배치량에 비례하지 않는다 — 같은 조건을 걸면 없는 결함을 고치는 것이다");
-        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같을 때만"),
+        assertTrue(metric(BenchmarkRules.GENERATOR_POWER).validity().contains("배치 건수가 같은 지점에서만"),
                 "총량 쪽 조건이 사라졌다면 '같은 조건' 이라는 위 문구의 기준이 없어진다");
     }
 
@@ -179,7 +272,7 @@ class BenchmarkRulesContractTest {
      * 그 사실은 {@link BenchmarkRules#LIMITATION} 이 밝힌다.
      *
      * <p>격차 지표가 여기 <b>다섯째</b>로 들어 있는 것도 의도다 — 다음 PR 의 판정이 읽는 값이라 보조로 두면,
-     * 판정에 쓰이는 순간 조용한 승격이 된다. 문헌 기준선을 분모로 삼고 전 전략 행에 같은 식으로 실으며
+     * 판정에 쓰이는 순간 조용한 승격이 된다. ΔP 단독 대조군(pabfd)을 분모로 삼고 전 전략 행에 같은 식으로 실으며
      * 좋은 방향이 낮은 쪽이라, 주 지표로 올린다고 우리 열이 유리해지지 않는다.</p>
      */
     @DisplayName("주 지표는 성공률과 전력·가동 계열뿐이고 온도 축에는 없다")
@@ -475,6 +568,10 @@ class BenchmarkRulesContractTest {
         assertEquals(10, BenchmarkRules.JUDGMENT_MIN_PAIRED_POINTS,
                 "짝 하한을 바꾸면 판정 가능·불가의 경계가 움직인다 — 결과를 보고 바꿀 수 없게 여기서 고정한다");
         assertEquals(2.0, BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP, 1e-9);
+        assertEquals(0.0002, BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, 1e-12, "무시 폭은 4자리 눈금 두 칸 — 한 칸은 반올림 동점 뒤집힘과 구별되지 않는다");
+        assertTrue(BenchmarkRules.JUDGMENT_POINT_IGNORE_PP <= BenchmarkRules.JUDGMENT_MEDIAN_REDUCTION_PP / 10000,
+                "무시 폭은 잡음 하한이지 문턱이 아니다 — 문턱에 견줄 크기가 되면 진짜 축소를 버린다");
+        assertTrue(BenchmarkRules.ruleAxes().get("judgment").contains("pointIgnorePp="), "무시 폭은 판정 함수의 문턱 상수라 judgment 축에 봉인한다");
         assertEquals(10.0 / 12, BenchmarkRules.JUDGMENT_REDUCED_POINT_RATIO, 1e-9,
                 "개수가 아니라 비율이다 — 교집합이 하한과 같을 때 전 지점 축소를 요구하는 더 센 기준이 조용히 생기지 않게");
 
@@ -513,13 +610,71 @@ class BenchmarkRulesContractTest {
         // 어휘만 보면 문장을 통째로 갈아치우는 변경이 통과한다. 문턱 셋의 이름과 올림·실패 처리까지
         // 요구해, 절차의 뼈대가 빠진 문장은 빨간불이 되게 한다.
         for (String part : List.of("JUDGMENT_MIN_PAIRED_POINTS", "JUDGMENT_MEDIAN_REDUCTION_PP",
-                "JUDGMENT_REDUCED_POINT_RATIO", "ceil", "실패로 기록")) {
+                "JUDGMENT_REDUCED_POINT_RATIO", "JUDGMENT_POINT_IGNORE_PP", "ceil", "실패로 기록", "회차마다", "지목한 결함", "지목하지 않은 변경")) {
             assertTrue(r.contains(part),
                     "판정 절차에서 '" + part + "' 가 사라졌다 — 문턱을 어떻게 쓰는지가 문장에 없으면 "
                             + "다음 PR 이 같은 상수로 다른 절차를 만든다: " + r);
         }
         assertFreeOfBannedClaims(r,
                 "격차 판정 규칙 — 금지 조각 순회는 한계 문구와 지표 유효성 조건만 보므로 이 상수는 여기서 따로 본다");
+    }
+
+    @DisplayName("판정 자격은 폐쇄형이다 — 두 판의 power 행 밖은 전부 자격 없음")
+    @Test
+    void the_judgment_qualification_is_closed_form() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        assertTrue(r.contains("판정 자격(폐쇄형)"), r);
+        assertTrue(r.contains("그 밖의 판·열·지표는 전부 자격 없음"), "판·열이 늘 때 규칙을 다시 고치지 않도록 폐쇄형이어야 한다: " + r);
+    }
+
+    /**
+     * 기준선을 중앙값 두 개로만 남긴 판정은 3·4항을 영원히 재구성할 수 없었다. 문장이 지점 배열 보존·출처 인용·같은 생산 경로·
+     * 재사용 순서를 들고 있어야 다음 판정이 같은 결손을 반복하지 않는다. 분포는 서비스 기본 분포와 같은 문자열이어야 한다 —
+     * 규칙 클래스가 서비스를 참조하지 않으므로 둘의 일치는 여기서 묶는다.
+     */
+    @DisplayName("격차 판정 규칙이 기준선 보존·출처·생산 경로·재사용 순서를 문장으로 밝히고 판정 분포가 서비스 기본 분포와 같다")
+    @Test
+    void the_gap_judgment_rule_states_how_the_baseline_is_kept() {
+        String r = BenchmarkRules.GAP_JUDGMENT_RULE;
+        for (String part : List.of("기준선 보존", "지점 배열째", "JUDGMENT_BASELINE_PATH", "출처", "결측 항목",
+                "같은 생산 경로", "1~4항 판정을 게시하는 PR 은 기준선 파일을 수정하지 않는다", "판정 보고를 게시한 뒤", "예외:", "판정을 게시하지 않는 한",
+                "중앙값 차", "산출 HEAD", "4자리로 반올림한 값으로 문턱과 견준다", "산출 방법", "JUDGMENT_DISTRIBUTION")) {
+            assertTrue(r.contains(part), "판정 절차에서 '" + part + "' 가 사라졌다: " + r);
+        }
+        assertEquals(com.innogrid.aims.scheduler.service.PlacementBenchmarkService.HEAVYTAIL, BenchmarkRules.JUDGMENT_DISTRIBUTION,
+                "판정 분포가 서비스 기본 분포와 갈렸다 — 규칙 값이 관행과 다르면 소급 명문화가 아니다");
+        assertTrue(BenchmarkRules.ruleAxes().get("judgment").contains("distribution=" + BenchmarkRules.JUDGMENT_DISTRIBUTION),
+                "분포가 judgment 축에 실려야 보고자가 분포를 고를 수 없다");
+        assertTrue(BenchmarkRules.JUDGMENT_BASELINE_PATH.startsWith("src/test/resources/"), "기준선은 시험 자원이다 — 배포 jar 에 실리지 않는다");
+    }
+
+    @DisplayName("방법론 변경 상수가 결과보다 먼저 등록되어 있다 — 오목 지수는 볼록 지수의 역수, 민감도 눈금 3값, 위상 독립 판 2장")
+    @Test
+    void the_methodology_constants_are_pre_registered() {
+        assertEquals(1.0 / BenchmarkRules.CONVEX_POWER_EXPONENT, BenchmarkRules.CONCAVE_POWER_EXPONENT, 1e-12, "대칭 응력 — 한 문장 근거");
+        assertTrue(BenchmarkRules.CONCAVE_POWER_EXPONENT < 1.0);
+        assertEquals(3, BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.stream().distinct().count());
+        assertTrue(BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.contains(0.0), "구 방식(정격 분모) 열이 있어야 눈금 도입 자체가 검증된다");
+        assertTrue(BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS.stream().anyMatch(s -> s > 0 && s < BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT),
+                "포화를 발현시키는 눈금이 하나 있어야 한다");
+        assertEquals(2, BenchmarkRules.PHASE_INDEPENDENT_BOARDS.size());
+        assertTrue(BenchmarkRules.PHASE_INDEPENDENT_BOARDS.contains(BenchmarkRules.DIRECTION_CHECK_BOARD + "-independent"));
+        assertTrue(BenchmarkRules.PHASE_INDEPENDENT_BOARDS.contains(BenchmarkRules.JUDGMENT_BOARD + "-independent"));
+        assertEquals(316.0, BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT, 1e-9, "판정 시점 고정값은 판이 늘어도 바뀌지 않는다");
+        for (String s : List.of(BenchmarkRules.SENSITIVITY_RULE, BenchmarkRules.PHASE_RULE, BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE)) {
+            assertFreeOfBannedClaims(s, "방법론 규칙 문장");
+        }
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("독립 증거가 아니다"));
+        assertTrue(BenchmarkRules.PHASE_RULE.contains("검정하지 않는다"));
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("원인을 지목하지 않"));
+        assertTrue(BenchmarkRules.PAIRING_RULE.contains("override 없는 기본 설정 열"), "짝 조건 기준 집합이 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.PAIRING_RULE.contains("totalsIncomparableReason"), "짝 제외 지점의 응답 표기 의무가 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("유효 지점 교집합"), "민감도 검정은 교집합 위 지점별 차로 정의돼야 한다");
+        assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("수준 의존이 곧 판정 의존은 아니다"));
+        assertTrue(BenchmarkRules.PHASE_RULE.contains("생략은 판정 보고의 결격 사유"), "위상 판 범위 보고 의무");
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("|X−Y| = Z%p"), "오목 판 결론은 차 Z 로 적는다");
+        assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("power-idle-fixed − power = W%p"), "역산 기여 슬롯");
+        assertFreeOfBannedClaims(BenchmarkRules.PAIRING_RULE, "짝 조건 규칙 문장");
     }
 
     /**
@@ -633,6 +788,18 @@ class BenchmarkRulesContractTest {
             assertFalse(banned.isBlank(), "빈 조각은 모든 문자열에 걸려 시험을 무의미하게 만든다");
             assertFalse(banned.endsWith("다."), "어미까지 적으면 사본이 어미만 바꿔 빠져나간다: " + banned);
         }
+        // 심사자가 인용할 과잉 주장 조각 — 실제 문장이 걸리는지 양성 확인(조각이 빠지면 여기서 잡힌다)
+        for (String sentence : List.of(
+                "실제 서버의 전력 곡선이 볼록하기 때문이다",
+                "시원한 노드를 선호해 핫스팟을 막는다",
+                "전력 인지 최적적합(문헌 기준선)",
+                "후보 중 최적의 노드를 선택한다",
+                "워크로드를 최적 노드에 배치한다",
+                "열적 균형으로 핫스팟 방지",   // 괄호 삽입형 "핫스팟(hot spot) 방지" 는 조각이 못 잡는다 — 원문은 이미 회피 목표 어투로 고쳤다
+                "냉각 비용이 비선형적으로 증가")) {
+            assertThrows(AssertionError.class, () -> assertFreeOfBannedClaims(sentence, "표본 문장"),
+                    "금지 조각이 이 문장을 잡아야 한다: " + sentence);
+        }
         assertFreeOfBannedClaims(BenchmarkRules.LIMITATION, "한계 문구");
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {
             assertFreeOfBannedClaims(m.validity(), m.key() + " 유효성 조건");
@@ -644,12 +811,12 @@ class BenchmarkRulesContractTest {
      * 사본이라, 한계 문구에서 지운 문장이 그쪽에 남아 있으면 읽는 사람에게는 그 문장이 여전히 살아 있다.
      * 실제로 옛 온도 문구가 사본 쪽에 남아 있던 적이 있다.
      */
-    @DisplayName("여섯 판의 설명과 전제 문구에도 금지 문장 조각이 없다")
+    @DisplayName("등록된 판 전부의 설명과 전제 문구에도 금지 문장 조각이 없다")
     @Test
     void the_board_roles_and_the_assumption_notes_are_free_of_banned_claims() {
         BenchmarkClusters clusters = new BenchmarkClusters();
 
-        assertEquals(6, clusters.boardIds().size(), "판이 늘거나 줄면 검사할 설명의 수도 달라진다");
+        assertFalse(clusters.boardIds().isEmpty(), "판 목록은 판 등록부가 정한다 — 판 수를 여기 다시 적지 않는다");
         for (String boardId : clusters.boardIds()) {
             assertFreeOfBannedClaims(clusters.roleOf(boardId), boardId + " 판 설명");
         }

@@ -17,6 +17,9 @@ public class PowerModel {
 
     private final SchedulerProperties.Power props;
 
+    /** 설정 {@code pei-normalizer} 가 0 이하일 때 쓰는 대체값 — 전력 효율 진단이 쓰는 값과 같다. */
+    static final double FALLBACK_PEI_NORMALIZER = 0.5;
+
     public PowerModel(SchedulerProperties properties) {
         this.props = properties.getPower();
     }
@@ -28,7 +31,18 @@ public class PowerModel {
     public double normalizedPei(NodeResource node) {
         if (node.getPowerWatts() <= 0) return 0.5;
         double efficiency = node.getCpuUsagePercent() / node.getPowerWatts();
-        return Math.min(1.0, efficiency / props.getPeiNormalizer());
+        return Math.min(1.0, efficiency / effectivePeiNormalizer());
+    }
+
+    /**
+     * 유효 PEI 정규화 상수 — 설정값이 0 보다 크면 그대로, 아니면 대체값. 설정이 0 이면 {@code min(1, x/0)} 이 사용률 &gt; 0 노드에
+     * 1.0(포화), 사용률 0 노드에 NaN 을 주고 NaN 은 엔진의 4자리 반올림에서 0.0 으로 삼켜져 그 노드의 전력점수·총점이 최하위로
+     * 내려간다. 음수면 점수가 음수다. 진단 서비스도 이 값을 쓰고 경고 로그만 자기 자리에서 남긴다. 이름이 설정 스냅샷의 원시
+     * 접근자({@code PowerKnobs.peiNormalizer})와 갈리도록 "유효" 를 붙였다 — 다이제스트는 원시값을 싣는다.
+     */
+    public double effectivePeiNormalizer() {
+        double normalizer = props.getPeiNormalizer();
+        return normalizer > 0 ? normalizer : FALLBACK_PEI_NORMALIZER;
     }
 
     /**
@@ -47,9 +61,11 @@ public class PowerModel {
      */
     public double placementPei(NodeResource node) {
         double powerEff = effectivePowerWatts(node);
-        if (powerEff <= 0) return 0.5;
+        // 정격 0 이면 실효 전력이 실측에 머물러(D = 0) 분자만 실효가 되는 기저 혼재라 중립값 — placementWasteScore 와 같은 가드.
+        // 엔진은 hasPower(전력·정격 > 0)로 이 경로를 이미 막으므로 직접 호출자(시험·앞으로의 호출부)를 위한 방어다
+        if (node.getPowerCapacityWatts() <= 0 || powerEff <= 0) return 0.5;
         double efficiency = node.effectiveCpuUsagePercent() / powerEff;
-        return Math.min(1.0, efficiency / props.getPeiNormalizer());
+        return Math.min(1.0, efficiency / effectivePeiNormalizer());
     }
 
     /** 정규화 전 PEI 원값(%/W). 평가 API 에서 그대로 보여준다. */

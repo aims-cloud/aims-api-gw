@@ -47,9 +47,6 @@ public class PowerEfficiencyService {
     /** 4분위 상대 등급을 매기려면 최소 이만큼은 평가 가능해야 한다. */
     static final int MIN_NODES_FOR_GRADE = 4;
 
-    /** 설정이 잘못됐을 때 쓸 PEI 정규화 기준. */
-    private static final double FALLBACK_PEI_NORMALIZER = 0.5;
-
     // ── 권고 임계 ──────────────────────────────────────────────
     private static final double LOW_UTILIZATION_PERCENT = 30.0;
     private static final double LOW_HEADROOM_PERCENT = 20.0;
@@ -149,15 +146,14 @@ public class PowerEfficiencyService {
     }
 
     /**
-     * 정규화 PEI. 설정이 0 이하로 들어오면 {@code min(1, x/0)} 이 1.0 이 되어
-     * 모든 노드가 조용히 만점을 받으므로 기본값으로 되돌린다.
+     * 정규화 PEI. 설정이 0 이하면 {@code min(1, x/0)} 이 1.0 또는 NaN(응답 반올림에서 0.0)이 되므로 모델이 대체값으로 되돌린다 —
+     * 계산은 모델 한 곳에 두고 여기서는 경고만 남긴다(대체값이 두 곳에 있으면 배치·진단 PEI 가 조용히 갈릴 수 있다).
      */
     private double normalizedPei(NodeResource node) {
         double normalizer = properties.getPower().getPeiNormalizer();
         if (normalizer <= 0) {
-            log.warn("aims.scheduler.power.pei-normalizer 가 {} 입니다. 기본값 {} 을 씁니다.",
-                    normalizer, FALLBACK_PEI_NORMALIZER);
-            return Math.min(1.0, powerModel.rawPei(node) / FALLBACK_PEI_NORMALIZER);
+            log.warn("aims.scheduler.power.pei-normalizer 가 {} 입니다. 대체값 {} 을 씁니다.",
+                    normalizer, powerModel.effectivePeiNormalizer());
         }
         return powerModel.normalizedPei(node);
     }

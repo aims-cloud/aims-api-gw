@@ -244,6 +244,28 @@ class JudgmentRoundTest {
         return new OutsideSummary(excluded, worse, better, tied, changedPairing, unpaired, lines);
     }
 
+    /** 표 G 분류의 갈림 — 한쪽만 값이 없으면 짝 집합 변화(악화 아님), N 이 커지면 악화, 작아지면 축소. 항등 실행에는 없는 갈래를 합성 사본으로 고정한다. */
+    @DisplayName("표 G 분류 — 한쪽만 값이 없는 셀은 짝 집합 변화이고, N 이 크면 악화·작으면 축소다")
+    @Test
+    void outside_classification_distinguishes_pairing_change_from_worsening() {
+        String worseKey = JudgmentBaselines.outsideKey(BenchmarkRules.DIRECTION_CHECK_BOARD, 30, "AVAILABLE");
+        String betterKey = JudgmentBaselines.outsideKey(BenchmarkRules.DIRECTION_CHECK_BOARD, 90, "AVAILABLE");
+        String droppedKey = JudgmentBaselines.outsideKey(BenchmarkRules.JUDGMENT_BOARD, 30, "UNAVAILABLE");
+        Map<String, OutsideCell> modified = new TreeMap<>(baseline.outside());
+        OutsideCell w = modified.get(worseKey), be = modified.get(betterKey), d = modified.get(droppedKey);
+        modified.put(worseKey, new OutsideCell(w.board(), w.loadRatioPercent(), w.powerControl(), new Column(w.power().points(), w.power().samples(), w.power().median() + 1.0)));
+        modified.put(betterKey, new OutsideCell(be.board(), be.loadRatioPercent(), be.powerControl(), new Column(be.power().points(), be.power().samples(), be.power().median() - 1.0)));
+        modified.put(droppedKey, new OutsideCell(d.board(), d.loadRatioPercent(), d.powerControl(), new Column(null, 0, null)));
+        JudgmentBaseline n = new JudgmentBaseline(baseline.schemaVersion(), baseline.provenance(), baseline.cells(), baseline.phase(), baseline.concave(), modified);
+
+        OutsideSummary s = classifyOutside(baseline, n);
+        assertEquals(1, s.worse(), "N 이 1.0 크면 악화(격차는 낮을수록 좋음)");
+        assertEquals(1, s.better(), "N 이 1.0 작으면 축소");
+        assertEquals(1, s.changedPairing(), "B 에만 값이 있는 셀은 짝 집합 변화 — 악화로 세지 않는다");
+        assertEquals(2, s.excluded());
+        assertEquals(baseline.outside().size(), s.excluded() + s.worse() + s.better() + s.tied() + s.changedPairing() + s.unpaired(), "분류 회계");
+    }
+
     @DisplayName("표 G 항등 — 기준선을 자기 자신과 견주면 판정 셀 둘 제외 · 동률 12 · 둘 다 짝 없음 2 · 악화·축소·짝 집합 변화 0")
     @Test
     void outside_classification_of_the_baseline_against_itself() {

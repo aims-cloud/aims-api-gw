@@ -6,11 +6,13 @@ import java.util.Map;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.network.VmNetworkMetric;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuDevice;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuInventory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -82,6 +84,43 @@ class HostCategoryMetricsQueryServiceTest {
 
         when(client.queryResults(anyString())).thenReturn(List.of());
         assertThat(service.cpuDevices(SEL)).isEmpty();
+    }
+
+    @Test
+    void CPU_인벤토리는_목록을_만든_표본의_시각을_함께_돌려준다() {
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            return q.startsWith("node_cpu_info")
+                    ? List.of(cpuInfo("0", "0", "0", "GenuineIntel", "Xeon Gold 6338"))
+                    : List.of();
+        });
+        CpuInventory fromInfo = service.cpuInventory(SEL);
+        assertThat(fromInfo.devices()).containsExactly(new CpuDevice(0, "GenuineIntel", "Xeon Gold 6338", 1, 1));
+        assertThat(fromInfo.collectedAt()).isEqualTo(Instant.ofEpochSecond(1_700_000_000L));
+
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            return q.startsWith("count by (instance) (node_cpu_seconds_total") ? vector("8") : List.of();
+        });
+        CpuInventory fromCount = service.cpuInventory(SEL);
+        assertThat(fromCount.devices()).containsExactly(new CpuDevice(0, null, null, 8, 8));
+        assertThat(fromCount.collectedAt()).isEqualTo(Instant.ofEpochSecond(1_700_000_000L));
+
+        when(client.queryResults(anyString())).thenReturn(List.of());
+        assertThat(service.cpuInventory(SEL)).isEqualTo(CpuInventory.EMPTY);
+    }
+
+    @Test
+    void 노드_CPU_지표는_VM과_같은_mode_PromQL을_쓴다() {
+        assertThat(HostCategoryMetricsQueryService.cpuQuery(CpuMetric.CPU_USED, SEL, "5m"))
+                .isEqualTo(HostCategoryMetricsQueryService.cpuQuery(VmCpuMetric.CPU_USED, SEL, "5m"));
+        assertThat(HostCategoryMetricsQueryService.cpuQuery(CpuMetric.CPU_SOFT_IRQ, SEL, "1h"))
+                .isEqualTo("avg by (instance) (rate(node_cpu_seconds_total{mode=\"softirq\"," + LABELS + "}[1h])) * 100");
+
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "3.33")))));
+        assertThat(service.cpuTrend(CpuMetric.CPU_STEAL, SEL, Instant.EPOCH, Instant.EPOCH, "30s"))
+                .containsExactly(new DataPoint(1_700_000_000L, 3.3));
     }
 
     @Test

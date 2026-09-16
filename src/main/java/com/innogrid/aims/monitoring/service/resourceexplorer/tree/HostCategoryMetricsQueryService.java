@@ -11,6 +11,7 @@ import java.util.Set;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
@@ -35,6 +36,11 @@ public class HostCategoryMetricsQueryService {
 
     /** CPU 목록 1행 — node_cpu_info 의 package(소켓) 단위 집계 */
     public record CpuDevice(int socket, String vendor, String model, int coreCount, int threadCount) {}
+
+    /** CPU 목록과 그 목록을 만든 Thanos 표본의 시각 — 표본이 없으면 빈 목록·null */
+    public record CpuInventory(List<CpuDevice> devices, Instant collectedAt) {
+        public static final CpuInventory EMPTY = new CpuInventory(List.of(), null);
+    }
 
     private final VictoriaMetricsClient client;
 
@@ -65,6 +71,11 @@ public class HostCategoryMetricsQueryService {
             case CPU_SOFT_IRQ -> cpuModePercent(s, "softirq", window);
             case CPU_STEAL -> cpuModePercent(s, "steal", window);
         };
+    }
+
+    /** 노드 CPU 지표 — CPU_USED 는 100 - idle, 나머지는 해당 mode 비율 */
+    static String cpuQuery(CpuMetric metric, MetricSelector s, String window) {
+        return metric.mode() == null ? cpuUsedPercent(s, window) : cpuModePercent(s, metric.mode(), window);
     }
 
     static String memoryQuery(VmMemoryMetric metric, MetricSelector s) {
@@ -127,25 +138,36 @@ public class HostCategoryMetricsQueryService {
      * cpu.info 가 꺼져 있으면 논리 CPU 수만으로 소켓 0 한 행을 만든다(벤더·모델 null). 논리 CPU 도 없으면 빈 목록.
      */
     public List<CpuDevice> cpuDevices(MetricSelector s) {
+        return cpuInventory(s).devices();
+    }
+
+    /** CPU 목록과 그 목록을 만든 표본의 시각 — 노드 CPU 목록의 "마지막 수집" 컬럼용. 규칙은 {@link #cpuDevices} 와 같다 */
+    public CpuInventory cpuInventory(MetricSelector s) {
         try {
             List<Map<String, Object>> info = client.queryResults(cpuInfoQuery(s));
             if (!info.isEmpty()) {
-                return fromCpuInfo(info);
+                return new CpuInventory(fromCpuInfo(info), sampleTime(info.get(0)));
             }
-            Double logical = scalar(cpuCountQuery(s));
+            List<Map<String, Object>> count = client.queryResults(cpuCountQuery(s));
+            Double logical = firstValue(count);
             if (logical == null || logical <= 0) {
-                return List.of();
+                return CpuInventory.EMPTY;
             }
             int n = (int) Math.round(logical);
-            return List.of(new CpuDevice(0, null, null, n, n));
+            return new CpuInventory(List.of(new CpuDevice(0, null, null, n, n)), sampleTime(count.get(0)));
         } catch (RuntimeException e) {
             log.warn("Thanos CPU 목록 조회 실패 — 빈 목록을 돌려줍니다: {}", e.getMessage());
-            return List.of();
+            return CpuInventory.EMPTY;
         }
     }
 
-    /** CPU mode 별 시계열 — 미수집이면 빈 목록 */
+    /** CPU mode 별 시계열(VM 지표 세트) — 미수집이면 빈 목록 */
     public List<DataPoint> cpuTrend(VmCpuMetric metric, MetricSelector s, Instant from, Instant to, String step) {
+        return points(cpuQuery(metric, s, HostDetailMetricsQueryService.rateWindow(step)), from, to, step);
+    }
+
+    /** CPU mode 별 시계열(노드 지표 세트) — 미수집이면 빈 목록 */
+    public List<DataPoint> cpuTrend(CpuMetric metric, MetricSelector s, Instant from, Instant to, String step) {
         return points(cpuQuery(metric, s, HostDetailMetricsQueryService.rateWindow(step)), from, to, step);
     }
 
@@ -201,13 +223,26 @@ public class HostCategoryMetricsQueryService {
     }
 
     private Double scalar(String query) {
-        List<Map<String, Object>> results = client.queryResults(query);
+        return firstValue(client.queryResults(query));
+    }
+
+    /** 즉시 쿼리 결과의 첫 벡터 값 — 없거나 비수치면 null */
+    private static Double firstValue(List<Map<String, Object>> results) {
         if (results.isEmpty()) {
             return null;
         }
         Object value = results.get(0).get("value");
         if (value instanceof List<?> pair && pair.size() >= 2) {
             return HostDetailMetricsQueryService.parse(pair.get(1));
+        }
+        return null;
+    }
+
+    /** 즉시 쿼리 결과 1개의 표본 시각(value[0], epoch 초) — 없으면 null */
+    private static Instant sampleTime(Map<String, Object> result) {
+        Object value = result.get("value");
+        if (value instanceof List<?> pair && !pair.isEmpty() && pair.get(0) instanceof Number ts) {
+            return Instant.ofEpochSecond(ts.longValue());
         }
         return null;
     }

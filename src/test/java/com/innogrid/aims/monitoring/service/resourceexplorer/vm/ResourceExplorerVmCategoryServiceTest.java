@@ -149,7 +149,7 @@ class ResourceExplorerVmCategoryServiceTest {
         assertThat(res.series().get(0).name()).isEqualTo("cpu");
         assertThat(res.series().get(0).dataPoints()).containsExactly(new DataPoint(1L, 1.5));
 
-        when(metrics.cpuTrend(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(metrics.cpuTrend(any(VmCpuMetric.class), any(), any(), any(), any())).thenReturn(List.of());
         assertThat(cpu.getCpuMetricTrend(null, NS, INFRA, NODE, VmCpuMetric.CPU_USED, NodeMetricInterval.LAST_10M)
                 .series()).isEmpty();
     }

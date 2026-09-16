@@ -14,6 +14,7 @@ import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.network.NetworkMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.network.VmNetworkMetric;
@@ -108,7 +109,7 @@ public class HostCategoryMetricsQueryService {
         };
     }
 
-    /** NIC 합산 초당 증가율 — lo·가상 인터페이스는 제외 */
+    /** NIC 합산 초당 증가율(VM 지표 세트) — lo·가상 인터페이스는 제외 */
     static String networkQuery(VmNetworkMetric metric, MetricSelector s, String window) {
         String counter = switch (metric) {
             case NETWORK_RECV -> "node_network_receive_bytes_total";
@@ -120,6 +121,26 @@ public class HostCategoryMetricsQueryService {
             case NETWORK_DROP_IN -> "node_network_receive_drop_total";
             case NETWORK_DROP_OUT -> "node_network_transmit_drop_total";
         };
+        return networkRate(counter, s, window);
+    }
+
+    /** NIC 합산 초당 증가율(노드 지표 세트) — TOTAL 은 receive + transmit 바이트 합 */
+    static String networkQuery(NetworkMetric metric, MetricSelector s, String window) {
+        return switch (metric) {
+            case NETWORK_TOTAL -> networkRate("node_network_receive_bytes_total", s, window)
+                    + " + " + networkRate("node_network_transmit_bytes_total", s, window);
+            case NETWORK_RECV -> networkRate("node_network_receive_bytes_total", s, window);
+            case NETWORK_SENT -> networkRate("node_network_transmit_bytes_total", s, window);
+            case NETWORK_PACKETS_RECV -> networkRate("node_network_receive_packets_total", s, window);
+            case NETWORK_PACKETS_SENT -> networkRate("node_network_transmit_packets_total", s, window);
+            case NETWORK_ERROR_IN -> networkRate("node_network_receive_errs_total", s, window);
+            case NETWORK_ERROR_OUT -> networkRate("node_network_transmit_errs_total", s, window);
+            case NETWORK_DROP_IN -> networkRate("node_network_receive_drop_total", s, window);
+            case NETWORK_DROP_OUT -> networkRate("node_network_transmit_drop_total", s, window);
+        };
+    }
+
+    private static String networkRate(String counter, MetricSelector s, String window) {
         return "sum by (instance) (rate(" + counter + s.braces(HostDetailMetricsQueryService.NET_FILTER) + "[" + window + "]))";
     }
 
@@ -195,8 +216,13 @@ public class HostCategoryMetricsQueryService {
         return points(memoryQuery(metric, s), from, to, step);
     }
 
-    /** 네트워크 지표 시계열(B/s, pps, /s) — 미수집이면 빈 목록 */
+    /** 네트워크 지표 시계열(B/s, pps, /s, VM 지표 세트) — 미수집이면 빈 목록 */
     public List<DataPoint> networkTrend(VmNetworkMetric metric, MetricSelector s, Instant from, Instant to, String step) {
+        return points(networkQuery(metric, s, HostDetailMetricsQueryService.rateWindow(step)), from, to, step);
+    }
+
+    /** 네트워크 지표 시계열(B/s, pps, /s, 노드 지표 세트) — 미수집이면 빈 목록 */
+    public List<DataPoint> networkTrend(NetworkMetric metric, MetricSelector s, Instant from, Instant to, String step) {
         return points(networkQuery(metric, s, HostDetailMetricsQueryService.rateWindow(step)), from, to, step);
     }
 

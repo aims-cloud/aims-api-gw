@@ -100,7 +100,7 @@ class ResourceExplorerVmCategoryServiceTest {
 
         verify(metrics, never()).cpuSummary(any());
         verify(metrics, never()).memoryTrend(any(VmMemoryMetric.class), any(), any(), any(), any());
-        verify(metrics, never()).networkTrend(any(), any(), any(), any(), any());
+        verify(metrics, never()).networkTrend(any(VmNetworkMetric.class), any(), any(), any(), any());
     }
 
     // ── CPU ─────────────────────────────────────────────────────

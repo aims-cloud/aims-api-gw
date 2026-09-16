@@ -9,6 +9,7 @@ import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetric;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.network.NetworkMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.network.VmNetworkMetric;
@@ -130,6 +131,25 @@ class HostCategoryMetricsQueryServiceTest {
                 .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "251.96")))));
         assertThat(service.memoryTrend(MemoryMetric.MEMORY_USED, SEL, Instant.EPOCH, Instant.EPOCH, "5m"))
                 .containsExactly(new DataPoint(1_700_000_000L, 252.0));
+    }
+
+    @Test
+    void 노드_Network_지표는_물리_NIC_합산_rate이고_TOTAL은_수신_송신_합이다() {
+        String filter = "{device!~\"lo|veth.*|docker.*|br.*|virbr.*\"," + LABELS + "}";
+        String recv = "sum by (instance) (rate(node_network_receive_bytes_total" + filter + "[5m]))";
+        String sent = "sum by (instance) (rate(node_network_transmit_bytes_total" + filter + "[5m]))";
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_TOTAL, SEL, "5m"))
+                .isEqualTo(recv + " + " + sent);
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_RECV, SEL, "5m")).isEqualTo(recv);
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_ERROR_IN, SEL, "1h"))
+                .isEqualTo("sum by (instance) (rate(node_network_receive_errs_total" + filter + "[1h]))");
+        assertThat(HostCategoryMetricsQueryService.networkQuery(NetworkMetric.NETWORK_DROP_OUT, SEL, "5m"))
+                .isEqualTo(HostCategoryMetricsQueryService.networkQuery(VmNetworkMetric.NETWORK_DROP_OUT, SEL, "5m"));
+
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(range(List.of(List.of(1_700_000_000L, "1048576.44")))));
+        assertThat(service.networkTrend(NetworkMetric.NETWORK_TOTAL, SEL, Instant.EPOCH, Instant.EPOCH, "30s"))
+                .containsExactly(new DataPoint(1_700_000_000L, 1_048_576.4));
     }
 
     @Test

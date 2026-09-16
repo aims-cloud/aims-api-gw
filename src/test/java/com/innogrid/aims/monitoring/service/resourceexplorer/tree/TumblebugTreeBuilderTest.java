@@ -161,6 +161,30 @@ class TumblebugTreeBuilderTest {
     }
 
     @Test
+    void Namespace부터_VM까지_패널_API_식별자_필드를_자기_계층까지_채운다() {
+        ResourceTreeNodeResponse vmRoot = builder.build(List.of("ADMIN")).get("ADMIN");
+        ResourceTreeNodeResponse nsA = vmRoot.children().get(0);
+        ResourceTreeNodeResponse infra1 = nsA.children().get(0);
+        ResourceTreeNodeResponse g1 = infra1.children().get(0);
+        ResourceTreeNodeResponse unclassified = infra1.children().get(1);
+        ResourceTreeNodeResponse vm1 = g1.children().get(0);
+        ResourceTreeNodeResponse vm3 = unclassified.children().get(0);
+
+        assertThat(vmRoot).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsOnlyNulls();
+        assertThat(nsA).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", null, null, null);
+        assertThat(infra1).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", null, null);
+        assertThat(g1).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", "g1", null);
+        assertThat(unclassified).extracting("nsId", "infraId", "nodeGroupId", "vmId")
+                .containsExactly("ns-a", "infra-1", "@unclassified", null);
+        assertThat(vm1).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", "g1", "vm-1");
+        assertThat(vm3).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", "@unclassified", "vm-3");
+
+        // VM 하위 항목은 채우지 않는다 — 프론트가 조상 VM 노드에서 읽는다
+        assertThat(vm1.children()).allSatisfy(item ->
+                assertThat(item).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsOnlyNulls());
+    }
+
+    @Test
     void Tumblebug_상태값은_원문으로_노출하고_Terminated도_제외하지_않는다() {
         ResourceTreeNodeResponse infra1 = builder.build(List.of("ADMIN")).get("ADMIN").children().get(0).children().get(0);
         List<ResourceTreeNodeResponse> g1 = infra1.children().get(0).children();

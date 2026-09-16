@@ -318,6 +318,7 @@ class PowerEfficiencyServiceTest {
         NodeEfficiency after = evaluateOne(node);
 
         assertEquals(before.peiRaw(), after.peiRaw(), EPS, "PEI 는 실측 기준이어야 한다");
+        assertEquals(before.peiNormalized(), after.peiNormalized(), EPS, "정규화 PEI 도 실측 기준 — 배치 점수용 실효 PEI 가 진단 경로로 새면 여기서 갈린다");
         assertEquals(before.powerWatts(), after.powerWatts(), EPS);
         assertEquals(before.cpuUsagePercent(), after.cpuUsagePercent(), EPS);
         assertEquals(before.proportionality(), after.proportionality(), EPS);

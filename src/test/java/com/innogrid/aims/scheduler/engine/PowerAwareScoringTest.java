@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -29,6 +30,54 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PowerAwareScoringTest {
 
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
+
+    /**
+     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 칸이 배치용 실효 PEI 와 같고, 비낭비 칸은 항등,
+     * 전력점수의 이동은 {@code peiWeight × ΔPEI} 다(한계 전력 동적항은 α=1 에서 불변). 엔진 배선을 진단용 두 함수로 되돌리면
+     * PEI 칸이 예약 전과 같아져 여기서 멈춘다.
+     */
+    @DisplayName("예약이 쌓인 노드의 후보 상세 PEI 는 배치용 실효 PEI 이고 전력점수 상승분은 peiWeight × ΔPEI 다")
+    @Test
+    void reserved_node_power_score_moves_by_pei_weight_times_delta() {
+        SchedulerProperties props = new SchedulerProperties();
+        PowerModel model = new PowerModel(props);
+        NodeResource node = node("n", 45, 40, 387, 55);
+        List<NodeResource> nodes = List.of(node);
+
+        SchedulingResult before = scheduler.schedule(workload(1), nodes, policy());
+        node.reserve(1, 0, 0);
+        SchedulingResult after = scheduler.schedule(workload(1), nodes, policy());
+
+        double dPei = model.placementPei(node) - model.normalizedPei(node);
+        assertTrue(dPei > 0, "판정 판 대표 노드는 예약이 쌓이면 PEI 상승");
+        assertEquals(round4(model.normalizedPei(node)), detail(before, "n", "PEI"), 0.0, "예약 0: 상세 PEI = 실측 PEI");
+        assertEquals(round4(model.placementPei(node)), detail(after, "n", "PEI"), 0.0, "예약 후: 상세 PEI = 배치용 실효 PEI");
+        assertTrue(detail(after, "n", "PEI") > detail(before, "n", "PEI"), "상세 PEI 가 예약을 따라 움직인다");
+        assertEquals(detail(before, "n", "비낭비"), detail(after, "n", "비낭비"), 0.0, "비낭비 항등(적격 노드)");
+        assertEquals(detail(before, "n", "실질한계전력점수"), detail(after, "n", "실질한계전력점수"), 0.0, "α=1 · 자르기 비발현이라 한계항 불변");
+        assertEquals(props.getPower().getPeiWeight() * dPei,
+                detail(after, "n", "전력점수") - detail(before, "n", "전력점수"), 1.01e-4,
+                "전력점수의 이동은 PEI 항 하나에서 온다(4자리 반올림 두 번의 상한 1e-4 에 1% 여유)");
+    }
+
+    /**
+     * 비낭비 배선을 잡는 유일한 자리 — 적격 노드에서는 두 함수가 항등이라, 실효 사용률이 100 에서 잘리는 부적격 후보에서만 갈린다.
+     * u=90 · P=440 · 예약 2/8: P_eff 527.5, 실효 이상 곡선 500 → overdraw 27.5 → 0.945. 진단용은 P_ideal 465 → 1.0.
+     */
+    @DisplayName("실효 사용률이 잘린 부적격 후보의 상세 비낭비 칸은 배치용 실효값 0.945 다")
+    @Test
+    void clamped_ineligible_candidate_reports_placement_waste() {
+        NodeResource clamped = node("c", 90, 40, 440, 55);
+        clamped.reserve(2, 0, 0);
+        SchedulingResult result = scheduler.schedule(workload(1), List.of(clamped), policy());
+
+        assertEquals(0.945, detail(result, "c", "비낭비"), 0.0, "설정 기본값(유휴비 0.3 · 정격 500) 전제 — 기본값이 바뀌면 리터럴도 함께 고친다");
+        assertEquals(1.0, new PowerModel(new SchedulerProperties()).wasteScore(clamped), 1e-9, "진단용은 예약을 보지 않아 1.0");
+    }
+
+    private static double round4(double v) {
+        return Math.round(v * 10000.0) / 10000.0;
+    }
 
     // ── 결함 A — 비례성이 저전력 노드를 벌하던 문제 ────────────────
 

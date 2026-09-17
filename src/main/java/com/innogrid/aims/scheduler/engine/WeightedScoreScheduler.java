@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
@@ -96,8 +97,8 @@ public class WeightedScoreScheduler implements SchedulingEngine {
 
         for (NodeResource node : candidates) {
             // ── 1단계: 하드 제약 조건 필터링 ──────────────────────
-            String exclusionReason = context.exclusionReason(workload, node);
-            boolean eligible = (exclusionReason == null);
+            Exclusion exclusion = context.exclusion(workload, node);
+            boolean eligible = (exclusion == null);
 
             // ── 2단계: 소프트 스코어링 (5차원, 예약분 반영 실효값) ──
             double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
@@ -161,7 +162,7 @@ public class WeightedScoreScheduler implements SchedulingEngine {
                     node.getMdcId(), node.getNodeId(),
                     round(cpuScore), round(memScore), round(powerScore),
                     round(tempScore), round(netScore), totalScore,
-                    eligible, exclusionReason, details
+                    eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
 

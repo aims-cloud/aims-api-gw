@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
@@ -102,8 +103,8 @@ public class PowerAwareScheduler implements SchedulingEngine {
         boolean anyPowerMetric = false;
 
         for (NodeResource node : candidates) {
-            String exclusionReason = context.exclusionReason(workload, node);
-            boolean eligible = (exclusionReason == null);
+            Exclusion exclusion = context.exclusion(workload, node);
+            boolean eligible = (exclusion == null);
 
             boolean hasPower = node.getPowerWatts() > 0 && node.getPowerCapacityWatts() > 0;
             boolean hasThermal = node.getTemperatureCelsius() > 0;
@@ -164,7 +165,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
                     node.getMdcId(), node.getNodeId(),
                     round(cpuScore), round(memScore),
                     round(powerScore), round(thermalScore), round(netScore),
-                    totalScore, eligible, exclusionReason, details
+                    totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
 

@@ -9,6 +9,7 @@ import java.util.random.RandomGenerator;
 
 import com.innogrid.aims.scheduler.benchmark.PlacementStrategy.Kind;
 import com.innogrid.aims.scheduler.benchmark.PlacementStrategy.PolicyVariant;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -374,11 +375,15 @@ public final class BaselinePlacers {
      *
      * @param node            후보 노드
      * @param index           nodeId 오름차순 목록에서의 위치(0부터)
-     * @param exclusionReason 제외 사유. 적격이면 {@code null}
+     * @param exclusion 제외 한 건(까닭·문장). 적격이면 {@code null}
      */
-    private record Candidate(NodeResource node, int index, String exclusionReason) {
+    private record Candidate(NodeResource node, int index, Exclusion exclusion) {
+        String exclusionReason() {
+            return Exclusion.messageOf(exclusion);
+        }
+
         boolean eligible() {
-            return exclusionReason == null;
+            return exclusion == null;
         }
     }
 
@@ -405,7 +410,7 @@ public final class BaselinePlacers {
         List<Candidate> candidates = new ArrayList<>(ordered.size());
         for (int i = 0; i < ordered.size(); i++) {
             NodeResource node = ordered.get(i);
-            candidates.add(new Candidate(node, i, context.exclusionReason(workload, node)));
+            candidates.add(new Candidate(node, i, context.exclusion(workload, node)));
         }
         return candidates;
     }
@@ -435,7 +440,8 @@ public final class BaselinePlacers {
                 round((100.0 - n.effectiveMemoryUsagePercent()) / 100.0),
                 0, 0, 0,                                   // 전력·열·네트워크는 계산하지 않는다
                 round(scored.score()),
-                candidate.eligible(), candidate.exclusionReason(), details);
+                candidate.eligible(), Exclusion.messageOf(candidate.exclusion()),
+                Exclusion.reasonOf(candidate.exclusion()), details);
     }
 
     /**

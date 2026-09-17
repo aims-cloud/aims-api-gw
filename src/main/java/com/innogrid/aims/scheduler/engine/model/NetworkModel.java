@@ -105,14 +105,16 @@ public class NetworkModel {
      * 대역폭 부족분 비용. 요구와 링크 대역폭이 모두 양수일 때만 계산하고, 모자란 비율을 [0, 1] 로 잘라 벌점을 곱한다.
      *
      * <p>한쪽이라도 없거나(null) 양수가 아니면 0 이다 — 모르는 값으로 후보를 깎지 않는다. 링크가 요구를
-     * 충족하면 잉여는 보너스가 되지 않는다(하한 0).</p>
+     * 충족하면 잉여는 보너스가 되지 않는다(하한 0). 위쪽은 자를 필요가 없다 — 두 값이 양수이므로
+     * {@code (required − link) / required} 는 1 <b>미만</b>이고, 링크가 0 에 가까울수록 1 에 붙는다.
+     * 그래서 가산은 {@link #BANDWIDTH_PENALTY} 를 넘지 않는다.</p>
      */
     public double bandwidthCost(Double linkBandwidthMbps, Double requiredBandwidthMbps) {
         if (linkBandwidthMbps == null || requiredBandwidthMbps == null) return 0.0;
         double link = linkBandwidthMbps;
         double required = requiredBandwidthMbps;
         if (!(link > 0) || !(required > 0)) return 0.0;
-        double shortfall = Math.min(1.0, Math.max(0.0, (required - link) / required));
+        double shortfall = Math.max(0.0, (required - link) / required);
         return shortfall * BANDWIDTH_PENALTY;
     }
 

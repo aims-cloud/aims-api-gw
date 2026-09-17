@@ -77,7 +77,11 @@ class NetworkModelLinkTest {
         assertEquals(0.625, model.linkScore(bw(20, 800.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "부족분 20%");
         assertEquals(0.714, model.linkScore(bw(20, 1000.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "요구를 딱 채우면 항 0");
         assertEquals(0.714, model.linkScore(bw(20, 5000.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "잉여는 보너스가 아니다");
-        assertEquals(0.417, model.linkScore(bw(20, 1.0, MdcLink.LinkStatus.UP), 1000000.0), EPS, "부족분은 1 에서 잘린다");
+        assertEquals(0.417, model.linkScore(bw(20, 1.0, MdcLink.LinkStatus.UP), 1000000.0), EPS,
+                "링크가 0 에 가까우면 부족분이 1 에 붙고 가산은 벌점을 넘지 않는다");
+        assertTrue(model.bandwidthCost(1.0, 1000000.0) < NetworkModel.BANDWIDTH_PENALTY,
+                "두 값이 양수면 부족분은 1 미만이라 가산이 벌점을 넘지 못한다");
+        assertEquals(0.0, model.bandwidthCost(1000000.0, 1.0), EPS, "링크가 요구보다 크면 0");
     }
 
     @DisplayName("한쪽이라도 대역폭을 모르면 부족분 항은 0 이다")

@@ -409,6 +409,29 @@ class PlacementBenchmarkServiceTest {
         assertTrue(plain.stream().allMatch(w -> w.getDataMdcId() == null), "링크 없는 판은 dataMdcId 를 부여하지 않는다");
     }
 
+    /** 순환 배정 — 0 은 요구 없음이라 null 로 남고, 요구 대역폭 절이 없는 판은 아무것도 부여하지 않는다. */
+    @DisplayName("요구 대역폭은 표본 순서대로 순환 배정되고 0 은 요구 없음으로 남는다")
+    @Test
+    void required_bandwidth_is_assigned_round_robin_with_zero_meaning_none() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        List<Workload> sample = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignRequiredBandwidth(sample, clusters.get(BenchmarkClusters.LINK));
+        List<Double> values = clusters.get(BenchmarkClusters.LINK).workloadBandwidthMbps();
+        assertTrue(sample.size() > values.size(), "표본이 배정 목록보다 길어야 순환이 검증된다");
+        for (int i = 0; i < sample.size(); i++) {
+            double v = values.get(i % values.size());
+            Double got = sample.get(i).getRequiredBandwidthMbps();
+            if (v > 0) assertEquals(v, got, "표본 " + i);
+            else assertNull(got, "표본 " + i + " — 0 은 요구 없음이라 null 이어야 부족분 항이 꺼진다");
+        }
+        assertTrue(sample.stream().anyMatch(w -> w.getRequiredBandwidthMbps() == null), "요구 없음 갈래가 실제로 돌아야 한다");
+        assertTrue(sample.stream().anyMatch(w -> w.getRequiredBandwidthMbps() != null), "요구 있음 갈래도 실제로 돌아야 한다");
+
+        List<Workload> plain = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignRequiredBandwidth(plain, clusters.get(BenchmarkClusters.MAIN));
+        assertTrue(plain.stream().allMatch(w -> w.getRequiredBandwidthMbps() == null), "요구 대역폭 절이 없는 판은 부여하지 않는다");
+    }
+
     /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */
     private static Map<String, String> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
         Map<String, String> out = new LinkedHashMap<>();

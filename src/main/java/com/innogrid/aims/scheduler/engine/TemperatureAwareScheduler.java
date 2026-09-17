@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -124,8 +125,8 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
 
         for (NodeResource node : candidates) {
             // ── 하드 제약 (배치 후 예상 온도 포함) ─────────────────
-            String exclusionReason = context.exclusionReason(workload, node);
-            boolean eligible = (exclusionReason == null);
+            Exclusion exclusion = context.exclusion(workload, node);
+            boolean eligible = (exclusion == null);
 
             // 온도를 수집하지 못한 노드(0°C)는 판단 근거가 없다. 0 을 그대로 계산하면 열적 여유·냉각이
             // 만점, 균형도 상한이 되어 가중치 0.75 를 통째로 가져간다 — 다른 두 엔진과 같이 중립 0.5 를 준다.
@@ -179,7 +180,7 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
                     round(resourceScore), round(resourceScore),
                     round(coolingScore), round(headroomScore),
                     round(balanceScore),
-                    totalScore, eligible, exclusionReason, details
+                    totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
 

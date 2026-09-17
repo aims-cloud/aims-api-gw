@@ -65,6 +65,20 @@ class ThermalExclusionCountTest {
         assertTrue(thermal != power, "열 계수가 전력 묶음을 세면 안 된다");
     }
 
+    @DisplayName("판이 쓰는 셈이 열 까닭만 세고 다른 까닭은 세지 않는다")
+    @Test
+    void the_production_counter_counts_only_thermal_codes() {
+        SchedulingResult r = engine.schedule(workload(1, 512), mixedContext());
+
+        assertEquals(2, PlacementBenchmarkService.countThermalExclusions(r),
+                "판 지표가 세는 셈 — 열 둘만 세야 한다. 막힌 후보 전체(3)나 전력 묶음(1)을 세면 여기서 갈린다");
+
+        SchedulingResult none = engine.schedule(workload(1, 512),
+                PlacementContext.of(List.of(new NodeResource("mdc-a", "n-ok", 64, 65536, 0, 10, 10, 15, 100, 1000, 30, 0, 0)),
+                        new SchedulingPolicy("p", "d"), ConstraintEvaluator.withDefaults()));
+        assertEquals(0, PlacementBenchmarkService.countThermalExclusions(none), "막힌 후보가 없으면 0");
+    }
+
     @DisplayName("열이 아닌 까닭은 열 막힘으로 세지 않는다")
     @Test
     void non_thermal_exclusions_are_not_counted() {

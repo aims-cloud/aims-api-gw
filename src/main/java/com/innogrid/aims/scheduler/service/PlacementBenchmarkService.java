@@ -948,8 +948,11 @@ public class PlacementBenchmarkService {
      * <p>예전에는 사유 문구에 "온도"·"냉각" 이 들었는지 보았다. 문구를 한 글자만 고쳐도 이 셈이 조용히
      * 0 이 되는 자리였다. 이제 {@link ExclusionReason#isThermal()} 이 온도 계열 넷을 가른다 — 세는 조건이
      * 같아 값은 그대로다.</p>
+     *
+     * <p>패키지 안에서 보이게 둔 것은 시험이 이 셈을 직접 부르기 위해서다 — 등록된 판은 온도 제약이
+     * 걸리지 않아 이 지표가 늘 0 이라, 판 응답만으로는 무엇을 세는지 가려낼 수 없다.</p>
      */
-    private static int countThermalExclusions(SchedulingResult result) {
+    static int countThermalExclusions(SchedulingResult result) {
         int count = 0;
         for (NodeScore score : result.candidateScores()) {
             if (score.exclusionCode() != null && score.exclusionCode().isThermal()) count++;

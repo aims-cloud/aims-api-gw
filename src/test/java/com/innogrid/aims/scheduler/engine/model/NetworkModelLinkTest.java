@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 지연 100ms UP               → cost 1.0 (상한)   → 0.5
  * 지연 0 손실 10% UP           → cost 0.1          → 0.909
  * DOWN                        → 0 (C5 가 제외하므로 실제로는 쓰이지 않음)
- * 원장 대역폭                  → 비용에 들어가지 않는다 (저장·응답 전용)
+ * 요구 1000 · 링크 500 · 20ms UP → cost 0.4 + 0.5 → 0.526   (부족분 50%)
+ * 요구를 주지 않음 · 원장 대역폭 없음 → 부족분 항 0 (예전 비용 그대로)
  * 같은 MDC                    → 1.0
  * 미등록 원격 · 라벨 없는 노드 · 빈 스냅샷 → unknownLinkScore (기본 0.5 = 50ms UP 과 같다)
  * </pre>
@@ -58,15 +59,57 @@ class NetworkModelLinkTest {
         assertTrue(model.linkScore("a", "b", m) > model.linkScore("a", "z", m), "측정된 양호 링크가 미등록을 이긴다");
     }
 
-    @DisplayName("원장의 대역폭은 링크 비용에 들어가지 않는다")
+    @DisplayName("요구 대역폭을 주지 않으면 원장 대역폭은 링크 비용에 들어가지 않는다")
     @Test
-    void ledger_bandwidth_is_not_part_of_the_cost() {
+    void ledger_bandwidth_alone_is_not_part_of_the_cost() {
         LinkMatrix wide = LinkMatrix.of(List.of(link(10000.0)));
         LinkMatrix narrow = LinkMatrix.of(List.of(link(10.0)));
 
         assertEquals(0.714, model.linkScore("a", "b", wide), EPS);
         assertEquals(model.linkScore("a", "b", wide), model.linkScore("a", "b", narrow), EPS,
-                "대역폭이 1000배 달라도 같은 점수다 — 원장·응답에만 있고 비용 식에는 없다");
+                "요구가 없으면 대역폭이 1000배 달라도 같은 점수 — 견줄 대상이 없다");
+    }
+
+    @DisplayName("요구 대역폭이 링크보다 크면 모자란 비율만큼 비용이 붙는다")
+    @Test
+    void shortfall_adds_cost_in_proportion() {
+        assertEquals(0.526, model.linkScore(bw(20, 500.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "부족분 50%");
+        assertEquals(0.625, model.linkScore(bw(20, 800.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "부족분 20%");
+        assertEquals(0.714, model.linkScore(bw(20, 1000.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "요구를 딱 채우면 항 0");
+        assertEquals(0.714, model.linkScore(bw(20, 5000.0, MdcLink.LinkStatus.UP), 1000.0), EPS, "잉여는 보너스가 아니다");
+        assertEquals(0.417, model.linkScore(bw(20, 1.0, MdcLink.LinkStatus.UP), 1000000.0), EPS, "부족분은 1 에서 잘린다");
+    }
+
+    @DisplayName("한쪽이라도 대역폭을 모르면 부족분 항은 0 이다")
+    @Test
+    void unknown_bandwidth_on_either_side_costs_nothing() {
+        assertEquals(0.0, model.bandwidthCost(null, 1000.0), EPS, "원장에 대역폭이 없다");
+        assertEquals(0.0, model.bandwidthCost(500.0, null), EPS, "워크로드가 요구를 주지 않았다");
+        assertEquals(0.0, model.bandwidthCost(null, null), EPS);
+        assertEquals(0.0, model.bandwidthCost(0.0, 1000.0), EPS, "0 은 값이 아니라 미기입으로 본다");
+        assertEquals(0.0, model.bandwidthCost(500.0, 0.0), EPS);
+        assertEquals(0.0, model.bandwidthCost(500.0, -1.0), EPS);
+        assertEquals(0.714, model.linkScore(bw(20, null, MdcLink.LinkStatus.UP), 1000.0), EPS, "예전 점수 그대로");
+    }
+
+    @DisplayName("벌점은 상수라 설정 다이제스트에 실리지 않고 눈금은 지연 기준값과 같다")
+    @Test
+    void the_penalty_is_a_constant_on_the_latency_scale() {
+        assertEquals(1.0, NetworkModel.BANDWIDTH_PENALTY, EPS);
+        assertEquals(model.linkScore(q(50, 0, MdcLink.LinkStatus.UP)),
+                model.linkScore(bw(0, 1.0, MdcLink.LinkStatus.UP), 1000000.0), EPS,
+                "전부 모자란 링크는 지연 기준값(50ms)과 같은 비용을 문다");
+    }
+
+    @DisplayName("같은 MDC 와 미등록 쌍은 요구 대역폭이 있어도 값이 바뀌지 않는다")
+    @Test
+    void same_mdc_and_unregistered_ignore_the_requirement() {
+        LinkMatrix m = LinkMatrix.of(List.of(link(500.0)));
+
+        assertEquals(1.0, model.linkScore("a", "a", m, 1000.0), EPS, "같은 MDC 는 링크를 타지 않는다");
+        assertEquals(0.5, model.linkScore("a", "z", m, 1000.0), EPS, "미등록은 견줄 대역폭이 없다");
+        assertEquals(0.526, model.linkScore("a", "b", m, 1000.0), EPS, "등록된 쌍만 부족분을 문다");
+        assertEquals(0.714, model.linkScore("a", "b", m), EPS, "요구를 주지 않은 호출은 예전 값");
     }
 
     private static MdcLink link(double bandwidthMbps) {
@@ -137,6 +180,10 @@ class NetworkModelLinkTest {
     }
 
     private static LinkMatrix.Quality q(double latency, double loss, MdcLink.LinkStatus st) {
-        return new LinkMatrix.Quality(latency, loss, st);
+        return new LinkMatrix.Quality(latency, null, loss, st);
+    }
+
+    private static LinkMatrix.Quality bw(double latency, Double bandwidth, MdcLink.LinkStatus st) {
+        return new LinkMatrix.Quality(latency, bandwidth, 0.0, st);
     }
 }

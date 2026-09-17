@@ -118,7 +118,8 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             Double linkRegistered = null;
             if (context.linkAware(workload)) {
                 String dataMdc = workload.getDataMdcId();
-                linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix());
+                linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix(),
+                                                   workload.getRequiredBandwidthMbps());
                 netScore = networkModel.blend(netScore, linkScore);
                 // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC 는 링크를 타지
                 // 않으므로 "등록됨" 과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.

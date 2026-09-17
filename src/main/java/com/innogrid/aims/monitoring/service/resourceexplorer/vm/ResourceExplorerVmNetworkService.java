@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
  * 트리에서 VM 하위 Network 항목 선택 시 모니터링 탭 차트 데이터를 제공한다.
  * (개요 탭은 화면 설계 미확정 — 추가 시 CPU 패턴대로 확장한다)
  *
- * VM 은 nsId·infraId·nodeId 로 식별하고(스코프 밖·부재는 404), 지표는 VM 안 node_exporter 의 node_network_*_total 을
+ * VM 은 nsId·infraId·vmId 로 식별하고(스코프 밖·부재는 404), 지표는 VM 안 node_exporter 의 node_network_*_total 을
  * {@code tb_ns/tb_infra/tb_node} 라벨로 좁혀 NIC 합산 rate 로 읽는다(lo·가상 인터페이스 제외).
  * VM 상세 패널은 ResourceExplorerVmService, 노드 Network 는 ResourceExplorerNodeNetworkService 가 담당한다.
  */
@@ -32,10 +32,10 @@ public class ResourceExplorerVmNetworkService {
     }
 
     /** 모니터링 탭 차트 — 지표별 시계열 8종 (VM NIC 합산). 미수집이면 빈 시리즈 */
-    public VmNetworkMetricTrendResponse getNetworkMetricTrend(String roleName, String nsId, String infraId, String nodeId,
+    public VmNetworkMetricTrendResponse getNetworkMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                               VmNetworkMetric metric, NodeMetricInterval interval) {
-        support.accessibleNode(roleName, nsId, infraId, nodeId);
-        MetricSelector sel = MetricSelector.tumblebugNode(nsId, infraId, nodeId);
+        support.accessibleNode(roleName, nsId, infraId, vmId);
+        MetricSelector sel = MetricSelector.tumblebugNode(nsId, infraId, vmId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();

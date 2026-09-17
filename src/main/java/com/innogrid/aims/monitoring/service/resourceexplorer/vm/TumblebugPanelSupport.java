@@ -62,15 +62,16 @@ public class TumblebugPanelSupport {
     }
 
     /** 스코프 검증을 통과한 Namespace 의 스냅샷에서 Node(VM) 1개 — Namespace 미매핑·Infra/Node 부재면 404 */
-    public TbNode accessibleNode(String roleName, String nsId, String infraId, String nodeId) {
+    /** vmId = Tumblebug node id(트리 VIRTUAL_MACHINE 노드의 vmId 필드). 같은 Infra 안에서 유일하므로 nodeGroupId 는 필요 없다 */
+    public TbNode accessibleNode(String roleName, String nsId, String infraId, String vmId) {
         TbSnapshot snapshot = accessibleNamespace(roleName, nsId);
         return snapshot.infrasByNamespace().getOrDefault(nsId, List.of()).stream()
                 .filter(i -> i.id().equals(infraId))
                 .map(TbInfra::nodes)
                 .flatMap(List::stream)
-                .filter(n -> n.id().equals(nodeId))
+                .filter(n -> n.id().equals(vmId))
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + nodeId));
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + vmId));
     }
 
     /** Node(VM) 목록의 §6.1 상태 버킷 */

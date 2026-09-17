@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   그룹 개요        — KPI 카드 6종, GPU 인스턴스 목록 테이블
  *   개별 인스턴스 개요 — KPI 카드 6종, 가상머신 할당 정보 표, GPU 기본 정보 표
  *   모니터링         — 지표별 시계열 (화면 설계 확정 전, 잠정 지표 세트)
- * VM 은 nsId·infraId·nodeId 쿼리 파라미터로 식별한다(다른 VM 패널과 동일). VM↔GPU 인스턴스 할당 원장이 없어
+ * VM 은 nsId·infraId·vmId 쿼리 파라미터로 식별한다(다른 VM 패널과 동일). VM↔GPU 인스턴스 할당 원장이 없어
  * 데이터 구현은 후순위이며 현재 전부 501 이다.
  * 노드의 물리 GPU 패널은 ResourceExplorerNodeGpuController, VM 상세는 ResourceExplorerVmController 가 담당한다.
  */
@@ -54,8 +54,8 @@ public class ResourceExplorerVmGpuController {
     public ApiResponse<VmGpuGroupSummaryResponse> getGroupSummary(@RequestParam(required = false) String roleName,
                                                                   @RequestParam String nsId,
                                                                   @RequestParam String infraId,
-                                                                  @RequestParam String nodeId) {
-        return ApiResponse.ok(resourceExplorerVmGpuService.getGroupSummary(roleName, nsId, infraId, nodeId));
+                                                                  @RequestParam String vmId) {
+        return ApiResponse.ok(resourceExplorerVmGpuService.getGroupSummary(roleName, nsId, infraId, vmId));
     }
 
     @Operation(summary = "GPU 인스턴스 목록",
@@ -67,11 +67,11 @@ public class ResourceExplorerVmGpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "instanceId,asc") String sort) {
-        return ApiResponse.ok(resourceExplorerVmGpuService.getInstances(roleName, nsId, infraId, nodeId, page, size, sort));
+        return ApiResponse.ok(resourceExplorerVmGpuService.getInstances(roleName, nsId, infraId, vmId, page, size, sort));
     }
 
     @Operation(summary = "VM GPU 그룹 모니터링 차트",
@@ -82,10 +82,10 @@ public class ResourceExplorerVmGpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @RequestParam(defaultValue = "GPU_UTILIZATION") GpuMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
-        return ApiResponse.ok(resourceExplorerVmGpuService.getGroupMetricTrend(roleName, nsId, infraId, nodeId, metric, interval));
+        return ApiResponse.ok(resourceExplorerVmGpuService.getGroupMetricTrend(roleName, nsId, infraId, vmId, metric, interval));
     }
 
     // ── 개별 GPU 인스턴스 (GPU 장치 선택) ───────────────────────
@@ -98,9 +98,9 @@ public class ResourceExplorerVmGpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @PathVariable String instanceId) {
-        return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceSummary(roleName, nsId, infraId, nodeId, instanceId));
+        return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceSummary(roleName, nsId, infraId, vmId, instanceId));
     }
 
     @Operation(summary = "GPU 인스턴스 할당 정보",
@@ -111,9 +111,9 @@ public class ResourceExplorerVmGpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @PathVariable String instanceId) {
-        return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceAllocation(roleName, nsId, infraId, nodeId, instanceId));
+        return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceAllocation(roleName, nsId, infraId, vmId, instanceId));
     }
 
     @Operation(summary = "GPU 인스턴스 기본 정보",
@@ -123,9 +123,9 @@ public class ResourceExplorerVmGpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @PathVariable String instanceId) {
-        return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceInfo(roleName, nsId, infraId, nodeId, instanceId));
+        return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceInfo(roleName, nsId, infraId, vmId, instanceId));
     }
 
     @Operation(summary = "GPU 인스턴스 모니터링 차트",
@@ -136,11 +136,11 @@ public class ResourceExplorerVmGpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @PathVariable String instanceId,
             @RequestParam(defaultValue = "GPU_UTILIZATION") GpuMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
         return ApiResponse.ok(resourceExplorerVmGpuService.getInstanceMetricTrend(
-                roleName, nsId, infraId, nodeId, instanceId, metric, interval));
+                roleName, nsId, infraId, vmId, instanceId, metric, interval));
     }
 }

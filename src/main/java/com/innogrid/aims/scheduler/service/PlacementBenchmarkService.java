@@ -52,6 +52,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalRiseSca
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WakeupReconstruction;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WorkloadClassShare;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
+import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
@@ -942,17 +943,16 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 열 때문에 후보가 막힌 횟수 — 사유 문구로 센다.
+     * 열 때문에 후보가 막힌 횟수 — 제외 까닭 코드로 센다.
      *
-     * <p>제약 종류를 코드가 돌려주지 않아 문구를 볼 수밖에 없다. 온도 계열 사유 넷이 모두 "온도" 를
-     * 담고 냉각 대기만 "냉각" 을 담으므로 둘을 함께 본다. 사유 문구가 바뀌면 이 셈이 조용히 0 이 되므로
-     * 시험이 실제 제약을 걸어 값을 확인한다.</p>
+     * <p>예전에는 사유 문구에 "온도"·"냉각" 이 들었는지 보았다. 문구를 한 글자만 고쳐도 이 셈이 조용히
+     * 0 이 되는 자리였다. 이제 {@link ExclusionReason#isThermal()} 이 온도 계열 넷을 가른다 — 세는 조건이
+     * 같아 값은 그대로다.</p>
      */
     private static int countThermalExclusions(SchedulingResult result) {
         int count = 0;
         for (NodeScore score : result.candidateScores()) {
-            String reason = score.exclusionReason();
-            if (reason != null && (reason.contains("온도") || reason.contains("냉각"))) count++;
+            if (score.exclusionCode() != null && score.exclusionCode().isThermal()) count++;
         }
         return count;
     }

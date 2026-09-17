@@ -46,6 +46,25 @@ class ThermalExclusionCountTest {
         assertEquals(byText, byCode, "까닭 코드 셈과 옛 문자열 셈이 갈렸다 — 판 지표 값이 움직인다");
     }
 
+    @DisplayName("판 실행의 열 막힘 계수가 사전 등록 값과 같다")
+    @Test
+    void the_board_metric_counts_only_thermal_exclusions() {
+        SchedulingResult r = engine.schedule(workload(1, 512), mixedContext());
+
+        long thermal = r.candidateScores().stream()
+                .filter(s -> s.exclusionCode() != null && s.exclusionCode().isThermal()).count();
+        long excluded = r.candidateScores().stream().filter(s -> !s.eligible()).count();
+        long power = r.candidateScores().stream()
+                .filter(s -> s.exclusionCode() != null && s.exclusionCode().isPower()).count();
+
+        assertEquals(4, r.candidateScores().size(), "후보 넷 — 열 둘·전력 하나·적격 하나");
+        assertEquals(2, thermal, "열로 막힌 후보만 센다");
+        assertEquals(1, power, "전력으로 막힌 후보는 열 막힘이 아니다");
+        assertEquals(3, excluded, "막힌 후보 전체는 셋 — 열 계수가 전체를 세면 이 값과 같아져 갈린다");
+        assertTrue(thermal < excluded, "열 계수가 막힌 후보 전체를 세면 안 된다");
+        assertTrue(thermal != power, "열 계수가 전력 묶음을 세면 안 된다");
+    }
+
     @DisplayName("열이 아닌 까닭은 열 막힘으로 세지 않는다")
     @Test
     void non_thermal_exclusions_are_not_counted() {
@@ -68,6 +87,19 @@ class ThermalExclusionCountTest {
                 new NodeResource("mdc-a", "n-over", 64, 65536, 0, 10, 10, 15, 400, 1000, 90, 0, 0),
                 new NodeResource("mdc-a", "n-near", 64, 65536, 0, 10, 10, 15, 400, 1000, 74, 0, 0),
                 new NodeResource("mdc-a", "n-ok", 64, 65536, 0, 10, 10, 15, 400, 1000, 30, 0, 0));
+        return PlacementContext.of(nodes, policy, ConstraintEvaluator.withDefaults());
+    }
+
+    /** 열 둘·전력 하나·적격 하나 — 열 계수가 무엇을 세는지 값으로 가른다. */
+    private static PlacementContext mixedContext() {
+        SchedulingPolicy policy = new SchedulingPolicy("p", "d");
+        policy.setTemperatureAwareEnabled(true);
+        policy.setPowerAwareEnabled(true);
+        List<NodeResource> nodes = List.of(
+                new NodeResource("mdc-a", "n-hot", 64, 65536, 0, 10, 10, 15, 400, 1000, 90, 0, 0),
+                new NodeResource("mdc-a", "n-warm", 4, 65536, 0, 10, 10, 15, 400, 1000, 74, 0, 0),
+                new NodeResource("mdc-a", "n-power", 64, 65536, 0, 10, 10, 15, 1000, 1000, 30, 0, 0),
+                new NodeResource("mdc-a", "n-ok", 64, 65536, 0, 10, 10, 15, 100, 1000, 30, 0, 0));
         return PlacementContext.of(nodes, policy, ConstraintEvaluator.withDefaults());
     }
 

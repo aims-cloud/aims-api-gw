@@ -8,8 +8,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.entity.MdcLink;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -95,6 +97,43 @@ class ExclusionCodeTest {
             assertFalse(r.isThermal() && r.isPower(), r + " 가 두 묶음에 동시에 들었다");
         }
         assertEquals(14, ExclusionReason.values().length, "까닭을 더하거나 빼면 이 수와 묶음 판정을 함께 본다");
+    }
+
+    @DisplayName("검사마다 제 까닭이 붙는다")
+    @Test
+    void every_check_reports_its_own_code() {
+        // 디스크 — 자원 까닭과 갈라져야 한다
+        Workload disk = workload(1, 512);
+        disk.setRequiredDiskGb(5000);
+        NodeResource small = idleNode().withDiskCapacityGb(2000);
+        assertEquals(ExclusionReason.INSUFFICIENT_DISK,
+                evaluator.exclusion(disk, small, ctx(small)).reason());
+
+        // 자원 — 디스크와 갈라져야 한다
+        assertEquals(ExclusionReason.INSUFFICIENT_RESOURCE,
+                evaluator.exclusion(workload(999, 512), idleNode(), ctx(idleNode())).reason());
+
+        // 링크 단절 — 열·전력 어느 묶음에도 들지 않는다
+        NodeResource remote = new NodeResource("mdc-b", "n-remote", 64, 65536, 0, 0, 0, 15, 400, 1000, 40, 0, 0);
+        SchedulingPolicy affinity = new SchedulingPolicy("p", "d");
+        affinity.setAffinityEnabled(true);
+        Workload dataBound = workload(1, 512);
+        dataBound.setDataMdcId("mdc-a");
+        MdcLink down = new MdcLink("mdc-a", "mdc-b", 5);
+        down.setStatus(MdcLink.LinkStatus.DOWN);
+        Exclusion link = evaluator.exclusion(dataBound, remote,
+                PlacementContext.of(List.of(remote), affinity, ConstraintEvaluator.withDefaults())
+                        .withLinkMatrix(LinkMatrix.of(List.of(down))));
+        assertEquals(ExclusionReason.MDC_LINK_DOWN, link.reason());
+        assertFalse(link.reason().isThermal(), "링크 단절은 열 막힘이 아니다");
+        assertFalse(link.reason().isPower(), "링크 단절은 전력 막힘이 아니다");
+
+        // 워크로드 온도 상한 — 정책 온도 초과와 갈라져야 한다
+        Workload tempLimited = workload(1, 512);
+        tempLimited.setMaxTemperatureCelsius(50.0);
+        NodeResource warm = new NodeResource("mdc-a", "n-warm", 64, 65536, 0, 0, 0, 15, 400, 1000, 70, 0, 0);
+        assertEquals(ExclusionReason.WORKLOAD_TEMPERATURE_EXCEEDED,
+                evaluator.exclusion(tempLimited, warm, ctx(warm)).reason());
     }
 
     @DisplayName("까닭 없는 제외나 빈 문장은 만들 수 없다")

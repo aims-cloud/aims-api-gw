@@ -24,13 +24,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>사유 문자열은 화면에 그대로 나가고, 판 응답의 제외 사유 분포는 이 문장을 <b>맵 키</b>로 쓴다. 그래서
  * 코드를 더하는 작업에서 문장이 한 글자라도 바뀌면 화면 문구와 판 집계가 함께 움직인다. 이 시험은 사유
- * 11종의 문장을 지금 값 그대로 못 박아 그 일이 없었음을 보인다.</p>
+ * 까닭 14종 가운데 12종의 문장을 지금 값 그대로 못 박아 그 일이 없었음을 보인다. 11종은 문장 전체를,
+ * MDC 전력 합계는 수치가 노드 상태에 따라 달라져 앞뒤만 본다. 냉각 대기와 배치 후 예상 전력은 이 시험
+ * 밖이며, 두 문장은 제약 시험이 따로 확인한다.</p>
  */
 class ConstraintReasonWordingTest {
 
     private final ConstraintEvaluator evaluator = ConstraintEvaluator.withDefaults();
 
-    @DisplayName("사유 문장 11종이 지금 문구 그대로다")
+    @DisplayName("사유 문장 12종이 지금 문구 그대로다")
     @Test
     void reason_wording_is_pinned() {
         assertEquals("자원 부족 (필요 CPU:99 MEM:512MB GPU:0, 가용 CPU:8.0 MEM:16384MB GPU:0)",

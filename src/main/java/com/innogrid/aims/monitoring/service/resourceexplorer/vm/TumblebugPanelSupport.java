@@ -1,7 +1,9 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.innogrid.aims.auth.service.AuthService;
@@ -53,6 +55,28 @@ public class TumblebugPanelSupport {
         return tumblebugTreeBuilder.snapshot(Set.of(nsId));
     }
 
+    /** 역할 1개에 매핑된 Namespace 전체와 그 Tumblebug 스냅샷 — 가상머신 그룹 루트(VM_ROOT) 패널용 */
+    public record RoleNamespaces(List<String> nsIds, TbSnapshot snapshot) {}
+
+    /**
+     * roleName 이 현재 사용자 토큰의 역할일 때 그 역할의 role_namespaces 매핑 전체(nsId 오름차순)와 스냅샷을 돌려준다.
+     * 토큰에 없는 역할이면 404. 매핑이 없으면 빈 목록과 빈 스냅샷(Tumblebug 미조회).
+     */
+    public RoleNamespaces accessibleRoleNamespaces(String roleName) {
+        if (!authService.currentUserRoleIds().contains(roleName)) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleName);
+        }
+        List<String> nsIds = roleNamespaceRepository.findByRole_NameIn(List.of(roleName)).stream()
+                .map(RoleNamespace::getNsId)
+                .distinct()
+                .sorted()
+                .toList();
+        if (nsIds.isEmpty()) {
+            return new RoleNamespaces(List.of(), new TbSnapshot(Instant.now(), Map.of(), Map.of(), false));
+        }
+        return new RoleNamespaces(nsIds, tumblebugTreeBuilder.snapshot(Set.copyOf(nsIds)));
+    }
+
     /** 스냅샷에서 Infra 1개 — 없으면 404 */
     public static TbInfra infraOf(TbSnapshot snapshot, String nsId, String infraId) {
         return snapshot.infrasByNamespace().getOrDefault(nsId, List.of()).stream()
@@ -61,8 +85,10 @@ public class TumblebugPanelSupport {
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "Infra 를 찾을 수 없습니다: " + infraId));
     }
 
-    /** 스코프 검증을 통과한 Namespace 의 스냅샷에서 Node(VM) 1개 — Namespace 미매핑·Infra/Node 부재면 404 */
-    /** vmId = Tumblebug node id(트리 VIRTUAL_MACHINE 노드의 vmId 필드). 같은 Infra 안에서 유일하므로 nodeGroupId 는 필요 없다 */
+    /**
+     * 스코프 검증을 통과한 Namespace 의 스냅샷에서 Node(VM) 1개 — Namespace 미매핑·Infra/Node 부재면 404.
+     * vmId 는 Tumblebug node id(트리 VIRTUAL_MACHINE 노드의 vmId 필드)다. 같은 Infra 안에서 유일하므로 nodeGroupId 는 필요 없다.
+     */
     public TbNode accessibleNode(String roleName, String nsId, String infraId, String vmId) {
         TbSnapshot snapshot = accessibleNamespace(roleName, nsId);
         return snapshot.infrasByNamespace().getOrDefault(nsId, List.of()).stream()

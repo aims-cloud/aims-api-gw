@@ -78,7 +78,7 @@ class BenchmarkBoardDigestEolTest {
             BenchmarkClusters.CONVEX, "5e71beea2592",
             BenchmarkClusters.MISRATED, "e935750a1637",
             BenchmarkClusters.CONVEX_MISRATED, "d199d46fa3b0",
-            BenchmarkClusters.LINK, "9d04e5ef0788",
+            BenchmarkClusters.LINK, "30279f733596",
             BenchmarkClusters.MAIN_INDEPENDENT, "ef2d4c7b28b7",
             BenchmarkClusters.CONVEX_MISRATED_INDEPENDENT, "ad4eb53bbcad",
             BenchmarkClusters.CONCAVE, "8e45125a043f");

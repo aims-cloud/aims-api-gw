@@ -312,7 +312,8 @@ public class PlacementBenchmarkService {
                 BenchmarkRules.SWEEP_POINTS, cluster.periodMinutes(),
                 BenchmarkRules.COOLDOWN_MINUTES_FOR_BENCHMARK, BenchmarkRules.MEMORY_MB_PER_CORE,
                 properties.getPower().getIdleRatio(), Assumptions.GENERATOR_FORMULA, Assumptions.POWER_CONTROL_NOTE,
-                BenchmarkRules.RANDOM_SEEDS.size(), Assumptions.POLICY_BASIS, dataMdcAssignment(cluster));
+                BenchmarkRules.RANDOM_SEEDS.size(), Assumptions.POLICY_BASIS, dataMdcAssignment(cluster),
+                bandwidthAssignment(cluster));
     }
 
     // ── 판 하나 ──────────────────────────────────────────────
@@ -446,6 +447,7 @@ public class PlacementBenchmarkService {
         double headroom = headroomCores(snapshot, basePolicy);
         List<Workload> sampled = workloads.sample(headroom * loadRatio / 100.0);
         assignDataMdc(sampled, cluster);
+        assignRequiredBandwidth(sampled, cluster);
         LinkMatrix links = BenchmarkLinks.matrixOf(cluster);
         double requestedCores = sampled.stream().mapToInt(Workload::getRequiredCpu).sum();
 
@@ -1129,11 +1131,33 @@ public class PlacementBenchmarkService {
         for (int i = 0; i < sampled.size(); i++) sampled.get(i).setDataMdcId(ids.get(i % ids.size()));
     }
 
+    /**
+     * 요구 대역폭 순환 배정 — 목록의 {@code 0} 은 요구 없음이라 null 로 둔다(그 워크로드는 부족분 항이 꺼진다).
+     *
+     * <p>{@code assignDataMdc} 와 같은 자리에서 같은 표본 순서로 돌린다. 표본은 {@code sample()} 이 판마다 새로 만든
+     * 객체라 공유 인스턴스를 오염시키지 않고, 전 열이 같은 목록을 본다.</p>
+     */
+    static void assignRequiredBandwidth(List<Workload> sampled, SyntheticCluster cluster) {
+        List<Double> values = cluster.workloadBandwidthMbps();
+        if (values.isEmpty()) return;
+        for (int i = 0; i < sampled.size(); i++) {
+            double v = values.get(i % values.size());
+            sampled.get(i).setRequiredBandwidthMbps(v > 0 ? v : null);
+        }
+    }
+
     /** 배정 규칙을 응답 전제로 밝힌다. */
     private static String dataMdcAssignment(SyntheticCluster cluster) {
         List<String> ids = cluster.workloadDataMdcIds();
         return ids.isEmpty() ? "없음 — 워크로드에 dataMdcId 를 부여하지 않아 링크 게이트는 꺼져 있다"
                 : "표본 순서대로 " + ids + " 순환 배정 — 게이트를 켠 열(weighted-affinity)만 링크 점수를 섞는다";
+    }
+
+    /** 요구 대역폭 배정 규칙을 응답 전제로 밝힌다. */
+    private static String bandwidthAssignment(SyntheticCluster cluster) {
+        List<Double> values = cluster.workloadBandwidthMbps();
+        return values.isEmpty() ? "없음 — 워크로드에 요구 대역폭을 부여하지 않아 링크 비용의 부족분 항은 전부 0 이다"
+                : "표본 순서대로 " + values + " 순환 배정(0 은 요구 없음) — 링크 대역폭에 못 미치는 만큼만 링크 점수를 깎는다";
     }
 
     /**

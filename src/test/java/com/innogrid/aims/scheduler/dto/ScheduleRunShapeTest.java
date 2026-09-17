@@ -19,22 +19,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ScheduleRunShapeTest {
 
-    /** 클러스터 스냅샷을 더하기 전의 15열. 이름과 순서를 그대로 적는다. */
+    /** 실행 이력 1행의 15열. 이름과 순서를 그대로 적는다. */
     private static final List<String> BASE_COMPONENTS = List.of(
             "runId", "scheduleId", "scheduleKey", "triggerType", "status",
             "startedAt", "finishedAt", "message",
             "targetCount", "successCount", "failedCount", "truncated",
             "engineId", "policyName", "triggeredBy");
 
-    @DisplayName("실행 이력 1행의 기존 15열이 이름과 순서 그대로다")
+    @DisplayName("실행 이력 1행은 15열이고 이름과 순서가 그대로다")
     @Test
     void the_existing_columns_keep_their_names_and_order() {
         List<String> actual = Arrays.stream(ScheduleRunResponse.class.getRecordComponents())
                 .map(RecordComponent::getName)
                 .toList();
 
-        assertEquals(BASE_COMPONENTS, actual.subList(0, BASE_COMPONENTS.size()),
-                "기존 열의 이름이나 순서가 바뀌었다 — 실행 이력·즉시 실행·실행 상세 세 화면이 함께 움직인다");
+        // 접두만 보면 열을 뒤에 덧붙이는 변경을 막지 못한다. 클러스터 스냅샷을 목록이 아니라 상세에
+        // 둔 것이 이번 결정이므로, 목록 1행은 늘어나지도 않아야 한다.
+        assertEquals(BASE_COMPONENTS, actual,
+                "실행 이력 1행의 열이 바뀌었다 — 목록은 한 화면에 수십 행이라 열을 더하지 않기로 했다");
     }
 
     @DisplayName("기존 열에 중복이 없다")

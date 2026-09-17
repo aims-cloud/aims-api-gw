@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
@@ -65,7 +66,7 @@ class RunSnapshotIsolationTest {
     @Test
     void a_failure_before_the_run_does_not_change_the_run_result() {
         givenOneNodeAndOneWorkload("rsi-before");
-        when(clusterSnapshot.fixedOf(any(PlacementContext.class), anyDouble()))
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
                 .thenThrow(new IllegalStateException("스냅샷 계산 실패"));
 
         ScheduleRun run = runNow("rsi-before");
@@ -81,7 +82,7 @@ class RunSnapshotIsolationTest {
     @Test
     void a_failure_after_the_run_clears_the_half_written_snapshot() {
         givenOneNodeAndOneWorkload("rsi-after");
-        when(clusterSnapshot.fixedOf(any(PlacementContext.class), anyDouble()))
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
                 .thenReturn(new RunClusterSnapshot.Fixed(1, 0, 1, 500.0));
         when(clusterSnapshot.movingOf(any(PlacementContext.class), anyDouble()))
                 .thenReturn(new RunClusterSnapshot.Moving(0, 120.0, 40.0))
@@ -97,11 +98,28 @@ class RunSnapshotIsolationTest {
         assertNull(run.getSnapshotMeasuredPowerWatts());
     }
 
+    @DisplayName("클래스를 못 읽어 계산이 터져도 배치는 성공으로 끝난다")
+    @Test
+    void a_linkage_error_in_the_snapshot_does_not_break_the_run() {
+        givenOneNodeAndOneWorkload("rsi-linkage");
+        // 배포가 돌고 있는 JVM 의 jar 를 덮어쓰면 아직 안 읽은 클래스에서 이 오류가 난다.
+        // RuntimeException 만 잡으면 하필 그때 "실행은 계속한다"는 약속이 깨진다.
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
+                .thenThrow(new NoClassDefFoundError("RunClusterSnapshot$Fixed"));
+
+        ScheduleRun run = runNow("rsi-linkage");
+
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus(),
+                "jar 를 덮어쓴 직후의 첫 실행이 통째로 실패로 뒤바뀐다");
+        assertEquals(1, run.getSuccessCount());
+        assertEquals(ScheduleRun.SnapshotStatus.FAILED, run.getSnapshotStatus());
+    }
+
     @DisplayName("스냅샷이 멀쩡하면 전·후가 모두 적힌다")
     @Test
     void a_healthy_snapshot_records_both_sides() {
         givenOneNodeAndOneWorkload("rsi-ok");
-        when(clusterSnapshot.fixedOf(any(PlacementContext.class), anyDouble()))
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
                 .thenReturn(new RunClusterSnapshot.Fixed(1, 0, 1, 500.0));
         when(clusterSnapshot.movingOf(any(PlacementContext.class), anyDouble()))
                 .thenReturn(new RunClusterSnapshot.Moving(0, 120.0, 40.0))
@@ -116,6 +134,32 @@ class RunSnapshotIsolationTest {
         assertEquals(1, run.getSnapshotActiveNodesAfter(), "배치가 노드를 깨운 것이 보인다");
         assertEquals(120.0, run.getSnapshotReclaimableWattsBefore());
         assertEquals(0.0, run.getSnapshotReclaimableWattsAfter());
+    }
+
+    @DisplayName("실행 전 스냅샷은 배치가 끝나기 전에 이미 DB 에 닿는다")
+    @Test
+    void the_before_snapshot_reaches_the_database_before_the_run_ends() {
+        givenOneNodeAndOneWorkload("rsi-persist");
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
+                .thenReturn(new RunClusterSnapshot.Fixed(1, 0, 1, 500.0));
+        when(clusterSnapshot.movingOf(any(PlacementContext.class), anyDouble()))
+                .thenReturn(new RunClusterSnapshot.Moving(0, 120.0, 40.0));
+
+        // 배치 도중에 이력을 다시 읽는다. 이 시점에 값이 없으면, 앱이 여기서 죽었을 때
+        // 그 회차는 "전만 기록됨"이 아니라 아무것도 기록되지 않은 행으로 남는다 —
+        // 기동 회수는 실행 이력을 마무리할 뿐 스냅샷을 채우지 못한다.
+        List<ScheduleRun.SnapshotStatus> midRun = new ArrayList<>();
+        when(placementService.place(any(Workload.class), any(PlacementContext.class), anyString(), anyLong()))
+                .thenAnswer(invocation -> {
+                    Long runId = invocation.getArgument(3);
+                    midRun.add(runRepository.findById(runId).orElseThrow().getSnapshotStatus());
+                    return new SchedulingResult(true, "mdc-01", "rsi-persist-node", 0.9, "테스트 배치", List.of());
+                });
+
+        runNow("rsi-persist");
+
+        assertEquals(List.of(ScheduleRun.SnapshotStatus.BEFORE_ONLY), midRun,
+                "배치 도중의 이력에 전 스냅샷이 없다 — 중단된 회차와 기능 이전 행이 구분되지 않는다");
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

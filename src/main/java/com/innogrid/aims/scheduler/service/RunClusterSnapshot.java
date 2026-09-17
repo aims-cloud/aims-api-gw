@@ -47,13 +47,15 @@ public class RunClusterSnapshot {
      * 예약에 반응하는 축 — 실행 전과 후에 각각 잰다.
      *
      * @param activeNodes           가동 중으로 세는 노드 수(실효 CPU 기준)
-     * @param reclaimableWatts      비어 있는 노드의 유휴 전력 합(W). 계측 노드가 없으면 null
+     * @param reclaimableWatts      비어 있는 노드의 유휴 전력 합(W). 계측 노드가 없으면 null.
+     *                              계측 노드는 실측에서 역산하고 미계측 노드는 정격으로 어림하므로,
+     *                              둘이 섞인 판에서는 실측과 추정이 함께 더해진 값이다
      * @param avgTemperatureCelsius 계측 노드의 평균 실효 온도(℃). 온도를 잰 노드가 없으면 null
      */
     public record Moving(int activeNodes, Double reclaimableWatts, Double avgTemperatureCelsius) {}
 
-    /** 실행 1회에 한 번 재는 축. */
-    public Fixed fixedOf(PlacementContext ctx, double activeCpuPercent) {
+    /** 실행 1회에 한 번 재는 축. 가동 문턱을 받지 않는다 — 이 네 값은 문턱과 무관하다. */
+    public Fixed fixedOf(PlacementContext ctx) {
         int measured = measuredNodes(ctx);
         return new Fixed(
                 ctx.nodes().size(),

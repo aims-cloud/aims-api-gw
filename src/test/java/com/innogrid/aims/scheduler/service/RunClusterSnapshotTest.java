@@ -38,7 +38,7 @@ class RunClusterSnapshotTest {
     void fixed_axes_are_filled_when_power_is_measured() {
         PlacementContext ctx = ctx(List.of(busy(), idle()));
 
-        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx, ACTIVE_CPU);
+        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx);
 
         assertEquals(2, f.nodeCount());
         assertEquals(0, f.excludedCount());
@@ -52,7 +52,7 @@ class RunClusterSnapshotTest {
     void unmeasured_power_yields_null_not_zero() {
         PlacementContext ctx = ctx(List.of(unmeasured(), unmeasured()));
 
-        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx, ACTIVE_CPU);
+        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx);
 
         assertEquals(0, f.measuredNodes());
         assertNull(f.measuredPowerWatts(), "0 이 아니라 null — 0W 를 쟀다는 뜻이 되면 안 된다");
@@ -65,7 +65,7 @@ class RunClusterSnapshotTest {
         // 전력은 있는데 정격이 0 — 유휴도 회수 가능 전력도 대체값이 되어 실측이라 부를 수 없다
         NodeResource noCapacity = new NodeResource("mdc-a", "n-nocap", 8, 16384, 0, 10, 10, 15, 300, 0, 40, 0, 0);
 
-        assertEquals(0, snapshot.fixedOf(ctx(List.of(noCapacity)), ACTIVE_CPU).measuredNodes());
+        assertEquals(0, snapshot.fixedOf(ctx(List.of(noCapacity))).measuredNodes());
     }
 
     @DisplayName("수집에서 빠진 노드 수가 따로 잡힌다")
@@ -74,7 +74,7 @@ class RunClusterSnapshotTest {
         PlacementContext ctx = ctx(List.of(busy()))
                 .withExcluded(List.of(new ExcludedNode("mdc-a", "n-gone", List.of("cpu사용률"), ExcludedNode.Cause.MISSING_METRICS, 0)));
 
-        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx, ACTIVE_CPU);
+        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx);
 
         assertEquals(1, f.nodeCount(), "후보에 오른 노드만 센다");
         assertEquals(1, f.excludedCount());
@@ -83,7 +83,7 @@ class RunClusterSnapshotTest {
     @DisplayName("노드가 하나도 없으면 값 없이 0 과 null 로 끝난다")
     @Test
     void an_empty_cluster_does_not_throw() {
-        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx(List.of()), ACTIVE_CPU);
+        RunClusterSnapshot.Fixed f = snapshot.fixedOf(ctx(List.of()));
         RunClusterSnapshot.Moving m = snapshot.movingOf(ctx(List.of()), ACTIVE_CPU);
 
         assertEquals(0, f.nodeCount());
@@ -98,12 +98,12 @@ class RunClusterSnapshotTest {
         NodeResource node = idle();
         PlacementContext ctx = ctx(List.of(node));
 
-        RunClusterSnapshot.Fixed before = snapshot.fixedOf(ctx, ACTIVE_CPU);
+        RunClusterSnapshot.Fixed before = snapshot.fixedOf(ctx);
         RunClusterSnapshot.Moving movingBefore = snapshot.movingOf(ctx, ACTIVE_CPU);
 
         ctx.reserve(node.getNodeId(), workload(4, 4096));
 
-        RunClusterSnapshot.Fixed after = snapshot.fixedOf(ctx, ACTIVE_CPU);
+        RunClusterSnapshot.Fixed after = snapshot.fixedOf(ctx);
         RunClusterSnapshot.Moving movingAfter = snapshot.movingOf(ctx, ACTIVE_CPU);
 
         assertEquals(before, after, "고정 축은 예약으로 움직이지 않는다 — 그래서 전·후를 따로 두지 않는다");

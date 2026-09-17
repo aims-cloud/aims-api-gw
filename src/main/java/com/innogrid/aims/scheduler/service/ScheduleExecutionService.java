@@ -240,16 +240,26 @@ public class ScheduleExecutionService {
      * <p>계산이 터져도 <b>실행은 계속한다</b>. 스냅샷은 곁들이는 기록이지 배치의 일부가 아니어서, 여기서
      * 예외를 밖으로 내보내면 잘 돌던 배치가 통째로 실패로 뒤바뀐다. 대신 상태를 실패로 남겨 빈 칸이
      * "안 쟀다"인지 "재다 터졌다"인지 구분되게 한다.</p>
+     *
+     * <p>{@link LinkageError} 까지 잡는다. 배포가 실행 중인 JVM 의 jar 를 덮어쓰는 이 환경에서는 아직
+     * 로드되지 않은 클래스를 그때 읽어 {@code NoClassDefFoundError} 가 난다 — 이 계산이 쓰는 record 와
+     * enum 이 바로 그런 지연 로드 대상이다. {@code RuntimeException} 만 잡으면 "실행은 계속한다"는 이
+     * 메서드의 약속이 하필 그 상황에서 깨진다. 메모리 고갈 같은 나머지 {@code Error} 는 그대로 내보낸다.</p>
+     *
+     * <p>여기서 <b>한 번 저장한다</b>. 저장하지 않으면 이 값이 실행이 끝날 때까지 DB 에 닿지 않아, 배치
+     * 도중 앱이 죽은 회차가 "전만 기록됨"이 아니라 아무것도 기록되지 않은 행으로 남는다 — 기동 회수는
+     * 실행 이력을 마무리할 뿐 스냅샷을 채우지 못한다. 실행 1회당 UPDATE 한 번이고 배치 루프 밖이다.</p>
      */
     private void recordSnapshotBefore(ScheduleRun run, PlacementContext context) {
         try {
-            double activeCpuPercent = properties.getPower().getActiveCpuPercent();
-            RunClusterSnapshot.Fixed fixed = clusterSnapshot.fixedOf(context, activeCpuPercent);
-            RunClusterSnapshot.Moving moving = clusterSnapshot.movingOf(context, activeCpuPercent);
+            RunClusterSnapshot.Fixed fixed = clusterSnapshot.fixedOf(context);
+            RunClusterSnapshot.Moving moving =
+                    clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
             run.recordSnapshotBefore(fixed.nodeCount(), fixed.excludedCount(), fixed.measuredNodes(),
                     fixed.measuredPowerWatts(),
                     moving.activeNodes(), moving.reclaimableWatts(), moving.avgTemperatureCelsius());
-        } catch (RuntimeException e) {
+            runRepository.save(run);
+        } catch (RuntimeException | LinkageError e) {
             log.warn("실행 전 클러스터 스냅샷 기록 실패(배치는 계속한다): run={}", run.getId(), e);
             run.markSnapshotFailed();
         }
@@ -265,7 +275,7 @@ public class ScheduleExecutionService {
             RunClusterSnapshot.Moving moving =
                     clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
             run.recordSnapshotAfter(moving.activeNodes(), moving.reclaimableWatts(), moving.avgTemperatureCelsius());
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             log.warn("실행 후 클러스터 스냅샷 기록 실패(배치는 계속한다): run={}", run.getId(), e);
             run.markSnapshotFailed();
         }

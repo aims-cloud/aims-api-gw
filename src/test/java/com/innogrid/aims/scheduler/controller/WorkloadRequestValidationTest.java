@@ -96,6 +96,38 @@ class WorkloadRequestValidationTest {
                 .andExpect(jsonPath("$.message").value(containsString("전력 상한")));
     }
 
+    @DisplayName("요구 대역폭이 0 이면 400")
+    @Test
+    void required_bandwidth_0_400() throws Exception {
+        create("{\"name\":\"w\",\"requiredCpu\":1,\"requiredMemoryMb\":512,\"requiredBandwidthMbps\":0}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("요구 대역폭(Mbps)")));
+    }
+
+    @DisplayName("요구 대역폭에 무한대를 주면 400 이다")
+    @Test
+    void required_bandwidth_infinite_400() throws Exception {
+        create("{\"name\":\"w\",\"requiredCpu\":1,\"requiredMemoryMb\":512,\"requiredBandwidthMbps\":1e400}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("요구 대역폭(Mbps)")));
+    }
+
+    @DisplayName("요구 대역폭은 선택이며 주면 그대로 저장되고 안 주면 null 이다")
+    @Test
+    void required_bandwidth_is_optional() throws Exception {
+        String given = create("{\"name\":\"w-bw\",\"requiredCpu\":1,\"requiredMemoryMb\":512,\"requiredBandwidthMbps\":1000}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requiredBandwidthMbps").value(1000.0))
+                .andReturn().getResponse().getContentAsString();
+        cleanup(given);
+
+        String omitted = create("{\"name\":\"w-nobw\",\"requiredCpu\":1,\"requiredMemoryMb\":512}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requiredBandwidthMbps").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        cleanup(omitted);
+    }
+
     @DisplayName("모르는 리소스 종류는 400 현행 동일")
     @Test
     void unknown_resource_type_400() throws Exception {

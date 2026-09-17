@@ -82,8 +82,15 @@ public final class SyntheticCluster {
     private final List<Link> links;
     /** 워크로드 데이터 MDC 순환 배정 목록 — 비어 있으면 dataMdcId 를 부여하지 않는다(등록된 판 대부분). */
     private final List<String> workloadDataMdcIds;
+    /** 워크로드 요구 대역폭 순환 배정 목록(Mbps) — 비어 있으면 부여하지 않는다. 0 은 "요구 없음"(null 로 부여)이다. */
+    private final List<Double> workloadBandwidthMbps;
     /** 노드별 위상(라디안) — 생성 시 한 번 계산한다. {@code phase()} 는 지표 5종 × 지점 × 노드마다 불리는 뜨거운 경로다. */
     private final Map<String, Double> phaseByNodeId;
+
+    /** 워크로드 요구 대역폭 순환 배정 목록. 판 파일에 {@code workloadBandwidthMbps} 절이 없으면 비어 있다. */
+    public List<Double> workloadBandwidthMbps() {
+        return workloadBandwidthMbps;
+    }
 
     SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
                      double powerExponent, List<Node> nodes) {
@@ -103,10 +110,17 @@ public final class SyntheticCluster {
     SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
                      double powerExponent, List<Node> nodes, List<Link> links, List<String> workloadDataMdcIds,
                      PhaseMode phaseMode, List<Long> seeds) {
+        this(name, job, periodMinutes, swing, seed, powerExponent, nodes, links, workloadDataMdcIds, phaseMode, seeds, List.of());
+    }
+
+    SyntheticCluster(String name, String job, int periodMinutes, double swing, long seed,
+                     double powerExponent, List<Node> nodes, List<Link> links, List<String> workloadDataMdcIds,
+                     PhaseMode phaseMode, List<Long> seeds, List<Double> workloadBandwidthMbps) {
         this.phaseMode = phaseMode;
         this.seeds = List.copyOf(seeds);
         this.links = List.copyOf(links);
         this.workloadDataMdcIds = List.copyOf(workloadDataMdcIds);
+        this.workloadBandwidthMbps = List.copyOf(workloadBandwidthMbps);
         this.name = name; this.job = job; this.periodMinutes = periodMinutes; this.swing = swing; this.seed = seed;
         this.powerExponent = powerExponent;
         this.nodes = List.copyOf(nodes);
@@ -121,7 +135,8 @@ public final class SyntheticCluster {
      */
     public SyntheticCluster withSeed(long newSeed) {
         // 사본의 seeds 는 자기 seed 하나 — "seed 는 seeds 의 첫 항목" 불변식을 사본에서도 지킨다. 원본의 seeds 목록은 하네스가 원본에서 읽는다
-        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds, phaseMode, List.of(newSeed));
+        return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds,
+                phaseMode, List.of(newSeed), workloadBandwidthMbps);
     }
 
     // ── 로딩 ──────────────────────────────────────────────────
@@ -155,7 +170,8 @@ public final class SyntheticCluster {
         Set<String> mdcIds = nodes.stream().map(Node::mdcId).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         List<Link> links = parseLinks(map.get("links"), mdcIds, location);
         List<String> dataMdcIds = parseWorkloadDataMdcIds(map.get("workloadDataMdcIds"), mdcIds, location);
-        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links, dataMdcIds, phaseMode, seeds);
+        List<Double> bandwidths = parseWorkloadBandwidthMbps(map.get("workloadBandwidthMbps"), location);
+        return new SyntheticCluster(name, job, period, swing, seed, powerExponent, nodes, links, dataMdcIds, phaseMode, seeds, bandwidths);
     }
 
     /**
@@ -208,6 +224,26 @@ public final class SyntheticCluster {
         return List.copyOf(ids);
     }
 
+    /**
+     * {@code workloadBandwidthMbps:} 절 — 표본 워크로드에 순환 배정할 요구 대역폭(Mbps) 목록. 절이 없으면 빈 목록(미부여).
+     *
+     * <p>항목 {@code 0} 은 <b>요구 없음</b>이라 그 워크로드에는 null 을 부여한다 — 한 판 안에서 "항이 꺼진 워크로드" 갈래를
+     * 함께 돌리기 위한 표기다. 음수는 거부한다. 데이터 MDC 배정과 달리 중복을 허용한다(같은 요구를 여러 워크로드가 가질 수 있다).</p>
+     */
+    static List<Double> parseWorkloadBandwidthMbps(Object raw, String location) {
+        if (raw == null) return List.of();
+        if (!(raw instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("workloadBandwidthMbps 는 비어 있지 않은 목록이어야 합니다: " + location);
+        List<Double> values = new ArrayList<>();
+        for (Object o : list) {
+            double v = num(o, null).doubleValue();
+            if (!(v >= 0) || !Double.isFinite(v)) {
+                throw new IllegalArgumentException("workloadBandwidthMbps 는 유한한 0 이상이어야 합니다(0 은 요구 없음): " + location + " = " + v);
+            }
+            values.add(v);
+        }
+        return List.copyOf(values);
+    }
+
     /** {@code nodes:} 절 — 판의 노드 축. 비어 있으면 판이 아니다. */
     @SuppressWarnings("unchecked")
     static List<Node> parseNodes(Object rawNodes, double swing, String location) {
@@ -249,7 +285,8 @@ public final class SyntheticCluster {
      * 두고 이 검사를 "노드 MDC ∪ 선언 MDC" 로 넓힌다 — 그때까지는 좁게 둔다.
      *
      * <p>쌍은 원장 규칙({@link MdcLink.Pair#of})으로 정렬해 담는다 — 파일에 {@code b,a} 로 적어도 {@code a,b} 와 같은 레코드다.
-     * {@code latencyMs} 는 원장과 같이 왕복 지연이고, {@code bandwidthMbps} 는 원장과 같이 저장만 하고 점수에는 쓰지 않는다.</p>
+     * {@code latencyMs} 는 원장과 같이 왕복 지연이고, {@code bandwidthMbps} 도 원장과 같이 요구 대역폭이 있는
+     * 워크로드의 링크 비용에 부족분으로 반영된다.</p>
      */
     @SuppressWarnings("unchecked")
     static List<Link> parseLinks(Object rawLinks, Set<String> nodeMdcIds, String location) {

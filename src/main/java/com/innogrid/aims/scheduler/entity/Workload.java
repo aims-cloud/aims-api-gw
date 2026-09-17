@@ -51,6 +51,15 @@ public class Workload {
     private Double maxPowerBudgetWatts;
     private Double maxTemperatureCelsius;
 
+    /**
+     * 데이터 MDC 와 주고받을 때 필요한 대역폭(Mbps). 모르면 null.
+     *
+     * <p>{@code dataMdcId} 가 있고 정책의 친화도 게이트가 켜진 배치에서만 읽힌다 — 링크 대역폭이
+     * 이 값에 못 미치면 그만큼 링크 점수를 깎는다. 제약이 아니라 점수라, 부족해도 배치는 된다.
+     * null 인 기존 행은 예전과 똑같이 계산된다.</p>
+     */
+    private Double requiredBandwidthMbps;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private WorkloadPriority priority = WorkloadPriority.NORMAL;
@@ -122,6 +131,7 @@ public class Workload {
     public String getPreferredMdcId() { return preferredMdcId; }
     public Double getMaxPowerBudgetWatts() { return maxPowerBudgetWatts; }
     public Double getMaxTemperatureCelsius() { return maxTemperatureCelsius; }
+    public Double getRequiredBandwidthMbps() { return requiredBandwidthMbps; }
     public WorkloadPriority getPriority() { return priority; }
     public String getAssignedMdcId() { return assignedMdcId; }
     public String getAssignedNodeId() { return assignedNodeId; }
@@ -144,6 +154,7 @@ public class Workload {
     public void setPreferredMdcId(String preferredMdcId) { this.preferredMdcId = preferredMdcId; }
     public void setMaxPowerBudgetWatts(Double maxPowerBudgetWatts) { this.maxPowerBudgetWatts = maxPowerBudgetWatts; }
     public void setMaxTemperatureCelsius(Double maxTemperatureCelsius) { this.maxTemperatureCelsius = maxTemperatureCelsius; }
+    public void setRequiredBandwidthMbps(Double requiredBandwidthMbps) { this.requiredBandwidthMbps = requiredBandwidthMbps; }
     public void setPriority(WorkloadPriority priority) { this.priority = priority; }
 
     public void assignTo(String mdcId, String nodeId, double score, String reason) {

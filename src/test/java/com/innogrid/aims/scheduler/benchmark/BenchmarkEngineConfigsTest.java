@@ -21,7 +21,12 @@ class BenchmarkEngineConfigsTest {
     void copy_preserves_every_getter_and_applies_only_the_tweak() throws Exception {
         SchedulerProperties base = new SchedulerProperties();
         base.getPower().setIdleRatio(0.41); base.getPower().setMarginalScaleWatts(777.0); base.getPower().setCapacityByNode(Map.of("n1", 640.0));
-        base.getThermal().setInertiaK(0.22); base.getNetwork().setLinkWeight(0.61);
+        base.getThermal().setInertiaK(0.22);
+        // 네 노브 전부를 기본값 밖으로 둔다 — 하나라도 기본값이면 사본이 그 줄을 빠뜨려도 반사 대조가 통과한다
+        base.getNetwork().setLinkWeight(0.61);
+        base.getNetwork().setLatencyScaleMs(123.0);
+        base.getNetwork().setDegradedPenalty(0.77);
+        base.getNetwork().setUnknownLinkScore(0.31);
 
         SchedulerProperties copy = BenchmarkEngineConfigs.copyOf(base);
         int checked = 0;

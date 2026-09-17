@@ -356,6 +356,33 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
+     * 판 실행 경로가 요구 대역폭을 실제로 배정하는지 — 배정 함수 단독 시험은 호출이 사라져도 통과한다.
+     *
+     * <p>링크 판 30% 두 셀의 게이트 열 격차 중앙값을 사전 등록 리터럴로 고정한다. 요구 배정이 빠지면
+     * a-c 경로(1000Mbps)의 부족분이 사라져 이 값이 움직인다.</p>
+     */
+    @DisplayName("링크 판 실행이 요구 대역폭을 배정해 게이트 열 격차가 사전 등록 리터럴과 같다")
+    @Test
+    void the_link_board_run_applies_the_required_bandwidth() {
+        var link = service.compare("link", "heavytail").boards().get(0);
+        Map<String, Double> gaps = new LinkedHashMap<>();
+        for (var cell : link.cells()) {
+            for (var s : cell.strategies()) {
+                if (!s.strategyId().equals("weighted-affinity")) continue;
+                for (var m : s.metrics()) {
+                    if (m.key().equals(BenchmarkRules.GAP_VS_PABFD) && m.median() != null) {
+                        gaps.put(cell.loadRatioPercent() + ":" + cell.powerControl(), m.median());
+                    }
+                }
+            }
+        }
+        assertEquals(24.7883, gaps.get("30:AVAILABLE"), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP,
+                "요구 대역폭 배정이 빠지면 부족분이 사라져 이 값이 움직인다");
+        assertEquals(7.8664, gaps.get("30:UNAVAILABLE"), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
+        assertEquals(26.7045, gaps.get("60:AVAILABLE"), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
+    }
+
+    /**
      * 민감도 3열은 실제로 다른 눈금으로 돈다 — 표기만 다르고 값이 같으면 열이 죽어 있는 것이다. 주 결과판에서 250W 눈금은
      * 실질 한계 전력 최댓값(316W) 아래라 포화가 발현해 1000W 열과 갈라져야 하고, 정격 분모(0) 열도 W 눈금 열과 갈라져야 한다.
      */
@@ -407,6 +434,29 @@ class PlacementBenchmarkServiceTest {
         List<Workload> plain = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
         PlacementBenchmarkService.assignDataMdc(plain, clusters.get(BenchmarkClusters.MAIN));
         assertTrue(plain.stream().allMatch(w -> w.getDataMdcId() == null), "링크 없는 판은 dataMdcId 를 부여하지 않는다");
+    }
+
+    /** 순환 배정 — 0 은 요구 없음이라 null 로 남고, 요구 대역폭 절이 없는 판은 아무것도 부여하지 않는다. */
+    @DisplayName("요구 대역폭은 표본 순서대로 순환 배정되고 0 은 요구 없음으로 남는다")
+    @Test
+    void required_bandwidth_is_assigned_round_robin_with_zero_meaning_none() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        List<Workload> sample = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignRequiredBandwidth(sample, clusters.get(BenchmarkClusters.LINK));
+        List<Double> values = clusters.get(BenchmarkClusters.LINK).workloadBandwidthMbps();
+        assertTrue(sample.size() > values.size(), "표본이 배정 목록보다 길어야 순환이 검증된다");
+        for (int i = 0; i < sample.size(); i++) {
+            double v = values.get(i % values.size());
+            Double got = sample.get(i).getRequiredBandwidthMbps();
+            if (v > 0) assertEquals(v, got, "표본 " + i);
+            else assertNull(got, "표본 " + i + " — 0 은 요구 없음이라 null 이어야 부족분 항이 꺼진다");
+        }
+        assertTrue(sample.stream().anyMatch(w -> w.getRequiredBandwidthMbps() == null), "요구 없음 갈래가 실제로 돌아야 한다");
+        assertTrue(sample.stream().anyMatch(w -> w.getRequiredBandwidthMbps() != null), "요구 있음 갈래도 실제로 돌아야 한다");
+
+        List<Workload> plain = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
+        PlacementBenchmarkService.assignRequiredBandwidth(plain, clusters.get(BenchmarkClusters.MAIN));
+        assertTrue(plain.stream().allMatch(w -> w.getRequiredBandwidthMbps() == null), "요구 대역폭 절이 없는 판은 부여하지 않는다");
     }
 
     /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */

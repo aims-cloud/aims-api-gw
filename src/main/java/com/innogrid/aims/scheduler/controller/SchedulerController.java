@@ -102,7 +102,8 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 생성",
                description = "name·requiredCpu(≥1)·requiredMemoryMb(≥1) 는 필수입니다. 값이 잘못되면 400 과 사유를 돌려줍니다. "
-                       + "resourceType·priority 는 대소문자를 가리지 않습니다.")
+                       + "resourceType·priority 는 대소문자를 가리지 않습니다. "
+                       + "requiredBandwidthMbps(0 초과)는 선택이며, 데이터 MDC 친화도가 켜진 배치에서 링크 대역폭이 모자란 만큼 링크 점수를 깎습니다.")
     @PostMapping("/workloads")
     public ApiResponse<WorkloadResponse> createWorkload(@RequestBody WorkloadRequest request) {
         return ApiResponse.ok(WorkloadResponse.from(workloadService.create(request)));

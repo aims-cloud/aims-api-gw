@@ -44,9 +44,10 @@ class LinkMatrixTest {
         assertSame(LinkMatrix.EMPTY, LinkMatrix.of(null));
         assertTrue(LinkMatrix.EMPTY.isEmpty());
 
-        LinkMatrix.Quality q = new LinkMatrix.Quality(5, null, MdcLink.LinkStatus.UP);
+        LinkMatrix.Quality q = new LinkMatrix.Quality(5, null, null, MdcLink.LinkStatus.UP);
         assertEquals(0.0, q.lossOrZero());
+        assertNull(q.bandwidthMbps(), "대역폭도 모르면 null — 부족분 항이 0 이 된다");
         assertFalse(q.isDown());
-        assertTrue(new LinkMatrix.Quality(5, 0.0, MdcLink.LinkStatus.DOWN).isDown());
+        assertTrue(new LinkMatrix.Quality(5, null, 0.0, MdcLink.LinkStatus.DOWN).isDown());
     }
 }

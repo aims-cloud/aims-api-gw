@@ -96,6 +96,20 @@ class NetworkModelLinkTest {
         assertEquals(0.714, model.linkScore(bw(20, null, MdcLink.LinkStatus.UP), 1000.0), EPS, "예전 점수 그대로");
     }
 
+    @DisplayName("유한하지 않은 대역폭은 부족분 항을 켜지 않는다 — NaN 총점은 반올림에서 0 으로 삼켜진다")
+    @Test
+    void non_finite_bandwidth_never_produces_nan() {
+        for (double bad : new double[] {Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN}) {
+            assertEquals(0.0, model.bandwidthCost(500.0, bad), EPS, "요구 " + bad);
+            assertEquals(0.0, model.bandwidthCost(bad, 500.0), EPS, "링크 " + bad);
+            double score = model.linkScore(bw(20, 500.0, MdcLink.LinkStatus.UP), bad);
+            assertTrue(Double.isFinite(score), "요구 " + bad + " 에서 점수가 유한하지 않다: " + score);
+            assertEquals(0.714, score, EPS, "요구 " + bad + " 는 요구를 주지 않은 것과 같아야 한다");
+        }
+        assertEquals(1.0, model.bandwidthCost(Double.MIN_VALUE, 1000.0), EPS, "아주 작은 링크는 상계에 붙되 유한하다");
+        assertEquals(1.0, model.bandwidthCost(1.0, Double.MAX_VALUE), EPS, "아주 큰 요구도 상계에서 멈춘다");
+    }
+
     @DisplayName("벌점은 상수라 설정 다이제스트에 실리지 않고 눈금은 지연 기준값과 같다")
     @Test
     void the_penalty_is_a_constant_on_the_latency_scale() {

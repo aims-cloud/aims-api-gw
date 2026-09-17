@@ -236,7 +236,9 @@ public final class SyntheticCluster {
         List<Double> values = new ArrayList<>();
         for (Object o : list) {
             double v = num(o, null).doubleValue();
-            if (v < 0) throw new IllegalArgumentException("workloadBandwidthMbps 는 0 이상이어야 합니다(0 은 요구 없음): " + location + " = " + v);
+            if (!(v >= 0) || !Double.isFinite(v)) {
+                throw new IllegalArgumentException("workloadBandwidthMbps 는 유한한 0 이상이어야 합니다(0 은 요구 없음): " + location + " = " + v);
+            }
             values.add(v);
         }
         return List.copyOf(values);

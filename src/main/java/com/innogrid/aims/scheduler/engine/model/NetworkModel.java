@@ -56,8 +56,13 @@ public class NetworkModel {
      *
      * <p><b>설정 노브가 아니라 상수다</b>({@link #SAME_MDC_LINK_SCORE} 와 같은 자리). 노브로 두면 설정
      * 다이제스트가 움직여 판정 기준선을 다시 떠야 하는데, 이 항은 워크로드가 요구 대역폭을 준 배치에서만
-     * 켜지므로 되돌림 레버는 워크로드 쪽(요구를 주지 않음)에 이미 있다. 눈금을 바꿀 일이 생기면 그때
-     * 노브로 올리고 같은 PR 에서 기준선을 다시 뜬다.</p>
+     * 켜지기 때문이다. 되돌림은 <b>새로 만드는 워크로드에 요구를 주지 않는 것</b>이고, 이미 요구를 받은
+     * 행은 워크로드 수정 API 가 없어 값을 지우려면 원장을 직접 고쳐야 한다 — 전역으로 끄는 길은 정책의
+     * 친화도를 내리는 것뿐인데 그러면 지연·열화 점수와 단절 제외까지 함께 꺼진다.</p>
+     *
+     * <p><b>이 상수는 설정 다이제스트에 실리지 않는다.</b> 값을 바꾸면 배치 식이 달라지는데 응답의
+     * {@code configDigest} 는 그대로라, 기준선 B 와 새 실행 N 이 "같은 설정"으로 보인다. 그래서 이 값을
+     * 바꾸는 변경은 <b>판정 기준선 재취득 사유</b>이고, 그때 노브로 올려 정규 문자열에 편입한다.</p>
      */
     public static final double BANDWIDTH_PENALTY = 1.0;
 
@@ -83,7 +88,7 @@ public class NetworkModel {
         return 1.0 / (1.0 + loadMbps / REFERENCE_MBPS);
     }
 
-    /** 요구 대역폭 없이 보는 링크 비용 — 부족분 항이 0 이라 이 항이 생기기 전과 같다. */
+    /** 요구 대역폭 없이 보는 링크 비용 — 부족분 항이 0 이라 이 항이 생기기 전과 같다. 엔진은 이 자리를 쓰지 않는다. */
     public double linkCost(LinkMatrix.Quality q) {
         return linkCost(q, null);
     }
@@ -104,7 +109,12 @@ public class NetworkModel {
     /**
      * 대역폭 부족분 비용. 요구와 링크 대역폭이 모두 양수일 때만 계산하고, 모자란 비율을 [0, 1] 로 잘라 벌점을 곱한다.
      *
-     * <p>한쪽이라도 없거나(null) 양수가 아니면 0 이다 — 모르는 값으로 후보를 깎지 않는다. 링크가 요구를
+     * <p>한쪽이라도 없거나(null) <b>유한한 양수가 아니면</b> 0 이다 — 모르는 값으로 후보를 깎지 않는다.
+     * 유한성을 따로 막는 이유는 {@code (∞ − link) / ∞} 가 NaN 이고, NaN 총점은 반올림({@code Math.round})에서
+     * 0.0 으로 삼켜져 <b>오류가 아니라 최하위 점수</b>로 보이기 때문이다 — 미등록 점수 설정이 같은 이유로
+     * 유한성을 막는다({@link #unknownLinkScore()}).</p>
+     *
+     * <p>모르는 값으로 후보를 깎지 않는다. 링크가 요구를
      * 충족하면 잉여는 보너스가 되지 않는다(하한 0). 위쪽은 자를 필요가 없다 — 두 값이 양수이므로
      * {@code (required − link) / required} 는 1 <b>미만</b>이고, 링크가 0 에 가까울수록 1 에 붙는다.
      * 그래서 가산은 {@link #BANDWIDTH_PENALTY} 를 넘지 않는다.</p>
@@ -114,11 +124,12 @@ public class NetworkModel {
         double link = linkBandwidthMbps;
         double required = requiredBandwidthMbps;
         if (!(link > 0) || !(required > 0)) return 0.0;
+        if (!Double.isFinite(link) || !Double.isFinite(required)) return 0.0;
         double shortfall = Math.max(0.0, (required - link) / required);
         return shortfall * BANDWIDTH_PENALTY;
     }
 
-    /** 요구 대역폭 없이 보는 링크 점수 — 이 항이 생기기 전과 같다. */
+    /** 요구 대역폭 없이 보는 링크 점수 — 이 항이 생기기 전과 같다. 엔진은 이 자리를 쓰지 않는다. */
     public double linkScore(LinkMatrix.Quality q) {
         return linkScore(q, null);
     }

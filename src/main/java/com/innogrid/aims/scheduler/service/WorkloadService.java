@@ -140,8 +140,14 @@ public class WorkloadService {
         return value;
     }
 
+    /**
+     * 유한한 양수만 받는다 — 무한대·NaN 을 통과시키면 점수 식에서 NaN 이 나고, NaN 총점은 반올림에서
+     * 0.0 으로 삼켜져 오류가 아니라 최하위 점수로 보인다.
+     */
     private static double requirePositive(Double value, String label) {
-        if (value <= 0) throw badRequest(String.format("%s은(는) 0 보다 커야 합니다: %s", label, value));
+        if (!(value > 0) || !Double.isFinite(value)) {
+            throw badRequest(String.format("%s은(는) 유한한 0 보다 큰 수여야 합니다: %s", label, value));
+        }
         return value;
     }
 

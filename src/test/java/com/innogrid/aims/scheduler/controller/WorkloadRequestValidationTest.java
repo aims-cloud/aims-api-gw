@@ -104,6 +104,14 @@ class WorkloadRequestValidationTest {
                 .andExpect(jsonPath("$.message").value(containsString("요구 대역폭(Mbps)")));
     }
 
+    @DisplayName("요구 대역폭에 무한대를 주면 400 이다")
+    @Test
+    void required_bandwidth_infinite_400() throws Exception {
+        create("{\"name\":\"w\",\"requiredCpu\":1,\"requiredMemoryMb\":512,\"requiredBandwidthMbps\":1e400}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("요구 대역폭(Mbps)")));
+    }
+
     @DisplayName("요구 대역폭은 선택이며 주면 그대로 저장되고 안 주면 null 이다")
     @Test
     void required_bandwidth_is_optional() throws Exception {

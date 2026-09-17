@@ -62,6 +62,124 @@ public class ScheduleRun {
     @Column(length = 100)
     private String triggeredBy;
 
+    // ── 클러스터 스냅샷 ─────────────────────────────────────────
+    //
+    // 전부 래퍼 타입이고 nullable 이다. 원시 타입으로 두면 "재지 않았다" 와 "0 을 쟀다" 가 구분되지 않고,
+    // 행이 이미 있는 표에 NOT NULL 컬럼을 더하려다 스키마 갱신이 실패한다.
+    //
+    // 컬럼 이름을 명시하는 이유는 카멜→스네이크 변환이 마지막 글자를 보지 않아 끝이 대문자인 이름이
+    // 뭉개지기 때문이다(2026-09-02 배포에서 mdcA → mdca 로 실측). 여기서는 앞질러 막는다.
+
+    /** 스냅샷 기록 상태. 이 PR 이전 행은 null 이다. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "snapshot_status", length = 20)
+    private SnapshotStatus snapshotStatus;
+
+    @Column(name = "snapshot_node_count")
+    private Integer snapshotNodeCount;
+
+    /** 메트릭을 못 얻어 후보에서 빠진 노드 수 — 제약으로 빠진 수가 아니다. */
+    @Column(name = "snapshot_excluded_count")
+    private Integer snapshotExcludedCount;
+
+    /** 전력을 실측한 노드 수. 0 이면 아래 전력 칸들이 전부 근거 없음이라는 뜻이다. */
+    @Column(name = "snapshot_measured_nodes")
+    private Integer snapshotMeasuredNodes;
+
+    /** 실측 전력 합(W). 배치를 얹어도 다시 재지 않으므로 전·후가 없다. */
+    @Column(name = "snapshot_measured_power_watts")
+    private Double snapshotMeasuredPowerWatts;
+
+    @Column(name = "snapshot_active_nodes_before")
+    private Integer snapshotActiveNodesBefore;
+
+    @Column(name = "snapshot_active_nodes_after")
+    private Integer snapshotActiveNodesAfter;
+
+    @Column(name = "snapshot_reclaimable_watts_before")
+    private Double snapshotReclaimableWattsBefore;
+
+    @Column(name = "snapshot_reclaimable_watts_after")
+    private Double snapshotReclaimableWattsAfter;
+
+    @Column(name = "snapshot_avg_temperature_before")
+    private Double snapshotAvgTemperatureBefore;
+
+    @Column(name = "snapshot_avg_temperature_after")
+    private Double snapshotAvgTemperatureAfter;
+
+    /**
+     * 클러스터 스냅샷이 어디까지 기록됐는가.
+     *
+     * <p>실행이 끝나는 길이 여럿이라 "전만 찍히고 끝난" 회차가 실제로 생긴다. 그 행을 성공으로 적으면
+     * 나중에 전·후 차를 0 으로 집계하게 되므로 상태를 따로 남긴다.</p>
+     */
+    public enum SnapshotStatus {
+        /** 전·후가 모두 찍혔다. */
+        OK,
+        /** 전만 찍히고 실행이 먼저 끝났다 — 후 칸은 비어 있다. */
+        BEFORE_ONLY,
+        /** 노드를 하나도 모아 오지 못해 잴 것이 없었다. */
+        SKIPPED,
+        /** 재는 도중 오류가 났다. 실행 자체는 이 값과 무관하게 끝난다. */
+        FAILED
+    }
+
+    /** 실행 전 스냅샷을 적는다. 후를 적기 전까지 상태는 "전만" 이다. */
+    public void recordSnapshotBefore(Integer nodeCount, Integer excludedCount, Integer measuredNodes,
+                                     Double measuredPowerWatts,
+                                     Integer activeNodes, Double reclaimableWatts, Double avgTemperature) {
+        this.snapshotNodeCount = nodeCount;
+        this.snapshotExcludedCount = excludedCount;
+        this.snapshotMeasuredNodes = measuredNodes;
+        this.snapshotMeasuredPowerWatts = measuredPowerWatts;
+        this.snapshotActiveNodesBefore = activeNodes;
+        this.snapshotReclaimableWattsBefore = reclaimableWatts;
+        this.snapshotAvgTemperatureBefore = avgTemperature;
+        this.snapshotStatus = SnapshotStatus.BEFORE_ONLY;
+    }
+
+    /** 실행 후 스냅샷을 적는다. 전이 없으면 후만 적지 않는다 — 짝이 없는 차는 뜻이 없다. */
+    public void recordSnapshotAfter(Integer activeNodes, Double reclaimableWatts, Double avgTemperature) {
+        if (snapshotStatus != SnapshotStatus.BEFORE_ONLY) return;
+        this.snapshotActiveNodesAfter = activeNodes;
+        this.snapshotReclaimableWattsAfter = reclaimableWatts;
+        this.snapshotAvgTemperatureAfter = avgTemperature;
+        this.snapshotStatus = SnapshotStatus.OK;
+    }
+
+    /** 잴 노드가 없어 건너뛴다. */
+    public void markSnapshotSkipped() {
+        this.snapshotStatus = SnapshotStatus.SKIPPED;
+    }
+
+    /** 재는 도중 오류가 났다. 이미 적은 칸은 비워 실행 이력이 반쪽 값을 들지 않게 한다. */
+    public void markSnapshotFailed() {
+        this.snapshotNodeCount = null;
+        this.snapshotExcludedCount = null;
+        this.snapshotMeasuredNodes = null;
+        this.snapshotMeasuredPowerWatts = null;
+        this.snapshotActiveNodesBefore = null;
+        this.snapshotActiveNodesAfter = null;
+        this.snapshotReclaimableWattsBefore = null;
+        this.snapshotReclaimableWattsAfter = null;
+        this.snapshotAvgTemperatureBefore = null;
+        this.snapshotAvgTemperatureAfter = null;
+        this.snapshotStatus = SnapshotStatus.FAILED;
+    }
+
+    public SnapshotStatus getSnapshotStatus() { return snapshotStatus; }
+    public Integer getSnapshotNodeCount() { return snapshotNodeCount; }
+    public Integer getSnapshotExcludedCount() { return snapshotExcludedCount; }
+    public Integer getSnapshotMeasuredNodes() { return snapshotMeasuredNodes; }
+    public Double getSnapshotMeasuredPowerWatts() { return snapshotMeasuredPowerWatts; }
+    public Integer getSnapshotActiveNodesBefore() { return snapshotActiveNodesBefore; }
+    public Integer getSnapshotActiveNodesAfter() { return snapshotActiveNodesAfter; }
+    public Double getSnapshotReclaimableWattsBefore() { return snapshotReclaimableWattsBefore; }
+    public Double getSnapshotReclaimableWattsAfter() { return snapshotReclaimableWattsAfter; }
+    public Double getSnapshotAvgTemperatureBefore() { return snapshotAvgTemperatureBefore; }
+    public Double getSnapshotAvgTemperatureAfter() { return snapshotAvgTemperatureAfter; }
+
     protected ScheduleRun() {}
 
     public ScheduleRun(Long scheduleId, String scheduleKey, TriggerType triggerType, String triggeredBy) {

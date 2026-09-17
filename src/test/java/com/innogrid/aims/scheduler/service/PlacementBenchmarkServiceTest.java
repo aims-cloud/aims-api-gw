@@ -356,6 +356,33 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
+     * 판 실행 경로가 요구 대역폭을 실제로 배정하는지 — 배정 함수 단독 시험은 호출이 사라져도 통과한다.
+     *
+     * <p>링크 판 30% 두 셀의 게이트 열 격차 중앙값을 사전 등록 리터럴로 고정한다. 요구 배정이 빠지면
+     * a-c 경로(1000Mbps)의 부족분이 사라져 이 값이 움직인다.</p>
+     */
+    @DisplayName("링크 판 실행이 요구 대역폭을 배정해 게이트 열 격차가 사전 등록 리터럴과 같다")
+    @Test
+    void the_link_board_run_applies_the_required_bandwidth() {
+        var link = service.compare("link", "heavytail").boards().get(0);
+        Map<String, Double> gaps = new LinkedHashMap<>();
+        for (var cell : link.cells()) {
+            for (var s : cell.strategies()) {
+                if (!s.strategyId().equals("weighted-affinity")) continue;
+                for (var m : s.metrics()) {
+                    if (m.key().equals(BenchmarkRules.GAP_VS_PABFD) && m.median() != null) {
+                        gaps.put(cell.loadRatioPercent() + ":" + cell.powerControl(), m.median());
+                    }
+                }
+            }
+        }
+        assertEquals(24.7883, gaps.get("30:AVAILABLE"), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP,
+                "요구 대역폭 배정이 빠지면 부족분이 사라져 이 값이 움직인다");
+        assertEquals(7.8664, gaps.get("30:UNAVAILABLE"), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
+        assertEquals(26.7045, gaps.get("60:AVAILABLE"), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
+    }
+
+    /**
      * 민감도 3열은 실제로 다른 눈금으로 돈다 — 표기만 다르고 값이 같으면 열이 죽어 있는 것이다. 주 결과판에서 250W 눈금은
      * 실질 한계 전력 최댓값(316W) 아래라 포화가 발현해 1000W 열과 갈라져야 하고, 정격 분모(0) 열도 W 눈금 열과 갈라져야 한다.
      */

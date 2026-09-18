@@ -14,11 +14,14 @@
 -- 이 행들은 실행 이력 정리(run-retention-days, 기본 90일)에 함께 지워진다. 배치 결정 이력과 달리
 -- 보존되지 않으므로, 더 긴 구간의 집계가 필요하면 지워지기 전에 따로 적재해야 한다.
 --
--- ddl-auto 에 따라 실행 필요 여부가 다르다:
---   * 기본 프로파일(application.yml)은 validate — 배포 전에 이 스크립트를 먼저 실행해야 한다.
---   * 배포 VM 은 환경파일(SPRING_JPA_HIBERNATE_DDL_AUTO=update)이라 Hibernate 가 자동 추가하지만,
---     스키마를 의도대로 고정하기 위해 스크립트로 남긴다.
---   psql -U aims -d aims -f 2026-09-17_schedule_run_snapshot.sql
+-- 이 스크립트는 ddl-auto 값과 무관하게 실행해야 한다.
+--   * 기본 프로파일(application.yml)은 validate — 배포 전에 먼저 실행한다.
+--   * ddl-auto=update 인 서버도 마찬가지다. 열은 Hibernate 가 더해 주지만 **상태 값 CHECK 는 다르다**.
+--     Hibernate 는 열거 열을 처음 만들 때 그 시점의 값 목록으로 CHECK 를 자동 생성하고, 그 뒤에는
+--     값이 늘어도 고치지 않는다. 그래서 이미 옛 목록으로 제약이 걸린 서버에서는 새 값을 쓰는 실행이
+--     통째로 실패한다(2026-09-18 개발 서버 실측 — 대상 0건 즉시 실행이 500).
+--     아래 DROP + ADD 가 그 제약을 바로잡는 유일한 수단이다.
+--   psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-09-17_schedule_run_snapshot.sql
 --
 -- 기존 행은 전부 NULL 로 남는다. 응답은 그 행의 스냅샷을 통째로 비워 내보내므로, 옛 실행이 "값 0" 으로
 -- 읽히지 않는다. 컬럼을 전부 nullable 로 두는 이유이기도 하다 — 행이 있는 표에 NOT NULL 을 더하면

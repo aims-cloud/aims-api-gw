@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.dispatch.PlacementDispatcher;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
@@ -20,6 +22,7 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
@@ -48,6 +51,15 @@ class RunSnapshotScenarioTest {
     @Autowired SchedulingHistoryRepository historyRepository;
 
     @MockitoBean NodeResourceCollector collector;
+    @MockitoBean PlacementDispatcher dispatcher;
+
+    /** 실행 계층은 기본적으로 받아들인다. 거부 시나리오만 이 대역을 덮어쓴다. */
+    @BeforeEach
+    void acceptByDefault() {
+        when(dispatcher.getMode()).thenReturn("record");
+        when(dispatcher.dispatch(any(PlacementDispatcher.Request.class)))
+                .thenReturn(PlacementDispatcher.Outcome.accepted("test-ref", "테스트 수용"));
+    }
 
     @AfterEach
     void clean() {
@@ -140,6 +152,26 @@ class RunSnapshotScenarioTest {
         assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus());
         assertEquals(ScheduleRun.SnapshotStatus.NO_NODES, run.getSnapshotStatus());
         assertNull(run.getSnapshotMeasuredPowerWatts());
+    }
+
+    @DisplayName("실행 계층이 배치를 되돌려도 후 값은 예약이 잡힌 채로 남는다")
+    @Test
+    void the_after_side_keeps_reservations_even_when_the_dispatch_layer_rejects() {
+        givenIdleNodes();
+        save("w1", 8);
+        // 실행 계층이 거부하면 워크로드는 되돌아가지만 맥락의 예약은 풀리지 않는다. 푸는 수단이 코드에
+        // 없어 이 브랜치 범위 밖이고, 알려진 한계라 값으로 붙잡아 둔다. 이 시험이 빨개지면 응답 설명과
+        // 계약 문서의 "예약은 엔진 선택 시점 기준" 문장도 함께 고쳐야 한다는 뜻이다.
+        when(dispatcher.dispatch(any(PlacementDispatcher.Request.class)))
+                .thenReturn(PlacementDispatcher.Outcome.rejected("실행 계층이 거부"));
+
+        ScheduleRun run = runNow("rejected", Workload.ResourceType.GPU);
+
+        assertEquals(0, run.getSuccessCount(), "거부되면 성공으로 세지 않는다");
+        assertEquals(ScheduleRun.SnapshotStatus.OK, run.getSnapshotStatus());
+        assertEquals(0, run.getSnapshotActiveNodesBefore());
+        assertEquals(1, run.getSnapshotActiveNodesAfter(),
+                "되돌려진 배치가 후 값에 남는다 — 알려진 한계이고 문서에 적혀 있다");
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

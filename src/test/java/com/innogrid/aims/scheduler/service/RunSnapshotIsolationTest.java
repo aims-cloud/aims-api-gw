@@ -162,6 +162,46 @@ class RunSnapshotIsolationTest {
                 "배치 도중의 이력에 전 스냅샷이 없다 — 중단된 회차와 기능 이전 행이 구분되지 않는다");
     }
 
+    @DisplayName("전을 못 적었으면 후만 적지 않는다")
+    @Test
+    void the_after_side_is_not_written_without_a_before_side() {
+        givenOneNodeAndOneWorkload("rsi-guard");
+        // 전이 터지고 후는 멀쩡한 경우 — DB 커넥션이 잠깐 끊겼다 돌아온 상황이 이렇다.
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
+                .thenThrow(new IllegalStateException("전 스냅샷 실패"));
+        when(clusterSnapshot.movingOf(any(PlacementContext.class), anyDouble()))
+                .thenReturn(new RunClusterSnapshot.Moving(1, 0.0, 44.0));
+
+        ScheduleRun run = runNow("rsi-guard");
+
+        assertEquals(ScheduleRun.SnapshotStatus.FAILED, run.getSnapshotStatus(),
+                "후만 적히면 상태가 OK 로 뒤집혀, 짝이 없는 값으로 전·후 차를 계산하게 된다");
+        assertNull(run.getSnapshotActiveNodesAfter(), "짝이 없는 후 값은 남기지 않는다");
+    }
+
+    @DisplayName("기록 실패는 열 열둘을 남김없이 비운다")
+    @Test
+    void a_failed_snapshot_clears_every_column() {
+        ScheduleRun run = new ScheduleRun(1L, "rsi-clear", ScheduleRun.TriggerType.MANUAL, "tester");
+        run.recordSnapshotBefore("0123456789ab", 3, 1, 2, 600.0, 1, 120.0, 40.0);
+        run.recordSnapshotAfter(2, 60.0, 44.0);
+
+        run.markSnapshotFailed();
+
+        assertEquals(ScheduleRun.SnapshotStatus.FAILED, run.getSnapshotStatus());
+        assertNull(run.getSnapshotKnobsDigest());
+        assertNull(run.getSnapshotNodeCount());
+        assertNull(run.getSnapshotExcludedCount());
+        assertNull(run.getSnapshotMeasuredNodes());
+        assertNull(run.getSnapshotMeasuredPowerWatts());
+        assertNull(run.getSnapshotActiveNodesBefore());
+        assertNull(run.getSnapshotActiveNodesAfter());
+        assertNull(run.getSnapshotReclaimableWattsBefore());
+        assertNull(run.getSnapshotReclaimableWattsAfter());
+        assertNull(run.getSnapshotAvgTemperatureBefore());
+        assertNull(run.getSnapshotAvgTemperatureAfter());
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     private void givenOneNodeAndOneWorkload(String key) {

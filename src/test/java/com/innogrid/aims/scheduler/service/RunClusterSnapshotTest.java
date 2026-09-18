@@ -139,6 +139,16 @@ class RunClusterSnapshotTest {
         assertNull(snapshot.movingOf(ctx(List.of(unmeasured())), ACTIVE_CPU).avgTemperatureCelsius());
     }
 
+    @DisplayName("전력과 온도를 소수 둘째 자리까지 적는다")
+    @Test
+    void values_are_rounded_to_two_decimals() {
+        // 실측 123.456W·36.789℃ — 반올림을 빼면 그대로 내려가 진단 응답의 두 자리 표기와 갈린다
+        NodeResource odd = new NodeResource("mdc-a", "n-odd", 8, 16384, 0, 1, 5, 15, 123.456, 500, 36.789, 0, 0);
+
+        assertEquals(123.46, snapshot.fixedOf(ctx(List.of(odd))).measuredPowerWatts());
+        assertEquals(36.79, snapshot.movingOf(ctx(List.of(odd)), ACTIVE_CPU).avgTemperatureCelsius());
+    }
+
     @DisplayName("노브 지문은 같은 설정에서 같고 문턱이 바뀌면 달라진다")
     @Test
     void the_knobs_digest_moves_with_the_settings_that_define_the_numbers() {

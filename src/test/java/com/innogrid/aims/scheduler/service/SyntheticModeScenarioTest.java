@@ -145,6 +145,24 @@ class SyntheticModeScenarioTest {
         assertTrue(energy.integratedFrom().isBefore(energy.integratedTo()));
     }
 
+    @DisplayName("과거 구간을 물으면 그 구간 안에서만 적분한다")
+    @Test
+    void a_past_window_is_integrated_inside_that_window() {
+        java.time.OffsetDateTime to = java.time.OffsetDateTime.now().minusHours(24);
+        java.time.OffsetDateTime from = to.minusHours(2);
+
+        PowerOptimizationTrendResponse.Energy past = optimization.trend(from, to, "5m").energy();
+
+        assertNotNull(past.consumedKwh());
+        assertNotNull(past.integratedFrom());
+        assertNotNull(past.integratedTo());
+        // 즉시 질의로 구간 평균을 받으면 언제나 현재 시각에서 평가되어, 어제를 물어도 오늘 값이 온다.
+        // 이미 받아 둔 구간 시계열을 적분하면 그 일이 생기지 않는다 — 잰 구간이 물은 구간 안에 있어야 한다.
+        assertFalse(past.integratedFrom().isBefore(from.minusMinutes(6)), "잰 구간이 물은 구간보다 앞선다");
+        assertFalse(past.integratedTo().isAfter(to.plusMinutes(6)), "잰 구간이 물은 구간을 넘어간다");
+        assertTrue(past.integratedHours() <= 2.01, "2시간을 물었는데 더 길게 쟀다: " + past.integratedHours());
+    }
+
     @DisplayName("구멍이 없는 판에서는 구간 에너지가 지점 적분과 맞아떨어진다")
     @Test
     void interval_energy_agrees_with_the_point_integral_when_nothing_is_missing() {

@@ -231,8 +231,8 @@ public class PowerOptimizationService {
      * 구간 전체의 에너지 요약.
      *
      * <p><b>지점 배열을 적분하지 않는다.</b> 그 배열은 전력을 못 읽은 노드를 0 으로 채워 만든 것이라, 적분하면
-     * 결손이 "0 W 를 썼다"가 되어 조용히 적게 나온다. 소비 에너지는 저장소의 구간 집계로 따로 받고 — 저장소는
-     * 있는 표본만 평균한다 — 회수 가능 에너지는 시각마다 가동 판정과 유휴 역산을 거쳐야 해서 여기서 적분한다.</p>
+     * 결손이 "0 W 를 썼다"가 되어 조용히 적게 나온다. 대신 <b>0 을 채우기 전의 원시 시계열</b>을 노드별로
+     * 적분한다 — 그 맵에는 애초에 결손 자리가 없고, 지점 배열과 달리 이미 받아 둔 값이라 질의도 늘지 않는다.</p>
      *
      * <p>에너지 계산이 터져도 추세는 그대로 낸다. 곁들이는 요약이지 추세의 일부가 아니다.</p>
      */
@@ -258,11 +258,11 @@ public class PowerOptimizationService {
             }
 
             IntervalEnergy.Result result = IntervalEnergy.integrate(reclaimable);
-            Double consumed = consumedKwh(start, end);
-            String reason = energyReason(result, consumed);
+            IntervalEnergy.Result consumedResult = IntervalEnergy.integrate(consumedSeries(power));
+            String reason = energyReason(result, consumedResult.kwh());
 
             return new PowerOptimizationTrendResponse.Energy(
-                    consumed, result.kwh(), result.estimatedKwh(),
+                    consumedResult.kwh(), result.kwh(), result.estimatedKwh(),
                     epochToTime(result.fromEpoch()), epochToTime(result.toEpoch()),
                     result.present() ? result.hours() : null,
                     result.present() ? result.nodes() : null,
@@ -276,32 +276,23 @@ public class PowerOptimizationService {
     }
 
     /**
-     * 구간 소비 에너지 — 저장소에 구간 평균을 묻고 시간을 곱한다.
+     * 소비 에너지에 쓸 표본 — <b>0 을 채우기 전의</b> 원시 전력 시계열 그대로다.
      *
-     * <p>사다리꼴로 손수 적분하지 않는 이유는 저장소가 <b>있는 표본만</b> 평균하기 때문이다. 결손을 0 으로 읽지
-     * 않고, 응답도 지점 배열이 아니라 한 줄이다. 대신 표본 간격이 고르지 않으면 산술평균이라 시간가중과 미세하게
-     * 갈린다 — 그 오차는 계약에 적어 둔다.</p>
+     * <p>지점 배열이 아니라 이 맵을 쓰는 것이 요점이다. 지점은 전력을 못 읽은 노드를 0 으로 채워 만들지만
+     * 이 맵에는 그 자리가 아예 없다 — 결손이 "0 W" 로 둔갑하지 않는다.</p>
+     *
+     * <p>저장소에 {@code avg_over_time} 을 묻는 방법도 있었으나 쓰지 않는다. 즉시 질의는 <b>언제나 현재
+     * 시각에서</b> 평가되어, 어제 구간을 물어도 오늘 구간의 평균이 돌아온다. 시각을 지정할 통로가 클라이언트에
+     * 없으므로, 이미 받아 둔 구간 시계열을 적분하는 편이 옳고 질의도 늘지 않는다.</p>
      */
-    private Double consumedKwh(OffsetDateTime start, OffsetDateTime end) {
-        long seconds = Duration.between(start, end).getSeconds();
-        if (seconds <= 0) return null;
-        List<Map<String, Object>> results = guard.call(
-                () -> metricsClient.queryResults(String.format(
-                        "avg_over_time(ipmi_dcmi_power_consumption_watts[%ds])", seconds)),
-                properties.getMetrics().getQueryTimeoutMs());
-        double watts = 0;
-        int measured = 0;
-        for (Map<String, Object> series : results) {
-            Object value = series.get("value");
-            if (!(value instanceof List<?> pair) || pair.size() < 2) continue;
-            try {
-                watts += Double.parseDouble(String.valueOf(pair.get(1)));
-                measured++;
-            } catch (NumberFormatException ignored) {
-                // 읽을 수 없는 표본은 없는 것으로 본다 — 0 으로 세면 실측 평균이 내려간다
-            }
-        }
-        return measured == 0 ? null : Math.round(watts * seconds / 3_600_000.0 * 1000.0) / 1000.0;
+    private static Map<String, Map<Long, IntervalEnergy.Sample>> consumedSeries(Map<String, Map<Long, Double>> power) {
+        Map<String, Map<Long, IntervalEnergy.Sample>> out = new LinkedHashMap<>();
+        power.forEach((instance, series) -> {
+            Map<Long, IntervalEnergy.Sample> samples = new LinkedHashMap<>();
+            series.forEach((ts, watts) -> samples.put(ts, new IntervalEnergy.Sample(watts, false)));
+            if (samples.size() >= 2) out.put(instance, samples);
+        });
+        return out;
     }
 
     /** 값이 비거나 좁아진 까닭. 정상이면 null. */

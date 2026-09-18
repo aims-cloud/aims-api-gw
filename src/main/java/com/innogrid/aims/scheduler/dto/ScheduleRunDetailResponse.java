@@ -40,6 +40,9 @@ public record ScheduleRunDetailResponse(
                     + "내려간 회차, NO_TARGET 은 배치할 워크로드가 없어 재기 전에 끝난 평범한 회차, "
                     + "NO_NODES 는 노드를 한 대도 모으지 못한 장애 회차, FAILED 는 재다 오류가 난 회차")
             ScheduleRun.SnapshotStatus status,
+            @Schema(description = "이 회차의 숫자를 정의한 설정 노브의 지문. 값이 다른 구간은 같은 열이라도 정의가 달라 "
+                    + "한 축으로 묶어 집계하면 안 된다", example = "3f2a91c0d4e7")
+            String knobsDigest,
             @Schema(description = "배치 후보에 오른 노드 수")
             Integer nodeCount,
             @Schema(description = "메트릭을 못 얻어 수집 단계에서 빠진 노드 수. 제약으로 걸러진 수가 아니다")
@@ -67,7 +70,8 @@ public record ScheduleRunDetailResponse(
         public static ClusterSnapshot from(ScheduleRun r) {
             if (r.getSnapshotStatus() == null) return null;
             return new ClusterSnapshot(
-                    r.getSnapshotStatus(), r.getSnapshotNodeCount(), r.getSnapshotExcludedCount(),
+                    r.getSnapshotStatus(), r.getSnapshotKnobsDigest(),
+                    r.getSnapshotNodeCount(), r.getSnapshotExcludedCount(),
                     r.getSnapshotMeasuredNodes(), r.getSnapshotMeasuredPowerWatts(),
                     r.getSnapshotActiveNodesBefore(), r.getSnapshotActiveNodesAfter(),
                     r.getSnapshotReclaimableWattsBefore(), r.getSnapshotReclaimableWattsAfter(),

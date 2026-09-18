@@ -1,7 +1,13 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+
 import org.springframework.stereotype.Component;
 
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.model.NodeResource;
@@ -27,10 +33,35 @@ public class RunClusterSnapshot {
 
     private final PowerModel powerModel;
     private final ThermalModel thermalModel;
+    private final SchedulerProperties properties;
 
-    public RunClusterSnapshot(PowerModel powerModel, ThermalModel thermalModel) {
+    public RunClusterSnapshot(PowerModel powerModel, ThermalModel thermalModel, SchedulerProperties properties) {
         this.powerModel = powerModel;
         this.thermalModel = thermalModel;
+        this.properties = properties;
+    }
+
+    /**
+     * 이 계산이 읽은 설정 노브의 지문(12자).
+     *
+     * <p>움직이는 축 셋은 전부 설정 노브가 정의한다 — 가동 판정 문턱, 유휴 비율, 유휴 역산 스위치,
+     * 열관성 계수. 이 값들은 정책이 아니라 설정 파일에서 오므로 정책 이름이 같아도 바뀔 수 있고, 바뀌면
+     * 그 뒤 회차의 숫자는 이전 회차와 <b>다른 정의</b>가 된다. 지문이 다른 구간을 한 축으로 더하면 안
+     * 된다는 것을 알리려고 남긴다. 비교 API 의 설정 다이제스트와는 별개다 — 그쪽은 판정 전용 상수까지
+     * 싣기 때문에 이 계산과 무관한 변경에도 값이 움직인다.</p>
+     */
+    public String knobsDigest() {
+        SchedulerProperties.Power power = properties.getPower();
+        String canonical = "activeCpuPercent=" + power.getActiveCpuPercent()
+                + ";idleRatio=" + power.getIdleRatio()
+                + ";idleFromMeasurement=" + power.isIdleFromMeasurement()
+                + ";inertiaK=" + properties.getThermal().getInertiaK();
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash).substring(0, 12);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 을 쓸 수 없다", e);   // 표준 JRE 에는 늘 있다
+        }
     }
 
     /**

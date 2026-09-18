@@ -30,8 +30,10 @@ class RunClusterSnapshotTest {
 
     private static final double ACTIVE_CPU = 5.0;
 
+    private static final SchedulerProperties PROPS = new SchedulerProperties();
+
     private final RunClusterSnapshot snapshot =
-            new RunClusterSnapshot(new PowerModel(new SchedulerProperties()), new ThermalModel(new SchedulerProperties()));
+            new RunClusterSnapshot(new PowerModel(PROPS), new ThermalModel(PROPS), PROPS);
 
     @DisplayName("계측 노드가 있는 판의 고정 축이 채워진다")
     @Test
@@ -135,6 +137,20 @@ class RunClusterSnapshotTest {
     @Test
     void unmeasured_temperature_yields_null() {
         assertNull(snapshot.movingOf(ctx(List.of(unmeasured())), ACTIVE_CPU).avgTemperatureCelsius());
+    }
+
+    @DisplayName("노브 지문은 같은 설정에서 같고 문턱이 바뀌면 달라진다")
+    @Test
+    void the_knobs_digest_moves_with_the_settings_that_define_the_numbers() {
+        assertEquals(snapshot.knobsDigest(), snapshot.knobsDigest(), "같은 설정이면 같은 지문이다");
+
+        SchedulerProperties changed = new SchedulerProperties();
+        changed.getPower().setActiveCpuPercent(10.0);
+        String moved = new RunClusterSnapshot(new PowerModel(changed), new ThermalModel(changed), changed).knobsDigest();
+
+        assertNotEquals(snapshot.knobsDigest(), moved,
+                "문턱이 바뀌면 가동 노드 수의 정의가 바뀐다 — 지문이 같으면 두 구간을 한 축으로 더하게 된다");
+        assertEquals(12, moved.length());
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

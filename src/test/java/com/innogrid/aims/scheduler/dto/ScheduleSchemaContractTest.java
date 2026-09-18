@@ -55,7 +55,7 @@ class ScheduleSchemaContractTest {
                 seen++;
             }
         }
-        assertEquals(84, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
+        assertEquals(85, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
     }
 
     @DisplayName("아홉 record 전부 클래스 레벨 설명이 있다")

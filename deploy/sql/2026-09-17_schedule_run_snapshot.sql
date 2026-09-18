@@ -18,6 +18,9 @@
 -- ddl-auto=update 가 실패한다.
 
 ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_status                   VARCHAR(20);
+-- 움직이는 축 셋을 정의한 설정 노브(가동 문턱·유휴 비율·유휴 역산 스위치·열관성 계수)의 지문.
+-- 이 값이 다른 구간은 같은 열이라도 숫자의 정의가 달라 한 축으로 묶어 집계하면 안 된다.
+ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_knobs_digest             VARCHAR(12);
 ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_node_count               INTEGER;
 ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_excluded_count           INTEGER;
 ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_measured_nodes           INTEGER;

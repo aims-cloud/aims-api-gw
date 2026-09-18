@@ -109,6 +109,16 @@ public class ScheduleRun {
     private Double snapshotAvgTemperatureAfter;
 
     /**
+     * 이 회차의 숫자를 정의한 설정 노브의 지문.
+     *
+     * <p>가동 판정 문턱·유휴 비율·유휴 역산 스위치·열관성 계수는 정책이 아니라 설정에서 온다. 값이 바뀌면
+     * 그 뒤 회차는 같은 열에 <b>다른 정의</b>의 숫자를 적게 되므로, 지문이 다른 구간을 한 축으로 묶어
+     * 집계하면 안 된다는 것을 이 칸으로 알린다.</p>
+     */
+    @Column(name = "snapshot_knobs_digest", length = 12)
+    private String snapshotKnobsDigest;
+
+    /**
      * 클러스터 스냅샷이 어디까지 기록됐는가.
      *
      * <p>빈 칸의 <b>까닭</b>을 남기는 값이다. 재지 못한 회차를 한 값으로 뭉뚱그리면 평범한 회차와 장애
@@ -133,9 +143,11 @@ public class ScheduleRun {
     }
 
     /** 실행 전 스냅샷을 적는다. 후를 적기 전까지 상태는 "전만" 이다. */
-    public void recordSnapshotBefore(Integer nodeCount, Integer excludedCount, Integer measuredNodes,
+    public void recordSnapshotBefore(String knobsDigest,
+                                     Integer nodeCount, Integer excludedCount, Integer measuredNodes,
                                      Double measuredPowerWatts,
                                      Integer activeNodes, Double reclaimableWatts, Double avgTemperature) {
+        this.snapshotKnobsDigest = knobsDigest;
         this.snapshotNodeCount = nodeCount;
         this.snapshotExcludedCount = excludedCount;
         this.snapshotMeasuredNodes = measuredNodes;
@@ -167,6 +179,7 @@ public class ScheduleRun {
 
     /** 재는 도중 오류가 났다. 이미 적은 칸은 비워 실행 이력이 반쪽 값을 들지 않게 한다. */
     public void markSnapshotFailed() {
+        this.snapshotKnobsDigest = null;
         this.snapshotNodeCount = null;
         this.snapshotExcludedCount = null;
         this.snapshotMeasuredNodes = null;
@@ -181,6 +194,7 @@ public class ScheduleRun {
     }
 
     public SnapshotStatus getSnapshotStatus() { return snapshotStatus; }
+    public String getSnapshotKnobsDigest() { return snapshotKnobsDigest; }
     public Integer getSnapshotNodeCount() { return snapshotNodeCount; }
     public Integer getSnapshotExcludedCount() { return snapshotExcludedCount; }
     public Integer getSnapshotMeasuredNodes() { return snapshotMeasuredNodes; }

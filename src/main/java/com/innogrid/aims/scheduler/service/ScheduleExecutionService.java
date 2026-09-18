@@ -255,7 +255,8 @@ public class ScheduleExecutionService {
             RunClusterSnapshot.Fixed fixed = clusterSnapshot.fixedOf(context);
             RunClusterSnapshot.Moving moving =
                     clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
-            run.recordSnapshotBefore(fixed.nodeCount(), fixed.excludedCount(), fixed.measuredNodes(),
+            run.recordSnapshotBefore(clusterSnapshot.knobsDigest(),
+                    fixed.nodeCount(), fixed.excludedCount(), fixed.measuredNodes(),
                     fixed.measuredPowerWatts(),
                     moving.activeNodes(), moving.reclaimableWatts(), moving.avgTemperatureCelsius());
             runRepository.save(run);

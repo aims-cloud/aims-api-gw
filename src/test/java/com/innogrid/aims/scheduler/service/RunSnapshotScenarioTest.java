@@ -101,6 +101,7 @@ class RunSnapshotScenarioTest {
         assertNotNull(snapshot, "상세에 스냅샷이 실리지 않으면 화면이 읽을 길이 없다");
         assertEquals(ScheduleRun.SnapshotStatus.OK, snapshot.status());
         assertEquals(run.getSnapshotNodeCount(), snapshot.nodeCount());
+        assertEquals(run.getSnapshotKnobsDigest(), snapshot.knobsDigest());
         assertEquals(run.getSnapshotActiveNodesAfter(), snapshot.activeNodesAfter());
         assertEquals(run.getSnapshotMeasuredPowerWatts(), snapshot.measuredPowerWatts());
     }

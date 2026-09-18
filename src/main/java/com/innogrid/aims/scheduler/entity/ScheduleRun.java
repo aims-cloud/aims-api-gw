@@ -111,16 +111,23 @@ public class ScheduleRun {
     /**
      * 클러스터 스냅샷이 어디까지 기록됐는가.
      *
-     * <p>실행이 끝나는 길이 여럿이라 "전만 찍히고 끝난" 회차가 실제로 생긴다. 그 행을 성공으로 적으면
-     * 나중에 전·후 차를 0 으로 집계하게 되므로 상태를 따로 남긴다.</p>
+     * <p>빈 칸의 <b>까닭</b>을 남기는 값이다. 재지 못한 회차를 한 값으로 뭉뚱그리면 평범한 회차와 장애
+     * 회차가 같은 표시를 달아, 어느 쪽이 쌓이고 있는지 이 표만으로 알 수 없게 된다.</p>
      */
     public enum SnapshotStatus {
         /** 전·후가 모두 찍혔다. */
         OK,
-        /** 전만 찍히고 실행이 먼저 끝났다 — 후 칸은 비어 있다. */
+        /**
+         * 전만 찍혔다 — 후 칸은 비어 있다.
+         *
+         * <p>전을 적어 저장한 뒤 후를 적기 전에 프로세스가 내려간 회차다. 배포가 곧 재시작이라 실제로
+         * 생긴다. 배치가 예외로 실패한 회차는 여기 들지 않는다 — 그쪽은 후까지 적고 {@link #OK} 로 끝난다.</p>
+         */
         BEFORE_ONLY,
-        /** 노드를 하나도 모아 오지 못해 잴 것이 없었다. */
-        SKIPPED,
+        /** 배치할 워크로드가 없어 재기 전에 끝났다. 클러스터는 멀쩡했고 잴 수도 있었다 — 평범한 회차다. */
+        NO_TARGET,
+        /** 노드를 한 대도 모아 오지 못했다. 메트릭 저장소가 아프거나 노드가 전부 내려간 상태다 — 장애다. */
+        NO_NODES,
         /** 재는 도중 오류가 났다. 실행 자체는 이 값과 무관하게 끝난다. */
         FAILED
     }
@@ -148,9 +155,14 @@ public class ScheduleRun {
         this.snapshotStatus = SnapshotStatus.OK;
     }
 
-    /** 잴 노드가 없어 건너뛴다. */
-    public void markSnapshotSkipped() {
-        this.snapshotStatus = SnapshotStatus.SKIPPED;
+    /** 배치할 워크로드가 없어 재기 전에 끝났다. */
+    public void markSnapshotNoTarget() {
+        this.snapshotStatus = SnapshotStatus.NO_TARGET;
+    }
+
+    /** 노드를 한 대도 모아 오지 못했다. */
+    public void markSnapshotNoNodes() {
+        this.snapshotStatus = SnapshotStatus.NO_NODES;
     }
 
     /** 재는 도중 오류가 났다. 이미 적은 칸은 비워 실행 이력이 반쪽 값을 들지 않게 한다. */

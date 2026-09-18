@@ -164,7 +164,7 @@ public class ScheduleExecutionService {
                 }
                 run = startRun(schedule, triggerType, triggeredBy, engineId, policy);
                 run.recordCounts(0, 0, 0, false);
-                run.markSnapshotSkipped();   // 노드를 모으기 전에 끝난다 — 잴 판이 없다
+                run.markSnapshotNoTarget();   // 노드를 모으기 전에 끝난다 — 평범한 회차다
                 return finishRun(schedule, run, outcome.status(), startedAt, message);
             }
 
@@ -174,7 +174,7 @@ public class ScheduleExecutionService {
                     .withPowerBudget(schedule.getMaxPowerBudgetWatts());
             if (context.isEmpty()) {
                 run.recordCounts(targets.size(), 0, 0, truncated);
-                run.markSnapshotSkipped();
+                run.markSnapshotNoNodes();
                 return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt,
                         SchedulingService.noActiveNodesReason(context));
             }

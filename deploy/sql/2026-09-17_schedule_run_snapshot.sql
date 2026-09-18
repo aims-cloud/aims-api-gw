@@ -29,7 +29,9 @@ ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_reclaimable_watts_af
 ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_avg_temperature_before   DOUBLE PRECISION;
 ALTER TABLE schedule_runs ADD COLUMN IF NOT EXISTS snapshot_avg_temperature_after    DOUBLE PRECISION;
 
--- 상태 값은 네 가지다. ddl-auto 는 CHECK 를 만들지 않으므로 스크립트에서 건다.
+-- 상태 값은 다섯 가지다. ddl-auto 는 CHECK 를 만들지 않으므로 스크립트에서 건다.
+-- NO_TARGET(배치할 것이 없어 평범하게 끝남)과 NO_NODES(노드를 한 대도 못 모은 장애)를 가른다 —
+-- 한 값으로 뭉치면 어느 쪽이 쌓이고 있는지 이 표만으로 알 수 없다.
 ALTER TABLE schedule_runs DROP CONSTRAINT IF EXISTS schedule_runs_snapshot_status_check;
 ALTER TABLE schedule_runs ADD CONSTRAINT schedule_runs_snapshot_status_check
-    CHECK (snapshot_status IS NULL OR snapshot_status IN ('OK', 'BEFORE_ONLY', 'SKIPPED', 'FAILED'));
+    CHECK (snapshot_status IS NULL OR snapshot_status IN ('OK', 'BEFORE_ONLY', 'NO_TARGET', 'NO_NODES', 'FAILED'));

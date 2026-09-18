@@ -36,8 +36,9 @@ public record ScheduleRunDetailResponse(
      */
     @Schema(description = "실행 전후 클러스터 상태. 배치를 얹어도 변하지 않는 축은 한 번만, 예약에 반응하는 축은 전·후로 싣는다")
     public record ClusterSnapshot(
-            @Schema(description = "기록 상태. OK 는 전·후 모두, BEFORE_ONLY 는 전만 찍히고 실행이 먼저 끝난 회차, "
-                    + "SKIPPED 는 잴 판이 없었던 회차, FAILED 는 재다 오류가 난 회차")
+            @Schema(description = "기록 상태. OK 는 전·후 모두, BEFORE_ONLY 는 전을 적은 뒤 후를 적기 전에 프로세스가 "
+                    + "내려간 회차, NO_TARGET 은 배치할 워크로드가 없어 재기 전에 끝난 평범한 회차, "
+                    + "NO_NODES 는 노드를 한 대도 모으지 못한 장애 회차, FAILED 는 재다 오류가 난 회차")
             ScheduleRun.SnapshotStatus status,
             @Schema(description = "배치 후보에 오른 노드 수")
             Integer nodeCount,

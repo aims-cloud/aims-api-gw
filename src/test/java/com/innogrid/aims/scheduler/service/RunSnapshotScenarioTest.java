@@ -115,28 +115,29 @@ class RunSnapshotScenarioTest {
                 "옛 실행까지 0 으로 채워 내리면 없던 회수 가능 전력이 생긴다");
     }
 
-    @DisplayName("대상이 없어 끝난 실행은 잴 판이 없었다고 남는다")
+    @DisplayName("대상이 없어 끝난 실행은 평범한 회차로 갈려 남는다")
     @Test
-    void a_run_with_no_target_records_a_skipped_snapshot() {
+    void a_run_with_no_target_is_marked_as_an_ordinary_run() {
         givenIdleNodes();
 
         ScheduleRun run = runNow("no-target", Workload.ResourceType.NPU);
 
         assertEquals(0, run.getTargetCount());
-        assertEquals(ScheduleRun.SnapshotStatus.SKIPPED, run.getSnapshotStatus());
+        assertEquals(ScheduleRun.SnapshotStatus.NO_TARGET, run.getSnapshotStatus(),
+                "장애로 못 잰 회차와 같은 값을 달면 어느 쪽이 쌓이는지 알 수 없다");
         assertNull(run.getSnapshotNodeCount(), "재지 않은 칸은 비어 있다");
     }
 
-    @DisplayName("활성 노드가 하나도 없어 실패한 실행도 잴 판이 없었다고 남는다")
+    @DisplayName("노드를 한 대도 못 모은 실행은 장애 회차로 갈려 남는다")
     @Test
-    void a_run_without_any_node_records_a_skipped_snapshot() {
+    void a_run_without_any_node_is_marked_as_a_failure_to_collect() {
         when(collector.collect()).thenReturn(new NodeResourceCollector.Snapshot(List.of(), List.of()));
         save("w1", 8);
 
         ScheduleRun run = runNow("no-node", Workload.ResourceType.GPU);
 
         assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus());
-        assertEquals(ScheduleRun.SnapshotStatus.SKIPPED, run.getSnapshotStatus());
+        assertEquals(ScheduleRun.SnapshotStatus.NO_NODES, run.getSnapshotStatus());
         assertNull(run.getSnapshotMeasuredPowerWatts());
     }
 

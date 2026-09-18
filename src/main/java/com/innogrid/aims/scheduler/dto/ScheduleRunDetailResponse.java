@@ -48,7 +48,7 @@ public record ScheduleRunDetailResponse(
             @Schema(description = "메트릭을 못 얻어 수집 단계에서 빠진 노드 수. 제약으로 걸러진 수가 아니다")
             Integer excludedCount,
             @Schema(description = "전력을 실측한 노드 수. 0 이면 아래 전력 값들이 근거 없음이라는 뜻이다")
-            Integer measuredNodes,
+            Integer powerMeasuredNodes,
             @Schema(description = "실측 전력 합(W). 실측 노드가 없으면 null")
             Double measuredPowerWatts,
             @Schema(description = "실행 전 가동 중이던 노드 수(실효 CPU 기준)")

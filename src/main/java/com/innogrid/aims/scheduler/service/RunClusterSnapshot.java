@@ -57,11 +57,17 @@ public class RunClusterSnapshot {
     /** 실행 1회에 한 번 재는 축. 가동 문턱을 받지 않는다 — 이 네 값은 문턱과 무관하다. */
     public Fixed fixedOf(PlacementContext ctx) {
         int measured = measuredNodes(ctx);
+        // 합계도 계측 술어로 거른다. 후보 전체를 더하면 정격을 모르는 노드의 전력이 분자에만 들어가,
+        // 옆 칸의 계측 노드 수로 나눈 대당 전력이 실제와 어긋난다.
+        double measuredWatts = ctx.nodes().stream()
+                .filter(RunClusterSnapshot::hasPower)
+                .mapToDouble(NodeResource::getPowerWatts)
+                .sum();
         return new Fixed(
                 ctx.nodes().size(),
                 ctx.excludedNodes().size(),
                 measured,
-                measured == 0 ? null : round(ctx.totalPowerWatts()));
+                measured == 0 ? null : round(measuredWatts));
     }
 
     /** 전·후로 재는 축. 같은 맥락을 실행 전후에 두 번 넘긴다. */

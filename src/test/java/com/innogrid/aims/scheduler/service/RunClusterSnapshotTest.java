@@ -59,13 +59,19 @@ class RunClusterSnapshotTest {
         assertNull(snapshot.movingOf(ctx, ACTIVE_CPU).reclaimableWatts());
     }
 
-    @DisplayName("정격을 모르는 노드는 계측으로 세지 않는다")
+    @DisplayName("정격을 모르는 노드는 계측 수에도 전력 합에도 들지 않는다")
     @Test
     void a_node_without_capacity_is_not_measured() {
         // 전력은 있는데 정격이 0 — 유휴도 회수 가능 전력도 대체값이 되어 실측이라 부를 수 없다
         NodeResource noCapacity = new NodeResource("mdc-a", "n-nocap", 8, 16384, 0, 10, 10, 15, 300, 0, 40, 0, 0);
 
         assertEquals(0, snapshot.fixedOf(ctx(List.of(noCapacity))).measuredNodes());
+
+        // 계측 노드 1대와 섞으면 합계가 한 대만 더하는지 두 대를 더하는지 갈린다.
+        RunClusterSnapshot.Fixed mixed = snapshot.fixedOf(ctx(List.of(noCapacity, busy())));
+        assertEquals(1, mixed.measuredNodes());
+        assertEquals(200.0, mixed.measuredPowerWatts(),
+                "정격을 모르는 노드의 전력이 합계에만 섞이면 옆 칸으로 나눈 대당 전력이 실제와 어긋난다");
     }
 
     @DisplayName("수집에서 빠진 노드 수가 따로 잡힌다")

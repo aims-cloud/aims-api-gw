@@ -108,6 +108,38 @@ class SyntheticMetricsGatewayTest {
         assertEquals(300, SyntheticMetricsGateway.parseStep(null));
     }
 
+    @DisplayName("구간 집계는 감싼 함수를 해석해 창 안의 표본으로 답한다")
+    @Test
+    void range_aggregates_are_interpreted() {
+        String selector = "ipmi_dcmi_power_consumption_watts{job=\"mdc-nodes\",instance=\"seoul-01:9100\"}";
+
+        double instant = val(gw.queryResults(selector).get(0));
+        double avg = val(gw.queryResults("avg_over_time(" + selector + "[24h])").get(0));
+        double min = val(gw.queryResults("min_over_time(" + selector + "[24h])").get(0));
+        double max = val(gw.queryResults("max_over_time(" + selector + "[24h])").get(0));
+        double count = val(gw.queryResults("count_over_time(" + selector + "[24h])").get(0));
+
+        // 감싼 함수를 무시하면 넷이 전부 순간값과 같아진다 — 시험은 초록불인데 값이 틀리는 자리다.
+        assertTrue(min < max, "창 안에서 전력이 움직여야 구간 집계에 뜻이 있다");
+        assertTrue(min <= avg && avg <= max);
+        assertEquals(24 * 60 + 1, count, "24시간을 1분 눈금으로 뜨면 표본은 1441개다");
+        assertNotEquals(instant, avg, "순간값과 구간 평균이 같으면 창을 걸지 않은 것이다");
+    }
+
+    @DisplayName("구간 집계도 메트릭 없는 노드는 빈 결과다")
+    @Test
+    void range_aggregates_keep_the_missing_metric_rule() {
+        // IPMI 없는 노드는 전력 시리즈가 통째로 없다. 집계라고 0 으로 채우지 않는다.
+        String missing = "avg_over_time(ipmi_dcmi_power_consumption_watts{job=\"mdc-nodes\",instance=\"daejeon-02:9100\"}[24h])";
+
+        assertTrue(gw.queryResults(missing).isEmpty(), "0 으로 채우면 미계측이 실측으로 둔갑한다");
+
+        // 클러스터 전체에 걸면 IPMI 있는 노드만 답한다.
+        long answered = gw.queryResults("avg_over_time(ipmi_dcmi_power_consumption_watts{job=\"mdc-nodes\"}[24h])").size();
+        long ipmi = cluster.nodes().stream().filter(SyntheticCluster.Node::ipmi).count();
+        assertEquals(ipmi, answered);
+    }
+
     @DisplayName("모르는 메트릭·라벨 해석 — 해석 불가는 빈 결과, 라벨은 = 만 잡는다")
     @Test
     void unknown_and_labels() {

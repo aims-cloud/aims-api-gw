@@ -22,6 +22,10 @@ import java.util.regex.Pattern;
  * <p>스케줄러가 쓰는 질의(2026-09-03 기준 13종): {@code up}, CPU 사용률(idle 역산), 코어 수, MemTotal/MemAvailable,
  * filesystem size/avail, IPMI 전력, IPMI 온도(avg), 네트워크 rx/tx(sum irate), DCGM GPU 수(count by instance),
  * 그리고 CPU·전력의 구간 질의.</p>
+ *
+ * <p><b>구간 집계 함수를 해석한다.</b> {@code avg_over_time(메트릭[24h])} 같은 질의는 감싼 함수를 무시하면 그 순간
+ * 값을 돌려주게 되어, 시험은 초록불인데 값이 틀린다. 실환경 저장소는 창 안의 표본을 모아 답하므로 여기서도 창을
+ * 걸어 표본을 모아 답한다. 표본 간격은 실환경 스크레이프 주기와 같은 {@link #SAMPLE_STEP_SECONDS} 로 둔다.</p>
  */
 public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
 
@@ -33,6 +37,18 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
             + "node_filesystem_avail_bytes|ipmi_dcmi_power_consumption_watts|ipmi_temperature_celsius|"
             + "node_network_receive_bytes_total|node_network_transmit_bytes_total|DCGM_FI_DEV_GPU_UTIL)\\b");
     private static final Pattern BY_INSTANCE = Pattern.compile("by\\s*\\(\\s*instance\\s*\\)");
+
+    /** 구간 집계 함수와 창 — {@code avg_over_time(... [24h])} 의 함수 이름과 창 길이를 뽑는다. */
+    private static final Pattern OVER_TIME = Pattern.compile(
+            "\\b(avg|min|max|count|sum|last)_over_time\\s*\\(.*?\\[(\\d+)([smhdw])\\]", Pattern.DOTALL);
+
+    /**
+     * 구간 집계가 창 안에서 표본을 뜨는 간격(초).
+     *
+     * <p>실환경 스크레이프 주기와 같은 눈금이라야 모의 값이 실환경과 같은 성격을 갖는다. 이 값을 줄이면 표본이
+     * 늘어 계산만 무거워지고, 늘리면 사인 곡선의 봉우리를 건너뛰어 평균이 흔들린다.</p>
+     */
+    static final long SAMPLE_STEP_SECONDS = 60;
 
     private final SyntheticCluster cluster;
     private final Supplier<Instant> clock;
@@ -66,13 +82,53 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
     public List<Map<String, Object>> queryResults(String promQL) {
         long now = clock.get().getEpochSecond();
         List<Map<String, Object>> out = new ArrayList<>();
+        Window window = windowOf(promQL);
         for (SyntheticCluster.Node node : select(promQL)) {
-            Double v = value(promQL, node, now);
+            Double v = window == null ? value(promQL, node, now) : aggregate(promQL, node, now, window);
             if (v == null) continue;
             out.add(series(node, List.of(now, format(v)), null));
         }
         return out;
     }
+
+    /** 질의가 건 구간 집계 — 없으면 null. */
+    private static Window windowOf(String promQL) {
+        Matcher m = OVER_TIME.matcher(promQL);
+        if (!m.find()) return null;
+        long seconds = Long.parseLong(m.group(2)) * switch (m.group(3)) {
+            case "s" -> 1L; case "m" -> 60L; case "h" -> 3600L; case "d" -> 86_400L; default -> 604_800L;
+        };
+        return new Window(m.group(1), Math.max(SAMPLE_STEP_SECONDS, seconds));
+    }
+
+    /**
+     * 창 {@code [now - seconds, now]} 안의 표본으로 집계한다.
+     *
+     * <p>메트릭이 없는 노드는 표본이 하나도 없어 {@code null} 이다 — 실환경에서 그 시리즈가 통째로 없는 것과 같다.
+     * 0 으로 채우지 않는 것이 이 게이트웨이의 규칙이고, 집계에서도 같다.</p>
+     */
+    private Double aggregate(String promQL, SyntheticCluster.Node node, long now, Window window) {
+        double sum = 0; double min = Double.MAX_VALUE; double max = -Double.MAX_VALUE;
+        long count = 0; Double last = null;
+        for (long t = now - window.seconds(); t <= now; t += SAMPLE_STEP_SECONDS) {
+            Double v = value(promQL, node, t);
+            if (v == null) continue;
+            sum += v; count++; last = v;
+            min = Math.min(min, v); max = Math.max(max, v);
+        }
+        if (count == 0) return null;
+        return switch (window.function()) {
+            case "avg" -> round(sum / count);
+            case "min" -> min;
+            case "max" -> max;
+            case "sum" -> round(sum);
+            case "count" -> (double) count;
+            default -> last;
+        };
+    }
+
+    /** 구간 집계 함수 이름과 창 길이(초). */
+    private record Window(String function, long seconds) {}
 
     @Override
     public double queryScalar(String promQL) {

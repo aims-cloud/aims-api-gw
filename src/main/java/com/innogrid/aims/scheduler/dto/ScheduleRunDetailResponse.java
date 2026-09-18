@@ -63,7 +63,8 @@ public record ScheduleRunDetailResponse(
             Double reclaimableWattsAfter,
             @Schema(description = "실행 전 평균 실효 온도(℃). 온도를 잰 노드가 없으면 null")
             Double avgTemperatureBefore,
-            @Schema(description = "예약을 반영한 평균 실효 온도(℃)")
+            @Schema(description = "예약을 반영한 평균 실효 온도(℃). 계측이 아니라 열관성 계수로 낸 외삽이라, "
+                    + "전·후 차는 온도 × 계수 × 예약 CPU 비율로 완전히 결정되고 온도계 관측을 포함하지 않는다")
             Double avgTemperatureAfter
     ) {
         /** 기록이 없는 회차는 통째로 null 이다 — 열마다 0 을 내리면 "쟀는데 0" 으로 읽힌다. */

@@ -94,6 +94,7 @@ public class ScheduleExecutionService {
     private final ScheduleService scheduleService;
     private final EngineRegistry engineRegistry;
     private final SchedulerProperties properties;
+    private final RunClusterSnapshot clusterSnapshot;
 
     public ScheduleExecutionService(ScheduleRepository scheduleRepository,
                                     ScheduleRunRepository runRepository,
@@ -104,7 +105,8 @@ public class ScheduleExecutionService {
                                     PlacementService placementService,
                                     ScheduleService scheduleService,
                                     EngineRegistry engineRegistry,
-                                    SchedulerProperties properties) {
+                                    SchedulerProperties properties,
+                                    RunClusterSnapshot clusterSnapshot) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
@@ -115,6 +117,7 @@ public class ScheduleExecutionService {
         this.scheduleService = scheduleService;
         this.engineRegistry = engineRegistry;
         this.properties = properties;
+        this.clusterSnapshot = clusterSnapshot;
     }
 
     /**
@@ -161,6 +164,7 @@ public class ScheduleExecutionService {
                 }
                 run = startRun(schedule, triggerType, triggeredBy, engineId, policy);
                 run.recordCounts(0, 0, 0, false);
+                run.markSnapshotNoTarget();   // 노드를 모으기 전에 끝난다 — 평범한 회차다
                 return finishRun(schedule, run, outcome.status(), startedAt, message);
             }
 
@@ -170,9 +174,12 @@ public class ScheduleExecutionService {
                     .withPowerBudget(schedule.getMaxPowerBudgetWatts());
             if (context.isEmpty()) {
                 run.recordCounts(targets.size(), 0, 0, truncated);
+                run.markSnapshotNoNodes();
                 return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt,
                         SchedulingService.noActiveNodesReason(context));
             }
+
+            recordSnapshotBefore(run, context);
 
             int success = 0;
             int attempted = 0;
@@ -191,13 +198,16 @@ public class ScheduleExecutionService {
             } catch (RuntimeException e) {
                 // 루프 중간에 끊겨도 그때까지의 결과는 사실이다. 집계를 0 으로 두면 실제로 배치된
                 // 워크로드가 이력에서 사라져, 다음 실행이 무엇을 이어서 해야 하는지 알 수 없다.
+                // 그때까지 쌓인 예약도 사실이므로 실행 후 상태를 남긴다.
                 run.recordCounts(targets.size(), success, attempted - success, truncated);
+                recordSnapshotAfter(run, context);
                 runRepository.save(run);
                 throw e;
             }
 
             int failed = targets.size() - success;
             run.recordCounts(targets.size(), success, failed, truncated);
+            recordSnapshotAfter(run, context);
 
             if (success == 0) {
                 return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt,
@@ -221,6 +231,54 @@ public class ScheduleExecutionService {
             log.error("스케줄 실행 중단(Error): schedule={}", schedule.getScheduleId(), e);
             failQuietly(schedule, run, startedAt, "실행 중단: " + e);
             throw e;
+        }
+    }
+
+    /**
+     * 실행 <b>전</b> 클러스터 상태를 실행 이력에 적는다.
+     *
+     * <p>계산이 터져도 <b>실행은 계속한다</b>. 스냅샷은 곁들이는 기록이지 배치의 일부가 아니어서, 여기서
+     * 예외를 밖으로 내보내면 잘 돌던 배치가 통째로 실패로 뒤바뀐다. 대신 상태를 실패로 남겨 빈 칸이
+     * "안 쟀다"인지 "재다 터졌다"인지 구분되게 한다.</p>
+     *
+     * <p>{@link LinkageError} 까지 잡는다. 배포가 실행 중인 JVM 의 jar 를 덮어쓰는 이 환경에서는 아직
+     * 로드되지 않은 클래스를 그때 읽어 {@code NoClassDefFoundError} 가 난다 — 이 계산이 쓰는 record 와
+     * enum 이 바로 그런 지연 로드 대상이다. {@code RuntimeException} 만 잡으면 "실행은 계속한다"는 이
+     * 메서드의 약속이 하필 그 상황에서 깨진다. 메모리 고갈 같은 나머지 {@code Error} 는 그대로 내보낸다.</p>
+     *
+     * <p>여기서 <b>한 번 저장한다</b>. 저장하지 않으면 이 값이 실행이 끝날 때까지 DB 에 닿지 않아, 배치
+     * 도중 앱이 죽은 회차가 "전만 기록됨"이 아니라 아무것도 기록되지 않은 행으로 남는다 — 기동 회수는
+     * 실행 이력을 마무리할 뿐 스냅샷을 채우지 못한다. 실행 1회당 UPDATE 한 번이고 배치 루프 밖이다.</p>
+     */
+    private void recordSnapshotBefore(ScheduleRun run, PlacementContext context) {
+        try {
+            RunClusterSnapshot.Fixed fixed = clusterSnapshot.fixedOf(context);
+            RunClusterSnapshot.Moving moving =
+                    clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
+            run.recordSnapshotBefore(clusterSnapshot.knobsDigest(),
+                    fixed.nodeCount(), fixed.excludedCount(), fixed.measuredNodes(),
+                    fixed.measuredPowerWatts(),
+                    moving.activeNodes(), moving.reclaimableWatts(), moving.avgTemperatureCelsius());
+            runRepository.save(run);
+        } catch (RuntimeException | LinkageError e) {
+            log.warn("실행 전 클러스터 스냅샷 기록 실패(배치는 계속한다): run={}", run.getId(), e);
+            run.markSnapshotFailed();
+        }
+    }
+
+    /**
+     * 실행 <b>후</b> 클러스터 상태를 적는다. 여기서 "후"는 다시 잰 값이 아니라 이번 실행의 예약을 반영한
+     * 값이다 — 배치 직후에 메트릭을 다시 부르면 실행이 그만큼 길어지고, 설비가 반응하기 전이라 숫자도
+     * 달라지지 않는다.
+     */
+    private void recordSnapshotAfter(ScheduleRun run, PlacementContext context) {
+        try {
+            RunClusterSnapshot.Moving moving =
+                    clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
+            run.recordSnapshotAfter(moving.activeNodes(), moving.reclaimableWatts(), moving.avgTemperatureCelsius());
+        } catch (RuntimeException | LinkageError e) {
+            log.warn("실행 후 클러스터 스냅샷 기록 실패(배치는 계속한다): run={}", run.getId(), e);
+            run.markSnapshotFailed();
         }
     }
 

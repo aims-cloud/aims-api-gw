@@ -218,7 +218,7 @@ public class PowerOptimizationService {
             String message = anyPower ? null
                     : "전력 메트릭이 없어 전력 지표를 계산하지 못했습니다. 가동/유휴 노드 수만 제공합니다 — IPMI exporter 연동을 확인하세요";
             return new PowerOptimizationTrendResponse(start, end, interval, points, message,
-                    energyOf(cpu, power, specs, start, end));
+                    energyOf(cpu, power, specs, interval));
 
         } catch (RuntimeException e) {
             // 조회 실패로 500 을 내면 화면이 통째로 깨진다. 사유만 담아 빈 결과로 돌려준다(전력 효율 추세와 같은 원칙).
@@ -238,8 +238,10 @@ public class PowerOptimizationService {
      */
     private PowerOptimizationTrendResponse.Energy energyOf(
             Map<String, Map<Long, Double>> cpu, Map<String, Map<Long, Double>> power,
-            NodePowerSpecs specs, OffsetDateTime start, OffsetDateTime end) {
+            NodePowerSpecs specs, String interval) {
         try {
+            // 허용 간격은 조회 간격에서 낸다. 하한 5분을 그대로 쓰면 step 을 크게 준 조회가 통째로 잘린다.
+            long gapLimit = IntervalEnergy.gapLimitFor(TrendRangeSupport.stepSeconds(interval));
             Map<String, Map<Long, IntervalEnergy.Sample>> reclaimable = new LinkedHashMap<>();
             for (Map.Entry<String, Map<Long, Double>> e : cpu.entrySet()) {
                 String instance = e.getKey();
@@ -257,8 +259,8 @@ public class PowerOptimizationService {
                 if (series.size() >= 2) reclaimable.put(instance, series);
             }
 
-            IntervalEnergy.Result result = IntervalEnergy.integrate(reclaimable);
-            IntervalEnergy.Result consumedResult = IntervalEnergy.integrate(consumedSeries(power));
+            IntervalEnergy.Result result = IntervalEnergy.integrate(reclaimable, gapLimit);
+            IntervalEnergy.Result consumedResult = IntervalEnergy.integrate(consumedSeries(cpu, power), gapLimit);
             String reason = energyReason(result, consumedResult.kwh());
 
             return new PowerOptimizationTrendResponse.Energy(
@@ -285,9 +287,13 @@ public class PowerOptimizationService {
      * 시각에서</b> 평가되어, 어제 구간을 물어도 오늘 구간의 평균이 돌아온다. 시각을 지정할 통로가 클라이언트에
      * 없으므로, 이미 받아 둔 구간 시계열을 적분하는 편이 옳고 질의도 늘지 않는다.</p>
      */
-    private static Map<String, Map<Long, IntervalEnergy.Sample>> consumedSeries(Map<String, Map<Long, Double>> power) {
+    private static Map<String, Map<Long, IntervalEnergy.Sample>> consumedSeries(
+            Map<String, Map<Long, Double>> cpu, Map<String, Map<Long, Double>> power) {
         Map<String, Map<Long, IntervalEnergy.Sample>> out = new LinkedHashMap<>();
         power.forEach((instance, series) -> {
+            // 전력 질의에는 job 필터가 없다. 지점 배열이 CPU 시계열을 기준으로 도는 것과 모집단을 맞춘다 —
+            // 그러지 않으면 추세에 한 줄도 나오지 않는 노드의 전력이 에너지에만 섞인다.
+            if (!cpu.containsKey(instance)) return;
             Map<Long, IntervalEnergy.Sample> samples = new LinkedHashMap<>();
             series.forEach((ts, watts) -> samples.put(ts, new IntervalEnergy.Sample(watts, false)));
             if (samples.size() >= 2) out.put(instance, samples);
@@ -301,7 +307,8 @@ public class PowerOptimizationService {
         if (consumed == null) reasons.add("전력을 실측한 노드가 없어 소비 에너지를 낼 수 없습니다");
         if (!result.present()) reasons.add("적분할 표본이 모자라 회수 가능 에너지를 낼 수 없습니다");
         else if (result.gaps() > 0) reasons.add(String.format(
-                "표본이 %d곳에서 끊겨 그만큼 시간이 빠졌습니다 — 실제로 적분한 시간은 integratedHours 입니다", result.gaps()));
+                "이어지지 않은 구간이 %d곳 있습니다 — 표본이 없었거나 그 시각 노드가 가동 중이었습니다. "
+                        + "실제로 적분한 시간은 integratedHours 입니다", result.gaps()));
         if (result.present() && result.estimatedKwh() != null && result.estimatedKwh() > 0) reasons.add(
                 "회수 가능 에너지에 미계측 노드의 정격 추정분이 섞여 있습니다 — reclaimableEstimatedKwh 를 보십시오");
         return reasons.isEmpty() ? null : String.join(" / ", reasons);

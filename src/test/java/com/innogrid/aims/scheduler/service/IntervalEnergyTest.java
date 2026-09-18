@@ -114,6 +114,24 @@ class IntervalEnergyTest {
         assertFalse(IntervalEnergy.integrate(Map.of("n1", Map.<Long, IntervalEnergy.Sample>of())).present());
     }
 
+    @DisplayName("허용 간격은 조회 간격의 두 배까지 늘어난다")
+    @Test
+    void the_gap_limit_follows_the_query_step() {
+        // 5분은 하한이다. 1시간 간격으로 보는 조회에서 하한을 그대로 쓰면 모든 표본 사이가 구멍이 되어
+        // 에너지가 통째로 비어 버린다 — 7일을 1시간 간격으로 보는 것은 정상적인 사용이다.
+        assertEquals(300, IntervalEnergy.gapLimitFor(60), "간격이 짧으면 하한이 이긴다");
+        assertEquals(7200, IntervalEnergy.gapLimitFor(3600), "1시간 간격이면 두 시간까지 잇는다");
+
+        Map<Long, IntervalEnergy.Sample> hourly = new TreeMap<>();
+        for (long t = 0; t <= 3 * 3600; t += 3600) hourly.put(t, new IntervalEnergy.Sample(100, false));
+
+        assertFalse(IntervalEnergy.integrate(Map.of("n", hourly)).present(), "하한만 쓰면 전부 끊긴다");
+        IntervalEnergy.Result r = IntervalEnergy.integrate(Map.of("n", hourly), IntervalEnergy.gapLimitFor(3600));
+        assertTrue(r.present(), "조회 간격을 반영하면 값이 나온다");
+        assertEquals(0, r.gaps());
+        assertEquals(0.3, r.kwh(), "100W 를 3시간");
+    }
+
     @DisplayName("끊는 기준은 5분이다")
     @Test
     void the_cut_off_is_five_minutes() {

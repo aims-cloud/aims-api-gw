@@ -145,6 +145,18 @@ class SyntheticModeScenarioTest {
         assertTrue(energy.integratedFrom().isBefore(energy.integratedTo()));
     }
 
+    @DisplayName("조회 간격을 크게 줘도 에너지가 나온다")
+    @Test
+    void a_coarse_step_still_yields_energy() {
+        // 허용 간격을 5분 하한으로 고정하면 1시간 간격 조회가 통째로 구멍으로 잘려 값이 전부 비고,
+        // 사유는 "표본이 모자라다" 는 엉뚱한 까닭을 낸다. 7일을 1시간으로 보는 것은 정상적인 사용이다.
+        PowerOptimizationTrendResponse.Energy coarse = optimization.trend(null, null, "1h").energy();
+
+        assertNotNull(coarse.consumedKwh(), "간격이 커졌다고 에너지가 사라지면 안 된다");
+        assertTrue(coarse.consumedKwh() > 0);
+        assertEquals(0, coarse.gaps(), "고른 표본인데 끊긴 것으로 세면 운영자가 수집기를 의심한다");
+    }
+
     @DisplayName("과거 구간을 물으면 그 구간 안에서만 적분한다")
     @Test
     void a_past_window_is_integrated_inside_that_window() {

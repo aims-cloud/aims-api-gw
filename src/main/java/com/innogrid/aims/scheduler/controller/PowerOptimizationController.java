@@ -67,8 +67,9 @@ public class PowerOptimizationController {
                        + "저장소가 응답하지 않으면 사유를 담은 빈 결과(200)입니다. "
                        + "energy 는 구간 전체의 에너지 요약입니다 — 지점 배열을 적분한 값이 아닙니다. "
                        + "지점의 총 전력은 전력을 못 읽은 노드를 0 으로 채워 만들기 때문에, 그 배열을 적분하면 결손이 0W 로 읽혀 적게 나옵니다. "
-                       + "소비 에너지는 저장소 구간 집계로, 회수 가능 에너지는 시각마다 가동 판정을 거쳐 노드별로 적분합니다. "
-                       + "물은 구간과 실제로 적분한 구간이 다를 수 있어 integratedFrom·integratedTo·integratedHours 를 함께 냅니다.")
+                       + "소비와 회수 가능 둘 다 0 을 채우기 전의 원시 구간 시계열을 노드별로 적분합니다. 회수 가능 쪽만 시각마다 가동 판정과 유휴 역산을 한 번 더 거칩니다. "
+                       + "물은 구간과 실제로 적분한 구간이 다를 수 있어 integratedFrom·integratedTo·integratedHours 를 함께 냅니다(회수 가능 적분 기준). "
+                       + "표본을 잇는 간격은 step 의 두 배이고 하한이 5분입니다 — 그보다 멀어진 자리는 잇지 않고 뺍니다.")
     @GetMapping("/power/trend")
     public ApiResponse<PowerOptimizationTrendResponse> getPowerTrend(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,

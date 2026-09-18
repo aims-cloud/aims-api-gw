@@ -42,9 +42,9 @@ public record PowerOptimizationTrendResponse(
      * 구간 전체의 에너지 요약 — 지점 배열을 클라이언트가 적분하지 않아도 되게 한다.
      *
      * <p><b>지점 배열을 더해서 낸 값이 아니다.</b> 지점의 총 전력은 그 시각에 전력을 못 읽은 노드를 0 으로 채워
-     * 만든 값이라, 그 배열을 적분하면 결손이 "0 W 를 썼다"로 읽혀 조용히 적게 나온다. 소비 에너지는 메트릭
-     * 저장소의 구간 집계로 따로 받고(저장소는 있는 표본만 평균한다), 회수 가능 에너지는 시각마다 가동 판정을
-     * 거쳐야 해서 서버가 노드별로 적분한다.</p>
+     * 만든 값이라, 그 배열을 적분하면 결손이 "0 W 를 썼다"로 읽혀 조용히 적게 나온다. 대신 <b>0 을 채우기 전의
+     * 원시 구간 시계열</b>을 노드별로 적분한다 — 그 맵에는 결손 자리가 아예 없다. 소비와 회수 가능이 같은 방식이고,
+     * 회수 가능 쪽만 시각마다 가동 판정과 유휴 역산을 한 번 더 거친다.</p>
      *
      * <p><b>물은 구간과 잰 구간이 다를 수 있다.</b> 시계열이 늦게 시작했거나 중간이 비면 그만큼 짧게 적분한다.
      * 그래서 실제로 적분이 걸친 구간과 시간을 함께 싣는다 — 24시간을 물었는데 21시간치가 왔다면 이 칸으로 안다.</p>
@@ -65,17 +65,18 @@ public record PowerOptimizationTrendResponse(
             Double consumedKwh,
             @Schema(description = "유휴 노드를 반납했다면 아꼈을 에너지(kWh). 적분할 표본이 없으면 null")
             Double reclaimableKwh,
-            @Schema(description = "회수 가능 에너지 중 실측이 아닌 값에서 온 몫(kWh). 미계측 노드는 정격으로 어림하므로 여기 든다")
+            @Schema(description = "회수 가능 에너지 중 실측이 아닌 값에서 온 몫(kWh). 미계측 노드는 정격으로 어림하므로 여기 든다. "
+                    + "두 끝 중 하나라도 추정이면 그 조각을 통째로 세므로 경계에서 조금 크게 잡힌다")
             Double reclaimableEstimatedKwh,
-            @Schema(description = "실제로 적분이 걸친 구간의 시작(UTC). 물은 구간보다 늦을 수 있다")
+            @Schema(description = "회수 가능 적분이 실제로 걸친 구간의 시작(UTC). 물은 구간보다 늦을 수 있다")
             OffsetDateTime integratedFrom,
-            @Schema(description = "실제로 적분이 걸친 구간의 끝(UTC)")
+            @Schema(description = "회수 가능 적분이 실제로 걸친 구간의 끝(UTC)")
             OffsetDateTime integratedTo,
-            @Schema(description = "실제로 적분이 걸친 시간(시). 끊긴 구멍은 빠져 있어 물은 구간보다 짧을 수 있다")
+            @Schema(description = "한 노드가 덮은 시간 중 가장 긴 것(시). 회수 가능 적분 기준이고, 이어지지 않은 자리는 빠져 있다")
             Double integratedHours,
-            @Schema(description = "적분에 쓴 노드 수")
+            @Schema(description = "회수 가능 적분에 쓴 노드 수")
             Integer integratedNodes,
-            @Schema(description = "표본이 멀어 잇지 않고 끊은 횟수. 0 보다 크면 그만큼 시간이 빠져 있다")
+            @Schema(description = "이어 붙이지 않고 끊은 횟수. 표본이 없었을 수도, 그 시각 노드가 가동 중이라 대상이 아니었을 수도 있다")
             Integer gaps,
             @Schema(description = "값이 비거나 좁아진 까닭. 정상이면 null")
             String reason

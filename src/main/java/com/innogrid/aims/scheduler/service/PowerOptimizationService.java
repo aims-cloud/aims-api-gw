@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -216,13 +217,107 @@ public class PowerOptimizationService {
             }
             String message = anyPower ? null
                     : "전력 메트릭이 없어 전력 지표를 계산하지 못했습니다. 가동/유휴 노드 수만 제공합니다 — IPMI exporter 연동을 확인하세요";
-            return new PowerOptimizationTrendResponse(start, end, interval, points, message);
+            return new PowerOptimizationTrendResponse(start, end, interval, points, message,
+                    energyOf(cpu, power, specs, start, end));
 
         } catch (RuntimeException e) {
             // 조회 실패로 500 을 내면 화면이 통째로 깨진다. 사유만 담아 빈 결과로 돌려준다(전력 효율 추세와 같은 원칙).
             log.warn("전력 최적화 추세 조회 실패: reason={}", e.getMessage());
             return PowerOptimizationTrendResponse.empty(start, end, interval, "메트릭 저장소를 조회하지 못했습니다: " + e.getMessage());
         }
+    }
+
+    /**
+     * 구간 전체의 에너지 요약.
+     *
+     * <p><b>지점 배열을 적분하지 않는다.</b> 그 배열은 전력을 못 읽은 노드를 0 으로 채워 만든 것이라, 적분하면
+     * 결손이 "0 W 를 썼다"가 되어 조용히 적게 나온다. 소비 에너지는 저장소의 구간 집계로 따로 받고 — 저장소는
+     * 있는 표본만 평균한다 — 회수 가능 에너지는 시각마다 가동 판정과 유휴 역산을 거쳐야 해서 여기서 적분한다.</p>
+     *
+     * <p>에너지 계산이 터져도 추세는 그대로 낸다. 곁들이는 요약이지 추세의 일부가 아니다.</p>
+     */
+    private PowerOptimizationTrendResponse.Energy energyOf(
+            Map<String, Map<Long, Double>> cpu, Map<String, Map<Long, Double>> power,
+            NodePowerSpecs specs, OffsetDateTime start, OffsetDateTime end) {
+        try {
+            Map<String, Map<Long, IntervalEnergy.Sample>> reclaimable = new LinkedHashMap<>();
+            for (Map.Entry<String, Map<Long, Double>> e : cpu.entrySet()) {
+                String instance = e.getKey();
+                double capacity = specs.capacityOr(instance, powerModel::capacityOf);
+                Map<Long, IntervalEnergy.Sample> series = new LinkedHashMap<>();
+                for (Map.Entry<Long, Double> point : e.getValue().entrySet()) {
+                    long ts = point.getKey();
+                    Double watts = power.getOrDefault(instance, Map.of()).get(ts);
+                    // 노드 한 대를 그 시각의 상태로 세운다. 회수 대상이 아니면 그 시각 기여는 0 이다.
+                    NodeResource node = new NodeResource("-", instance, 0, 0, 0, point.getValue(), 0, 0,
+                            watts == null ? 0 : watts, capacity, 0, 0, 0);
+                    if (powerModel.isActive(node)) continue;
+                    series.put(ts, new IntervalEnergy.Sample(powerModel.wakeupPower(node), watts == null));
+                }
+                if (series.size() >= 2) reclaimable.put(instance, series);
+            }
+
+            IntervalEnergy.Result result = IntervalEnergy.integrate(reclaimable);
+            Double consumed = consumedKwh(start, end);
+            String reason = energyReason(result, consumed);
+
+            return new PowerOptimizationTrendResponse.Energy(
+                    consumed, result.kwh(), result.estimatedKwh(),
+                    epochToTime(result.fromEpoch()), epochToTime(result.toEpoch()),
+                    result.present() ? result.hours() : null,
+                    result.present() ? result.nodes() : null,
+                    result.gaps(), reason);
+
+        } catch (RuntimeException e) {
+            log.warn("구간 에너지 계산 실패(추세는 그대로 낸다): reason={}", e.getMessage());
+            return new PowerOptimizationTrendResponse.Energy(null, null, null, null, null, null, null, 0,
+                    "구간 에너지를 계산하지 못했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 구간 소비 에너지 — 저장소에 구간 평균을 묻고 시간을 곱한다.
+     *
+     * <p>사다리꼴로 손수 적분하지 않는 이유는 저장소가 <b>있는 표본만</b> 평균하기 때문이다. 결손을 0 으로 읽지
+     * 않고, 응답도 지점 배열이 아니라 한 줄이다. 대신 표본 간격이 고르지 않으면 산술평균이라 시간가중과 미세하게
+     * 갈린다 — 그 오차는 계약에 적어 둔다.</p>
+     */
+    private Double consumedKwh(OffsetDateTime start, OffsetDateTime end) {
+        long seconds = Duration.between(start, end).getSeconds();
+        if (seconds <= 0) return null;
+        List<Map<String, Object>> results = guard.call(
+                () -> metricsClient.queryResults(String.format(
+                        "avg_over_time(ipmi_dcmi_power_consumption_watts[%ds])", seconds)),
+                properties.getMetrics().getQueryTimeoutMs());
+        double watts = 0;
+        int measured = 0;
+        for (Map<String, Object> series : results) {
+            Object value = series.get("value");
+            if (!(value instanceof List<?> pair) || pair.size() < 2) continue;
+            try {
+                watts += Double.parseDouble(String.valueOf(pair.get(1)));
+                measured++;
+            } catch (NumberFormatException ignored) {
+                // 읽을 수 없는 표본은 없는 것으로 본다 — 0 으로 세면 실측 평균이 내려간다
+            }
+        }
+        return measured == 0 ? null : Math.round(watts * seconds / 3_600_000.0 * 1000.0) / 1000.0;
+    }
+
+    /** 값이 비거나 좁아진 까닭. 정상이면 null. */
+    private static String energyReason(IntervalEnergy.Result result, Double consumed) {
+        List<String> reasons = new ArrayList<>();
+        if (consumed == null) reasons.add("전력을 실측한 노드가 없어 소비 에너지를 낼 수 없습니다");
+        if (!result.present()) reasons.add("적분할 표본이 모자라 회수 가능 에너지를 낼 수 없습니다");
+        else if (result.gaps() > 0) reasons.add(String.format(
+                "표본이 %d곳에서 끊겨 그만큼 시간이 빠졌습니다 — 실제로 적분한 시간은 integratedHours 입니다", result.gaps()));
+        if (result.present() && result.estimatedKwh() != null && result.estimatedKwh() > 0) reasons.add(
+                "회수 가능 에너지에 미계측 노드의 정격 추정분이 섞여 있습니다 — reclaimableEstimatedKwh 를 보십시오");
+        return reasons.isEmpty() ? null : String.join(" / ", reasons);
+    }
+
+    private static OffsetDateTime epochToTime(Long epochSeconds) {
+        return epochSeconds == null ? null : OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC);
     }
 
     /** 한 시각의 클러스터 상태 — 현재 진단의 {@link #cluster} 와 같은 식. */

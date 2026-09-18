@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class PowerOptimizationTrendShapeTest {
 
-    /** 구간 에너지를 더하기 전의 최상위 5열. */
+    /** 구간 에너지를 더하기 전의 최상위 5열. 에너지는 이 뒤에 붙는다. */
     private static final List<String> TOP_COMPONENTS = List.of("from", "to", "step", "points", "message");
 
     /** 지점 11열. 이 열들은 이번 작업에서 하나도 바뀌지 않는다. */

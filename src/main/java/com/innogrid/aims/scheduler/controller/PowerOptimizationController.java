@@ -64,7 +64,11 @@ public class PowerOptimizationController {
                description = "구간의 시각마다 총 전력·가동/유휴 노드·회수 가능 전력·PEI 를 메트릭 저장소 구간 질의로 다시 계산합니다(저장하지 않음). "
                        + "기본 최근 24시간·5분 간격, 지점 수 상한(설정 trendMaxPoints)을 넘으면 400. "
                        + "전력 메트릭이 없는 시각은 measured=false 이고 전력 지표는 null 입니다(가동/유휴 노드 수만). "
-                       + "저장소가 응답하지 않으면 사유를 담은 빈 결과(200)입니다.")
+                       + "저장소가 응답하지 않으면 사유를 담은 빈 결과(200)입니다. "
+                       + "energy 는 구간 전체의 에너지 요약입니다 — 지점 배열을 적분한 값이 아닙니다. "
+                       + "지점의 총 전력은 전력을 못 읽은 노드를 0 으로 채워 만들기 때문에, 그 배열을 적분하면 결손이 0W 로 읽혀 적게 나옵니다. "
+                       + "소비 에너지는 저장소 구간 집계로, 회수 가능 에너지는 시각마다 가동 판정을 거쳐 노드별로 적분합니다. "
+                       + "물은 구간과 실제로 적분한 구간이 다를 수 있어 integratedFrom·integratedTo·integratedHours 를 함께 냅니다.")
     @GetMapping("/power/trend")
     public ApiResponse<PowerOptimizationTrendResponse> getPowerTrend(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,

@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
@@ -154,6 +155,9 @@ public class PowerAwareScheduler implements SchedulingEngine {
             details.put("cpu여유", round(cpuScore));
             details.put("메모리여유", round(memScore));
             details.put("네트워크한산도", round(netScore));
+            if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
+                details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
+            }
             details.put("실질한계전력W", round(powerModel.realMarginalPower(node, workload.getRequiredCpu())));
             details.put("배치후예상전력W",
                     measured(hasPower, powerModel.predictedPower(node, workload.getRequiredCpu())));

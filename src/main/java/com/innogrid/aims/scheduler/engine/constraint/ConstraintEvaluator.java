@@ -1,7 +1,10 @@
 package com.innogrid.aims.scheduler.engine.constraint;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.OptionalDouble;
 
+import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -13,6 +16,7 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.NodeResource.ThermalState;
 import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 /**
  * 제약 조건 평가 — 모든 스케줄링 엔진이 공유하는 하드 제약 파이프라인.
@@ -165,6 +169,54 @@ public class ConstraintEvaluator {
     /** 배치 가능 여부. */
     public boolean isEligible(Workload workload, NodeResource node, PlacementContext ctx) {
         return exclusion(workload, node, ctx) == null;
+    }
+
+    // ── C1 디스크 검사의 표기 — 판정을 바꾸지 않고 "검사가 적용됐는가" 만 밖으로 낸다 ────────────────
+
+    /** 후보 상세 키. 워크로드가 디스크를 요구할 때만 붙는다 — 요구가 없는 배치의 키 집합은 그대로다. */
+    public static final String DISK_CHECK_DETAIL = "디스크검사";
+
+    /** 디스크 요구가 있어 표기가 뜻을 갖는 워크로드인가. */
+    public static boolean diskCheckRelevant(Workload workload) {
+        return workload.getRequiredDiskGb() > 0;
+    }
+
+    /**
+     * 이 노드에 C1 디스크 검사가 <b>적용되는가</b> — 총량을 알아야 한다. {@link #checkResources} 와 같은 식이다.
+     * "검사했다" 가 아니라 "검사 대상이다" 다: 자원 검사는 단락 평가라 CPU 부족 노드는 디스크 줄에 닿지 않고,
+     * 다른 제약에서 걸린 노드도 마찬가지다. 그래서 이 값은 적격·부적격과 무관하다.
+     */
+    public static boolean diskCheckApplied(Workload workload, NodeResource node) {
+        return diskCheckRelevant(workload) && node.diskCapacityGb() > 0;
+    }
+
+    /**
+     * 디스크 요구가 있는 배치에서 <b>총량을 몰라 검사 없이 적격이 된</b> 노드 id. 비어 있으면 표기할 것이 없다.
+     * 후보 상세가 아니라 노드 총량으로 센다 — 디스패치 강등은 결과를 새로 만들어 상세를 비우므로 상세로 세면 샌다.
+     */
+    public static List<String> uncheckedDiskEligible(Workload workload, SchedulingResult result, PlacementContext ctx) {
+        if (!diskCheckRelevant(workload) || result == null || result.candidateScores() == null) return List.of();
+        List<String> out = new ArrayList<>();
+        for (SchedulingResult.NodeScore s : result.candidateScores()) {
+            if (!s.eligible()) continue;
+            ctx.node(s.nodeId()).filter(n -> n.diskCapacityGb() <= 0).ifPresent(n -> out.add(n.getNodeId()));
+        }
+        return out;
+    }
+
+    /**
+     * 위 목록이 비어 있지 않으면 WARN 한 줄 — 배치 1회당. 응답의 0.0 은 규약이지만 로그까지 조용하면 운영자가
+     * 어디를 봐야 할지 모른다. 원인은 셋(그 노드의 루트 마운트가 설정과 다름 · 익스포터에 filesystem 시리즈가 없음
+     * 또는 overlay 라 걸러짐 · instance 오타)이라 적용 중인 마운트 설정값과 노드 예시를 함께 찍는다.
+     */
+    public static void warnUncheckedDisk(Logger log, Workload workload, SchedulingResult result, PlacementContext ctx, String mountPoint) {
+        List<String> nodes = uncheckedDiskEligible(workload, result, ctx);
+        if (nodes.isEmpty()) return;
+        log.warn("디스크 {}GB 요구 워크로드 {} — 총량을 모르는 노드 {}대({})가 디스크 검사 없이 적격이 됐다. "
+                        + "마운트 설정 aims.scheduler.disk-mount-point='{}' 이 그 노드의 루트 마운트와 같은지, "
+                        + "익스포터에 filesystem 시리즈가 있는지, 익스포터 대응 원장의 instance 가 맞는지 확인하십시오",
+                workload.getRequiredDiskGb(), workload.getName(), nodes.size(),
+                String.join(", ", nodes.subList(0, Math.min(3, nodes.size()))) + (nodes.size() > 3 ? ", …" : ""), mountPoint);
     }
 
     // ── C1. 자원 가용성 ─────────────────────────────────────────

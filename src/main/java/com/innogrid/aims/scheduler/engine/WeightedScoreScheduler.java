@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
@@ -96,8 +97,8 @@ public class WeightedScoreScheduler implements SchedulingEngine {
 
         for (NodeResource node : candidates) {
             // ── 1단계: 하드 제약 조건 필터링 ──────────────────────
-            String exclusionReason = context.exclusionReason(workload, node);
-            boolean eligible = (exclusionReason == null);
+            Exclusion exclusion = context.exclusion(workload, node);
+            boolean eligible = (exclusion == null);
 
             // ── 2단계: 소프트 스코어링 (5차원, 예약분 반영 실효값) ──
             double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
@@ -118,7 +119,8 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             Double linkRegistered = null;
             if (context.linkAware(workload)) {
                 String dataMdc = workload.getDataMdcId();
-                linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix());
+                linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix(),
+                                                   workload.getRequiredBandwidthMbps());
                 netScore = networkModel.blend(netScore, linkScore);
                 // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC 는 링크를 타지
                 // 않으므로 "등록됨" 과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.
@@ -160,7 +162,7 @@ public class WeightedScoreScheduler implements SchedulingEngine {
                     node.getMdcId(), node.getNodeId(),
                     round(cpuScore), round(memScore), round(powerScore),
                     round(tempScore), round(netScore), totalScore,
-                    eligible, exclusionReason, details
+                    eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
 

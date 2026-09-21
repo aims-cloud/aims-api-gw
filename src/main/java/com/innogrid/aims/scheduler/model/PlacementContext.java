@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -150,6 +151,16 @@ public class PlacementContext {
      */
     public String exclusionReason(Workload workload, NodeResource node) {
         return evaluator.exclusionReason(workload, node, this);
+    }
+
+    /**
+     * 노드가 워크로드를 받을 수 없는 까닭과 문장. 배치 가능하면 {@code null}.
+     *
+     * <p>{@link #exclusionReason} 과 같은 검사를 한 번만 돌린다 — 둘을 따로 부르면 냉각 대기 표시처럼
+     * 상태를 남기는 검사가 두 번 실행된다.</p>
+     */
+    public Exclusion exclusion(Workload workload, NodeResource node) {
+        return evaluator.exclusion(workload, node, this);
     }
 
     /**

@@ -81,6 +81,14 @@ class TumblebugTreeBuilderTest {
                 vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-2"), "120")));
         when(metricsClient.queryResults(MonitoringCapabilityResolver.tbGpuDeviceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
                 vector(Map.of("tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1", "UUID", "GPU-1111", "gpu", "0"), "1")));
+        // vm-1 의 node_exporter 항목 지표군 — systemd 없음(Service Status NO_DATA), 스왑 있음
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.nodeMetricQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(
+                MonitoringCapabilityResolver.NODE_PRESENCE_METRICS.stream()
+                        .filter(m -> !m.equals("node_systemd_unit_state"))
+                        .map(m -> vector(Map.of("instance", "10.1.0.1:9100", "tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1", "metric", m), "288"))
+                        .toList());
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.swapPresenceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
+                vector(Map.of("instance", "10.1.0.1:9100", "tb_ns", "ns-a", "tb_infra", "infra-1", "tb_node", "vm-1"), "2147483648")));
 
         MonitoringCapabilityResolver resolver = new MonitoringCapabilityResolver(metricsClient, properties, clock);
         builder = new TumblebugTreeBuilder(tumblebugClient, roleNamespaceRepository, resolver, properties, portalLogService, clock);
@@ -153,6 +161,30 @@ class TumblebugTreeBuilderTest {
     }
 
     @Test
+    void Namespace부터_VM까지_패널_API_식별자_필드를_자기_계층까지_채운다() {
+        ResourceTreeNodeResponse vmRoot = builder.build(List.of("ADMIN")).get("ADMIN");
+        ResourceTreeNodeResponse nsA = vmRoot.children().get(0);
+        ResourceTreeNodeResponse infra1 = nsA.children().get(0);
+        ResourceTreeNodeResponse g1 = infra1.children().get(0);
+        ResourceTreeNodeResponse unclassified = infra1.children().get(1);
+        ResourceTreeNodeResponse vm1 = g1.children().get(0);
+        ResourceTreeNodeResponse vm3 = unclassified.children().get(0);
+
+        assertThat(vmRoot).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsOnlyNulls();
+        assertThat(nsA).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", null, null, null);
+        assertThat(infra1).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", null, null);
+        assertThat(g1).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", "g1", null);
+        assertThat(unclassified).extracting("nsId", "infraId", "nodeGroupId", "vmId")
+                .containsExactly("ns-a", "infra-1", "@unclassified", null);
+        assertThat(vm1).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", "g1", "vm-1");
+        assertThat(vm3).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsExactly("ns-a", "infra-1", "@unclassified", "vm-3");
+
+        // VM 하위 항목은 채우지 않는다 — 프론트가 조상 VM 노드에서 읽는다
+        assertThat(vm1.children()).allSatisfy(item ->
+                assertThat(item).extracting("nsId", "infraId", "nodeGroupId", "vmId").containsOnlyNulls());
+    }
+
+    @Test
     void Tumblebug_상태값은_원문으로_노출하고_Terminated도_제외하지_않는다() {
         ResourceTreeNodeResponse infra1 = builder.build(List.of("ADMIN")).get("ADMIN").children().get(0).children().get(0);
         List<ResourceTreeNodeResponse> g1 = infra1.children().get(0).children();
@@ -186,15 +218,25 @@ class TumblebugTreeBuilderTest {
                         ResourceTreeNodeType.NETWORK, ResourceTreeNodeType.PROCESS, ResourceTreeNodeType.SERVICE_STATUS,
                         ResourceTreeNodeType.SWAP, ResourceTreeNodeType.SYSTEM, ResourceTreeNodeType.GPU_GROUP);
         assertThat(vm1.children().get(8).children()).extracting(ResourceTreeNodeResponse::resourceId).containsExactly("GPU-1111");
+        // 항목 노드는 VM 의 resourceId 를 갖고, systemd 지표가 없는 Service Status 만 NO_DATA
+        assertThat(vm1.children()).extracting(ResourceTreeNodeResponse::resourceId).containsOnly("TB:ns-a/infra-1/vm-1");
+        assertThat(vm1.children().get(5).type()).isEqualTo(ResourceTreeNodeType.SERVICE_STATUS);
+        assertThat(vm1.children().get(5).monitoringStatus()).isEqualTo(MonitoringStatus.NO_DATA);
+        assertThat(vm1.children().get(0).monitoringStatus()).isEqualTo(MonitoringStatus.COLLECTING);
+        assertThat(vm1.children().get(6).monitoringStatus()).isEqualTo(MonitoringStatus.COLLECTING);   // Swap: SwapTotal > 0
 
-        // vm-2: 이력은 있고 현재 up 없음 → 항목 유지 + UNAVAILABLE (NOT_CONFIGURED 로 떨어지지 않는다)
+        // vm-2: 이력은 있고 현재 up 없음 → 항목 유지 + UNAVAILABLE (NOT_CONFIGURED 로 떨어지지 않는다), GPU 이력 없음 → 그룹 NOT_CONFIGURED
         assertThat(vm2.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
-        assertThat(vm2.children()).hasSize(8);
-        assertThat(vm2.children()).extracting(ResourceTreeNodeResponse::monitoringStatus).containsOnly(MonitoringStatus.UNAVAILABLE);
+        assertThat(vm2.children()).hasSize(9);
+        assertThat(vm2.children().subList(0, 8)).extracting(ResourceTreeNodeResponse::monitoringStatus).containsOnly(MonitoringStatus.UNAVAILABLE);
+        assertThat(vm2.children().get(8).type()).isEqualTo(ResourceTreeNodeType.GPU_GROUP);
+        assertThat(vm2.children().get(8).monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);
 
-        // vm-3: 시계열 없음 → NOT_CONFIGURED, 항목 없음
+        // vm-3: 시계열 없음 → NOT_CONFIGURED, 항목은 만들되 전부 NOT_CONFIGURED
         assertThat(vm3.monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);
-        assertThat(vm3.leaf()).isTrue();
+        assertThat(vm3.children()).hasSize(9);
+        assertThat(vm3.children()).extracting(ResourceTreeNodeResponse::monitoringStatus).containsOnly(MonitoringStatus.NOT_CONFIGURED);
+        assertThat(vm3.children()).extracting(ResourceTreeNodeResponse::resourceId).containsOnly("TB:ns-a/infra-1/vm-3");
     }
 
     // ── 요청 범위·재시도·격리 ───────────────────────────────────

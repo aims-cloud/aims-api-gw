@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.model;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
+
 /**
  * 스케줄링 엔진의 결정 결과.
  */
@@ -32,6 +34,7 @@ public record SchedulingResult(
             double totalScore,
             boolean eligible,
             String exclusionReason,
+            ExclusionReason exclusionCode,
             Map<String, Double> details
     ) {
         /**
@@ -43,8 +46,10 @@ public record SchedulingResult(
                          double temperatureScore, double networkScore, double totalScore,
                          boolean eligible, String exclusionReason) {
             this(mdcId, nodeId, cpuScore, memoryScore, powerScore,
-                    temperatureScore, networkScore, totalScore, eligible, exclusionReason, new java.util.LinkedHashMap<>());
+                    temperatureScore, networkScore, totalScore, eligible, exclusionReason, null,
+                    new java.util.LinkedHashMap<>());
         }
+
     }
 
     public static SchedulingResult failure(String reason) {

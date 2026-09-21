@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * 트리에서 VM 하위 Network 항목을 선택했을 때 모니터링 탭 차트 데이터를 제공한다.
  * 개요 탭은 화면 설계 미확정 — 추가 시 CPU 패턴대로 확장한다.
- * VM 은 nsId·infraId·nodeId 쿼리 파라미터로 식별한다(VM 상세·CPU 패널과 동일).
+ * VM 은 nsId·infraId·vmId 쿼리 파라미터로 식별한다(VM 상세·CPU 패널과 동일).
  * VM 상세 패널은 ResourceExplorerVmController 가 담당한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (VM Network)", description = "VM Network 카테고리 — 모니터링 차트")
@@ -42,10 +42,10 @@ public class ResourceExplorerVmNetworkController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @RequestParam(defaultValue = "NETWORK_RECV") VmNetworkMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
         return ApiResponse.ok(resourceExplorerVmNetworkService.getNetworkMetricTrend(
-                roleName, nsId, infraId, nodeId, metric, interval));
+                roleName, nsId, infraId, vmId, metric, interval));
     }
 }

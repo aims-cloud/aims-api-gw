@@ -26,13 +26,16 @@ public final class LinkMatrix {
     public static final LinkMatrix EMPTY = new LinkMatrix(Collections.emptyMap());
 
     /**
-     * 한 링크의 품질 — 엔진이 필요로 하는 세 값만 담는다(엔티티를 엔진에 노출하지 않는다).
+     * 한 링크의 품질 — 엔진이 필요로 하는 네 값만 담는다(엔티티를 엔진에 노출하지 않는다).
+     *
+     * <p>인자 순서는 원장 컬럼 순서(지연 → 대역폭 → 손실 → 상태)와 같다.</p>
      *
      * @param latencyMs         왕복 지연(ms)
+     * @param bandwidthMbps     대역폭(Mbps). 모르면 null → 부족분 항이 0 이라 예전과 같은 비용이다
      * @param packetLossPercent 손실률(%). 모르면 null → 0 으로 본다
      * @param status            UP · DEGRADED · DOWN
      */
-    public record Quality(double latencyMs, Double packetLossPercent, MdcLink.LinkStatus status) {
+    public record Quality(double latencyMs, Double bandwidthMbps, Double packetLossPercent, MdcLink.LinkStatus status) {
         public double lossOrZero() {
             return packetLossPercent == null ? 0.0 : packetLossPercent;
         }
@@ -53,7 +56,7 @@ public final class LinkMatrix {
         Map<MdcLink.Pair, Quality> m = new HashMap<>();
         for (MdcLink l : rows) {
             m.put(MdcLink.Pair.of(l.getMdcA(), l.getMdcB()),
-                  new Quality(l.getLatencyMs(), l.getPacketLossPercent(), l.getStatus()));
+                  new Quality(l.getLatencyMs(), l.getBandwidthMbps(), l.getPacketLossPercent(), l.getStatus()));
         }
         return new LinkMatrix(Collections.unmodifiableMap(m));
     }

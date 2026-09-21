@@ -22,7 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 트리에서 가상머신(Tumblebug Node)을 선택했을 때 오른쪽 패널(개요·모니터링 탭)의 데이터를 제공한다.
  *   개요 탭     — 주요 지표 카드 5종, 모니터링 요약 차트 6종, VM 정보 표
  *   모니터링 탭 — 지표별 시계열 (개요 요약 차트와 metrics/trend 공용)
- * VM 은 트리 resourceId {@code TB:{ns}/{infra}/{node}} 를 쪼갠 nsId·infraId·nodeId 쿼리 파라미터로 식별한다
+ * VM 은 nsId·infraId·vmId 쿼리 파라미터로 식별한다 — 트리 VIRTUAL_MACHINE 노드의 같은 이름 필드를 그대로 넘긴다.
+ * vmId 는 Tumblebug 의 node id 이며, 물리 노드 패널의 nodeId(assets.id)와 구분하기 위해 이름을 vmId 로 둔다
  * (Tumblebug ID 에 '/' 가 올 수 있어 경로 변수 대신 쿼리 파라미터를 쓴다).
  * 접근 권한은 nsId 가 토큰 역할(roleName 지정 시 그 역할)의 role_namespaces 매핑에 있는지로 판정하며, 없으면 404 다.
  * VM 하위 카테고리(CPU/Disk/…/GPU)는 화면 확정 시 노드 카테고리 패턴으로 별도 추가한다.
@@ -47,8 +48,8 @@ public class ResourceExplorerVmController {
     public ApiResponse<VmSummaryResponse> getVmSummary(@RequestParam(required = false) String roleName,
                                                        @RequestParam String nsId,
                                                        @RequestParam String infraId,
-                                                       @RequestParam String nodeId) {
-        return ApiResponse.ok(resourceExplorerVmService.getVmSummary(roleName, nsId, infraId, nodeId));
+                                                       @RequestParam String vmId) {
+        return ApiResponse.ok(resourceExplorerVmService.getVmSummary(roleName, nsId, infraId, vmId));
     }
 
     @Operation(summary = "VM 모니터링 차트",
@@ -62,10 +63,10 @@ public class ResourceExplorerVmController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @RequestParam(required = false) NodeDetailMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
-        return ApiResponse.ok(resourceExplorerVmService.getVmMetricTrend(roleName, nsId, infraId, nodeId, metric, interval));
+        return ApiResponse.ok(resourceExplorerVmService.getVmMetricTrend(roleName, nsId, infraId, vmId, metric, interval));
     }
 
     @Operation(summary = "VM 정보",
@@ -76,7 +77,7 @@ public class ResourceExplorerVmController {
     public ApiResponse<VmInfoResponse> getVmInfo(@RequestParam(required = false) String roleName,
                                                  @RequestParam String nsId,
                                                  @RequestParam String infraId,
-                                                 @RequestParam String nodeId) {
-        return ApiResponse.ok(resourceExplorerVmService.getVmInfo(roleName, nsId, infraId, nodeId));
+                                                 @RequestParam String vmId) {
+        return ApiResponse.ok(resourceExplorerVmService.getVmInfo(roleName, nsId, infraId, vmId));
     }
 }

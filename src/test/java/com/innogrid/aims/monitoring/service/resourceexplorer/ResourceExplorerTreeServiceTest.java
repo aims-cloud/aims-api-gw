@@ -118,6 +118,15 @@ class ResourceExplorerTreeServiceTest {
         when(metricsClient.queryResults(MonitoringCapabilityResolver.ipmiMetricQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
                 vector(Map.of("instance", NODE01_IPMI, "metric", "ipmi_temperature_celsius"), "12"),
                 vector(Map.of("instance", NODE01_IPMI, "metric", "ipmi_fan_speed_rpm"), "6")));
+        stubNodeMetrics(NODE01_NE, MonitoringCapabilityResolver.NODE_PRESENCE_METRICS);
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.swapPresenceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
+                vector(Map.of("instance", NODE01_NE), "8589934592")));
+    }
+
+    /** node_exporter 항목 존재 판정 지표군 — 주어진 instance 에 주어진 지표들이 24시간 안에 있었다고 스텁한다 */
+    private void stubNodeMetrics(String instance, List<String> metrics) {
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.nodeMetricQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW)))
+                .thenReturn(metrics.stream().map(m -> vector(Map.of("instance", instance, "metric", m), "288")).toList());
     }
 
     private void loginWithRoles(String... roles) {
@@ -184,7 +193,7 @@ class ResourceExplorerTreeServiceTest {
         ResourceTreeNodeResponse host = mdc01.children().get(0);
         assertThat(host.id()).isEqualTo("host:ADMIN:11");
         assertThat(host.resourceId()).isEqualTo("11");                // assets.id
-        assertThat(host.status()).isEqualTo("ACTIVE");                // 자원 상태
+        assertThat(host.status()).isEqualTo("RUNNING");               // 자원 상태 — 패널과 같은 판정(ACTIVE + exporter up)
         assertThat(host.monitoringStatus()).isEqualTo(MonitoringStatus.COLLECTING);
     }
 
@@ -226,10 +235,14 @@ class ResourceExplorerTreeServiceTest {
         assertThat(gpu.children()).extracting(ResourceTreeNodeResponse::name).containsExactly("GPU 0", "GPU 1");
         assertThat(gpu.children()).extracting(ResourceTreeNodeResponse::resourceId).containsExactly("GPU-aaaa", "GPU-bbbb");
 
-        // Hardware 는 센서 메트릭이 확인된 항목만 (Temperature, Fan) — 나머지는 NO_DATA 로 미생성
+        // Hardware 하위 6종은 항상 만들고, 센서 메트릭이 확인된 Temperature·Fan 만 COLLECTING, 나머지는 NO_DATA
         ResourceTreeNodeResponse hardware = node01.children().get(9);
-        assertThat(hardware.children()).extracting(ResourceTreeNodeResponse::type)
-                .containsExactly(ResourceTreeNodeType.HW_TEMPERATURE, ResourceTreeNodeType.HW_FAN);
+        assertThat(hardware.children()).extracting(ResourceTreeNodeResponse::type).containsExactly(
+                ResourceTreeNodeType.HW_TEMPERATURE, ResourceTreeNodeType.HW_FAN, ResourceTreeNodeType.HW_POWER,
+                ResourceTreeNodeType.HW_VOLTAGE, ResourceTreeNodeType.HW_HEALTH, ResourceTreeNodeType.HW_EVENTS);
+        assertThat(hardware.children()).extracting(ResourceTreeNodeResponse::monitoringStatus).containsExactly(
+                MonitoringStatus.COLLECTING, MonitoringStatus.COLLECTING, MonitoringStatus.NO_DATA,
+                MonitoringStatus.NO_DATA, MonitoringStatus.NO_DATA, MonitoringStatus.NO_DATA);
     }
 
     @Test
@@ -238,19 +251,31 @@ class ResourceExplorerTreeServiceTest {
         ResourceTreeNodeResponse node02 = host(service.getTree(noFilter()), "node-02");
 
         assertThat(node02.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
-        assertThat(node02.children()).hasSize(8);                     // node_exporter 항목 8종 유지
-        assertThat(node02.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+        assertThat(node02.children()).hasSize(10);                    // node_exporter 8종 + GPU·Hardware 그룹은 항상 존재
+        assertThat(node02.children().subList(0, 8)).extracting(ResourceTreeNodeResponse::monitoringStatus)
                 .containsOnly(MonitoringStatus.UNAVAILABLE);
+        assertThat(node02.children().get(8).type()).isEqualTo(ResourceTreeNodeType.GPU_GROUP);
+        assertThat(node02.children().get(8).monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);   // dcgm 미등록
+        assertThat(node02.children().get(9).type()).isEqualTo(ResourceTreeNodeType.HARDWARE);
+        assertThat(node02.children().get(9).monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);   // ipmi 미등록
+        assertThat(node02.children().get(9).children()).hasSize(6);
     }
 
     @Test
-    void exporter가_등록되지_않은_호스트는_항목_없이_NOT_CONFIGURED다() {
+    void exporter가_등록되지_않은_호스트도_항목을_전부_만들고_NOT_CONFIGURED로_표시한다() {
         loginWithRoles("USER");
         ResourceTreeNodeResponse node03 = host(service.getTree(noFilter()), "node-03");
 
         assertThat(node03.monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);
-        assertThat(node03.leaf()).isTrue();
-        assertThat(node03.children()).isEmpty();
+        assertThat(node03.children()).extracting(ResourceTreeNodeResponse::name).containsExactly(
+                "CPU", "Memory", "Disk", "Network", "Process", "Service Status", "Swap", "System", "GPU", "Hardware");
+        assertThat(node03.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsOnly(MonitoringStatus.NOT_CONFIGURED);
+        assertThat(node03.children().get(2).children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsOnly(MonitoringStatus.NOT_CONFIGURED);       // Disk I/O·File System
+        assertThat(node03.children().get(8).children()).isEmpty();      // GPU 장치는 지표 없이 열거할 수 없다
+        assertThat(node03.children().get(9).children()).hasSize(6);     // Hardware 하위 6종
+        assertThat(node03.children()).extracting(ResourceTreeNodeResponse::resourceId).containsOnly("13");
     }
 
     @Test
@@ -270,16 +295,91 @@ class ResourceExplorerTreeServiceTest {
         ResourceTreeNodeResponse hardware = node01.children().get(9);
         assertThat(hardware.type()).isEqualTo(ResourceTreeNodeType.HARDWARE);
         assertThat(hardware.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
-        assertThat(hardware.children()).hasSize(2);
+        assertThat(hardware.children()).hasSize(6);
+        assertThat(hardware.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsOnly(MonitoringStatus.UNAVAILABLE);          // 다운 중에는 NO_DATA 판정을 하지 않는다
     }
 
     @Test
-    void GPU_장치_메트릭이_없으면_GPU_그룹을_만들지_않는다() {
+    void dcgm은_등록됐는데_GPU_장치_메트릭이_없으면_GPU_그룹을_NO_DATA로_남긴다() {
         when(metricsClient.queryResults(MonitoringCapabilityResolver.gpuDeviceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of());
         loginWithRoles("ADMIN");
         ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
-        assertThat(node01.children()).extracting(ResourceTreeNodeResponse::type)
-                .doesNotContain(ResourceTreeNodeType.GPU_GROUP);
+
+        ResourceTreeNodeResponse gpu = node01.children().stream()
+                .filter(c -> c.type() == ResourceTreeNodeType.GPU_GROUP).findFirst().orElseThrow();
+        assertThat(gpu.monitoringStatus()).isEqualTo(MonitoringStatus.NO_DATA);
+        assertThat(gpu.children()).isEmpty();
+        assertThat(gpu.resourceId()).isEqualTo("11");
+    }
+
+    @Test
+    void ipmi는_등록됐는데_센서_메트릭이_없으면_Hardware_그룹을_NO_DATA로_남긴다() {
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.ipmiMetricQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of());
+        loginWithRoles("ADMIN");
+        ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
+
+        ResourceTreeNodeResponse hardware = node01.children().stream()
+                .filter(c -> c.type() == ResourceTreeNodeType.HARDWARE).findFirst().orElseThrow();
+        assertThat(hardware.monitoringStatus()).isEqualTo(MonitoringStatus.NO_DATA);
+        assertThat(hardware.children()).hasSize(6);
+        assertThat(hardware.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsOnly(MonitoringStatus.NO_DATA);
+    }
+
+    @Test
+    void 지표가_없는_node_exporter_항목은_NO_DATA로_남고_나머지는_COLLECTING이다() {
+        // systemd 콜렉터 미설치 + 스왑 없는 호스트: Service Status·Swap 만 NO_DATA
+        stubNodeMetrics(NODE01_NE, MonitoringCapabilityResolver.NODE_PRESENCE_METRICS.stream()
+                .filter(m -> !m.equals("node_systemd_unit_state")).toList());
+        when(metricsClient.queryResults(MonitoringCapabilityResolver.swapPresenceQuery(MonitoringCapabilityResolver.DEFAULT_PRESENCE_WINDOW))).thenReturn(List.of(
+                vector(Map.of("instance", NODE01_NE), "0")));
+        loginWithRoles("ADMIN");
+        ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
+
+        Map<ResourceTreeNodeType, MonitoringStatus> byType = node01.children().stream()
+                .collect(java.util.stream.Collectors.toMap(ResourceTreeNodeResponse::type, ResourceTreeNodeResponse::monitoringStatus));
+        assertThat(byType.get(ResourceTreeNodeType.SERVICE_STATUS)).isEqualTo(MonitoringStatus.NO_DATA);
+        assertThat(byType.get(ResourceTreeNodeType.SWAP)).isEqualTo(MonitoringStatus.NO_DATA);
+        assertThat(byType.get(ResourceTreeNodeType.CPU)).isEqualTo(MonitoringStatus.COLLECTING);
+        assertThat(byType.get(ResourceTreeNodeType.PROCESS)).isEqualTo(MonitoringStatus.COLLECTING);
+        assertThat(byType.get(ResourceTreeNodeType.DISK)).isEqualTo(MonitoringStatus.COLLECTING);
+        assertThat(node01.children()).hasSize(10);                    // 노드는 그대로 남는다
+        assertThat(node01.monitoringStatus()).isEqualTo(MonitoringStatus.COLLECTING);
+    }
+
+    @Test
+    void Disk_그룹은_하위가_둘_다_NO_DATA일_때만_NO_DATA다() {
+        stubNodeMetrics(NODE01_NE, List.of("node_cpu_seconds_total", "node_memory_MemTotal_bytes",
+                "node_network_receive_bytes_total", "node_procs_running", "node_systemd_unit_state", "node_load1"));
+        loginWithRoles("ADMIN");
+        ResourceTreeNodeResponse disk = host(service.getTree(noFilter()), "node-01").children().get(2);
+
+        assertThat(disk.type()).isEqualTo(ResourceTreeNodeType.DISK);
+        assertThat(disk.monitoringStatus()).isEqualTo(MonitoringStatus.NO_DATA);
+        assertThat(disk.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsOnly(MonitoringStatus.NO_DATA);
+
+        stubNodeMetrics(NODE01_NE, List.of("node_filesystem_size_bytes"));
+        resolver.evict();
+        disk = host(service.getTree(noFilter()), "node-01").children().get(2);
+        assertThat(disk.monitoringStatus()).isEqualTo(MonitoringStatus.COLLECTING);
+        assertThat(disk.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsExactly(MonitoringStatus.NO_DATA, MonitoringStatus.COLLECTING);
+    }
+
+    @Test
+    void 항목_노드는_소유_자원의_resourceId를_가지고_GPU_장치만_UUID를_쓴다() {
+        loginWithRoles("ADMIN");
+        ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
+
+        node01.children().forEach(item -> assertThat(item.resourceId()).as(item.name()).isEqualTo("11"));
+        ResourceTreeNodeResponse disk = node01.children().get(2);
+        assertThat(disk.children()).extracting(ResourceTreeNodeResponse::resourceId).containsOnly("11");
+        ResourceTreeNodeResponse gpu = node01.children().get(8);
+        assertThat(gpu.children()).extracting(ResourceTreeNodeResponse::resourceId).containsExactly("GPU-aaaa", "GPU-bbbb");
+        ResourceTreeNodeResponse hardware = node01.children().get(9);
+        assertThat(hardware.children()).extracting(ResourceTreeNodeResponse::resourceId).containsOnly("11");
     }
 
     @Test
@@ -302,7 +402,10 @@ class ResourceExplorerTreeServiceTest {
 
         ResourceTreeNodeResponse web02 = group.children().get(1);
         assertThat(web02.monitoringStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);
-        assertThat(web02.leaf()).isTrue();
+        assertThat(web02.children()).hasSize(8);                      // exporter 미설치여도 항목은 만든다
+        assertThat(web02.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
+                .containsOnly(MonitoringStatus.NOT_CONFIGURED);
+        assertThat(web02.children()).extracting(ResourceTreeNodeResponse::resourceId).containsOnly("SEBU1:vm-uuid-2");
     }
 
     // ── Thanos 스냅샷 캐시 ──────────────────────────────────────
@@ -325,15 +428,17 @@ class ResourceExplorerTreeServiceTest {
     }
 
     @Test
-    void 정상_스냅샷이_없는_상태에서_Thanos_장애면_항목은_UNAVAILABLE이고_GPU_Hardware는_만들지_않는다() {
+    void 정상_스냅샷이_없는_상태에서_Thanos_장애면_항목은_UNAVAILABLE이고_NO_DATA_판정은_보류한다() {
         when(metricsClient.queryResults(any())).thenThrow(new IllegalStateException("thanos down"));
         loginWithRoles("ADMIN");
         ResourceTreeNodeResponse node01 = host(service.getTree(noFilter()), "node-01");
 
         assertThat(node01.monitoringStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
-        assertThat(node01.children()).hasSize(8);
+        assertThat(node01.children()).hasSize(10);                    // 등록된 exporter 의 그룹은 장치·센서 없이 UNAVAILABLE 로 남는다
         assertThat(node01.children()).extracting(ResourceTreeNodeResponse::monitoringStatus)
-                .containsOnly(MonitoringStatus.UNAVAILABLE);
+                .containsOnly(MonitoringStatus.UNAVAILABLE);          // 지표 존재를 모르니 NO_DATA 로 내리지 않는다
+        assertThat(node01.children().get(8).children()).isEmpty();
+        assertThat(node01.status()).isEqualTo("PENDING");             // 관측 계통 장애는 호스트 오류로 집계하지 않는다
     }
 
     // ── 필터·검색·Lazy ───────────────────────────────────────────
@@ -360,7 +465,7 @@ class ResourceExplorerTreeServiceTest {
         assertThat(physical.children()).extracting(ResourceTreeNodeResponse::name).containsExactly("mdc-02");
         ResourceTreeNodeResponse node02 = physical.children().get(0).children().get(0);
         assertThat(node02.name()).isEqualTo("node-02");
-        assertThat(node02.children()).hasSize(8);                     // 일치 노드의 하위는 원본 유지
+        assertThat(node02.children()).hasSize(10);                    // 일치 노드의 하위는 원본 유지 (항목 8 + GPU·Hardware 그룹)
     }
 
     @Test

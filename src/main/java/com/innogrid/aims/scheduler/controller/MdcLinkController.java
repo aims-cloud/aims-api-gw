@@ -56,7 +56,8 @@ public class MdcLinkController {
     }
 
     @Operation(summary = "링크 생성",
-               description = "mdcA·mdcB(서로 다름, 순서 무관 — 사전순으로 저장)·latencyMs(0 이상) 필수. bandwidthMbps 는 0 초과, "
+               description = "mdcA·mdcB(서로 다름, 순서 무관 — 사전순으로 저장)·latencyMs(0 이상) 필수. bandwidthMbps 는 0 초과이며 "
+                       + "워크로드 requiredBandwidthMbps 가 있는 배치에서 부족분만큼 링크 점수를 깎습니다. "
                        + "packetLossPercent 는 0~100. status 기본 UP, source 기본 MANUAL. 같은 쌍(역방향 포함)은 409.")
     @PostMapping
     public ApiResponse<MdcLinkResponse> create(@RequestBody MdcLinkRequest request) {

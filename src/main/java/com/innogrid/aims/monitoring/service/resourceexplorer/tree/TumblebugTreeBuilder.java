@@ -63,6 +63,8 @@ import org.springframework.web.client.ResourceAccessException;
  * ng:{role}:{ns}:{infra}:{group}        | TB:{ns}/{infra}/@{group}   (미분류: @unclassified)
  * tbvm:{role}:{ns}:{infra}:{node}       | TB:{ns}/{infra}/{node}
  * </pre>
+ * Namespace~VM 노드는 패널 API 식별자 {@code nsId}·{@code infraId}·{@code nodeGroupId}·{@code vmId} 를 자기 계층까지
+ * 필드로 함께 싣는다(§4.3) — 프론트는 id·resourceId 를 파싱하지 않고 이 필드와 조상 체인만 쓴다.
  */
 @Component
 public class TumblebugTreeBuilder {
@@ -217,8 +219,9 @@ public class TumblebugTreeBuilder {
                 .map(infra -> infraNode(role, nsNodeId, nsId, infra, metrics))
                 .toList();
         String name = tb.namespaceNames().getOrDefault(nsId, nsId);
-        return ResourceTreeNodeResponse.of(nsNodeId, vmRootId, name, ResourceTreeNodeType.NAMESPACE,
-                "TB:" + nsId, role, null, tb.failedNamespaces().contains(nsId) ? UNAVAILABLE_STATUS : null, null, infras);
+        return ResourceTreeNodeResponse.ofTumblebug(nsNodeId, vmRootId, name, ResourceTreeNodeType.NAMESPACE,
+                "TB:" + nsId, role, nsId, null, null, null, null,
+                tb.failedNamespaces().contains(nsId) ? UNAVAILABLE_STATUS : null, null, infras);
     }
 
     private static ResourceTreeNodeResponse infraNode(String role,
@@ -247,8 +250,8 @@ public class TumblebugTreeBuilder {
                     UNCLASSIFIED_KEY, ResourceTreeNodeType.UNCLASSIFIED, ResourceTreeNodeType.UNCLASSIFIED.displayName(),
                     unclassified, metrics));
         }
-        return ResourceTreeNodeResponse.of(infraNodeId, nsNodeId, infra.name(), ResourceTreeNodeType.INFRA,
-                infraResourceId, role, null, infra.status(), null, groups);
+        return ResourceTreeNodeResponse.ofTumblebug(infraNodeId, nsNodeId, infra.name(), ResourceTreeNodeType.INFRA,
+                infraResourceId, role, nsId, infra.id(), null, null, null, infra.status(), null, groups);
     }
 
     private static ResourceTreeNodeResponse groupNode(String role,
@@ -265,32 +268,36 @@ public class TumblebugTreeBuilder {
         String groupResourceId = infraResourceId + "/" + (UNCLASSIFIED_KEY.equals(groupKey) ? UNCLASSIFIED_KEY : "@" + groupKey);
         List<ResourceTreeNodeResponse> vms = nodes.stream()
                 .sorted(Comparator.comparing(TbNode::name, String.CASE_INSENSITIVE_ORDER))
-                .map(node -> vmNode(role, groupNodeId, nsId, infraId, node, metrics))
+                .map(node -> vmNode(role, groupNodeId, nsId, infraId, groupKey, node, metrics))
                 .toList();
-        return ResourceTreeNodeResponse.of(groupNodeId, infraNodeId, name, type, groupResourceId, role, null,
-                null, null, vms);
+        // nodeGroupId 는 패널 API 파라미터 값 그대로 — 미분류는 @unclassified
+        return ResourceTreeNodeResponse.ofTumblebug(groupNodeId, infraNodeId, name, type, groupResourceId, role,
+                nsId, infraId, groupKey, null, null, null, null, vms);
     }
 
     private static ResourceTreeNodeResponse vmNode(String role,
                                                    String groupNodeId,
                                                    String nsId,
                                                    String infraId,
+                                                   String groupKey,
                                                    TbNode node,
                                                    Snapshot metrics) {
         String vmNodeId = "tbvm:" + role + ":" + nsId + ":" + infraId + ":" + node.id();
+        String vmResourceId = "TB:" + nsId + "/" + infraId + "/" + node.id();
         MonitoringStatus status = metrics.tbStatusOf(nsId, infraId, node.id());
 
-        List<ResourceTreeNodeResponse> items = new ArrayList<>();
-        if (status != MonitoringStatus.NOT_CONFIGURED) {
-            items.addAll(PhysicalTreeBuilder.nodeExporterItems(vmNodeId, role, null, status));
-            List<GpuDevice> gpus = metrics.tbGpuDevices(nsId, infraId, node.id());
-            ResourceTreeNodeResponse gpuGroup = PhysicalTreeBuilder.gpuGroup(vmNodeId, role, null, gpus, status);
-            if (gpuGroup != null) {
-                items.add(gpuGroup);
-            }
-        }
-        return ResourceTreeNodeResponse.of(vmNodeId, groupNodeId, node.name(), ResourceTreeNodeType.VIRTUAL_MACHINE,
-                "TB:" + nsId + "/" + infraId + "/" + node.id(), role, null, node.provider(), node.status(), status, items);
+        // 항목은 exporter 이력이 없어도(NOT_CONFIGURED) 항상 만든다. NO_DATA 판정은 exporter 이력이 있고 Thanos 정상 스냅샷일 때만
+        Set<String> presentMetrics = status == MonitoringStatus.NOT_CONFIGURED || metrics.degraded()
+                ? null : metrics.tbNodeMetrics(nsId, infraId, node.id());
+        List<ResourceTreeNodeResponse> items = new ArrayList<>(
+                PhysicalTreeBuilder.nodeExporterItems(vmNodeId, vmResourceId, role, null, status, presentMetrics));
+        // VM 은 dcgm 등록 원장이 없어 장치 이력이 없으면 "dcgm 미설치"(NOT_CONFIGURED)로 본다
+        List<GpuDevice> gpus = metrics.tbGpuDevices(nsId, infraId, node.id());
+        items.add(PhysicalTreeBuilder.gpuGroup(vmNodeId, vmResourceId, role, null, gpus,
+                gpus.isEmpty() ? MonitoringStatus.NOT_CONFIGURED : status));
+        // 식별자 4종은 VM 노드까지만 — 하위 항목(CPU·GPU 그룹 등)은 프론트가 조상 체인에서 읽는다
+        return ResourceTreeNodeResponse.ofTumblebug(vmNodeId, groupNodeId, node.name(), ResourceTreeNodeType.VIRTUAL_MACHINE,
+                vmResourceId, role, nsId, infraId, groupKey, node.id(), node.provider(), node.status(), status, items);
     }
 
     // ── Tumblebug 조회·캐시 ─────────────────────────────────────

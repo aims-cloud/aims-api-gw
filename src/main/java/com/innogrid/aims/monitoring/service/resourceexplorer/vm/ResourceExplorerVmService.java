@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
  * 자원 탐색기 VM 상세 패널 조회 서비스 — Tumblebug Node(VM) 1개의 개요(주요 지표 카드·요약 차트)와 정보 표.
  *
  * <ul>
- *   <li>식별: nsId·infraId·nodeId 세 값. 트리 resourceId {@code TB:{ns}/{infra}/{node}} 를 쪼갠 것이다.</li>
+ *   <li>식별: nsId·infraId·vmId 세 값 — 트리 VIRTUAL_MACHINE 노드의 같은 이름 필드. vmId 는 Tumblebug node id 다.</li>
  *   <li>접근: nsId 가 토큰 역할(roleName 지정 시 그 역할)의 role_namespaces 매핑에 있고, Tumblebug 스냅샷에 그 Node 가 있어야 한다. 아니면 404.</li>
  *   <li>지표: Thanos 를 {@code tb_ns/tb_infra/tb_node} 라벨로 좁혀 읽는다({@link MetricSelector#tumblebugNode}).
  *       VM 안 node_exporter·dcgm_exporter 에 같은 라벨이 붙으므로 선택자 하나로 두 exporter 를 가리킨다.</li>
@@ -66,8 +66,8 @@ public class ResourceExplorerVmService {
     // ── 공개 API ────────────────────────────────────────────────
 
     /** 개요 탭 주요 지표 카드 5종 — 미수집이거나 GPU 미탑재면 해당 카드가 null 로 내려간다 */
-    public VmSummaryResponse getVmSummary(String roleName, String nsId, String infraId, String nodeId) {
-        VmContext ctx = accessibleVm(roleName, nsId, infraId, nodeId);
+    public VmSummaryResponse getVmSummary(String roleName, String nsId, String infraId, String vmId) {
+        VmContext ctx = accessibleVm(roleName, nsId, infraId, vmId);
         HostSummaryMetrics m = detailMetrics.summary(ctx.selector(), ctx.selector());
         return new VmSummaryResponse(
                 OffsetDateTime.now(ZoneId.systemDefault()),
@@ -81,9 +81,9 @@ public class ResourceExplorerVmService {
 
     /** 요약 차트 — 지표별 시계열 (NETWORK 는 수신/송신 2개 시리즈, 미수집이면 빈 시리즈).
      *  metric 미지정 시 6종 전부. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep. */
-    public List<NodeMetricTrendResponse> getVmMetricTrend(String roleName, String nsId, String infraId, String nodeId,
+    public List<NodeMetricTrendResponse> getVmMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                           NodeDetailMetric metric, NodeMetricInterval interval) {
-        VmContext ctx = accessibleVm(roleName, nsId, infraId, nodeId);
+        VmContext ctx = accessibleVm(roleName, nsId, infraId, vmId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -96,17 +96,17 @@ public class ResourceExplorerVmService {
     }
 
     /** 개요 탭 VM 정보 표 — Tumblebug Node 상세 원문에서 구성 */
-    public VmInfoResponse getVmInfo(String roleName, String nsId, String infraId, String nodeId) {
-        VmContext ctx = accessibleVm(roleName, nsId, infraId, nodeId);
+    public VmInfoResponse getVmInfo(String roleName, String nsId, String infraId, String vmId) {
+        VmContext ctx = accessibleVm(roleName, nsId, infraId, vmId);
         Map<String, Object> node;
         try {
-            node = tumblebugClient.getNode(nsId, infraId, nodeId);
+            node = tumblebugClient.getNode(nsId, infraId, vmId);
         } catch (RuntimeException e) {
-            log.warn("Tumblebug Node 상세 조회 실패 (ns={}, infra={}, node={}): {}", nsId, infraId, nodeId, e.getMessage());
-            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "Tumblebug 에서 VM 정보를 조회할 수 없습니다: " + nodeId);
+            log.warn("Tumblebug Node 상세 조회 실패 (ns={}, infra={}, node={}): {}", nsId, infraId, vmId, e.getMessage());
+            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "Tumblebug 에서 VM 정보를 조회할 수 없습니다: " + vmId);
         }
         if (node == null || str(node, "id") == null) {
-            throw notFound(nodeId);
+            throw notFound(vmId);
         }
         Map<String, Object> spec = nested(node, "spec");
         Map<String, Object> image = nested(node, "image");
@@ -122,7 +122,7 @@ public class ResourceExplorerVmService {
         }
         return new VmInfoResponse(
                 ctx.vmId(),
-                str(node, "name") == null ? nodeId : str(node, "name"),
+                str(node, "name") == null ? vmId : str(node, "name"),
                 nsId,
                 infraId,
                 str(node, "nodeGroupId"),
@@ -145,13 +145,13 @@ public class ResourceExplorerVmService {
     // ── 접근 검증 ───────────────────────────────────────────────
 
     /** nsId 가 토큰 역할(roleName 지정 시 그 역할) 스코프에 있고 Tumblebug 스냅샷에 Node 가 존재할 때만 컨텍스트를 만든다. 아니면 404. */
-    private VmContext accessibleVm(String roleName, String nsId, String infraId, String nodeId) {
-        TbNode node = support.accessibleNode(roleName, nsId, infraId, nodeId);
-        return new VmContext(nsId, infraId, node, MetricSelector.tumblebugNode(nsId, infraId, nodeId));
+    private VmContext accessibleVm(String roleName, String nsId, String infraId, String vmId) {
+        TbNode node = support.accessibleNode(roleName, nsId, infraId, vmId);
+        return new VmContext(nsId, infraId, node, MetricSelector.tumblebugNode(nsId, infraId, vmId));
     }
 
-    private static BusinessException notFound(String nodeId) {
-        return new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + nodeId);
+    private static BusinessException notFound(String vmId) {
+        return new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + vmId);
     }
 
     // ── 카드 구성 ───────────────────────────────────────────────

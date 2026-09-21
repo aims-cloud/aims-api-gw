@@ -22,7 +22,13 @@ import tools.jackson.databind.JsonNode;
  * <b>존재는 검증하지 않는다</b> — 검증하려면 원장 CRUD 가 저장소를 불러야 한다. 어느 시리즈에도 걸리지 않는 오타는
  * 그 노드의 GPU·전력·온도가 미계측으로 남을 뿐 다른 노드를 건드리지 않는다.</p>
  *
- * <p>노드 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다.</p>
+ * <p>노드 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다. 대소문자만 다른
+ * 식별자도 409 다 — 라벨은 대소문자를 가리므로 철자가 다른 행은 영원히 쓰이지 않는데 운영자는 등록했다고 믿게 된다.</p>
+ *
+ * <p><b>한 익스포터 instance 는 한 노드에만.</b> 다른 행이 이미 쓰는 DCGM·IPMI instance 는 409 다. 같은 시리즈를 두
+ * 노드에 넣으면 그 값이 두 번 세어져 클러스터 전력 합·에너지·GPU 총량이 부푼다. 수집기도 같은 충돌을 미계측으로
+ * 떨어뜨리지만, 여기서 막아야 운영자가 그 자리에서 안다. 중앙 IPMI 익스포터가 노드를 instance 로 구분하지 못하면
+ * 그 노드들은 미계측으로 두는 것이 맞다.</p>
  */
 @Service
 public class NodeExporterMappingService {
@@ -59,10 +65,11 @@ public class NodeExporterMappingService {
     public NodeExporterMapping create(NodeExporterMappingRequest r) {
         if (r == null) throw badRequest("요청 본문이 필요합니다");
         String nodeId = requireText(r.nodeId(), "노드 식별자(nodeId)", NodeExporterMapping.INSTANCE_MAX);
-        repository.findByNodeId(nodeId).ifPresent(existing -> { throw conflict(existing); });
+        repository.findByNodeIdIgnoreCase(nodeId).ifPresent(existing -> { throw conflict(existing); });
 
         NodeExporterMapping mapping = new NodeExporterMapping(nodeId);
         apply(mapping, r);
+        rejectSharedInstances(mapping);
         ScheduleActorResolver.Actor actor = actorResolver.current();
         mapping.setCreatedBy(actor.email(), actor.name());
         mapping.setUpdatedBy(actor.email(), actor.name());
@@ -78,11 +85,17 @@ public class NodeExporterMappingService {
         if (r.nodeId() != null) {
             String nodeId = requireText(r.nodeId(), "노드 식별자(nodeId)", NodeExporterMapping.INSTANCE_MAX);
             if (!nodeId.equals(mapping.getNodeId())) {
-                repository.findByNodeId(nodeId).ifPresent(existing -> { throw conflict(existing); });
+                repository.findByNodeIdIgnoreCase(nodeId)
+                        .filter(existing -> !existing.getId().equals(mapping.getId()))
+                        .ifPresent(existing -> { throw conflict(existing); });
                 mapping.setNodeId(nodeId);
             }
         }
         apply(mapping, r);
+        // 노드 식별자를 바꿔 저장된 익스포터 칸과 같아졌으면 그 칸은 뜻이 없다 — 비워 그대로로 떨어뜨린다
+        if (mapping.getNodeId().equals(mapping.getDcgmInstance())) mapping.setDcgmInstance(null);
+        if (mapping.getNodeId().equals(mapping.getIpmiInstance())) mapping.setIpmiInstance(null);
+        rejectSharedInstances(mapping);
         ScheduleActorResolver.Actor actor = actorResolver.current();
         mapping.setUpdatedBy(actor.email(), actor.name());
         return saveOrConflict(mapping);
@@ -105,6 +118,26 @@ public class NodeExporterMappingService {
     }
 
     // ── 반영·검증 ──────────────────────────────────────────────
+
+    /** 다른 행이 이미 쓰는 DCGM·IPMI instance 면 409. 원장은 작아 전건을 훑는다. */
+    private void rejectSharedInstances(NodeExporterMapping mapping) {
+        for (NodeExporterMapping other : repository.findAll()) {
+            if (other.getId() != null && other.getId().equals(mapping.getId())) continue;
+            if (mapping.getDcgmInstance() != null && mapping.getDcgmInstance().equals(other.getDcgmInstance())) {
+                throw shared("DCGM instance", mapping.getDcgmInstance(), other);
+            }
+            if (mapping.getIpmiInstance() != null && mapping.getIpmiInstance().equals(other.getIpmiInstance())) {
+                throw shared("IPMI instance", mapping.getIpmiInstance(), other);
+            }
+        }
+    }
+
+    private static BusinessException shared(String label, String value, NodeExporterMapping other) {
+        return new BusinessException(HttpStatus.CONFLICT, String.format(
+                "%s %s 은(는) 이미 노드 %s (id %d) 에 적혀 있습니다. 한 시리즈를 두 노드에 넣으면 값이 두 번 세어져 합계가 부풉니다 — "
+                        + "익스포터가 노드를 instance 로 구분하지 못하면 그 노드들은 비워 두십시오",
+                label, value, other.getNodeId(), other.getId()));
+    }
 
     /**
      * 두 익스포터 칸은 {@link JsonNode} 로 받아 "비우는 것" 을 표현한다 — 필드가 {@code null} 이면 키 없음(유지),

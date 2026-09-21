@@ -201,6 +201,20 @@ class PowerEfficiencyTrendTest {
         assertDoesNotThrow(() -> service.trend("node-1", TO.minusDays(30), TO, "1h"));
     }
 
+    @DisplayName("전력은 저장소에 있는 IPMI instance(host:9290)로 묻는다 — 노드 instance 로 물으면 빈손이다")
+    @Test
+    void power_is_queried_by_the_discovered_ipmi_instance() {
+        when(metrics.queryResults(contains("ipmi_dcmi_power_consumption_watts")))
+                .thenReturn(List.of(Map.of("metric", Map.of("instance", "node-1:9290"), "value", List.of(1L, "1"))));
+        stub("instance=\"node-1:9290\"", series(1756684800L, 200.0));
+        stub("node_cpu_seconds_total", series(1756684800L, 80.0));
+
+        List<PowerEfficiencyTrendResponse.Point> points = service.trend("node-1:9100", FROM, TO, "5m").points();
+
+        assertEquals(1, points.size(), "node-1:9100 으로 물었다면 스텁에 걸리지 않아 전력이 없다");
+        assertEquals(0.40, points.get(0).peiRaw(), 1e-9);
+    }
+
     // ── 도우미 ─────────────────────────────────────────────────
 
     /** PromQL 일부가 일치하는 호출에 시계열을 물린다. */

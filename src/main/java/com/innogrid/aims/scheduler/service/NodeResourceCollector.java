@@ -175,15 +175,26 @@ public class NodeResourceCollector {
 
             List<String> instances = new ArrayList<>();
             List<String> mdcIds = new ArrayList<>();
-            List<Future<NodeOutcome>> futures = new ArrayList<>();
             for (Map<String, Object> result : results) {
                 Map<String, String> labels = (Map<String, String>) result.get("metric");
-                String instance = labels.getOrDefault("instance", "unknown");
-                String mdcId = labels.getOrDefault("mdc_id", "unknown");
-                int gpu = gpuCounts.getOrDefault(exporters.dcgmOf(instance), 0);
-                String ipmiInstance = exporters.ipmiOf(instance);
-                instances.add(instance);
-                mdcIds.add(mdcId);
+                instances.add(labels.getOrDefault("instance", "unknown"));
+                mdcIds.add(labels.getOrDefault("mdc_id", "unknown"));
+            }
+            // 노드 전체를 한 번에 해석한다 — 같은 시리즈를 가리킨 노드가 둘이면 둘 다 미계측(한 값이 두 번 세어지면 합계가 부푼다)
+            Map<String, String> dcgmOfNode = exporters.dcgmFor(instances);
+            Map<String, String> ipmiOfNode = exporters.ipmiFor(instances);
+
+            List<Future<NodeOutcome>> futures = new ArrayList<>();
+            for (int i = 0; i < instances.size(); i++) {
+                String instance = instances.get(i);
+                String mdcId = mdcIds.get(i);
+                String dcgmInstance = dcgmOfNode.getOrDefault(instance, instance);
+                String ipmiInstance = ipmiOfNode.getOrDefault(instance, instance);
+                if (!dcgmInstance.equals(exporters.dcgmOf(instance)) || !ipmiInstance.equals(exporters.ipmiOf(instance))) {
+                    log.warn("익스포터 대응 충돌: instance={} — 다른 노드와 같은 시리즈(DCGM {} / IPMI {})를 가리켜 이 노드는 그대로 둔다. "
+                            + "원장에서 한 instance 를 한 노드에만 적으십시오", instance, exporters.dcgmOf(instance), exporters.ipmiOf(instance));
+                }
+                int gpu = gpuCounts.getOrDefault(dcgmInstance, 0);
                 futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, ipmiInstance, gpu, specs)));
             }
 

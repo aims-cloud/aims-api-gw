@@ -22,8 +22,9 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>모의 게이트웨이는 이제 DCGM 을 {@code host:9400}, IPMI 를 {@code host:9290} 으로 낸다. 노드 instance 로는 둘을
  * 찾을 수 없으므로, 수집기가 GPU 개수와 전력을 얻는다는 것 자체가 해석기가 결합을 살렸다는 증명이다. 그 위에 원장에
- * <b>다른 노드의 IPMI</b> 를 적어 두면 그 노드의 전력이 이 노드로 들어와야 한다 — 원장이 호스트명 일치보다 앞선다는
- * 것을 값으로 보이는 유일한 방법이다.</p>
+ * <b>저장소에 없는 IPMI</b> 를 적어 두면 호스트명 일치로 잡혔을 전력이 사라져야 한다 — 원장이 호스트명 일치보다
+ * 앞선다는 것을 값으로 보이는 방법이다. 다른 노드의 시리즈를 적으면 두 노드가 충돌해 둘 다 미계측이 된다 — 한 값을 두
+ * 번 세지 않는다.</p>
  */
 @SpringBootTest
 @TestPropertySource(properties = "aims.scheduler.mock-enabled=true")
@@ -52,23 +53,39 @@ class ExporterMappingCollectionTest {
         assertEquals(NodeResource.PowerSource.NONE, nodes.get("busan-03:9100").getPowerSource(), "IPMI 없는 노드는 그대로 미계측");
     }
 
-    @DisplayName("원장은 호스트명 일치보다 앞선다 — 다른 노드의 IPMI 를 적으면 그 노드의 전력이 들어온다")
+    @DisplayName("원장은 호스트명 일치보다 앞선다 — 저장소에 없는 IPMI 를 적으면 잡혔을 전력이 사라진다")
     @Test
     void the_ledger_wins_over_the_host_heuristic() {
         Map<String, NodeResource> before = byId();
-        double seoul01 = before.get("seoul-01:9100").getPowerWatts();
-        double seoul03 = before.get("seoul-03:9100").getPowerWatts();
-        assertTrue(seoul01 > 0 && seoul03 > 0);
-        assertNotEquals(Math.round(seoul01), Math.round(seoul03), "두 노드의 전력이 달라야 바뀐 것이 보인다");
+        assertTrue(before.get("seoul-01:9100").getPowerWatts() > 0, "호스트명 일치로 seoul-01:9290 이 잡혀 있어야 출발점이 된다");
 
-        // 호스트명 일치라면 seoul-01:9290 이 잡혔을 자리에 seoul-03 의 IPMI 를 적는다.
+        NodeExporterMapping mapping = new NodeExporterMapping("seoul-01:9100");
+        mapping.setIpmiInstance("nowhere:9290");
+        repository.saveAndFlush(mapping);
+
+        Map<String, NodeResource> after = byId();
+        assertEquals(0.0, after.get("seoul-01:9100").getPowerWatts(), "원장이 가리킨 자리에는 시리즈가 없다 — 호스트명 일치가 이겼다면 값이 그대로다");
+        assertEquals(NodeResource.PowerSource.NONE, after.get("seoul-01:9100").getPowerSource());
+        assertTrue(after.get("seoul-03:9100").getPowerWatts() > 0, "다른 노드는 건드리지 않는다");
+    }
+
+    @DisplayName("두 노드가 같은 IPMI 시리즈를 가리키면 둘 다 미계측이다 — 한 전력을 두 번 세지 않는다")
+    @Test
+    void two_nodes_on_one_series_are_both_unmeasured() {
+        Map<String, NodeResource> before = byId();
+        double seoul03 = before.get("seoul-03:9100").getPowerWatts();
+        assertTrue(seoul03 > 0);
+
+        // seoul-03 은 호스트명 일치로 seoul-03:9290 을 갖는다. seoul-01 의 원장이 같은 시리즈를 가리키면 충돌이다.
         NodeExporterMapping mapping = new NodeExporterMapping("seoul-01:9100");
         mapping.setIpmiInstance("seoul-03:9290");
         repository.saveAndFlush(mapping);
 
         Map<String, NodeResource> after = byId();
-        assertEquals(Math.round(seoul03), Math.round(after.get("seoul-01:9100").getPowerWatts()),
-                "원장이 가리킨 시리즈의 전력이 들어와야 한다 — 호스트명 일치가 이겼다면 값이 그대로다");
-        assertEquals(Math.round(seoul03), Math.round(after.get("seoul-03:9100").getPowerWatts()), "다른 노드는 건드리지 않는다");
+        assertEquals(NodeResource.PowerSource.NONE, after.get("seoul-01:9100").getPowerSource(), "가리킨 쪽");
+        assertEquals(NodeResource.PowerSource.NONE, after.get("seoul-03:9100").getPowerSource(), "가리켜진 쪽도 — 어느 값이 맞는지 알 수 없다");
+        double sumBefore = before.values().stream().mapToDouble(NodeResource::getPowerWatts).sum();
+        double sumAfter = after.values().stream().mapToDouble(NodeResource::getPowerWatts).sum();
+        assertTrue(sumAfter < sumBefore, "합계는 줄어야 한다 — 두 배로 세었다면 커진다");
     }
 }

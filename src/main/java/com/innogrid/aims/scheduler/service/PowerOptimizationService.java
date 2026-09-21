@@ -367,9 +367,11 @@ public class PowerOptimizationService {
      */
     private Map<String, Map<Long, Double>> rekeyToNodes(Map<String, Map<Long, Double>> rawPower, java.util.Set<String> nodeInstances) {
         com.innogrid.aims.scheduler.model.ExporterInstances exporters = exporterResolver.resolve(java.util.Set.of(), rawPower.keySet());
+        // 노드 전체를 한 번에 — 같은 IPMI 시리즈를 가리킨 노드가 둘이면 둘 다 빠진다. 한 시계열을 두 노드에 넣으면 합·에너지가 그 배수로 부푼다.
+        Map<String, String> ipmiOfNode = exporters.ipmiFor(nodeInstances);
         Map<String, Map<Long, Double>> out = new LinkedHashMap<>();
         for (String node : nodeInstances) {
-            Map<Long, Double> series = rawPower.get(exporters.ipmiOf(node));
+            Map<Long, Double> series = rawPower.get(ipmiOfNode.getOrDefault(node, node));
             if (series != null && !series.isEmpty()) out.put(node, series);
         }
         return out;

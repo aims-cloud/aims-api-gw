@@ -12,5 +12,8 @@ public interface NodeExporterMappingRepository extends JpaRepository<NodeExporte
 
     Optional<NodeExporterMapping> findByNodeId(String nodeId);
 
+    /** 중복 검사용 — 라벨 철자만 다른 행은 영원히 쓰이지 않으므로 등록 단계에서 막는다. */
+    Optional<NodeExporterMapping> findByNodeIdIgnoreCase(String nodeId);
+
     List<NodeExporterMapping> findAllByOrderByNodeIdAsc();
 }

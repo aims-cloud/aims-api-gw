@@ -294,7 +294,9 @@ public class PowerEfficiencyService {
 
         try {
             // 전력은 IPMI 시리즈의 instance 로 묻는다 — 노드 익스포터와 다를 수 있다(원장 → 호스트명 일치 → 그대로).
-            String ipmiInstance = exporterResolver.discover().ipmiOf(nodeId);
+            // 이 경로는 IPMI 만 쓰므로 DCGM 발견 질의는 던지지 않는다. 노드 한 대만 보므로 다른 노드와의 시리즈 충돌은
+            // 여기서 가리지 못한다 — 원장이 같은 instance 의 중복 등록을 409 로 막고, 수집기가 충돌을 미계측으로 떨어뜨린다.
+            String ipmiInstance = exporterResolver.resolve(java.util.Set.of(), exporterResolver.discoverIpmiInstances()).ipmiOf(nodeId);
             Map<Long, Double> power = seriesOf(String.format(
                     "ipmi_dcmi_power_consumption_watts{instance=\"%s\"}", ipmiInstance), start, end, interval);
             // 스냅샷 수집과 동일한 식. 다르면 목록 API 와 추세의 값이 맞지 않는다.

@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.model;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
@@ -101,6 +102,45 @@ class ExporterInstancesTest {
         assertEquals("::1", ExporterInstances.hostOf("[::1]:9100"));
         assertEquals("fe80::1", ExporterInstances.hostOf("fe80::1"), "콜론이 여럿이고 대괄호가 없으면 포트 없는 IPv6");
         assertEquals("", ExporterInstances.hostOf(null));
+    }
+
+    @DisplayName("같은 시리즈로 해석된 노드가 둘이면 둘 다 그대로 떨어진다 — 한 값을 두 노드에 넣지 않는다")
+    @Test
+    void nodes_resolving_to_one_series_all_fall_back() {
+        // 중앙 IPMI 를 두 노드에 적은 원장 + 셋째 노드는 호스트명 일치
+        ExporterInstances r = ExporterInstances.of(List.of(
+                mapping("a:9100", null, "ipmi-exporter:9290"),
+                mapping("b:9100", null, "ipmi-exporter:9290")),
+                Set.of(), Set.of("ipmi-exporter:9290", "c:9290"));
+
+        Map<String, String> ipmi = r.ipmiFor(List.of("a:9100", "b:9100", "c:9100"));
+
+        assertEquals("a:9100", ipmi.get("a:9100"), "충돌 — 자기 instance 로(저장소에 없으니 미계측)");
+        assertEquals("b:9100", ipmi.get("b:9100"));
+        assertEquals("c:9290", ipmi.get("c:9100"), "충돌하지 않은 노드는 그대로 이어진다");
+        assertEquals("ipmi-exporter:9290", r.ipmiOf("a:9100"), "한 노드씩 물으면 원장 값 그대로 — 충돌은 묶어서 물을 때만 가린다");
+    }
+
+    @DisplayName("원장이 다른 노드가 호스트명으로 얻는 시리즈를 가리키면 가리켜진 쪽도 함께 떨어진다 — 어느 노드의 값인지 알 수 없다")
+    @Test
+    void pointing_at_another_nodes_series_drops_both() {
+        ExporterInstances r = ExporterInstances.of(List.of(mapping("a:9100", "b:9400", null)),
+                Set.of("b:9400"), Set.of());
+
+        Map<String, String> dcgm = r.dcgmFor(List.of("a:9100", "b:9100"));
+
+        assertEquals("a:9100", dcgm.get("a:9100"), "b 의 GPU 를 a 에도 세면 총량이 두 배다");
+        assertEquals("b:9100", dcgm.get("b:9100"), "b 도 그대로로 — 원장이 틀렸는지 호스트명이 틀렸는지 코드는 모른다. 원장을 고치면 돌아온다");
+    }
+
+    @DisplayName("호스트명 일치는 대소문자를 가리지 않고, 원장 키의 앞뒤 공백은 무시한다")
+    @Test
+    void host_match_ignores_case_and_ledger_keys_are_trimmed() {
+        NodeExporterMapping padded = mapping(" seoul-01:9100 ", null, "ipmi-exporter:9290");
+        ExporterInstances r = ExporterInstances.of(List.of(padded), Set.of("seoul-02:9400"), Set.of("ipmi-exporter:9290"));
+
+        assertEquals("seoul-02:9400", r.dcgmOf("Seoul-02:9100"), "스크레이프 설정의 철자가 달라도 같은 호스트");
+        assertEquals("ipmi-exporter:9290", r.ipmiOf("seoul-01:9100"), "스크립트로 넣은 공백 붙은 키도 원장으로 잡힌다");
     }
 
     @DisplayName("비어 있으면 모두 그대로다 — 이 브랜치 이전과 같은 동작")

@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.model;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,8 +51,11 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
         Map<String, String> ipmi = new LinkedHashMap<>();
         if (ledger != null) {
             for (NodeExporterMapping m : ledger) {
-                if (m.getDcgmInstance() != null && !m.getDcgmInstance().isBlank()) dcgm.put(m.getNodeId(), m.getDcgmInstance().trim());
-                if (m.getIpmiInstance() != null && !m.getIpmiInstance().isBlank()) ipmi.put(m.getNodeId(), m.getIpmiInstance().trim());
+                if (m.getNodeId() == null) continue;
+                // 키도 다듬는다 — API 는 저장 전에 trim 하지만 스크립트·직접 INSERT 로 들어온 행은 그렇지 않을 수 있다.
+                String node = m.getNodeId().trim();
+                if (m.getDcgmInstance() != null && !m.getDcgmInstance().isBlank()) dcgm.put(node, m.getDcgmInstance().trim());
+                if (m.getIpmiInstance() != null && !m.getIpmiInstance().isBlank()) ipmi.put(node, m.getIpmiInstance().trim());
             }
         }
         return new ExporterInstances(dcgm, ipmi,
@@ -69,9 +73,41 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
         return resolve(nodeInstance, ipmiByNode, ipmiSeen);
     }
 
-    /** 이 노드에 원장이나 호스트명으로 <b>실제로 이어진</b> 익스포터가 있는가 — 그대로 떨어진 경우는 아니다. */
+    /**
+     * 여러 노드를 한 번에 — 노드 → DCGM instance. <b>같은 시리즈로 해석된 노드가 둘 이상이면 그 노드들은 전부 그대로(자기
+     * instance)로 떨어진다.</b> 한 시리즈를 두 노드에 넣으면 값이 두 번 세어져 클러스터 합계·에너지가 부푼다 — 후보가
+     * 둘이면 고르지 않는다는 원칙의 같은 결이다. 중앙 IPMI 익스포터를 여러 노드에 적어 둔 원장이 바로 이 경우다.
+     */
+    public Map<String, String> dcgmFor(Collection<String> nodeInstances) {
+        return assign(nodeInstances, dcgmByNode, dcgmSeen);
+    }
+
+    /** 여러 노드를 한 번에 — 노드 → IPMI instance. 충돌 규칙은 {@link #dcgmFor} 와 같다. */
+    public Map<String, String> ipmiFor(Collection<String> nodeInstances) {
+        return assign(nodeInstances, ipmiByNode, ipmiSeen);
+    }
+
+    /**
+     * 이 노드의 그 익스포터 시리즈가 저장소에 실제로 있는가 — 원장·호스트명으로 이어졌거나, 노드 instance 그대로의
+     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 떨어진 경우만 false. 시험용.
+     */
     public boolean resolvedDcgm(String nodeInstance) { return !dcgmOf(nodeInstance).equals(nodeInstance) || dcgmSeen.contains(nodeInstance); }
     public boolean resolvedIpmi(String nodeInstance) { return !ipmiOf(nodeInstance).equals(nodeInstance) || ipmiSeen.contains(nodeInstance); }
+
+    private static Map<String, String> assign(Collection<String> nodeInstances, Map<String, String> ledger, Set<String> seen) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (nodeInstances == null) return out;
+        Map<String, Integer> claims = new HashMap<>();
+        for (String node : nodeInstances) {
+            if (node == null) continue;
+            String target = resolve(node, ledger, seen);
+            out.put(node, target);
+            claims.merge(target, 1, Integer::sum);
+        }
+        // 둘 이상이 같은 시리즈를 가리키면 전부 자기 instance 로 — 자기 시리즈가 있는 노드만 값이 남고 나머지는 미계측
+        out.replaceAll((node, target) -> claims.get(target) > 1 ? node : target);
+        return out;
+    }
 
     private static String resolve(String nodeInstance, Map<String, String> ledger, Set<String> seen) {
         if (nodeInstance == null) return null;
@@ -82,7 +118,8 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
         String host = hostOf(nodeInstance);
         String match = null;
         for (String candidate : seen) {
-            if (hostOf(candidate).equals(host)) {
+            // 호스트명은 대소문자를 가리지 않는다 — 스크레이프 설정에 적힌 철자가 익스포터마다 다를 수 있다
+            if (hostOf(candidate).equalsIgnoreCase(host)) {
                 if (match != null) return nodeInstance;   // 둘 이상 — 고르지 않는다
                 match = candidate;
             }

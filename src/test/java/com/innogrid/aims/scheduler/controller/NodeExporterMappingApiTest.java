@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 익스포터 대응 원장 API 계약 — 11필드, 검증 400, 중복 409, 부분 수정, 미인증 403.
+ * 익스포터 대응 원장 API 계약 — 11필드, 검증 400, 중복·공유 instance 409, 부분 수정, 미인증 403.
  *
  * <p>원장이 수집 결과에 닿는지는 여기서 보지 않는다 — 이 컨텍스트는 실 게이트웨이라 노드가 없다.
  * {@code ExporterMappingCollectionTest} 가 모의 클러스터로 본다.</p>
@@ -113,8 +113,8 @@ class NodeExporterMappingApiTest {
         mockMvc.perform(put(BASE + "/" + z.get("id").asLong()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"ipmiInstance\":null,\"description\":null}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.ipmiInstance").doesNotExist())
-                .andExpect(jsonPath("$.data.description").doesNotExist());
+                .andExpect(jsonPath("$.data.ipmiInstance").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.description").value(org.hamcrest.Matchers.nullValue()));
 
         JsonNode list = data(mockMvc.perform(get(BASE).param("nodeId", "nemapi-")).andExpect(status().isOk()).andReturn());
         assertEquals(2, list.size());
@@ -123,6 +123,30 @@ class NodeExporterMappingApiTest {
 
         mockMvc.perform(delete(BASE + "/" + z.get("id").asLong())).andExpect(status().isOk());
         mockMvc.perform(get(BASE + "/" + z.get("id").asLong())).andExpect(status().isNotFound());
+    }
+
+    @DisplayName("다른 노드가 쓰는 instance 는 409 — 한 시리즈를 두 노드에 넣으면 값이 두 번 세어진다. 대소문자만 다른 노드도 409")
+    @Test
+    void shared_instance_and_case_variant_node_are_conflicts() throws Exception {
+        JsonNode d = create("{\"nodeId\":\"nemapi-d:9100\",\"ipmiInstance\":\"ipmi-exporter:9290\",\"dcgmInstance\":\"nemapi-d:9400\"}");
+        JsonNode e = create("{\"nodeId\":\"nemapi-e:9100\"}");
+
+        MvcResult shared = mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nodeId\":\"nemapi-f:9100\",\"ipmiInstance\":\"ipmi-exporter:9290\"}"))
+                .andExpect(status().isConflict()).andReturn();
+        assertTrue(shared.getResponse().getContentAsString().contains("nemapi-d:9100"), "누가 쓰는지 알려 준다");
+        mockMvc.perform(put(BASE + "/" + e.get("id").asLong()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dcgmInstance\":\"nemapi-d:9400\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put(BASE + "/" + d.get("id").asLong()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ipmiInstance\":\"ipmi-exporter:9290\"}"))
+                .andExpect(status().isOk());   // 자기 행의 같은 값은 충돌이 아니다
+
+        mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{\"nodeId\":\"NEMAPI-D:9100\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put(BASE + "/" + e.get("id").asLong()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nodeId\":\"Nemapi-D:9100\"}"))
+                .andExpect(status().isConflict());
     }
 
     @DisplayName("미인증은 403 이고 기존 노드 응답은 21필드 그대로다")

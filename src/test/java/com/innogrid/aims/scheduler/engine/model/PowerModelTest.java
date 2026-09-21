@@ -554,6 +554,37 @@ class PowerModelTest {
                 "역산 여부와 무관하게 같아야 한다");
     }
 
+    /**
+     * 유휴 기준선 일원화 — 정수 픽스처(8코어 · 2코어 요구 · 정격 500 · 유휴 108W 계측·CPU 2%):
+     * 역산 유휴 (108 − 500×0.02)/0.98 = 100.0, 동적 (500 − 100) × 0.25 = 100.0 → 합 200.0.
+     * 정정을 되돌리면(절편만 선언 유휴 150) 87.5 + 100 = 187.5, 반대 방향(깨우기항을 선언 유휴로)이면 요구 0 코어에서 150.
+     */
+    @DisplayName("계측된 유휴 노드는 동적 범위 기준선과 깨우기항이 같은 역산 유휴다")
+    @Test
+    void measured_idle_node_uses_one_idle_baseline_in_both_places() {
+        NodeResource node = node(2, 108, 500);
+
+        assertEquals(200.0, model.realMarginalPower(node, 2), 1e-9, "동적 100 + 깨우기 100 — 절편만 선언이면 187.5");
+        assertEquals(100.0, model.realMarginalPower(node, 0), 1e-9, "요구 0 이면 깨우기항 단독 — 선언 유휴였다면 150");
+        double wakeup = model.wakeupPower(node);
+        double dynamicBase = 500.0 - (model.realMarginalPower(node, 2) - wakeup) / 0.25;
+        assertEquals(wakeup, dynamicBase, 1e-9, "동적항의 절편을 역산하면 깨우기항과 같은 값이 나온다");
+        assertEquals(87.5, model.marginalPowerOnCurve(node, 2), 1e-9, "공개 곡선 함수는 선언 절편 그대로 — 진단·선형 식이 쓴다");
+    }
+
+    @DisplayName("미계측·가동·역산 범위 밖·역산 끔 노드는 비트 단위로 이전과 같다")
+    @Test
+    void nodes_without_a_measured_idle_are_bit_identical_to_before() {
+        assertEquals(87.5 + 150.0, model.realMarginalPower(node(2, 0, 500), 2), 0.0, "미계측(전력 0) — 두 자리 모두 선언 유휴 150");
+        assertEquals(87.5, model.realMarginalPower(node(50, 250, 500), 2), 0.0, "가동 노드 — 동적항만, 절편 선언");
+        assertEquals(87.5 + 150.0, model.realMarginalPower(node(2, 5, 500), 2), 0.0, "역산이 음수 — 대체값으로 두 자리 모두 선언 유휴");
+        assertEquals(87.5 + 150.0, model.realMarginalPower(node(4, 520, 500), 2), 0.0, "역산이 정격 초과 — 대체값으로 두 자리 모두 선언 유휴");
+        SchedulerProperties off = new SchedulerProperties();
+        off.getPower().setIdleFromMeasurement(false);
+        assertEquals(87.5 + 150.0, new PowerModel(off).realMarginalPower(node(2, 108, 500), 2), 0.0,
+                "역산을 끄면 두 자리 모두 선언 유휴 150 — 정정 전 power-idle-fixed 열(87.5 + 150)과 같은 식이라 그 열의 값은 비트 불변");
+    }
+
     @DisplayName("실질 한계전력은 역산한 유휴전력으로 깨어난다")
     @Test
     void real_marginal_power_wakes_with_the_measured_idle() {

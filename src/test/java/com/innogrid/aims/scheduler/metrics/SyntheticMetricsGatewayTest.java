@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 스케줄러가 실제로 보내는 PromQL 13종에 가상 클러스터가 어떤 형태로 답하는가. 시각은 고정.
+ * 스케줄러가 실제로 보내는 PromQL 16종에 가상 클러스터가 어떤 형태로 답하는가. 시각은 고정.
  * 질의 문자열은 NodeResourceCollector·PowerEfficiencyService·PowerOptimizationService 의 것을 그대로 복사했다.
  */
 class SyntheticMetricsGatewayTest {
@@ -85,6 +85,38 @@ class SyntheticMetricsGatewayTest {
             assertTrue(labels.get("instance").endsWith(":" + SyntheticMetricsGateway.DCGM_PORT),
                     "DCGM 시리즈의 instance 는 노드 익스포터(:9100)가 아니라 DCGM 포트다: " + labels.get("instance"));
         }
+    }
+
+    @DisplayName("GPU 사용률·온도·전력은 카드를 접는 함수에 따라 값이 갈린다 — avg 는 평균, max 는 가장 뜨거운 카드, sum 은 합")
+    @Test
+    void gpu_telemetry_depends_on_the_wrapping_aggregation() {
+        String i = "seoul-02:9400";   // 카드 4장
+        double avgUtil = gw.queryScalar("avg by(instance) (DCGM_FI_DEV_GPU_UTIL{instance=\"" + i + "\"})");
+        double maxUtil = gw.queryScalar("max by(instance) (DCGM_FI_DEV_GPU_UTIL{instance=\"" + i + "\"})");
+        double sumUtil = gw.queryScalar("sum by(instance) (DCGM_FI_DEV_GPU_UTIL{instance=\"" + i + "\"})");
+        assertTrue(avgUtil > 0 && avgUtil <= 100);
+        assertTrue(maxUtil >= avgUtil, "최고 카드는 평균 이상");
+        assertTrue(sumUtil > maxUtil, "카드 4장의 합은 한 장보다 크다 — 집계자가 바뀌면 값이 바뀐다");
+        assertEquals(4.0, gw.queryScalar("count by(instance) (DCGM_FI_DEV_GPU_UTIL{instance=\"" + i + "\"})"), "count 는 여전히 GPU 수");
+
+        double maxTemp = gw.queryScalar("max by(instance) (DCGM_FI_DEV_GPU_TEMP{instance=\"" + i + "\"})");
+        double sumTemp = gw.queryScalar("sum by(instance) (DCGM_FI_DEV_GPU_TEMP{instance=\"" + i + "\"})");
+        assertTrue(maxTemp > 35 && maxTemp < 100, "카드 기준 35°C + 사용률 0.4 배");
+        assertTrue(sumTemp > 2 * maxTemp, "온도에 sum 을 쓰면 물리적으로 말이 안 되는 값이 나와 시험이 잡는다");
+
+        double sumPower = gw.queryScalar("sum by(instance) (DCGM_FI_DEV_POWER_USAGE{instance=\"" + i + "\"})");
+        double maxPower = gw.queryScalar("max by(instance) (DCGM_FI_DEV_POWER_USAGE{instance=\"" + i + "\"})");
+        assertTrue(sumPower > maxPower && sumPower <= 4 * SyntheticCluster.DEFAULT_GPU_CAPACITY_WATTS, "합은 카드 정격 × 4 이내");
+        assertTrue(maxPower >= SyntheticCluster.DEFAULT_GPU_IDLE_WATTS);
+    }
+
+    @DisplayName("GPU 없는 노드와 노드 instance 로 물은 DCGM 온도·전력은 빈 결과다")
+    @Test
+    void gpu_telemetry_absent_without_gpus_or_on_the_node_instance() {
+        assertTrue(gw.queryResults("max by(instance) (DCGM_FI_DEV_GPU_TEMP{instance=\"seoul-01:9400\"})").isEmpty(), "GPU 0 → 시리즈 없음");
+        assertTrue(gw.queryResults("sum by(instance) (DCGM_FI_DEV_POWER_USAGE{instance=\"seoul-02:9100\"})").isEmpty(), "노드 instance 로는 없다");
+        assertEquals(2, gw.queryResults("sum by(instance) (DCGM_FI_DEV_POWER_USAGE)").size(), "클러스터 질의는 GPU 노드 2대");
+        assertEquals(0.0, gw.queryScalar("max by(instance) (DCGM_FI_DEV_GPU_TEMP{instance=\"busan-01:9400\"})"), "scalar 는 0 — 미계측 규약");
     }
 
     @DisplayName("IPMI·DCGM 메트릭을 노드 instance 로 물으면 빈 결과다 — 실장비에서 GPU 가 0 이던 까닭")

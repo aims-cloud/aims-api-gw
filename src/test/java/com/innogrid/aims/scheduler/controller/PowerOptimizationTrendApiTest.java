@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code GET /scheduler/optimization/power/trend} 계약 — 응답 5필드·지점 11필드, 저장소 없는 환경에서도 200 + 사유,
+ * {@code GET /scheduler/optimization/power/trend} 계약 — 응답 6필드·지점 11필드, 저장소 없는 환경에서도 200 + 사유,
  * 구간 검증 400, 미인증 403, 기존 {@code /optimization/power} 불변.
  */
 @SpringBootTest
@@ -34,8 +34,9 @@ class PowerOptimizationTrendApiTest {
 
     private static final String PATH = "/api/v1/scheduler/optimization/power/trend";
 
-    /** 추세 응답 5필드. */
-    static final Set<String> RESPONSE_FIELDS = new TreeSet<>(Set.of("from", "to", "step", "points", "message"));
+    /** 추세 응답 6필드. */
+    static final Set<String> RESPONSE_FIELDS =
+            new TreeSet<>(Set.of("from", "to", "step", "points", "message", "energy"));
     /** 지점 11필드. */
     static final Set<String> POINT_FIELDS = new TreeSet<>(Set.of(
             "at", "totalNodes", "activeNodes", "idleNodes", "totalPowerWatts", "reclaimableIdleWatts",
@@ -64,7 +65,7 @@ class PowerOptimizationTrendApiTest {
         PowerOptimizationTrendResponse.Point p = new PowerOptimizationTrendResponse.Point(
                 java.time.OffsetDateTime.now(), 3, 1, 2, 510.0, 300.0, 0.15, 0.0067, 0.4, 3, true);
         JsonNode json = objectMapper.readTree(objectMapper.writeValueAsString(
-                new PowerOptimizationTrendResponse(null, null, "5m", List.of(p), null))).get("points").get(0);
+                new PowerOptimizationTrendResponse(null, null, "5m", List.of(p), null, null))).get("points").get(0);
         TreeSet<String> keys = new TreeSet<>(); json.propertyNames().forEach(keys::add);
         assertEquals(POINT_FIELDS, keys);
     }

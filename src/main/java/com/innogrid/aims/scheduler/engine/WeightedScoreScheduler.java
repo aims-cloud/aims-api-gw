@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
@@ -153,6 +154,9 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             details.put("전력여유", round(powerScore));
             details.put("온도여유", round(tempScore));
             details.put("네트워크한산도", round(netScore));
+            if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
+                details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
+            }
             if (linkScore != null) {   // 게이트 on 일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
                 details.put("링크품질", round(linkScore));
                 details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)

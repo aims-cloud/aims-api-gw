@@ -255,7 +255,10 @@ public class SchedulingService {
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context));
         }
-        return engineRegistry.resolve(engineId).schedule(workload, context);
+        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context);
+        // 모의 배치(dryRun)도 알린다 — 운영자가 실제 배치 전에 확인하는 경로다
+        ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, properties.getDiskMountPoint());
+        return result;
     }
 
     /**

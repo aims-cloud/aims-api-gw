@@ -59,6 +59,25 @@ class DiskConstraintScenarioTest {
         assertEquals(0, c.diskCapacityGb(), "C 는 여전히 총량 모름 — 검사 없이 받았다");
     }
 
+    @DisplayName("같은 시나리오의 후보 상세 — A·B 는 디스크검사 1.0, 총량 모름 C 는 0.0")
+    @Test
+    void candidate_details_mark_which_nodes_were_checked() {
+        NodeResource a = node("A").withDiskCapacityGb(100);
+        NodeResource b = node("B").withDiskCapacityGb(500);
+        NodeResource c = node("C");
+        PlacementContext ctx = PlacementContext.of(List.of(a, b, c), new SchedulingPolicy("t", "t"));
+        Workload w = new Workload("w", 2, 1024);
+        w.setRequiredDiskGb(200);
+
+        SchedulingResult r = new WeightedScoreScheduler().schedule(w, ctx);
+
+        for (SchedulingResult.NodeScore s : r.candidateScores()) {
+            double expected = s.nodeId().equals("C") ? 0.0 : 1.0;
+            assertEquals(expected, s.details().get("디스크검사"), s.nodeId());
+        }
+        assertFalse(r.candidateScores().stream().filter(s -> s.nodeId().equals("A")).findFirst().orElseThrow().eligible(), "A 는 검사에서 걸렸다");
+    }
+
     private static NodeResource node(String id) {
         return new NodeResource("mdc-01", id, 8, 16384, 0, 10, 20, 0, 200, 500, 45, 1000, 500);
     }

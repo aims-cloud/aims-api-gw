@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -169,6 +170,9 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
             details.put("열적균형", round(balanceScore));
             details.put("냉각점수", round(coolingScore));
             details.put("자원여유", round(resourceScore));
+            if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
+                details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
+            }
             // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다 — 0 을 넣으면
             // "재 봤더니 0°C" 로 읽혀 판단 근거가 없다는 사실이 가려진다(power 엔진과 같은 관례).
             details.put("배치후예상온도C",

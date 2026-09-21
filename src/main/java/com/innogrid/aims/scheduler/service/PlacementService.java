@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
@@ -29,13 +30,25 @@ public class PlacementService {
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
     private final EngineRegistry engineRegistry;
+    /** 디스크 총량 질의의 마운트 설정 — 검사 없이 통과한 노드를 알릴 때 함께 찍는다. 없이 조립하면(시험) 기본값. */
+    private final String diskMountPoint;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PlacementService(WorkloadRepository workloadRepository,
                             SchedulingHistoryRepository historyRepository,
-                            EngineRegistry engineRegistry) {
+                            EngineRegistry engineRegistry,
+                            com.innogrid.aims.scheduler.config.SchedulerProperties properties) {
         this.workloadRepository = workloadRepository;
         this.historyRepository = historyRepository;
         this.engineRegistry = engineRegistry;
+        this.diskMountPoint = properties == null ? "/" : properties.getDiskMountPoint();
+    }
+
+    /** 설정 없이 조립하는 형태(기존 시험 경로). */
+    public PlacementService(WorkloadRepository workloadRepository,
+                            SchedulingHistoryRepository historyRepository,
+                            EngineRegistry engineRegistry) {
+        this(workloadRepository, historyRepository, engineRegistry, null);
     }
 
     /**
@@ -63,6 +76,7 @@ public class PlacementService {
                 workload.getName(), engine.getName(), context.nodes().size());
 
         SchedulingResult result = engine.schedule(workload, context);
+        ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, diskMountPoint);
 
         if (result.success()) {
             workload.assignTo(result.selectedMdcId(), result.selectedNodeId(),

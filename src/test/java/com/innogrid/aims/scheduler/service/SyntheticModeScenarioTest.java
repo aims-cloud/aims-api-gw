@@ -214,6 +214,13 @@ class SyntheticModeScenarioTest {
         SchedulingResult d = schedulingService.scheduleWorkload(disk.getId(), "weighted");
         assertTrue(d.success(), d.reason());
         assertFalse(d.selectedNodeId().startsWith("daejeon-02"), "디스크 96% 노드는 피한다: " + d.selectedNodeId());
+        // 총량 모름 노드(daejeon-01, diskTotalGb 0)는 검사 없이 적격이 되고 그 사실이 상세에 남는다 — 나머지는 검사 적용
+        java.util.Map<String, Double> byNode = new java.util.HashMap<>();
+        d.candidateScores().forEach(s -> byNode.put(s.nodeId(), s.details().get("디스크검사")));
+        assertEquals(0.0, byNode.get("daejeon-01:9100"), "수집기가 총량 0 을 그대로 들고 와 검사가 적용되지 않는다");
+        assertEquals(1.0, byNode.get("seoul-01:9100"));
+        assertEquals(1.0, byNode.get("daejeon-02:9100"), "부족으로 걸린 노드도 검사 대상이었다");
+        assertEquals(8, byNode.size(), "요구가 있는 배치라 모든 후보에 키가 있다");
     }
 
     @DisplayName("표시 API — /metrics-source 는 synthetic·mockEnabled true·파일·이름·MDC 3·노드 8 의 6필드")

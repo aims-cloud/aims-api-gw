@@ -255,7 +255,10 @@ public class SchedulingService {
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context));
         }
-        return engineRegistry.resolve(engineId).schedule(workload, context);
+        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context);
+        // 모의 배치도 알린다 — 배포 서버에서 검증하는 경로가 이것이다
+        ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, properties.getDiskMountPoint());
+        return result;
     }
 
     /**

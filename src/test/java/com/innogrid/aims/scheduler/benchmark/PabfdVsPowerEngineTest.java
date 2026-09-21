@@ -79,8 +79,9 @@ class PabfdVsPowerEngineTest {
 
         // idle-x 는 계측 160W·CPU 2% 라 깨우기 비용을 실측에서 역산한다: (160 − 500×0.02)/(1−0.02) = 153.1W.
         // pabfd 가 쓰는 marginalPower(대체값 기준 87.5W)는 그대로다 — 갈리는 것은 깨우기 비용의 출처뿐이다.
-        assertEquals(87.5 + (160 - 500 * 0.02) / 0.98, powerModel.realMarginalPower(idle, 2), 1e-9,
-                "87.5 + 역산 유휴 153.1W");
+        double recon = (160 - 500 * 0.02) / 0.98;
+        assertEquals((500 - recon) * 0.25 + recon, powerModel.realMarginalPower(idle, 2), 1e-9,
+                "동적 (500 − 153.1) × 0.25 = 86.7 + 역산 유휴 153.1W");
         assertEquals(157.5, powerModel.realMarginalPower(busy, 2), 1e-9, "이미 도는 노드라 동적 증가분만");
         assertTrue(powerModel.realMarginalPower(idle, 2) > powerModel.realMarginalPower(busy, 2));
     }

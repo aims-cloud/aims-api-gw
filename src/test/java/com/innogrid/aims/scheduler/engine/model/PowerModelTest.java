@@ -316,8 +316,9 @@ class PowerModelTest {
         // 있는 기본 모델에서는 대체값(150W)이 아니라 실측 역산값을 깨우기 비용으로 쓴다.
         // 예전(대체값 시절)의 237.5 가 아니다 — 왜 바뀌었는지는 wakeupPower 역산식 그대로.
         double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
-        assertEquals(87.5 + reconstructedWakeup, model.realMarginalPower(node(2, 250, 500), 2), 1e-9,
-                "빈 노드 — 깨우는 비용을 실측에서 역산(대체값 237.5 아님)");
+        // 동적 범위의 기준선도 같은 역산 유휴다 — (500 − 244.9) × 0.25 = 63.8, 깨우기항 244.9
+        assertEquals((500.0 - reconstructedWakeup) * 0.25 + reconstructedWakeup, model.realMarginalPower(node(2, 250, 500), 2), 1e-9,
+                "빈 노드 — 두 자리 모두 실측 역산 유휴(대체값 237.5 도, 절편만 선언이던 332.4 도 아님)");
     }
 
     @DisplayName("실질 한계전력 점수는 용량 대비로 정규화한다")
@@ -326,7 +327,7 @@ class PowerModelTest {
         assertEquals(1.0 - 87.5 / 500, model.marginalScore(node(50, 250, 500), 2), 1e-9);
         // real_marginal_adds_idle_power 와 같은 이유로 237.5 대신 역산값 기준.
         double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
-        assertEquals(1.0 - (87.5 + reconstructedWakeup) / 500, model.marginalScore(node(2, 250, 500), 2), 1e-9);
+        assertEquals(1.0 - ((500.0 - reconstructedWakeup) * 0.25 + reconstructedWakeup) / 500, model.marginalScore(node(2, 250, 500), 2), 1e-9);
     }
 
     /** 회귀 안전판 — α 기본값에서는 기존 선형 모델과 값이 같아야 한다. */
@@ -556,12 +557,13 @@ class PowerModelTest {
     @DisplayName("실질 한계전력은 역산한 유휴전력으로 깨어난다")
     @Test
     void real_marginal_power_wakes_with_the_measured_idle() {
-        // marginalOnCurve(α=1) = 350 × (2/8) = 87.5 — 동적 범위는 idlePower 기준 350 그대로.
-        // 유휴는 대체값 150 이 아니라 역산값 100 → 87.5 + 100 = 187.5 (대체값 시절 237.5 아님).
+        // 공개 marginalOnCurve(α=1) = 350 × (2/8) = 87.5 — 선언 유휴 절편 그대로(진단·선형 식이 쓴다).
+        // 한계 전력 식은 역산 유휴 100 을 두 자리에 쓴다: 동적 (500−100)×0.25 = 100 + 깨우기 100 = 200.0
+        // (대체값 시절 237.5 · 절편만 선언이던 187.5 아님).
         NodeResource node = node(2, 108, 500);
 
         assertEquals(87.5, model.marginalPowerOnCurve(node, 2), 1e-9);
-        assertEquals(187.5, model.realMarginalPower(node, 2), 1e-9);
+        assertEquals(200.0, model.realMarginalPower(node, 2), 1e-9);
     }
 
     private NodeResource node(double cpuUsage, double powerWatts, double capacityWatts) {

@@ -96,9 +96,9 @@ public class PowerModel {
     }
 
     /**
-     * 빈 노드를 깨울 때 새로 드는 전력(W) — 깨우기 비용과 반납 가능 전력 계열 전용.
-     * 진단 지표(비례성·비낭비)와 동적 범위 {@code (Pmax − Pidle)} 는 이 값을 쓰지 않는다 —
-     * 그쪽 기준선에 실측을 넣으면 지표가 항등이 되고 전력 제약의 동적 범위가 무너진다.
+     * 빈 노드를 깨울 때 새로 드는 전력(W) — 깨우기 비용·반납 가능 전력 계열, 그리고 한계 전력 식
+     * {@link #realMarginalPower} 의 동적 범위 기준선. 진단 지표(비례성·비낭비)와 {@link #idlePower} 를 쓰는
+     * 선형 식(제약·예상 전력·대조군)은 이 값을 쓰지 않는다 — 그쪽 기준선에 실측을 넣으면 지표가 항등이 된다.
      *
      * <p><b>왜 유휴 노드에서만 역산하는가</b> — 선형 전력식 {@code P = P_idle + (P_max − P_idle)·u}
      * 를 P_idle 에 대해 풀면 {@code P_idle = (P − P_max·u) / (1 − u)} 다. 가동 중인 노드는 이미
@@ -110,11 +110,10 @@ public class PowerModel {
      * 반영한 사용률을 쓰면 이 노드가 실제로 그 전력을 그리던 순간의 u 가 아니게 되어 역산식이
      * 성립하지 않는다.</p>
      *
-     * <p><b>왜 {@link #idlePower} 와 다른 메서드인가</b> — {@code idlePower} 는 진단 지표와 동적
-     * 범위의 기준선이다. 거기에 실측 역산을 넣으면 {@code P_ideal} 이 실측 {@code P} 를 그대로
-     * 따라가는 항등식이 되어 비례성·비낭비가 노드를 구별하지 못하게 되고, 동적 범위
-     * {@code (Pmax − Pidle)} 도 노드마다 흔들려, 현재 부하를 보지 않던 것을 고친 볼록 곡선이
-     * 무너진다. 그래서 역산은 깨우기 비용 전용인 이 메서드에만 둔다.</p>
+     * <p><b>왜 {@link #idlePower} 와 다른 메서드인가</b> — {@code idlePower} 는 진단 지표와 선형 식의
+     * 기준선이다. 거기에 실측 역산을 넣으면 {@code P_ideal} 이 실측 {@code P} 를 그대로 따라가는 항등식이
+     * 되어 비례성·비낭비가 노드를 구별하지 못한다. 그래서 역산은 이 메서드에 두고, 한계 전력 식은 계측된
+     * 유휴 노드에서 동적 범위와 깨우기항 두 자리에 이 값을 같이 쓴다({@link #realMarginalPower}).</p>
      *
      * <p><b>미계측 가드</b> — 정격을 모르거나(override 없음) IPMI 가 없어 전력을 못 읽는 노드는
      * 역산할 분자·분모가 없다. 전력 메트릭이 없는 환경(IPMI 미구성)이 이 경로다 — 지금의 배포 환경이
@@ -257,21 +256,23 @@ public class PowerModel {
      * 전력이 통째로 새로 든다.</b> 그 값은 {@link #wakeupPower} — 계측된 유휴 노드는 실측에서 역산한
      * 값이고, 미계측이면 대체값(정격 × 0.3)이다. 500W 용량 노드에 2코어(전체 8코어)를 얹을 때 가동 중이면
      * 87.5W, 비어 있고 미계측이면 87.5 + 150 = 237.5W(<b>2.7배</b>), 비어 있고 108W 로 계측되면
-     * 87.5 + 100 = 187.5W 다.</p>
+     * 역산 유휴 100 이 절편과 깨우기항에 함께 들어 (500 − 100) × 0.25 + 100 = 200W 다.</p>
      *
      * <p>이 한 줄이 전력 통합을 "CPU 가 10% 넘으면 보너스" 같은 임의 규칙이 아니라 모델의 전력
      * 단위(W)로 계산되는 항으로 만든다. 별도의 통합 항이 필요 없어진다. 동적항은 모델식, 깨우기항은 계측
      * 노드면 실측 역산·미계측이면 대체값이며, 총량이 실측 서버의 전력과 같다는 주장은 아니다.</p>
      *
-     * <p><b>한 숫자 안에 기준선이 둘이다 — 의도된 절충.</b> 동적항은 {@link #idlePower}(선언 기준선, 진단 지표와
-     * 볼록 곡선을 보호), 깨우기항만 {@link #wakeupPower}(실측 역산)다. 이 비일관은 비교 판에서 측정된 효과가 있다
-     * (균일 분포 판에서 깨운 노드에 얼마나 얹을지가 달라진다) — 생성식이 볼록한 비교판(convex·convex-misrated)에서 재판단한다.
-     * 이 절충(선언 유휴 vs 실측 역산)은 그대로 남는다 — 동적항의 <b>사용률</b> 기저를 실효로 맞춘 것({@link #marginalPowerOnCurve})은
-     * 이 절충과 다른 축이다.</p>
+     * <p><b>한 식 안의 유휴 기준선은 하나다.</b> 동적 범위 {@code (P_max − 기준선)} 의 기준선과 깨우기항이 같은 값
+     * {@link #wakeupPower} 를 쓴다 — 계측된 유휴 노드는 실측 역산, 그 밖(가동·미계측·정격 미상·역산 범위 밖·역산 끔)은
+     * 대체값이라 {@link #idlePower} 와 비트까지 같다. 정정 전에는 동적항이 선언 유휴({@code idlePower}), 깨우기항만
+     * 역산이라 계측된 유휴 노드의 유휴가 한 식의 두 자리에서 다른 값으로 쓰였다(판정 회차 3 지목). 진단 지표(비례성·비낭비)와
+     * 공개 {@link #marginalPowerOnCurve}(진단·시험 표면)와 선형 {@link #marginalPower}(제약·예상 전력·대조군)의 절편은 선언 유휴 그대로다 —
+     * 지목 밖이며, 그래서 계측 유휴 노드에서는 한계 전력 점수의 절편과 제약·예상 전력의 절편이 갈린다.</p>
      */
     public double realMarginalPower(NodeResource node, int requiredCpu) {
-        double dynamic = marginalPowerOnCurve(node, requiredCpu);
-        return isActive(node) ? dynamic : dynamic + wakeupPower(node);
+        double base = wakeupPower(node);   // 가동·미계측 노드는 이 안에서 선언 유휴로 떨어진다 — 삼항이 필요 없다
+        double dynamic = marginalPowerOnCurve(node, requiredCpu, base);
+        return isActive(node) ? dynamic : dynamic + base;
     }
 
     /**
@@ -327,6 +328,11 @@ public class PowerModel {
      * 관측 범위의 진술이다 — 회차별 관측은 배치 비교 계약 §10 의 행에 적는다. α&gt;1 이면 예약이 있는 적격 노드에서도 값이 갈린다 — 그것이 이 정정의 관측 가능한 효과다.</p>
      */
     public double marginalPowerOnCurve(NodeResource node, int requiredCpu) {
+        return marginalPowerOnCurve(node, requiredCpu, idlePower(node));
+    }
+
+    /** 같은 곡선을 주어진 유휴 기준선으로 — {@link #realMarginalPower} 가 깨우기항과 같은 기준선을 넣는다. */
+    private double marginalPowerOnCurve(NodeResource node, int requiredCpu, double idleBase) {
         double pMax = node.getPowerCapacityWatts();
         if (pMax <= 0) return 0;
 
@@ -334,7 +340,7 @@ public class PowerModel {
         double u = Math.min(1.0, Math.max(0, node.effectiveCpuUsagePercent() / 100.0));   // 실효 — isActive 와 같은 기저
         double u2 = Math.min(1.0, u + (double) requiredCpu / Math.max(node.getTotalCpu(), 1));
 
-        return (pMax - idlePower(node)) * (Math.pow(u2, alpha) - Math.pow(u, alpha));
+        return (pMax - idleBase) * (Math.pow(u2, alpha) - Math.pow(u, alpha));
     }
 
     /** 배치로 늘어나는 전력(W) — 한계 전력 ΔP. 작을수록 전력 효율적인 배치다. */

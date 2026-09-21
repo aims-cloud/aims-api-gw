@@ -46,15 +46,35 @@ public class VirtualAssetService {
         this.tumblebug = tumblebug;
     }
 
-    /** 호스트 목록 = OpenStack 하이퍼바이저(Nova) + 퍼블릭 클라우드 provider+리전(Tumblebug). */
+    /** 호스트 목록(전체) = OpenStack 하이퍼바이저(Nova) + 퍼블릭 클라우드 provider+리전(Tumblebug). */
     public List<HostSummary> listHosts() {
+        return listHosts(null);
+    }
+
+    /**
+     * provider 로 필터링한 호스트 목록.
+     * provider 가 비어 있으면 전체, "openstack" 이면 Nova 만, aws/azure/gcp 등이면 해당 퍼블릭 클라우드만 조회한다.
+     * (특정 provider 지정 시 불필요한 소스는 호출하지 않는다.)
+     */
+    public List<HostSummary> listHosts(String provider) {
+        boolean all = provider == null || provider.isBlank();
+        String want = all ? null : provider.trim().toLowerCase();
+
         List<HostSummary> hosts = new ArrayList<>();
         // 1) OpenStack — Nova 하이퍼바이저 (사용률 포함)
-        for (Map<String, Object> hv : list(safe(nova::listHypervisors), "hypervisors")) {
-            hosts.add(toHost(hv));
+        if (all || "openstack".equals(want)) {
+            for (Map<String, Object> hv : list(safe(nova::listHypervisors), "hypervisors")) {
+                hosts.add(toHost(hv));
+            }
         }
         // 2) 퍼블릭 클라우드 — Tumblebug VM 을 connection(=provider+region) 별로 묶어 호스트로
-        hosts.addAll(publicCloudHosts());
+        if (all || !"openstack".equals(want)) {
+            for (HostSummary h : publicCloudHosts()) {
+                if (all || h.provider().equalsIgnoreCase(want)) {
+                    hosts.add(h);
+                }
+            }
+        }
         return hosts;
     }
 

@@ -144,6 +144,51 @@ class VirtualAssetServiceTest {
     }
 
     @Test
+    void provider_filter_openstack_skips_tumblebug() {
+        Map<String, Object> hv = new HashMap<>();
+        hv.put("hypervisor_hostname", "rnd-com01");
+        hv.put("vcpus", 80);
+        when(nova.listHypervisors()).thenReturn(Map.of("hypervisors", List.of(hv)));
+
+        List<HostSummary> hosts = service.listHosts("openstack");
+
+        assertThat(hosts).hasSize(1);
+        assertThat(hosts.get(0).provider()).isEqualTo("openstack");
+        // Tumblebug 은 아예 호출하지 않는다
+        org.mockito.Mockito.verifyNoInteractions(tumblebug);
+    }
+
+    @Test
+    void provider_filter_public_skips_nova_and_filters_by_provider() {
+        when(tumblebug.listNamespaces()).thenReturn(Map.of("ns", List.of(Map.of("id", "default"))));
+        Map<String, Object> aws = nodeMap("aws-ap-northeast-2", "aws", "vm-a", "aws-vm", "Running", "3.1.1.1");
+        Map<String, Object> azure = nodeMap("azure-koreacentral", "azure", "vm-b", "az-vm", "Running", "20.1.1.1");
+        when(tumblebug.listInfra("default")).thenReturn(
+                Map.of("infra", List.of(Map.of("id", "mci-1", "node", List.of(aws, azure)))));
+
+        List<HostSummary> hosts = service.listHosts("aws");
+
+        assertThat(hosts).hasSize(1);
+        assertThat(hosts.get(0).provider()).isEqualTo("aws");
+        assertThat(hosts.get(0).hostId()).isEqualTo("aws-ap-northeast-2");
+        // Nova 는 호출하지 않는다
+        org.mockito.Mockito.verifyNoInteractions(nova);
+    }
+
+    /** Tumblebug node(=VM) 한 개 맵. */
+    private static Map<String, Object> nodeMap(String connectionName, String provider, String id,
+                                               String name, String status, String publicIp) {
+        Map<String, Object> node = new HashMap<>();
+        node.put("id", id);
+        node.put("name", name);
+        node.put("status", status);
+        node.put("connectionName", connectionName);
+        node.put("connectionConfig", Map.of("providerName", provider));
+        if (publicIp != null) node.put("publicIP", publicIp);
+        return node;
+    }
+
+    @Test
     void openstack_nodes_excluded_from_tumblebug_source() {
         when(nova.listHypervisors()).thenReturn(Map.of());
         when(tumblebug.listNamespaces()).thenReturn(Map.of("ns", List.of(Map.of("id", "openstack"))));

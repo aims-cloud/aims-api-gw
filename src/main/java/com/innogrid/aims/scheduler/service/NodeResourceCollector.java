@@ -18,7 +18,6 @@ import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
 import com.innogrid.aims.scheduler.model.ExporterInstances;
 import com.innogrid.aims.scheduler.model.NodePowerSpecs;
-import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
 import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -54,8 +53,8 @@ public class NodeResourceCollector {
     /** 노드 전력 사양 원장. null 이면(원장 없이 조립한 테스트 경로) 정격은 종전대로 설정값에서 온다. */
     private final NodePowerSpecRepository powerSpecRepository;
 
-    /** 익스포터 대응 원장. null 이면(원장 없이 조립한 시험 경로) 호스트명 일치와 그대로만 쓴다. */
-    private final NodeExporterMappingRepository mappingRepository;
+    /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
+    private final ExporterInstanceResolver exporterResolver;
 
     @Autowired
     public NodeResourceCollector(SchedulerMetricsGateway metrics,
@@ -63,13 +62,14 @@ public class NodeResourceCollector {
                                  PowerModel powerModel,
                                  MetricsQueryGuard guard,
                                  NodePowerSpecRepository powerSpecRepository,
-                                 NodeExporterMappingRepository mappingRepository) {
+                                 ExporterInstanceResolver exporterResolver) {
         this.vmClient = metrics;
         this.properties = properties;
         this.powerModel = powerModel;
         this.guard = guard;
         this.powerSpecRepository = powerSpecRepository;
-        this.mappingRepository = mappingRepository;
+        this.exporterResolver = exporterResolver != null ? exporterResolver
+                : new ExporterInstanceResolver(metrics, guard, properties);
     }
 
     /** 익스포터 대응 원장 없이 조립하는 형태(기존 시험 경로) — 호스트명 일치와 그대로만 쓴다. */
@@ -166,10 +166,10 @@ public class NodeResourceCollector {
             if (results == null) return new Snapshot(nodes, excluded);
 
             // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다. 키는 DCGM 시리즈의 instance 다.
-            Map<String, Integer> gpuCounts = collectGpuCounts();
+            Map<String, Integer> gpuCounts = exporterResolver.discoverGpuCounts();
             // 세 익스포터의 instance 를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance 가
             // 달라(노드 :9100, DCGM :9400, IPMI 는 중앙 주소) 노드 instance 로는 GPU·전력·온도를 찾을 수 없었다.
-            ExporterInstances exporters = ExporterInstances.of(exporterMappings(), gpuCounts.keySet(), collectIpmiInstances());
+            ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
             // 정격 전력 원장도 수집 1회당 한 번만 읽는다(단계 20). 비어 있으면 정격은 종전대로 설정값에서 온다.
             NodePowerSpecs specs = powerSpecs();
 
@@ -272,60 +272,6 @@ public class NodeResourceCollector {
         return NodeOutcome.of(node);
     }
 
-    /** 원장 스냅샷 — 수집 1회당 한 번만 읽는다. 원장이 없거나 비면 빈 목록. */
-    private List<com.innogrid.aims.scheduler.entity.NodeExporterMapping> exporterMappings() {
-        return mappingRepository == null ? List.of() : mappingRepository.findAll();
-    }
-
-    /**
-     * 저장소에 지금 있는 IPMI 시리즈의 instance 들 — 호스트명 일치의 후보. 수집 1회당 질의 1회.
-     *
-     * <p>값은 쓰지 않고 라벨만 쓴다. DCGM 은 GPU 개수 질의가 같은 역할을 겸하므로 따로 묻지 않는다.</p>
-     */
-    @SuppressWarnings("unchecked")
-    private java.util.Set<String> collectIpmiInstances() {
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        try {
-            List<Map<String, Object>> rows = guard.call(
-                    () -> vmClient.queryResults("count by(instance) (ipmi_dcmi_power_consumption_watts)"),
-                    properties.getMetrics().getQueryTimeoutMs());
-            for (Map<String, Object> result : rows) {
-                Map<String, String> labels = (Map<String, String>) result.get("metric");
-                if (labels == null) continue;
-                String instance = labels.get("instance");
-                if (instance != null) out.add(instance);
-            }
-        } catch (Exception e) {
-            log.debug("IPMI instance 수집 실패: {}", e.getMessage());
-        }
-        return out;
-    }
-
-    /**
-     * 노드별 GPU 개수. DCGM exporter 가 없으면 빈 결과가 되고 GPU 요구 워크로드는 배치되지 않는다.
-     * <b>키는 DCGM 시리즈의 instance</b> 라 노드 익스포터와 다를 수 있다 — {@link ExporterInstances} 로 잇는다.
-     */
-    @SuppressWarnings("unchecked")
-    private Map<String, Integer> collectGpuCounts() {
-        Map<String, Integer> counts = new HashMap<>();
-        try {
-            List<Map<String, Object>> rows = guard.call(
-                    () -> vmClient.queryResults("count by(instance) (DCGM_FI_DEV_GPU_UTIL)"),
-                    properties.getMetrics().getQueryTimeoutMs());
-            for (Map<String, Object> result : rows) {
-                Map<String, String> labels = (Map<String, String>) result.get("metric");
-                List<Object> value = (List<Object>) result.get("value");
-                if (labels == null || value == null || value.size() < 2) continue;
-
-                String instance = labels.get("instance");
-                if (instance == null) continue;
-                counts.put(instance, (int) Double.parseDouble(value.get(1).toString()));
-            }
-        } catch (Exception e) {
-            log.debug("GPU 개수 수집 실패: {}", e.getMessage());
-        }
-        return counts;
-    }
 
     /**
      * 핵심 메트릭 질의 — "값이 없다"와 "값이 0 이다"를 구분한다.

@@ -213,7 +213,8 @@ public class ConstraintEvaluator {
         List<String> nodes = uncheckedDiskEligible(workload, result, ctx);
         if (nodes.isEmpty()) return;
         log.warn("디스크 {}GB 요구 워크로드 {} — 총량을 모르는 노드 {}대({})가 디스크 검사 없이 적격이 됐다. "
-                        + "마운트 설정 '{}' 과 그 노드의 루트 마운트가 같은지, 익스포터의 filesystem 시리즈가 있는지 확인하십시오",
+                        + "마운트 설정 aims.scheduler.disk-mount-point='{}' 이 그 노드의 루트 마운트와 같은지, "
+                        + "익스포터에 filesystem 시리즈가 있는지, 익스포터 대응 원장의 instance 가 맞는지 확인하십시오",
                 workload.getRequiredDiskGb(), workload.getName(), nodes.size(),
                 String.join(", ", nodes.subList(0, Math.min(3, nodes.size()))) + (nodes.size() > 3 ? ", …" : ""), mountPoint);
     }

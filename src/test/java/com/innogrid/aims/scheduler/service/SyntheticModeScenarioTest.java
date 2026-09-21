@@ -220,7 +220,7 @@ class SyntheticModeScenarioTest {
         assertEquals(0.0, byNode.get("daejeon-01:9100"), "수집기가 총량 0 을 그대로 들고 와 검사가 적용되지 않는다");
         assertEquals(1.0, byNode.get("seoul-01:9100"));
         assertEquals(1.0, byNode.get("daejeon-02:9100"), "부족으로 걸린 노드도 검사 대상이었다");
-        assertEquals(8, byNode.size(), "요구가 있는 배치라 모든 후보에 키가 있다");
+        assertEquals(8, byNode.values().stream().filter(java.util.Objects::nonNull).count(), "요구가 있는 배치라 모든 후보에 키가 있다");
     }
 
     @DisplayName("표시 API — /metrics-source 는 synthetic·mockEnabled true·파일·이름·MDC 3·노드 8 의 6필드")

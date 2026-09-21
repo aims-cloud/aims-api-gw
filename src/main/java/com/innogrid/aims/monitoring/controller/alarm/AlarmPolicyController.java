@@ -6,6 +6,7 @@ import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.log.PortalLog;
 import com.innogrid.aims.monitoring.dto.log.PortalLogType;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmAreaCandidateResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmMetricCatalogResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyDetailResponse;
@@ -14,6 +15,8 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyRecipientRe
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyRequest;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmPolicyResourceResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRecipientCandidatesResponse;
+import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmRoleCandidateResponse;
+import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyOptionService;
 import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,7 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 관측 > 알람 > 정책 탭 API.
  *
  * 정책 목록(필터·정렬·페이징)·상세와 생성/편집/복제/삭제(다중),
- * 하단 탭(대상 자원/전송 대상), 생성 위저드 보조(메트릭 카탈로그·수신자 후보 조직 트리)를 제공한다.
+ * 하단 탭(대상 자원/전송 대상), 생성 위저드 보조(역할·배포영역 옵션, 메트릭 카탈로그, 수신자 후보 조직 트리)를 제공한다.
+ * 역할·배포영역 옵션은 이력·정책 탭 필터 드롭다운도 같이 쓴다 — 값 체계(roleName·areaId)가 정책 원장·이력과 같다.
  * 발생 이력 탭은 AlarmHistoryController 의 /histories?policyId= 를 재사용하고,
  * 조건 설정의 미리보기 차트는 자원 탐색기 trend API 를 재사용한다.
  * 구 AlarmController 의 규칙 CRUD(/rules)와 alarm_rules 원장은 이 컨트롤러·정책 원장으로 대체되어 제거됐다.
@@ -46,9 +50,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AlarmPolicyController {
 
     private final AlarmPolicyService alarmPolicyService;
+    private final AlarmPolicyOptionService alarmPolicyOptionService;
 
-    public AlarmPolicyController(AlarmPolicyService alarmPolicyService) {
+    public AlarmPolicyController(AlarmPolicyService alarmPolicyService, AlarmPolicyOptionService alarmPolicyOptionService) {
         this.alarmPolicyService = alarmPolicyService;
+        this.alarmPolicyOptionService = alarmPolicyOptionService;
     }
 
     @Operation(summary = "알람 정책 목록",
@@ -135,6 +141,26 @@ public class AlarmPolicyController {
     @GetMapping("/{policyId}/recipients")
     public ApiResponse<List<AlarmPolicyRecipientResponse>> getPolicyRecipients(@PathVariable Long policyId) {
         return ApiResponse.ok(alarmPolicyService.getPolicyRecipients(policyId));
+    }
+
+    @Operation(summary = "역할 옵션",
+            description = "생성 위저드 적용 범위·이력/정책 탭 필터의 역할 드롭다운 — 토큰에 부여된 역할 전체(이름순). "
+                    + "roleName 이 정책·필터에 보내는 값이고 name 은 표시명(roles.description, 없으면 roleName), "
+                    + "areaCount 는 그 역할에서 고를 수 있는 배포영역(MDC+Namespace) 수입니다.")
+    @GetMapping("/role-candidates")
+    public ApiResponse<List<AlarmRoleCandidateResponse>> getRoleCandidates() {
+        return ApiResponse.ok(alarmPolicyOptionService.getRoleCandidates());
+    }
+
+    @Operation(summary = "배포영역 옵션",
+            description = "생성 위저드 적용 범위·이력/정책 탭 필터의 배포영역 드롭다운 — roleName 을 주면 그 역할의 MDC·Namespace, "
+                    + "없으면 토큰 역할 전체(행마다 roleName 포함). MDC 먼저, Namespace 다음, 각각 이름순입니다. "
+                    + "areaId 가 정책·필터에 보내는 값이며 MDC 는 mdcId, Namespace 는 TB:{nsId} — 정책 원장·이력의 areaId 와 같은 체계입니다. "
+                    + "자원 탐색기 트리의 MDC·Namespace 와 같은 원장을 쓰므로 목록이 항상 일치합니다. 토큰에 없는 역할은 404 입니다.")
+    @GetMapping("/area-candidates")
+    public ApiResponse<List<AlarmAreaCandidateResponse>> getAreaCandidates(
+            @RequestParam(required = false) String roleName) {
+        return ApiResponse.ok(alarmPolicyOptionService.getAreaCandidates(roleName));
     }
 
     @Operation(summary = "메트릭 카탈로그",

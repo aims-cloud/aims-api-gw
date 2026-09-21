@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  *
  * <p>응답 형태의 주인은 이제 {@link NodeResponse} 다. 예전에는 {@code NodeResource} 를 DTO 없이 그대로
  * 내보내 모델에 {@code get} 메서드를 하나 추가하면 {@code GET /api/v1/scheduler/nodes} 응답에 필드가
- * 조용히 늘었다. DTO 도입 후에는 그 위험이 사라졌지만, 계약 자체(21필드)는 프런트와의 약속이라
+ * 조용히 늘었다. DTO 도입 후에는 그 위험이 사라졌지만, 계약 자체(24필드)는 프런트와의 약속이라
  * 여기서 여전히 못 박는다 — DTO 에 컴포넌트를 추가하면 이 테스트가 막는다.</p>
  *
  * <p>계산용 메서드를 {@code get} 없이 짓는 규율은 유지한다. 이제는 API 보호 수단이 아니라
@@ -70,6 +70,21 @@ class NodeResourceSerializationTest {
         assertFalse(actual.contains("snapshot"));
         assertFalse(actual.contains("effectiveCpuUsagePercent"));
         assertEquals(EXPECTED_FIELDS, actual, "모델 자체의 직렬화도 24필드다 — DTO 와 어긋나면 동치 테스트가 깨진다");
+    }
+
+    /** 세 GPU 칸이 각자 제 자리로 간다 — 셋 다 double 이라 인자 순서가 바뀌어도 컴파일되므로 값으로 잡는다. */
+    @DisplayName("GPU 사용률·온도·전력이 응답의 제 칸에 실린다")
+    @Test
+    void gpu_fields_land_in_their_own_slots() {
+        NodeResource node = sample().withGpuTelemetry(new com.innogrid.aims.scheduler.model.GpuTelemetry(75.5, 71, 410.25));
+
+        NodeResponse r = NodeResponse.from(node);
+
+        assertEquals(75.5, r.gpuUsagePercent());
+        assertEquals(71.0, r.gpuTemperatureCelsius());
+        assertEquals(410.25, r.gpuPowerWatts());
+        assertEquals(55.0, r.temperatureCelsius(), "섀시 온도는 그대로");
+        assertEquals(250.0, r.powerWatts(), "섀시 전력은 그대로");
     }
 
     /** 예약이 잡혀 있어도 필드 구성은 그대로여야 한다. 값만 달라진다. */

@@ -308,6 +308,24 @@ class NodeResourceCollectorTest {
                 || q.startsWith("avg by(instance) (DCGM")).count(), "GPU 개수 질의만 나가고 축 질의는 없다");
     }
 
+    @DisplayName("세 축 중 한 칸만 비면 그 칸만 0 이고 나머지는 값이다 — NaN 은 미계측으로 뺀다")
+    @Test
+    void partial_gpu_axis_and_nan_fall_to_zero_per_slot() {
+        up(N1);
+        healthy(N1, 30, 8, 4e9, 2e9);
+        answers.put("count by(instance) (DCGM_FI_DEV_GPU_UTIL)", instanceVector("n1:9400", 2));
+        answers.put("avg by(instance) (DCGM_FI_DEV_GPU_UTIL)", instanceVector("n1:9400", 40));
+        answers.put("max by(instance) (DCGM_FI_DEV_GPU_TEMP)", List.of(Map.of("metric", Map.of("instance", "n1:9400"), "value", List.of(0, "NaN"))));
+        // 전력 카운터는 익스포터가 안 낸다 → 빈 결과
+
+        NodeResource n = collector.collectAll().get(0);
+
+        assertEquals(2, n.getTotalGpu());
+        assertEquals(40.0, n.getGpuUsagePercent(), 1e-9, "사용률은 그대로 값");
+        assertEquals(0.0, n.getGpuTemperatureCelsius(), "NaN 은 0 — 응답에 NaN 이 새면 JSON 이 깨진다");
+        assertEquals(0.0, n.getGpuPowerWatts(), "빈 결과는 0");
+    }
+
     private static List<Map<String, Object>> instanceVector(String instance, double value) {
         return List.of(Map.of("metric", Map.of("instance", instance), "value", List.of(0, Double.toString(value))));
     }

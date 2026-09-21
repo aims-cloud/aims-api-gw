@@ -169,7 +169,10 @@ public class NodeResourceCollector {
             // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다. 키는 DCGM 시리즈의 instance 다.
             Map<String, Integer> gpuCounts = exporterResolver.discoverGpuCounts();
             // GPU 축(사용률·온도·전력)도 클러스터 한 번씩 — GPU 시리즈가 아예 없으면 세 질의를 던지지 않는다.
-            Map<String, GpuTelemetry> gpuTelemetry = gpuCounts.isEmpty() ? Map.of() : exporterResolver.discoverGpuTelemetry();
+            ExporterInstanceResolver.GpuTelemetryDiscovery gpuDiscovery = gpuCounts.isEmpty()
+                    ? ExporterInstanceResolver.GpuTelemetryDiscovery.NONE : exporterResolver.discoverGpuTelemetry();
+            Map<String, GpuTelemetry> gpuTelemetry = gpuDiscovery.byInstance();
+            warnGpuTelemetryGaps(gpuCounts, gpuDiscovery);
             // 세 익스포터의 instance 를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance 가
             // 달라(노드 :9100, DCGM :9400, IPMI 는 중앙 주소) 노드 instance 로는 GPU·전력·온도를 찾을 수 없었다.
             ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
@@ -188,7 +191,6 @@ public class NodeResourceCollector {
             Map<String, String> ipmiOfNode = exporters.ipmiFor(instances);
 
             List<Future<NodeOutcome>> futures = new ArrayList<>();
-            int gpuNodesWithoutTelemetry = 0;
             for (int i = 0; i < instances.size(); i++) {
                 String instance = instances.get(i);
                 String mdcId = mdcIds.get(i);
@@ -200,12 +202,7 @@ public class NodeResourceCollector {
                 }
                 int gpu = gpuCounts.getOrDefault(dcgmInstance, 0);
                 GpuTelemetry telemetry = gpu > 0 ? gpuTelemetry.getOrDefault(dcgmInstance, GpuTelemetry.EMPTY) : GpuTelemetry.EMPTY;
-                if (gpu > 0 && telemetry.isEmpty()) gpuNodesWithoutTelemetry++;
                 futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, ipmiInstance, gpu, telemetry, specs)));
-            }
-            if (gpuNodesWithoutTelemetry > 0) {
-                log.warn("GPU 노드 {}대의 DCGM 사용률·온도·전력 시리즈가 비었다 — GPU 개수는 잡혔으니 익스포터의 메트릭 설정을 확인하십시오",
-                        gpuNodesWithoutTelemetry);
             }
 
             List<Optional<NodeOutcome>> outcomes = guard.awaitAll(futures, limits.getNodeTimeoutMs(), deadline);
@@ -228,6 +225,24 @@ public class NodeResourceCollector {
         }
 
         return new Snapshot(nodes, excluded);
+    }
+
+    /**
+     * GPU 개수는 잡혔는데 GPU 축이 빈 까닭을 수집 1회당 한 줄로 남긴다 — 메트릭 이름과 노드 예시까지. 상한 초과(저장소 쪽)와
+     * 빈 결과(익스포터가 그 카운터를 안 냄)는 확인할 자리가 달라 갈라 적는다. 응답의 0 은 규약이지만 로그까지 조용하면
+     * 운영자가 어디를 봐야 할지 모른다.
+     */
+    private void warnGpuTelemetryGaps(Map<String, Integer> gpuCounts, ExporterInstanceResolver.GpuTelemetryDiscovery d) {
+        if (gpuCounts.isEmpty()) return;
+        String sample = gpuCounts.keySet().stream().sorted().findFirst().orElse("?");
+        if (!d.timedOutMetrics().isEmpty()) {
+            log.warn("GPU 노드 {}대(예: {})의 {} 질의가 상한 {}ms 안에 끝나지 않았다 — 저장소 응답 지연. 이번 수집의 그 칸은 0 이다",
+                    gpuCounts.size(), sample, d.timedOutMetrics(), properties.getMetrics().getQueryTimeoutMs());
+        }
+        if (!d.emptyMetrics().isEmpty()) {
+            log.warn("GPU 노드 {}대(예: {})의 {} 시리즈가 비었다 — GPU 개수(DCGM_FI_DEV_GPU_UTIL)는 잡혔으니 익스포터가 그 카운터를 내는지 확인하십시오",
+                    gpuCounts.size(), sample, d.emptyMetrics());
+        }
     }
 
     /**

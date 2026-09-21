@@ -86,7 +86,8 @@ class GpuTelemetryScenarioTest {
         assertTrue(seoul02.getPowerWatts() > 0 && seoul02.getPowerWatts() <= 900, "섀시 전력은 IPMI 식 범위 안");
         // 섀시 온도는 기준 42 + 0.3×CPU ≤ 72 — GPU 온도(카드 35 + 0.4×사용률)와 다른 식
         assertTrue(seoul02.getTemperatureCelsius() > 0 && seoul02.getTemperatureCelsius() <= 72);
-        assertNotEquals(seoul02.getGpuTemperatureCelsius(), seoul02.getTemperatureCelsius(), "두 축은 다른 값");
+        // 두 축이 같은 값일 수는 있어도(곡선이 교차하는 순간) 같은 식은 아니다 — 섀시 식의 상한(72)을 GPU 축은 넘을 수 있다
+        assertTrue(seoul02.getGpuTemperatureCelsius() >= 35 && seoul02.getGpuTemperatureCelsius() <= 75, "GPU 축은 카드 식 35 + 0.4×사용률");
         // GPU 없는 노드의 섀시 값은 GPU 노드와 같은 식으로 나온다 — GPU 축이 섀시 계산에 끼지 않는다
         assertTrue(seoul01.getPowerWatts() > 0 && seoul01.getTemperatureCelsius() > 0);
     }

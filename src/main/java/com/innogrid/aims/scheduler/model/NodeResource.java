@@ -122,13 +122,13 @@ public class NodeResource {
 
     /**
      * GPU 축 — 카드 평균 사용률·가장 뜨거운 카드 온도·카드 합 전력. 수집기가 GPU 가 있는 노드에만 얹는다.
-     * 섀시 온도·전력에 섞지 않는다({@link GpuTelemetry} 참고). 음수는 0 으로 — 0 이 미계측 규약이다.
+     * 섀시 온도·전력에 섞지 않는다({@link GpuTelemetry} 참고). NaN·무한대·음수는 record 가 이미 0(미계측)으로 만든다.
      */
     public NodeResource withGpuTelemetry(GpuTelemetry gpu) {
         if (gpu == null) return this;
-        this.gpuUsagePercent = Math.max(0, gpu.usagePercent());
-        this.gpuTemperatureCelsius = Math.max(0, gpu.temperatureCelsius());
-        this.gpuPowerWatts = Math.max(0, gpu.powerWatts());
+        this.gpuUsagePercent = gpu.usagePercent();
+        this.gpuTemperatureCelsius = gpu.temperatureCelsius();
+        this.gpuPowerWatts = gpu.powerWatts();
         return this;
     }
 

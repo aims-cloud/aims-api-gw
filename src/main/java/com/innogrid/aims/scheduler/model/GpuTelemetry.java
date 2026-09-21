@@ -14,6 +14,17 @@ public record GpuTelemetry(double usagePercent, double temperatureCelsius, doubl
 
     public static final GpuTelemetry EMPTY = new GpuTelemetry(0, 0, 0);
 
+    /** 유한하고 0 이상인 값만 — NaN·무한대·음수(고장 센서)는 미계측(0) 으로. 응답에 NaN 이 새면 JSON 이 깨진다. */
+    public GpuTelemetry {
+        usagePercent = finite(usagePercent);
+        temperatureCelsius = finite(temperatureCelsius);
+        powerWatts = finite(powerWatts);
+    }
+
+    private static double finite(double v) {
+        return Double.isFinite(v) && v > 0 ? v : 0;
+    }
+
     /** 셋 다 0 — 시리즈가 없었다. */
     public boolean isEmpty() {
         return usagePercent <= 0 && temperatureCelsius <= 0 && powerWatts <= 0;

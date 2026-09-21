@@ -48,6 +48,7 @@ class NodeResourceCollectorTest {
                 if (q.contains(e.getKey())) {
                     if (e.getValue() instanceof RuntimeException ex) throw ex;
                     if (e.getValue() == null) return List.of();
+                    if (e.getValue() instanceof List<?> rows) return rows;
                     return vector(((Number) e.getValue()).doubleValue());
                 }
             }
@@ -228,6 +229,88 @@ class NodeResourceCollectorTest {
     }
 
     // ── 픽스처 ──────────────────────────────────────────────────
+
+    @DisplayName("GPU 노드는 DCGM instance 로 GPU 사용률·온도·전력을 받고, 섀시 전력·온도에는 섞지 않는다")
+    @Test
+    void gpu_node_gets_telemetry_by_dcgm_instance_without_touching_chassis_values() {
+        up(N1);
+        healthy(N1, 30, 8, 4e9, 2e9);
+        answers.put("count by(instance) (DCGM_FI_DEV_GPU_UTIL)", instanceVector("n1:9400", 2));
+        answers.put("avg by(instance) (DCGM_FI_DEV_GPU_UTIL)", instanceVector("n1:9400", 75.5));
+        answers.put("max by(instance) (DCGM_FI_DEV_GPU_TEMP)", instanceVector("n1:9400", 71));
+        answers.put("sum by(instance) (DCGM_FI_DEV_POWER_USAGE)", instanceVector("n1:9400", 410.25));
+
+        NodeResource n = collector.collectAll().get(0);
+
+        assertEquals(2, n.getTotalGpu(), "호스트명 일치로 n1:9400 이 이어진다");
+        assertEquals(75.5, n.getGpuUsagePercent(), 1e-9);
+        assertEquals(71.0, n.getGpuTemperatureCelsius(), 1e-9);
+        assertEquals(410.25, n.getGpuPowerWatts(), 1e-9);
+        assertEquals(0.0, n.getPowerWatts(), "IPMI 가 없으니 섀시 전력은 그대로 0 — GPU 전력을 더하지 않는다");
+        assertEquals(0.0, n.getTemperatureCelsius(), "섀시 온도도 0 — GPU 온도와 섞지 않는다");
+        assertEquals(NodeResource.PowerSource.NONE, n.getPowerSource());
+        NodeResource copy = n.snapshot();
+        assertEquals(410.25, copy.getGpuPowerWatts(), 1e-9, "사본에도 GPU 축이 옮겨진다");
+        assertEquals(71.0, copy.getGpuTemperatureCelsius(), 1e-9);
+    }
+
+    @DisplayName("GPU 축은 클러스터 한 번씩 세 질의로 묻고 문자열은 avg·max·sum by(instance) 다 — 노드마다 묻지 않는다")
+    @Test
+    void gpu_telemetry_is_three_cluster_wide_queries_with_fixed_aggregations() {
+        up(N1, N2);
+        healthy(N1, 30, 8, 4e9, 2e9);
+        healthy(N2, 30, 8, 4e9, 2e9);
+        answers.put("count by(instance) (DCGM_FI_DEV_GPU_UTIL)", List.of(
+                instanceVector("n1:9400", 2).get(0), instanceVector("n2:9400", 4).get(0)));
+        List<String> sent = new java.util.concurrent.CopyOnWriteArrayList<>();
+        when(vm.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            sent.add(q);
+            for (Map.Entry<String, Object> e : answers.entrySet()) {
+                if (q.contains(e.getKey())) {
+                    if (e.getValue() instanceof List<?> rows) return rows;
+                    return vector(((Number) e.getValue()).doubleValue());
+                }
+            }
+            return List.of();
+        });
+
+        collector.collectAll();
+
+        assertEquals(1, sent.stream().filter("avg by(instance) (DCGM_FI_DEV_GPU_UTIL)"::equals).count(), "사용률은 카드 평균, 클러스터 1회");
+        assertEquals(1, sent.stream().filter("max by(instance) (DCGM_FI_DEV_GPU_TEMP)"::equals).count(), "온도는 가장 뜨거운 카드, 클러스터 1회");
+        assertEquals(1, sent.stream().filter("sum by(instance) (DCGM_FI_DEV_POWER_USAGE)"::equals).count(), "전력은 카드 합, 클러스터 1회");
+        assertEquals(0, sent.stream().filter(q -> q.contains("DCGM") && q.contains("instance=\"")).count(), "노드별 DCGM 질의는 없다");
+    }
+
+    @DisplayName("GPU 시리즈가 없는 클러스터는 GPU 축 질의를 아예 던지지 않고 값은 0 이다")
+    @Test
+    void no_gpu_series_means_no_gpu_queries() {
+        up(N1);
+        healthy(N1, 30, 8, 4e9, 2e9);
+        List<String> sent = new java.util.concurrent.CopyOnWriteArrayList<>();
+        when(vm.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            sent.add(q);
+            for (Map.Entry<String, Object> e : answers.entrySet()) {
+                if (q.contains(e.getKey()) && e.getValue() != null) return vector(((Number) e.getValue()).doubleValue());
+            }
+            return List.of();
+        });
+
+        NodeResource n = collector.collectAll().get(0);
+
+        assertEquals(0, n.getTotalGpu());
+        assertEquals(0.0, n.getGpuUsagePercent());
+        assertEquals(0.0, n.getGpuTemperatureCelsius());
+        assertEquals(0.0, n.getGpuPowerWatts());
+        assertEquals(0, sent.stream().filter(q -> q.contains("DCGM_FI_DEV_GPU_TEMP") || q.contains("DCGM_FI_DEV_POWER_USAGE")
+                || q.startsWith("avg by(instance) (DCGM")).count(), "GPU 개수 질의만 나가고 축 질의는 없다");
+    }
+
+    private static List<Map<String, Object>> instanceVector(String instance, double value) {
+        return List.of(Map.of("metric", Map.of("instance", instance), "value", List.of(0, Double.toString(value))));
+    }
 
     private void up(String... instances) {
         List<Map<String, Object>> result = java.util.Arrays.stream(instances)

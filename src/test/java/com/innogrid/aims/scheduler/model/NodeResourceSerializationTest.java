@@ -39,6 +39,7 @@ class NodeResourceSerializationTest {
             "cpuUsagePercent", "memoryUsagePercent", "diskUsagePercent",
             "powerWatts", "powerCapacityWatts", "temperatureCelsius",
             "networkRxBps", "networkTxBps",
+            "gpuUsagePercent", "gpuTemperatureCelsius", "gpuPowerWatts",
             "reservedCpu", "reservedMemoryMb", "reservedGpu",
             "thermalState", "powerSource",
             "availableCpu", "availableMemoryMb", "availableGpu"
@@ -68,7 +69,7 @@ class NodeResourceSerializationTest {
         assertFalse(actual.contains("powerHeadroomPercent"));
         assertFalse(actual.contains("snapshot"));
         assertFalse(actual.contains("effectiveCpuUsagePercent"));
-        assertEquals(EXPECTED_FIELDS, actual, "모델 자체의 직렬화도 아직 21필드다 — DTO 와 어긋나면 동치 테스트가 깨진다");
+        assertEquals(EXPECTED_FIELDS, actual, "모델 자체의 직렬화도 24필드다 — DTO 와 어긋나면 동치 테스트가 깨진다");
     }
 
     /** 예약이 잡혀 있어도 필드 구성은 그대로여야 한다. 값만 달라진다. */

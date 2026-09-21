@@ -33,6 +33,11 @@ public class NodeResource {
     private final double networkRxBps;
     private final double networkTxBps;
 
+    // ── GPU 축 (DCGM) — 섀시 온도·전력과 별개. 0 = 미계측. 생성자에 넣지 않고 {@link #withGpuTelemetry} 로 얹는다 ──
+    private double gpuUsagePercent;
+    private double gpuTemperatureCelsius;
+    private double gpuPowerWatts;
+
     // ── 예약분 (배치 확정됐으나 메트릭에 아직 반영되지 않은 워크로드) ──
     private int reservedCpu;
     private long reservedMemoryMb;
@@ -42,7 +47,7 @@ public class NodeResource {
     /**
      * 디스크 총량(GB). 0 이면 <b>모른다</b>는 뜻이다 — 수집기가 파일시스템 크기를 얻지 못한 경우.
      *
-     * <p>생성자에 넣지 않고 세터로 둔다. 생성자는 테스트 26개 파일이 위치 인자로 쓰고 있어 시그니처를
+     * <p>생성자에 넣지 않고 세터로 둔다. 생성자는 테스트 62개 파일이 위치 인자로 쓰고 있어 시그니처를
      * 바꾸면 전부 손대야 한다. 디스크는 부가 메트릭이라 "없으면 0" 이 자연스럽고, 제약 검사는 총량을
      * 아는 노드에서만 한다.</p>
      */
@@ -116,6 +121,18 @@ public class NodeResource {
     }
 
     /**
+     * GPU 축 — 카드 평균 사용률·가장 뜨거운 카드 온도·카드 합 전력. 수집기가 GPU 가 있는 노드에만 얹는다.
+     * 섀시 온도·전력에 섞지 않는다({@link GpuTelemetry} 참고). 음수는 0 으로 — 0 이 미계측 규약이다.
+     */
+    public NodeResource withGpuTelemetry(GpuTelemetry gpu) {
+        if (gpu == null) return this;
+        this.gpuUsagePercent = Math.max(0, gpu.usagePercent());
+        this.gpuTemperatureCelsius = Math.max(0, gpu.temperatureCelsius());
+        this.gpuPowerWatts = Math.max(0, gpu.powerWatts());
+        return this;
+    }
+
+    /**
      * 예약분까지 반영한 CPU 사용률 (%).
      *
      * <p>메트릭은 "이미 실행 중인" 부하만 보여준다. 한 번의 스케줄링 실행에서 워크로드를
@@ -149,7 +166,7 @@ public class NodeResource {
      * <p>이 클래스는 {@link #reserve} 로 상태가 바뀌는 <b>가변</b> 객체다. 배치를 시뮬레이션할
      * 때 조회용으로 받은 객체에 예약을 쌓으면 응답이 오염되므로 사본을 쓴다.</p>
      *
-     * <p>메트릭을 다시 수집하지 않고 복사하는 이유는 비용이다 — 수집기는 노드당 아홉 종의
+     * <p>메트릭을 다시 수집하지 않고 복사하는 이유는 비용이다 — 수집기는 노드당 열 종의
      * 질의를 날리므로, 후보 노드마다 새로 수집하면 한 요청에 수백 건이 나간다. 게다가 메트릭
      * 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.</p>
      *
@@ -166,6 +183,9 @@ public class NodeResource {
         copy.reservedGpu = reservedGpu;
         copy.reservedDiskGb = reservedDiskGb;
         copy.diskCapacityGb = diskCapacityGb;
+        copy.gpuUsagePercent = gpuUsagePercent;
+        copy.gpuTemperatureCelsius = gpuTemperatureCelsius;
+        copy.gpuPowerWatts = gpuPowerWatts;
         copy.thermalState = thermalState;
         copy.powerSource = powerSource;
         return copy;
@@ -227,6 +247,9 @@ public class NodeResource {
     public double getTemperatureCelsius() { return temperatureCelsius; }
     public double getNetworkRxBps() { return networkRxBps; }
     public double getNetworkTxBps() { return networkTxBps; }
+    public double getGpuUsagePercent() { return gpuUsagePercent; }
+    public double getGpuTemperatureCelsius() { return gpuTemperatureCelsius; }
+    public double getGpuPowerWatts() { return gpuPowerWatts; }
     public int getReservedCpu() { return reservedCpu; }
     public long getReservedMemoryMb() { return reservedMemoryMb; }
     public int getReservedGpu() { return reservedGpu; }

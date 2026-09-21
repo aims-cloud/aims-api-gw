@@ -16,6 +16,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
 import com.innogrid.aims.scheduler.model.ExporterInstances;
+import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
 
 /**
@@ -36,6 +37,10 @@ public class ExporterInstanceResolver {
 
     static final String DCGM_DISCOVERY = "count by(instance) (DCGM_FI_DEV_GPU_UTIL)";
     static final String IPMI_DISCOVERY = "count by(instance) (ipmi_dcmi_power_consumption_watts)";
+    /** GPU 축 — 카드를 접는 함수가 값마다 다르다: 사용률은 평균, 온도는 가장 뜨거운 카드, 전력은 합. */
+    static final String GPU_USAGE = "avg by(instance) (DCGM_FI_DEV_GPU_UTIL)";
+    static final String GPU_TEMPERATURE = "max by(instance) (DCGM_FI_DEV_GPU_TEMP)";
+    static final String GPU_POWER = "sum by(instance) (DCGM_FI_DEV_POWER_USAGE)";
 
     private final NodeExporterMappingRepository repository;
     private final SchedulerMetricsGateway metrics;
@@ -99,6 +104,47 @@ public class ExporterInstanceResolver {
             log.debug("GPU 개수 수집 실패: {}", e.getMessage());
         }
         return counts;
+    }
+
+    /**
+     * 노드별 GPU 축 — <b>키는 DCGM 시리즈의 instance</b>. 클러스터 전체를 한 번씩 세 질의로 묻는다(노드마다 묻지 않는다 —
+     * GPU 개수와 같은 결). 저장소에 그 메트릭이 없으면 그 칸만 0 이다.
+     */
+    public Map<String, GpuTelemetry> discoverGpuTelemetry() {
+        Map<String, Double> usage = instanceValues(GPU_USAGE, "GPU 사용률");
+        Map<String, Double> temperature = instanceValues(GPU_TEMPERATURE, "GPU 온도");
+        Map<String, Double> power = instanceValues(GPU_POWER, "GPU 전력");
+        Set<String> instances = new LinkedHashSet<>(usage.keySet());
+        instances.addAll(temperature.keySet());
+        instances.addAll(power.keySet());
+        Map<String, GpuTelemetry> out = new HashMap<>();
+        for (String instance : instances) {
+            out.put(instance, new GpuTelemetry(usage.getOrDefault(instance, 0.0),
+                    temperature.getOrDefault(instance, 0.0), power.getOrDefault(instance, 0.0)));
+        }
+        return out;
+    }
+
+    /** {@code … by(instance)} 질의 한 건 → instance → 값. 실패하면 빈 맵(부가 값이라 수집을 멈추지 않는다). */
+    @SuppressWarnings("unchecked")
+    private Map<String, Double> instanceValues(String promQL, String what) {
+        Map<String, Double> out = new HashMap<>();
+        if (metrics == null) return out;
+        try {
+            List<Map<String, Object>> rows = guard.call(() -> metrics.queryResults(promQL),
+                    properties.getMetrics().getQueryTimeoutMs());
+            for (Map<String, Object> result : rows) {
+                Map<String, String> labels = (Map<String, String>) result.get("metric");
+                List<Object> value = (List<Object>) result.get("value");
+                if (labels == null || value == null || value.size() < 2) continue;
+                String instance = labels.get("instance");
+                if (instance == null) continue;
+                out.put(instance, Double.parseDouble(value.get(1).toString()));
+            }
+        } catch (Exception e) {
+            log.debug("{} 수집 실패: {}", what, e.getMessage());
+        }
+        return out;
     }
 
     /** 저장소에 지금 있는 IPMI 시리즈의 instance 들. 값은 쓰지 않는다. */

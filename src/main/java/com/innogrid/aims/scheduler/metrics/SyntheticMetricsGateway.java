@@ -45,7 +45,10 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
     private static final Pattern METRIC = Pattern.compile(
             "\\b(up|node_cpu_seconds_total|node_memory_MemTotal_bytes|node_memory_MemAvailable_bytes|node_filesystem_size_bytes|"
             + "node_filesystem_avail_bytes|ipmi_dcmi_power_consumption_watts|ipmi_temperature_celsius|"
-            + "node_network_receive_bytes_total|node_network_transmit_bytes_total|DCGM_FI_DEV_GPU_UTIL)\\b");
+            + "node_network_receive_bytes_total|node_network_transmit_bytes_total|"
+            + "DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_GPU_TEMP|DCGM_FI_DEV_POWER_USAGE)\\b");
+    /** 질의 맨 앞의 집계 함수 — {@code avg by(instance) (…)} 의 {@code avg}. {@code avg_over_time} 은 구간 함수라 여기 걸리지 않는다. */
+    private static final Pattern LEADING_AGG = Pattern.compile("^\\s*(avg|max|min|sum|count)\\s*(by\\s*\\([^)]*\\))?\\s*\\(");
     private static final Pattern BY_INSTANCE = Pattern.compile("by\\s*\\(\\s*instance\\s*\\)");
 
     /** 구간 집계 함수와 창 — {@code avg_over_time(... [24h])} 의 함수 이름과 창 길이를 뽑는다. */
@@ -225,9 +228,41 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
             case "ipmi_temperature_celsius": return node.ipmi() ? round(cluster.temperature(node, t)) : null;
             case "node_network_receive_bytes_total": return round(cluster.networkRx(node, t));
             case "node_network_transmit_bytes_total": return round(cluster.networkTx(node, t));
-            case "DCGM_FI_DEV_GPU_UTIL": return node.gpus() > 0 ? (double) node.gpus() : null;   // count by(instance) → GPU 수
+            case "DCGM_FI_DEV_GPU_UTIL":
+            case "DCGM_FI_DEV_GPU_TEMP":
+            case "DCGM_FI_DEV_POWER_USAGE":
+                return dcgm(metric, promQL, node, t);
             default: return null;
         }
+    }
+
+    /**
+     * DCGM 은 <b>카드마다 시리즈</b>다. 실환경에서 {@code by(instance)} 집계는 카드 값들을 노드 하나로 접는데, 모의는 카드별
+     * 시리즈를 내보내지 않고 <b>감싼 함수를 읽어 그 자리에서 접는다</b> — 그래서 {@code avg}·{@code max}·{@code sum} 이 서로
+     * 다른 값이고, 온도에 {@code sum} 을 쓰는 실수는 모의에서도 다른 값으로 드러난다. 감싼 함수가 없으면 첫 카드 값이다
+     * (스칼라 질의가 첫 시리즈만 읽는 것과 같다). GPU 없는 노드는 시리즈가 없다.
+     */
+    private Double dcgm(String metric, String promQL, SyntheticCluster.Node node, long t) {
+        if (node.gpus() <= 0) return null;
+        Matcher agg = LEADING_AGG.matcher(promQL);
+        String fn = agg.find() ? agg.group(1) : null;
+        if ("count".equals(fn)) return (double) node.gpus();
+        double sum = 0, max = -Double.MAX_VALUE, min = Double.MAX_VALUE;
+        for (int card = 0; card < node.gpus(); card++) {
+            double v = switch (metric) {
+                case "DCGM_FI_DEV_GPU_UTIL" -> cluster.gpuUsage(node, t, card);
+                case "DCGM_FI_DEV_GPU_TEMP" -> cluster.gpuTemperature(node, t, card);
+                default -> cluster.gpuPowerWatts(node, t, card);
+            };
+            if (fn == null) return round(v);
+            sum += v; max = Math.max(max, v); min = Math.min(min, v);
+        }
+        return round(switch (fn) {
+            case "avg" -> sum / node.gpus();
+            case "max" -> max;
+            case "min" -> min;
+            default -> sum;
+        });
     }
 
     static Map<String, String> labels(String promQL) {

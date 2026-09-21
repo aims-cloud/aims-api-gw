@@ -5,7 +5,8 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 /**
  * 노드 자원 현황 응답 — {@code GET /scheduler/nodes}·{@code /nodes/{nodeId}}.
  *
- * <p>필드 21개는 {@link NodeResource} 를 그대로 직렬화하던 시절의 계약과 <b>동일</b>하다
+ * <p>필드 24개 — 21개는 {@link NodeResource} 를 그대로 직렬화하던 시절의 계약과 <b>동일</b>하고, GPU 축 3개
+ * ({@code gpuUsagePercent}·{@code gpuTemperatureCelsius}·{@code gpuPowerWatts}, 0 = 미계측)를 2026-09 에 더했다
  * ({@code NodeResourceSerializationTest} 가 고정). 이 DTO 가 생기기 전에는 모델에 {@code get}
  * 메서드를 하나 추가하면 API 필드가 조용히 늘었고, 그래서 계산용 메서드를 비-{@code get} 으로
  * 짓는 규율에 의존했다. 이제 응답 형태는 이 record 가 정한다 — 모델은 자유롭게 바뀌어도 된다.</p>
@@ -27,6 +28,9 @@ public record NodeResponse(
         double temperatureCelsius,
         double networkRxBps,
         double networkTxBps,
+        double gpuUsagePercent,
+        double gpuTemperatureCelsius,
+        double gpuPowerWatts,
         int reservedCpu,
         long reservedMemoryMb,
         int reservedGpu,
@@ -43,6 +47,7 @@ public record NodeResponse(
                 n.getCpuUsagePercent(), n.getMemoryUsagePercent(), n.getDiskUsagePercent(),
                 n.getPowerWatts(), n.getPowerCapacityWatts(), n.getTemperatureCelsius(),
                 n.getNetworkRxBps(), n.getNetworkTxBps(),
+                n.getGpuUsagePercent(), n.getGpuTemperatureCelsius(), n.getGpuPowerWatts(),
                 n.getReservedCpu(), n.getReservedMemoryMb(), n.getReservedGpu(),
                 n.getThermalState(), n.getPowerSource(),
                 n.availableCpu(), n.availableMemoryMb(), n.availableGpu());

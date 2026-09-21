@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * 바이트 단위로 같아야</b> 한다. 이 테스트가 그 "같아야 할 것"의 원본이다.</p>
  *
  * <p>스프링이 구성한 Jackson 3({@code tools.jackson}) 매퍼를 주입받아 쓴다. HTTP 응답을 만드는 것이
- * 그 매퍼이며, {@code com.fasterxml} 쪽은 별개 인스턴스라 계약과 무관하다. 노드 응답(21필드)은
+ * 그 매퍼이며, {@code com.fasterxml} 쪽은 별개 인스턴스라 계약과 무관하다. 노드 응답(24필드)은
  * {@code NodeResourceSerializationTest} 가 같은 방식으로 고정하고 있다.</p>
  */
 @SpringBootTest

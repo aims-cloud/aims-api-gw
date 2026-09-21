@@ -45,11 +45,17 @@ public final class SyntheticCluster {
                        double cpuUsage, double memoryUsage, double diskTotalGb, double diskUsage,
                        boolean ipmi, double idleWatts, double capacityWatts, double believedCapacityWatts,
                        double baseTemperature,
-                       double networkRxBps, double networkTxBps, String trait, Double swing) {
+                       double networkRxBps, double networkTxBps, String trait, Double swing,
+                       double gpuIdleWatts, double gpuCapacityWatts, double gpuBaseTemperature) {
 
         double memoryTotalBytes() { return memoryMb * 1024.0 * 1024.0; }
         double diskTotalBytes() { return diskTotalGb * 1024.0 * 1024.0 * 1024.0; }
     }
+
+    /** GPU 축 선택 항목의 기본값 — 판 파일에 적지 않은 노드가 쓴다. 카드 한 장 기준(W·°C). */
+    public static final double DEFAULT_GPU_IDLE_WATTS = 60;
+    public static final double DEFAULT_GPU_CAPACITY_WATTS = 300;
+    public static final double DEFAULT_GPU_BASE_TEMPERATURE = 35;
 
     /**
      * 판이 선언하는 MDC 사이 링크 한 줄 — 원장 엔티티({@code MdcLink})의 판 파일 표현.
@@ -271,7 +277,10 @@ public final class SyntheticCluster {
                     bool(n.get("ipmi"), true), idle, cap, believed,
                     num(n.get("baseTemperature"), 40).doubleValue(),
                     num(n.get("networkRxBps"), 1_000_000).doubleValue(), num(n.get("networkTxBps"), 800_000).doubleValue(),
-                    str(n.get("trait"), ""), n.get("swing") == null ? null : num(n.get("swing"), swing).doubleValue()));
+                    str(n.get("trait"), ""), n.get("swing") == null ? null : num(n.get("swing"), swing).doubleValue(),
+                    num(n.get("gpuIdleWatts"), DEFAULT_GPU_IDLE_WATTS).doubleValue(),
+                    num(n.get("gpuCapacityWatts"), DEFAULT_GPU_CAPACITY_WATTS).doubleValue(),
+                    num(n.get("gpuBaseTemperature"), DEFAULT_GPU_BASE_TEMPERATURE).doubleValue()));
         }
         return nodes;
     }
@@ -436,6 +445,26 @@ public final class SyntheticCluster {
     /** 온도 = 기준 + CPU 사용률의 0.3 배 (100% 이면 +30°C). */
     public double temperature(Node node, long epochSeconds) {
         return node.baseTemperature() + 0.3 * cpuUsage(node, epochSeconds);
+    }
+
+    // ── GPU 축 — 카드별 값. 노드 CPU 곡선과 같은 파동에 카드마다 상수 위상만 얹는다(새 위상 계산을 두지 않는다 —
+    //    boards 축이 위상 구성을 봉인하므로). 그래서 카드가 여럿이면 avg·max·sum 이 서로 다른 값이 된다.
+
+    /** 카드 {@code card}(0부터) 의 GPU 사용률(0~100). GPU 없는 노드는 호출자가 묻지 않는다. */
+    public double gpuUsage(Node node, long epochSeconds, int card) {
+        double w = Math.sin(2 * Math.PI * (epochSeconds % (long) (periodMinutes * 60.0)) / (periodMinutes * 60.0)
+                + phase(node) + Math.PI / 3 + card * Math.PI / 6);
+        return clamp(node.cpuUsage() + 15 + swingOf(node) * w, 0, 100);
+    }
+
+    /** 카드 한 장의 전력 = 카드 유휴 + (카드 정격 − 카드 유휴) × 사용률/100. */
+    public double gpuPowerWatts(Node node, long epochSeconds, int card) {
+        return node.gpuIdleWatts() + (node.gpuCapacityWatts() - node.gpuIdleWatts()) * gpuUsage(node, epochSeconds, card) / 100.0;
+    }
+
+    /** 카드 한 장의 온도 = 카드 기준 + 사용률의 0.4 배 (100% 이면 +40°C). 노드 온도(섀시)와는 별개의 축이다. */
+    public double gpuTemperature(Node node, long epochSeconds, int card) {
+        return node.gpuBaseTemperature() + 0.4 * gpuUsage(node, epochSeconds, card);
     }
 
     public double networkRx(Node node, long epochSeconds) { return Math.max(0, node.networkRxBps() * (1 + 0.5 * wave(node, epochSeconds))); }

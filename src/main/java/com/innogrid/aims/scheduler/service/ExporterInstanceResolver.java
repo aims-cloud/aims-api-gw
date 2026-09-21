@@ -16,6 +16,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
 import com.innogrid.aims.scheduler.model.ExporterInstances;
+import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
 
 /**
@@ -36,6 +37,10 @@ public class ExporterInstanceResolver {
 
     static final String DCGM_DISCOVERY = "count by(instance) (DCGM_FI_DEV_GPU_UTIL)";
     static final String IPMI_DISCOVERY = "count by(instance) (ipmi_dcmi_power_consumption_watts)";
+    /** GPU 축 — 카드를 접는 함수가 값마다 다르다: 사용률은 평균, 온도는 가장 뜨거운 카드, 전력은 합. */
+    static final String GPU_USAGE = "avg by(instance) (DCGM_FI_DEV_GPU_UTIL)";
+    static final String GPU_TEMPERATURE = "max by(instance) (DCGM_FI_DEV_GPU_TEMP)";
+    static final String GPU_POWER = "sum by(instance) (DCGM_FI_DEV_POWER_USAGE)";
 
     private final NodeExporterMappingRepository repository;
     private final SchedulerMetricsGateway metrics;
@@ -99,6 +104,71 @@ public class ExporterInstanceResolver {
             log.debug("GPU 개수 수집 실패: {}", e.getMessage());
         }
         return counts;
+    }
+
+    /**
+     * GPU 축 발견 결과 — 노드별 값과, 왜 비었는지.
+     *
+     * @param byInstance      DCGM instance → 세 값. 그 메트릭이 없는 칸은 0
+     * @param emptyMetrics    저장소가 빈 결과로 답한 메트릭 이름 — 익스포터가 그 카운터를 내지 않는다
+     * @param timedOutMetrics 상한 안에 답하지 않은 메트릭 이름 — 익스포터가 아니라 저장소 쪽 문제
+     */
+    public record GpuTelemetryDiscovery(Map<String, GpuTelemetry> byInstance, List<String> emptyMetrics, List<String> timedOutMetrics) {
+        public static final GpuTelemetryDiscovery NONE = new GpuTelemetryDiscovery(Map.of(), List.of(), List.of());
+    }
+
+    /**
+     * 노드별 GPU 축 — <b>키는 DCGM 시리즈의 instance</b>. 클러스터 전체를 세 질의로 묻되 <b>동시에 던지고 한 상한만 기다린다</b>
+     * — 순차로 기다리면 저장소가 반쯤 멈췄을 때 선행 단계가 세 상한(15초)을 삼켜 노드 수집 예산이 남지 않는다. 노드마다
+     * 묻지 않는 것은 GPU 개수와 같은 결이다. 어느 메트릭이 비었는지·상한을 넘겼는지를 함께 돌려 수집기가 까닭을 적게 한다.
+     */
+    public GpuTelemetryDiscovery discoverGpuTelemetry() {
+        if (metrics == null) return GpuTelemetryDiscovery.NONE;
+        List<String> promQLs = List.of(GPU_USAGE, GPU_TEMPERATURE, GPU_POWER);
+        List<java.util.concurrent.Future<List<Map<String, Object>>>> futures = new java.util.ArrayList<>();
+        for (String q : promQLs) futures.add(guard.submit(() -> metrics.queryResults(q)));
+        long timeout = properties.getMetrics().getQueryTimeoutMs();
+        List<java.util.Optional<List<Map<String, Object>>>> rows = guard.awaitAll(futures, timeout,
+                System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout));
+
+        List<Map<String, Double>> values = new java.util.ArrayList<>();
+        List<String> empty = new java.util.ArrayList<>(), timedOut = new java.util.ArrayList<>();
+        for (int i = 0; i < promQLs.size(); i++) {
+            String metric = promQLs.get(i).replaceAll(".*\\((DCGM_\\w+)\\).*", "$1");
+            if (rows.get(i).isEmpty()) { timedOut.add(metric); values.add(Map.of()); continue; }
+            Map<String, Double> byInstance = instanceValues(rows.get(i).get());
+            if (byInstance.isEmpty()) empty.add(metric);
+            values.add(byInstance);
+        }
+        Set<String> instances = new LinkedHashSet<>();
+        values.forEach(v -> instances.addAll(v.keySet()));
+        Map<String, GpuTelemetry> out = new HashMap<>();
+        for (String instance : instances) {
+            out.put(instance, new GpuTelemetry(values.get(0).getOrDefault(instance, 0.0),
+                    values.get(1).getOrDefault(instance, 0.0), values.get(2).getOrDefault(instance, 0.0)));
+        }
+        return new GpuTelemetryDiscovery(out, List.copyOf(empty), List.copyOf(timedOut));
+    }
+
+    /** {@code … by(instance)} 질의 결과 → instance → 값. 유한하지 않은 값(NaN·Inf)은 그 자리 미계측으로 뺀다. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Double> instanceValues(List<Map<String, Object>> rows) {
+        Map<String, Double> out = new HashMap<>();
+        if (rows == null) return out;
+        for (Map<String, Object> result : rows) {
+            Map<String, String> labels = (Map<String, String>) result.get("metric");
+            List<Object> value = (List<Object>) result.get("value");
+            if (labels == null || value == null || value.size() < 2) continue;
+            String instance = labels.get("instance");
+            if (instance == null) continue;
+            try {
+                double v = Double.parseDouble(value.get(1).toString());
+                if (Double.isFinite(v)) out.put(instance, v);
+            } catch (NumberFormatException ignored) {
+                // 값이 숫자가 아니면 그 시리즈만 미계측
+            }
+        }
+        return out;
     }
 
     /** 저장소에 지금 있는 IPMI 시리즈의 instance 들. 값은 쓰지 않는다. */

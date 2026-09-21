@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
 import com.innogrid.aims.scheduler.model.ExporterInstances;
+import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.model.NodePowerSpecs;
 import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
@@ -134,7 +135,7 @@ public class NodeResourceCollector {
     /**
      * 후보 노드와 제외 노드를 함께 수집한다.
      *
-     * <p><b>질의는 상한 안에서만 기다린다</b>(단계 14). 대상 목록·GPU 개수는 단건 상한, 노드 한 대의 질의 10회는
+     * <p><b>질의는 상한 안에서만 기다린다</b>(단계 14). 대상 목록·GPU 개수·GPU 축 셋은 단건 상한, 노드 한 대의 질의 10회는
      * 노드 상한, 스냅샷 전체는 전체 상한이다. 노드별 수집은 보호 장치의 풀에서 병렬로 돌리되 결과는 <b>제출 순서대로</b>
      * 모아 노드 순서가 순차 수집과 같다. 상한을 넘긴 노드는 "응답 없음"으로 제외 목록에 넣고 나머지로 계속 간다 —
      * 저장소가 멈춰도 요청 스레드는 멈추지 않는다. 대상 목록 질의가 상한을 넘기면 빈 스냅샷(지금까지의 "수집 실패"와
@@ -167,6 +168,11 @@ public class NodeResourceCollector {
 
             // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다. 키는 DCGM 시리즈의 instance 다.
             Map<String, Integer> gpuCounts = exporterResolver.discoverGpuCounts();
+            // GPU 축(사용률·온도·전력)도 클러스터 한 번씩 — GPU 시리즈가 아예 없으면 세 질의를 던지지 않는다.
+            ExporterInstanceResolver.GpuTelemetryDiscovery gpuDiscovery = gpuCounts.isEmpty()
+                    ? ExporterInstanceResolver.GpuTelemetryDiscovery.NONE : exporterResolver.discoverGpuTelemetry();
+            Map<String, GpuTelemetry> gpuTelemetry = gpuDiscovery.byInstance();
+            warnGpuTelemetryGaps(gpuCounts, gpuDiscovery);
             // 세 익스포터의 instance 를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance 가
             // 달라(노드 :9100, DCGM :9400, IPMI 는 중앙 주소) 노드 instance 로는 GPU·전력·온도를 찾을 수 없었다.
             ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
@@ -195,7 +201,8 @@ public class NodeResourceCollector {
                             + "원장에서 한 instance 를 한 노드에만 적으십시오", instance, exporters.dcgmOf(instance), exporters.ipmiOf(instance));
                 }
                 int gpu = gpuCounts.getOrDefault(dcgmInstance, 0);
-                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, ipmiInstance, gpu, specs)));
+                GpuTelemetry telemetry = gpu > 0 ? gpuTelemetry.getOrDefault(dcgmInstance, GpuTelemetry.EMPTY) : GpuTelemetry.EMPTY;
+                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, ipmiInstance, gpu, telemetry, specs)));
             }
 
             List<Optional<NodeOutcome>> outcomes = guard.awaitAll(futures, limits.getNodeTimeoutMs(), deadline);
@@ -221,10 +228,29 @@ public class NodeResourceCollector {
     }
 
     /**
+     * GPU 개수는 잡혔는데 GPU 축이 빈 까닭을 수집 1회당 한 줄로 남긴다 — 메트릭 이름과 노드 예시까지. 상한 초과(저장소 쪽)와
+     * 빈 결과(익스포터가 그 카운터를 안 냄)는 확인할 자리가 달라 갈라 적는다. 응답의 0 은 규약이지만 로그까지 조용하면
+     * 운영자가 어디를 봐야 할지 모른다.
+     */
+    private void warnGpuTelemetryGaps(Map<String, Integer> gpuCounts, ExporterInstanceResolver.GpuTelemetryDiscovery d) {
+        if (gpuCounts.isEmpty()) return;
+        String sample = gpuCounts.keySet().stream().sorted().findFirst().orElse("?");
+        if (!d.timedOutMetrics().isEmpty()) {
+            log.warn("GPU 노드 {}대(예: {})의 {} 질의가 상한 {}ms 안에 끝나지 않았다 — 저장소 응답 지연. 이번 수집의 그 칸은 0 이다",
+                    gpuCounts.size(), sample, d.timedOutMetrics(), properties.getMetrics().getQueryTimeoutMs());
+        }
+        if (!d.emptyMetrics().isEmpty()) {
+            log.warn("GPU 노드 {}대(예: {})의 {} 시리즈가 비었다 — GPU 개수(DCGM_FI_DEV_GPU_UTIL)는 잡혔으니 익스포터가 그 카운터를 내는지 확인하십시오",
+                    gpuCounts.size(), sample, d.emptyMetrics());
+        }
+    }
+
+    /**
      * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 제외 사유를 담은 결과를 돌려준다.
      * 작업 스레드에서 돌므로 공유 상태를 건드리지 않는다.
      */
-    private NodeOutcome collectNodeMetrics(String mdcId, String instance, String ipmiInstance, int totalGpu, NodePowerSpecs specs) {
+    private NodeOutcome collectNodeMetrics(String mdcId, String instance, String ipmiInstance, int totalGpu,
+                                           GpuTelemetry gpuTelemetry, NodePowerSpecs specs) {
         String filter = String.format("{instance=\"%s\"}", instance);
         // 전력·온도는 IPMI 시리즈의 instance 로 묻는다 — 노드 익스포터와 다를 수 있다.
         String ipmiFilter = String.format("{instance=\"%s\"}", ipmiInstance);
@@ -276,7 +302,8 @@ public class NodeResourceCollector {
                 cpuUsage.getAsDouble(), memUsage, diskUsage,
                 powerWatts, specs.capacityOr(instance, powerModel::capacityOf), temperature,
                 networkRx, networkTx)
-                .withDiskCapacityGb(diskCapacityGb);
+                .withDiskCapacityGb(diskCapacityGb)
+                .withGpuTelemetry(totalGpu > 0 ? gpuTelemetry : GpuTelemetry.EMPTY);   // GPU 축은 섀시 전력·온도에 섞지 않는다
 
         // IPMI 값이 하나도 없으면 전력·온도 판단 근거가 없다는 뜻이다.
         node.setPowerSource(powerWatts > 0 || temperature > 0 ? PowerSource.IPMI : PowerSource.NONE);

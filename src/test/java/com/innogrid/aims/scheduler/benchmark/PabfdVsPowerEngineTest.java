@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   busy-y : 정격 900W, 실측 500W,                CPU 50%  → 가동 중
  *
  *   marginalPower     (고전 선형, 깨우기 비용 없음)   idle-x  87.5W  <  busy-y 157.5W
- *   realMarginalPower (유휴 가산 — 계측된 유휴 노드는 실측 역산 153.1W)  idle-x 240.6W  >  busy-y 157.5W
+ *   realMarginalPower (유휴 가산 — 계측된 유휴 노드는 실측 역산 153.1W 를 절편·깨우기항에)  idle-x 239.8W  >  busy-y 157.5W
  * </pre>
  *
  * <p>두 수식의 부등호가 <b>반대</b>다. 그래서 PABFD 는 빈 노드를, 우리 엔진은 가동 중인 노드를
@@ -67,7 +67,7 @@ class PabfdVsPowerEngineTest {
     /**
      * 손계산.
      * <pre>
-     * idle-x  CPU 2% ≤ 활성 기준 5% → 빈 노드 → 87.5 + 역산 유휴 153.1 = 240.6W (실측 160W 에서 역산, 대체값 150 아님)
+     * idle-x  CPU 2% ≤ 활성 기준 5% → 빈 노드 → (500 − 153.1) × 0.25 = 86.7 + 역산 유휴 153.1 = 239.8W (절편도 역산 유휴, 대체값 150 아님)
      * busy-y  CPU 50% > 5%        → 가동 중  → 157.5W
      * </pre>
      */
@@ -79,8 +79,9 @@ class PabfdVsPowerEngineTest {
 
         // idle-x 는 계측 160W·CPU 2% 라 깨우기 비용을 실측에서 역산한다: (160 − 500×0.02)/(1−0.02) = 153.1W.
         // pabfd 가 쓰는 marginalPower(대체값 기준 87.5W)는 그대로다 — 갈리는 것은 깨우기 비용의 출처뿐이다.
-        assertEquals(87.5 + (160 - 500 * 0.02) / 0.98, powerModel.realMarginalPower(idle, 2), 1e-9,
-                "87.5 + 역산 유휴 153.1W");
+        double recon = (160 - 500 * 0.02) / 0.98;
+        assertEquals((500 - recon) * 0.25 + recon, powerModel.realMarginalPower(idle, 2), 1e-9,
+                "동적 (500 − 153.1) × 0.25 = 86.7 + 역산 유휴 153.1W");
         assertEquals(157.5, powerModel.realMarginalPower(busy, 2), 1e-9, "이미 도는 노드라 동적 증가분만");
         assertTrue(powerModel.realMarginalPower(idle, 2) > powerModel.realMarginalPower(busy, 2));
     }
@@ -132,10 +133,10 @@ class PabfdVsPowerEngineTest {
      *
      * <p>총점 손계산(정책 기본값 · 자원 몫 0.10):</p>
      * <pre>
-     * idle-x  전력점수 .40×0.025 + .25×0.9940 + .35×0.5189 = 0.44011
+     * idle-x  전력점수 .40×0.025 + .25×0.9940 + .35×0.5204 = 0.44064
      * busy-y  전력점수 .40×0.200 + .25×1.0000 + .35×0.6850 = 0.56975
      * 열점수  둘 다 1 − (40/75)² = 0.715556 (경고 65℃ 미만이라 감점 0)
-     * 총점    idle-x 0.5963  <  busy-y 0.6190
+     * 총점    idle-x 0.5966  <  busy-y 0.6190
      * </pre>
      * 자원 여유만 보면 빈 노드가 0.94 대 0.50 으로 앞서지만, 자원 몫이 0.10 이라 전력 판단이 이긴다.
      * busy-y 의 한계전력 점수 0.685 는 1 − 157.5/500 이다 — 분모가 정격 900 이 아니라 W 눈금이라

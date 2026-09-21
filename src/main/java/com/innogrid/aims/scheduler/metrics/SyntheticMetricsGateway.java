@@ -23,6 +23,11 @@ import java.util.regex.Pattern;
  * filesystem size/avail, IPMI 전력, IPMI 온도(avg), 네트워크 rx/tx(sum irate), DCGM GPU 수(count by instance),
  * 그리고 CPU·전력의 구간 질의.</p>
  *
+ * <p><b>익스포터별 instance 형식을 실환경대로 낸다.</b> 노드 익스포터 시리즈는 {@code host:9100}, DCGM 은
+ * {@code host:9400}, IPMI 는 {@code host:9290} 이다. 예전에는 모든 시리즈에 노드 id 하나를 붙여, 수집기가 노드
+ * instance 로 GPU 개수·전력·온도를 찾는 결함이 시험에서 드러나지 않았다. 실장비에서는 익스포터마다 포트가 달라
+ * 그 결합이 빈손이었다. 이제 IPMI·DCGM 메트릭을 노드 instance 로 물으면 <b>빈 결과</b>다 — 실환경과 같다.</p>
+ *
  * <p><b>구간 집계 함수를 해석한다.</b> {@code avg_over_time(메트릭[24h])} 같은 질의는 감싼 함수를 무시하면 그 순간
  * 값을 돌려주게 되어, 시험은 초록불인데 값이 틀린다. 실환경 저장소는 창 안의 표본을 모아 답하므로 여기서도 창을
  * 걸어 표본을 모아 답한다. 표본 간격은 실환경 스크레이프 주기와 같은 {@link #SAMPLE_STEP_SECONDS} 로 둔다.</p>
@@ -30,6 +35,11 @@ import java.util.regex.Pattern;
 public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
 
     public static final String SOURCE = "synthetic";
+
+    /** DCGM 익스포터 포트 — 배포 서버 실측 {@code mdc1-gpu-node1:9400}. */
+    public static final int DCGM_PORT = 9400;
+    /** IPMI 익스포터 포트 — 배포 서버 실측 {@code ipmi-exporter:9290}. 모의에서는 노드 호스트에 붙인다. */
+    public static final int IPMI_PORT = 9290;
 
     private static final Pattern LABEL = Pattern.compile("(\\w+)\\s*(=~|!~|!=|=)\\s*\"([^\"]*)\"");
     private static final Pattern METRIC = Pattern.compile(
@@ -86,7 +96,7 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
         for (SyntheticCluster.Node node : select(promQL)) {
             Double v = window == null ? value(promQL, node, now) : aggregate(promQL, node, now, window);
             if (v == null) continue;
-            out.add(series(node, List.of(now, format(v)), null));
+            out.add(series(node, promQL, List.of(now, format(v)), null));
         }
         return out;
     }
@@ -150,21 +160,49 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
                 if (v == null) break;
                 values.add(List.of(t, format(v)));
             }
-            if (!values.isEmpty()) out.add(series(node, null, values));
+            if (!values.isEmpty()) out.add(series(node, promQL, null, values));
         }
         return out;
     }
 
     // ── 해석 ──────────────────────────────────────────────────
 
-    /** 질의가 가리키는 노드들 — instance 라벨이 있으면 그 노드만, job 라벨이 다르면 없음. */
+    /**
+     * 질의가 가리키는 노드들 — instance 라벨이 있으면 그 노드만, job 라벨이 다르면 없음.
+     *
+     * <p>instance 는 <b>그 메트릭의 익스포터 형식</b>이어야 한다. IPMI 메트릭을 {@code host:9100} 으로 물으면
+     * 실환경에서 시리즈가 없듯 여기서도 없다. 그래서 수집기는 해석기를 거쳐 {@code host:9290} 으로 물어야 값을 얻는다.</p>
+     */
     private List<SyntheticCluster.Node> select(String promQL) {
         Map<String, String> labels = labels(promQL);
         String job = labels.get("job");
         if (job != null && !job.equals(cluster.job())) return List.of();
         String instance = labels.get("instance");
-        if (instance != null) return cluster.node(instance).map(List::of).orElse(List.of());
-        return cluster.nodes();
+        if (instance == null) return cluster.nodes();
+        Integer port = exporterPort(promQL);
+        if (port == null) return cluster.node(instance).map(List::of).orElse(List.of());
+        // 익스포터 메트릭 — 라벨의 포트가 그 익스포터의 것이고 호스트가 노드와 같아야 한다.
+        String expectedPort = ":" + port;
+        if (!instance.endsWith(expectedPort)) return List.of();
+        String host = instance.substring(0, instance.length() - expectedPort.length());
+        return cluster.nodes().stream().filter(n -> hostOf(n.nodeId()).equals(host)).findFirst()
+                .map(List::of).orElse(List.of());
+    }
+
+    /** 질의 메트릭이 어느 익스포터의 것인가 — DCGM 9400, IPMI 9290, 노드 익스포터는 null. */
+    private static Integer exporterPort(String promQL) {
+        Matcher m = METRIC.matcher(promQL);
+        if (!m.find()) return null;
+        String metric = m.group(1);
+        if (metric.startsWith("DCGM_")) return DCGM_PORT;
+        if (metric.startsWith("ipmi_")) return IPMI_PORT;
+        return null;
+    }
+
+    /** {@code host:port} 의 호스트. */
+    private static String hostOf(String instance) {
+        int colon = instance.lastIndexOf(':');
+        return colon < 0 ? instance : instance.substring(0, colon);
     }
 
     /** 노드 한 대에 대한 질의 값. 그 노드에 없는 메트릭(IPMI 없는 노드의 전력·온도, GPU 없는 노드의 DCGM)이면 null. */
@@ -218,9 +256,11 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
         }
     }
 
-    private Map<String, Object> series(SyntheticCluster.Node node, List<Object> value, List<List<Object>> values) {
+    private Map<String, Object> series(SyntheticCluster.Node node, String promQL, List<Object> value, List<List<Object>> values) {
         Map<String, String> labels = new LinkedHashMap<>();
-        labels.put("instance", node.nodeId());
+        // 시리즈의 instance 는 그 메트릭을 낸 익스포터의 주소다 — 노드 익스포터와 다르다.
+        Integer port = exporterPort(promQL);
+        labels.put("instance", port == null ? node.nodeId() : hostOf(node.nodeId()) + ":" + port);
         labels.put("mdc_id", node.mdcId());
         labels.put("job", cluster.job());
         Map<String, Object> s = new LinkedHashMap<>();

@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 대상 화면: 지능형 예측 진단 > 스케줄러, 지능형 예측 진단 > 전력 최적화 진단
-- 기준 코드: `com.innogrid.aims.scheduler` (develop `e12d665` + 문구 정정 PR), 엔드포인트 59개
+- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 64개
 - 관련 문서: docs/10 알람 API 프론트 계약(같은 형식), docs/06 자원 탐색기 트리 설계(역할 스코프)
 
 **필드 하나하나의 진실은 Swagger(`/swagger-ui/index.html`, `/v3/api-docs`)입니다.** 이 문서는 필드를 전수로 옮기지 않습니다. 대신 화면을 붙일 때 Swagger 만으로는 알기 어려운 것 — 경로 묶음, 공통 규칙, 값이 비는 조건, 오류가 나는 조건, 그리고 앞으로 바뀔 예정 — 을 적습니다. 필드 목록이 필요하면 Swagger 를 보고, 이 문서와 다르면 코드가 맞습니다.
@@ -191,17 +191,21 @@
 
 ---
 
-## 6. 운영자 입력 원장 (16)
+## 6. 운영자 입력 원장 (21)
 
 | 대상 | 경로 | 메서드 |
 |---|---|---|
 | 노드 정격 전력 | `/node-power-specs` | GET `/` · GET `/{specId}` · POST `/` · PUT `/{specId}` · DELETE `/{specId}` |
 | MDC 전력 예산 | `/mdc-power-budgets` | GET `/` · GET `/{budgetId}` · POST `/` · PUT `/{budgetId}` · DELETE `/{budgetId}` |
 | MDC 링크 | `/mdc-links` | GET `/`(`mdcId`·`status` 필터) · GET `/matrix` · GET `/{linkId}` · POST `/` · PUT `/{linkId}` · DELETE `/{linkId}` |
+| 익스포터 대응 | `/node-exporter-mappings` | GET `/`(`nodeId` 부분 일치 필터) · GET `/{mappingId}` · POST `/` · PUT `/{mappingId}` · DELETE `/{mappingId}` |
 
-센서로 알 수 없는 값(노드 정격 W, MDC 총량 W, MDC 간 지연·대역폭)을 운영자가 입력하는 화면입니다.
+센서로 알 수 없는 값(노드 정격 W, MDC 총량 W, MDC 간 지연·대역폭)과 센서가 **어디에** 있는지(노드별 DCGM·IPMI `instance`)를 운영자가 입력하는 화면입니다.
 
 - **정격이 등록되지 않은 노드는 기본값 500W 로 계산합니다.** 원장이 비어 있으면 전 노드가 같은 값을 쓰므로, 화면에 "미등록" 을 구분해 보여 주는 편이 좋습니다.
+- **익스포터 대응은 노드 한 대의 GPU 개수·전력·온도가 저장소의 어느 `instance` 시리즈에 있는지 적는 원장입니다.** 프로메테우스의 `instance` 라벨은 익스포터마다 다릅니다 — 노드 익스포터 `host:9100`, DCGM `host:9400`, IPMI 는 중앙 주소(`ipmi-exporter:9290`)일 수 있습니다. 원장이 비어 있으면 수집기가 **포트를 뗀 호스트명이 같은 시리즈가 정확히 하나일 때** 그것을 쓰고, 그것도 안 되면 노드 `instance` 를 그대로 씁니다. 중앙 IPMI 처럼 호스트명이 다른 형태는 이 원장에 적는 길밖에 없습니다. `nodeId` 는 노드 목록의 `nodeId`(노드 익스포터 `instance`) 그대로이고, 노드와 같은 값은 뜻이 없어 400, 같은 노드 재등록은 409 입니다. `instance` 의 존재는 검증하지 않습니다 — 오타면 그 노드만 미계측으로 남습니다. 값을 넣거나 지우면 **다음 수집부터** 반영되고 저장된 이력은 바뀌지 않습니다.
+- **한 `instance` 는 한 노드에만.** 다른 행이 이미 쓰는 DCGM·IPMI `instance` 를 적으면 **409** 이고 응답 문장이 어느 노드가 쓰는지 알려 줍니다. 같은 시리즈를 두 노드에 넣으면 그 값이 두 번 세어져 클러스터 전력 합·에너지·GPU 총량이 부풀기 때문입니다. 수집기도 같은 충돌(원장이 다른 노드가 호스트명으로 얻는 시리즈를 가리키는 경우)을 보면 **관련 노드를 전부 미계측**으로 두고 WARN 로그를 남깁니다. 중앙 IPMI 익스포터가 노드를 `instance` 로 구분하지 못하는 구성(배포 서버가 그렇습니다 — `ipmi-exporter:9290` 하나)에서는 한 노드에만 적거나 비워 두십시오.
+- 화면에서 고를 **후보 `instance` 를 주는 API 는 아직 없습니다.** 저장소에서 `count by(instance) (DCGM_FI_DEV_GPU_UTIL)` · `count by(instance) (ipmi_dcmi_power_consumption_watts)` 를 직접 확인해 입력하십시오. 노드 식별자는 대소문자만 달라도 중복(409)입니다 — 라벨은 대소문자를 가리므로 철자가 다른 행은 쓰이지 않습니다.
 - MDC 링크의 상태가 `DOWN` 이면 그 MDC 로는 배치하지 않습니다. `UP`·`DEGRADED` 의 지연과 손실은 제약이 아니라 배치 점수에만 반영됩니다.
 - 정책의 `affinityEnabled` 가 켜져 있고 워크로드에 `dataMdcId` 가 있을 때만 링크가 배치에 반영됩니다. 이때 후보 노드 상세(`details`)에 `링크품질`(같은 MDC 1.0 · 등록 링크는 지연·손실 기반 · **원장에 없는 원격 MDC 는 기본 0.5**)과 `링크등록`(1.0 등록됨 또는 같은 MDC, 0.0 원장에 없음)이 붙습니다. 원장에 없는 원격 MDC 는 배치에서 빠지지 않고 점수만 낮습니다 — 링크를 등록하면 측정값으로 바뀝니다. `링크등록` 은 **원장에 행이 있는지**만 뜻하므로 `DOWN` 링크도 `1.0` 입니다. 배치 가능 여부는 `eligible` 과 제외 사유로 판단하십시오. 사유로 분기해야 하면 문장(`exclusionReason`)이 아니라 **코드(`exclusionCode`)** 를 보십시오 — 문장은 사람이 읽는 값이라 문구가 다듬어질 수 있습니다. `dataMdcId` 는 앞뒤 공백을 지운 뒤 노드의 MDC 라벨과 **정확히 일치**해야 같은 MDC 로 봅니다(대소문자 차이는 미등록 원격으로 처리, 공백만이면 지정 안 함).
 
@@ -314,9 +318,9 @@
 | 항목 | 현재 | 이유 |
 |---|---|---|
 | 노드 목록 | 1건 | 모니터링 대상 노드가 백엔드가 도는 서버 하나뿐 |
-| 전력·온도 | 0 | IPMI 수집 대상 미등록 |
-| GPU | 0 | DCGM 수집 대상 미등록 |
-| 원장 3종 | 0건 | 운영자 입력 전 |
+| 전력·온도 | 0 | IPMI 타깃(`ipmi-exporter:9290`) down. 살아나도 `instance` 가 노드와 다르므로 익스포터 대응 원장에 적어야 이어진다 |
+| GPU | 0 | DCGM 타깃(`mdc1-gpu-node1:9400`) down. 살아나도 노드 `instance`(`localhost:9100`)와 호스트명이 달라 호스트명 일치가 걸리지 않는다 — 전력·온도와 마찬가지로 익스포터 대응 원장에 적어야 이어진다 |
+| 원장 4종 | 0건 | 운영자 입력 전 |
 | 링크 원장 | 0건 | 운영자 입력 전. 그래서 배치 후보 상세에 `링크품질`·`링크등록` 키가 나오지 않는다(정책 `affinityEnabled` 도 꺼져 있음) |
 | 통합 권고 | 후보가 적음 | 노드가 1대라 옮길 곳이 없음 |
 | 실행 상세의 전력·온도 칸 | `null` | 전력·온도가 0 이라 실측 노드가 없음(`powerMeasuredNodes` 0). 가동 노드 수는 값이 나옴 |
@@ -348,7 +352,9 @@
 | (이번) | 2026-09-17 | 배치 결정 | 후보 상세에 `exclusionCode` 추가 — 제외 사유를 기계가 읽는 이름 14종(`INSUFFICIENT_RESOURCE`·`INSUFFICIENT_DISK`·`CPU_USAGE_EXCEEDED`·`MEMORY_USAGE_EXCEEDED`·`COOLING_DOWN`·`TEMPERATURE_EXCEEDED`·`WORKLOAD_TEMPERATURE_EXCEEDED`·`PREDICTED_TEMPERATURE_EXCEEDED`·`POWER_HEADROOM_EXCEEDED`·`WORKLOAD_POWER_EXCEEDED`·`RUN_POWER_BUDGET_EXCEEDED`·`PREDICTED_POWER_EXCEEDED`·`MDC_LINK_DOWN`·`MDC_POWER_BUDGET_EXCEEDED`)으로 나눕니다. **기존 `exclusionReason` 문장은 한 글자도 바뀌지 않습니다** — 까닭 14종 가운데 12종의 문구를 시험으로 고정했습니다(11종은 문장 전체, MDC 전력 합계는 앞뒤). 적격 후보는 `exclusionCode` 가 없습니다(`null`). 판 응답의 온도 제약 개입 횟수(`c3InterventionCount`)가 사유 문장 부분 검색에서 코드 비교로 바뀌었고 세는 조건이 같아 값은 불변입니다(증거 묶음 `entriesDigest` `ca1cffbf59e3` 그대로) | 필드 추가 — 문장으로 분기하던 화면은 코드로 옮기는 편이 안전합니다. 문장·값·다이제스트 전부 불변이라 조정 없이도 동작합니다 |
 | (이번) | 2026-09-17 | 실행 이력 | 실행 상세에 `clusterSnapshot` 추가 — 실행 1회의 클러스터 상태를 열 12개로 남깁니다. 배치를 얹어도 다시 재지 않는 축(`nodeCount`·`excludedCount`·`measuredNodes`·`measuredPowerWatts`)은 한 번만, 예약에 반응하는 축(`activeNodes`·`reclaimableWatts`·`avgTemperature`)은 전·후로 싣습니다. "후"는 재측정이 아니라 이번 실행의 예약을 반영한 값입니다. **실행 이력 목록 1행(`ScheduleRunResponse`)의 15열은 이름·순서 그대로**이고 상세에만 더했습니다. 기록이 없는 실행은 `clusterSnapshot` 이 통째로 `null` 입니다 — 이 기능 이전에 쌓인 행이 그렇습니다. 재지 못한 회차는 `null` 이 아니라 까닭을 담은 `status` 를 가진 객체입니다(`NO_TARGET`·`NO_NODES`). 배치 점수·선택·판 다이제스트는 불변입니다(읽기만 하고 맥락을 고치지 않습니다) | 필드 추가 — 실행 상세만. 목록·즉시 실행 응답은 불변이라 조정 없이 동작합니다 |
 | (이번) | 2026-09-18 | 전력 최적화 추세 | 응답 최상위에 `energy` 추가(5 → 6열) — 구간 전체의 에너지 요약입니다. **지점 배열은 11열 그대로**입니다. 지점의 `totalPowerWatts` 는 전력을 못 읽은 노드를 0 으로 채워 만든 합이라 그 배열을 적분하면 결손이 0W 로 읽혀 적게 나오므로, 소비와 회수 가능 둘 다 0 을 채우기 전의 원시 구간 시계열을 노드별로 적분하고, 회수 가능 쪽만 가동 판정을 한 번 더 거칩니다. 물은 구간과 실제로 적분한 구간이 다를 수 있어 `integratedFrom`·`integratedTo`·`integratedHours`·`gaps` 를 함께 냅니다. 배치 점수·선택·판 다이제스트·`configDigest` 전부 불변입니다 | 필드 추가 — 추세 응답 최상위 키 하나. 지점 배열과 기존 5열은 불변이라 조정 없이 동작합니다 |
+| (이번) | 2026-09-21 | 노드 · 전력 최적화 진단 · 운영자 입력 원장 | 수집기가 GPU 개수·전력·온도를 노드 `instance` 로 찾던 것을 **익스포터별 `instance` 해석**으로 — 원장(신설 `/node-exporter-mappings`, 5 엔드포인트, 59 → **64**) → 포트를 뗀 호스트명 일치(정확히 하나) → 노드 `instance` 그대로 순. 전력 최적화 추세·전력 효율 추세의 노드별 전력 결합도 같은 해석기를 씁니다. 실장비의 `instance` 는 익스포터마다 달라(노드 `:9100`, DCGM `:9400`, IPMI 중앙 주소) 셋이 전부 빈손이었습니다. 노드 응답 21필드·추세 응답 형태는 그대로이고, `instance` 가 노드와 같은 저장소에서는 값도 불변입니다(모의 저장소는 이번에 익스포터별 포트를 내도록 바뀌었고 호스트명 일치로 이어져 값은 같습니다). 같은 시리즈로 해석된 노드가 둘이면 전부 미계측 — 원장은 다른 행이 쓰는 `instance` 를 409 로 막습니다. 배치 점수·판 다이제스트·`configDigest`·`entriesDigest` 불변 | 필드 변경 없음. 새 원장 5 엔드포인트 — 운영자 입력 화면 한 장 추가. 실장비에서 GPU·전력·온도가 0 에서 값으로 바뀌는 것은 데이터가 이어진 결과입니다 |
 | — | — | (예정) 배치 이력 | 제외 사유 코드를 저장 | 필드 추가 |
 | — | — | (예정) 노드 | GPU 온도·전력 추가 | 필드 추가 |
+| — | — | (예정) 익스포터 대응 | 후보 `instance` 발견 API | 엔드포인트 추가 |
 
 예정 항목은 착수 시점에 날짜와 PR 번호를 채웁니다.

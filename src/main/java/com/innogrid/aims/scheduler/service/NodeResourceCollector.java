@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.model.ExporterInstances;
 import com.innogrid.aims.scheduler.model.NodePowerSpecs;
 import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
@@ -52,17 +53,32 @@ public class NodeResourceCollector {
     /** 노드 전력 사양 원장. null 이면(원장 없이 조립한 테스트 경로) 정격은 종전대로 설정값에서 온다. */
     private final NodePowerSpecRepository powerSpecRepository;
 
+    /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
+    private final ExporterInstanceResolver exporterResolver;
+
     @Autowired
     public NodeResourceCollector(SchedulerMetricsGateway metrics,
                                  SchedulerProperties properties,
                                  PowerModel powerModel,
                                  MetricsQueryGuard guard,
-                                 NodePowerSpecRepository powerSpecRepository) {
+                                 NodePowerSpecRepository powerSpecRepository,
+                                 ExporterInstanceResolver exporterResolver) {
         this.vmClient = metrics;
         this.properties = properties;
         this.powerModel = powerModel;
         this.guard = guard;
         this.powerSpecRepository = powerSpecRepository;
+        this.exporterResolver = exporterResolver != null ? exporterResolver
+                : new ExporterInstanceResolver(metrics, guard, properties);
+    }
+
+    /** 익스포터 대응 원장 없이 조립하는 형태(기존 시험 경로) — 호스트명 일치와 그대로만 쓴다. */
+    public NodeResourceCollector(SchedulerMetricsGateway metrics,
+                                 SchedulerProperties properties,
+                                 PowerModel powerModel,
+                                 MetricsQueryGuard guard,
+                                 NodePowerSpecRepository powerSpecRepository) {
+        this(metrics, properties, powerModel, guard, powerSpecRepository, null);
     }
 
     /** 원장 없이 조립하는 형태 — 정격은 설정값. */
@@ -149,22 +165,37 @@ public class NodeResourceCollector {
             List<Map<String, Object>> results = (List<Map<String, Object>>) data.get("result");
             if (results == null) return new Snapshot(nodes, excluded);
 
-            // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다.
-            Map<String, Integer> gpuCounts = collectGpuCounts();
+            // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다. 키는 DCGM 시리즈의 instance 다.
+            Map<String, Integer> gpuCounts = exporterResolver.discoverGpuCounts();
+            // 세 익스포터의 instance 를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance 가
+            // 달라(노드 :9100, DCGM :9400, IPMI 는 중앙 주소) 노드 instance 로는 GPU·전력·온도를 찾을 수 없었다.
+            ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
             // 정격 전력 원장도 수집 1회당 한 번만 읽는다(단계 20). 비어 있으면 정격은 종전대로 설정값에서 온다.
             NodePowerSpecs specs = powerSpecs();
 
             List<String> instances = new ArrayList<>();
             List<String> mdcIds = new ArrayList<>();
-            List<Future<NodeOutcome>> futures = new ArrayList<>();
             for (Map<String, Object> result : results) {
                 Map<String, String> labels = (Map<String, String>) result.get("metric");
-                String instance = labels.getOrDefault("instance", "unknown");
-                String mdcId = labels.getOrDefault("mdc_id", "unknown");
-                int gpu = gpuCounts.getOrDefault(instance, 0);
-                instances.add(instance);
-                mdcIds.add(mdcId);
-                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, gpu, specs)));
+                instances.add(labels.getOrDefault("instance", "unknown"));
+                mdcIds.add(labels.getOrDefault("mdc_id", "unknown"));
+            }
+            // 노드 전체를 한 번에 해석한다 — 같은 시리즈를 가리킨 노드가 둘이면 둘 다 미계측(한 값이 두 번 세어지면 합계가 부푼다)
+            Map<String, String> dcgmOfNode = exporters.dcgmFor(instances);
+            Map<String, String> ipmiOfNode = exporters.ipmiFor(instances);
+
+            List<Future<NodeOutcome>> futures = new ArrayList<>();
+            for (int i = 0; i < instances.size(); i++) {
+                String instance = instances.get(i);
+                String mdcId = mdcIds.get(i);
+                String dcgmInstance = dcgmOfNode.getOrDefault(instance, instance);
+                String ipmiInstance = ipmiOfNode.getOrDefault(instance, instance);
+                if (!dcgmInstance.equals(exporters.dcgmOf(instance)) || !ipmiInstance.equals(exporters.ipmiOf(instance))) {
+                    log.warn("익스포터 대응 충돌: instance={} — 다른 노드와 같은 시리즈(DCGM {} / IPMI {})를 가리켜 이 노드는 그대로 둔다. "
+                            + "원장에서 한 instance 를 한 노드에만 적으십시오", instance, exporters.dcgmOf(instance), exporters.ipmiOf(instance));
+                }
+                int gpu = gpuCounts.getOrDefault(dcgmInstance, 0);
+                futures.add(guard.submit(() -> collectNodeMetrics(mdcId, instance, ipmiInstance, gpu, specs)));
             }
 
             List<Optional<NodeOutcome>> outcomes = guard.awaitAll(futures, limits.getNodeTimeoutMs(), deadline);
@@ -193,8 +224,10 @@ public class NodeResourceCollector {
      * 노드 한 대의 메트릭. 핵심 메트릭 4종 중 하나라도 알 수 없으면 제외 사유를 담은 결과를 돌려준다.
      * 작업 스레드에서 돌므로 공유 상태를 건드리지 않는다.
      */
-    private NodeOutcome collectNodeMetrics(String mdcId, String instance, int totalGpu, NodePowerSpecs specs) {
+    private NodeOutcome collectNodeMetrics(String mdcId, String instance, String ipmiInstance, int totalGpu, NodePowerSpecs specs) {
         String filter = String.format("{instance=\"%s\"}", instance);
+        // 전력·온도는 IPMI 시리즈의 instance 로 묻는다 — 노드 익스포터와 다를 수 있다.
+        String ipmiFilter = String.format("{instance=\"%s\"}", ipmiInstance);
         String mount = properties.getDiskMountPoint();
 
         // ── 핵심 메트릭: 없으면 노드 자체를 수집하지 않는다 ─────────
@@ -231,10 +264,10 @@ public class NodeResourceCollector {
         double diskUsage = diskSize > 0 ? (1 - diskAvail / diskSize) * 100 : 0;
         long diskCapacityGb = (long) (diskSize / 1024 / 1024 / 1024);
 
-        double powerWatts = safeQuery("ipmi_dcmi_power_consumption_watts" + filter);
+        double powerWatts = safeQuery("ipmi_dcmi_power_consumption_watts" + ipmiFilter);
         // 괄호를 닫지 않으면 PromQL 파싱 오류가 나고 값이 항상 0이 된다.
         double temperature = safeQuery(String.format(
-                "avg(ipmi_temperature_celsius{name=~\"CPU.*\",instance=\"%s\"})", instance));
+                "avg(ipmi_temperature_celsius{name=~\"CPU.*\",instance=\"%s\"})", ipmiInstance));
         double networkRx = safeQuery("sum(irate(node_network_receive_bytes_total" + filter + "[5m]))");
         double networkTx = safeQuery("sum(irate(node_network_transmit_bytes_total" + filter + "[5m]))");
 
@@ -250,30 +283,6 @@ public class NodeResourceCollector {
         return NodeOutcome.of(node);
     }
 
-    /**
-     * 노드별 GPU 개수. DCGM exporter 가 없으면 빈 결과가 되고 GPU 요구 워크로드는 배치되지 않는다.
-     */
-    @SuppressWarnings("unchecked")
-    private Map<String, Integer> collectGpuCounts() {
-        Map<String, Integer> counts = new HashMap<>();
-        try {
-            List<Map<String, Object>> rows = guard.call(
-                    () -> vmClient.queryResults("count by(instance) (DCGM_FI_DEV_GPU_UTIL)"),
-                    properties.getMetrics().getQueryTimeoutMs());
-            for (Map<String, Object> result : rows) {
-                Map<String, String> labels = (Map<String, String>) result.get("metric");
-                List<Object> value = (List<Object>) result.get("value");
-                if (labels == null || value == null || value.size() < 2) continue;
-
-                String instance = labels.get("instance");
-                if (instance == null) continue;
-                counts.put(instance, (int) Double.parseDouble(value.get(1).toString()));
-            }
-        } catch (Exception e) {
-            log.debug("GPU 개수 수집 실패: {}", e.getMessage());
-        }
-        return counts;
-    }
 
     /**
      * 핵심 메트릭 질의 — "값이 없다"와 "값이 0 이다"를 구분한다.

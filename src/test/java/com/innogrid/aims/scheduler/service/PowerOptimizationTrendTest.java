@@ -18,6 +18,9 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationTrendResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationTrendResponse.Point;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
+import com.innogrid.aims.scheduler.metrics.VictoriaMetricsGateway;
+import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -163,6 +166,41 @@ class PowerOptimizationTrendTest {
         PowerOptimizationTrendResponse r = service.trend(null, null, null);
         assertEquals("5m", r.step());
         assertEquals(24, java.time.Duration.between(r.from(), r.to()).toHours());
+    }
+
+    @DisplayName("IPMI 시리즈가 노드와 다른 instance(host:9290)로 와도 호스트명 일치로 노드에 이어진다")
+    @Test
+    void power_keyed_by_ipmi_instance_joins_the_node_by_host() {
+        stub("node_cpu_seconds_total", List.of(series("n1:9100", T1, 80), series("n2:9100", T1, 40)));
+        stub("ipmi_dcmi_power", List.of(series("n1:9290", T1, 200), series("n2:9290", T1, 100)));
+
+        Point p = service.trend(from, to, "5m").points().get(0);
+
+        assertTrue(p.measured(), "instance 가 달라도 전력이 노드에 붙어야 한다 — 이전에는 전부 미계측이었다");
+        assertEquals(2, p.evaluableNodes());
+        assertEquals(300.0, p.totalPowerWatts(), EPS);
+    }
+
+    @DisplayName("두 노드가 같은 IPMI 시리즈를 가리키면 둘 다 빠진다 — 한 값이 두 번 더해지면 합이 부푼다")
+    @Test
+    void nodes_sharing_one_ipmi_series_are_both_dropped() {
+        // 원장: n1 이 n2 의 IPMI 를 가리킨다 → n2(호스트명 일치)와 충돌
+        NodeExporterMapping m = new NodeExporterMapping("n1:9100");
+        m.setIpmiInstance("n2:9290");
+        NodeExporterMappingRepository ledger = mock(NodeExporterMappingRepository.class);
+        when(ledger.findAll()).thenReturn(List.of(m));
+        SchedulerProperties props = new SchedulerProperties();
+        MetricsQueryGuard guard = new MetricsQueryGuard(2);
+        com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway gateway = VictoriaMetricsGateway.of(metrics);
+        PowerOptimizationService withLedger = new PowerOptimizationService(mock(SchedulingService.class), new PowerModel(props),
+                props, gateway, guard, null, new ExporterInstanceResolver(ledger, gateway, guard, props));
+        stub("node_cpu_seconds_total", List.of(series("n1:9100", T1, 80), series("n2:9100", T1, 40), series("n3:9100", T1, 50)));
+        stub("ipmi_dcmi_power", List.of(series("n2:9290", T1, 100), series("n3:9290", T1, 150)));
+
+        Point p = withLedger.trend(from, to, "5m").points().get(0);
+
+        assertEquals(1, p.evaluableNodes(), "n3 만 남는다 — n1·n2 는 같은 시리즈를 가리켜 둘 다 미계측");
+        assertEquals(150.0, p.totalPowerWatts(), EPS, "100 이 두 번 더해진 350 도, 한 번 더해진 250 도 아니다");
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

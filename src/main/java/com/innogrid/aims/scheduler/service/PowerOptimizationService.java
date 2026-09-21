@@ -70,13 +70,17 @@ public class PowerOptimizationService {
     /** 노드 전력 사양 원장. null 이면(직접 조립한 테스트 경로) 정격은 설정값. */
     private final NodePowerSpecRepository powerSpecRepository;
 
+    /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
+    private final ExporterInstanceResolver exporterResolver;
+
     @Autowired
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties,
                                     SchedulerMetricsGateway metrics,
                                     MetricsQueryGuard guard,
-                                    NodePowerSpecRepository powerSpecRepository) {
+                                    NodePowerSpecRepository powerSpecRepository,
+                                    ExporterInstanceResolver exporterResolver) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
         this.properties = properties;
@@ -84,6 +88,18 @@ public class PowerOptimizationService {
         this.metricsClient = metrics;
         this.guard = guard;
         this.powerSpecRepository = powerSpecRepository;
+        this.exporterResolver = exporterResolver != null ? exporterResolver
+                : new ExporterInstanceResolver(metrics, guard, properties);
+    }
+
+    /** 원장 없이 조립하는 형태 — 추세의 정격은 설정값, 익스포터 해석은 호스트명 일치와 그대로만. */
+    public PowerOptimizationService(SchedulingService schedulingService,
+                                    PowerModel powerModel,
+                                    SchedulerProperties properties,
+                                    SchedulerMetricsGateway metrics,
+                                    MetricsQueryGuard guard,
+                                    NodePowerSpecRepository powerSpecRepository) {
+        this(schedulingService, powerModel, properties, metrics, guard, powerSpecRepository, null);
     }
 
     /** 원장 없이 조립하는 형태 — 추세의 정격은 설정값. */
@@ -92,7 +108,7 @@ public class PowerOptimizationService {
                                     SchedulerProperties properties,
                                     SchedulerMetricsGateway metrics,
                                     MetricsQueryGuard guard) {
-        this(schedulingService, powerModel, properties, metrics, guard, null);
+        this(schedulingService, powerModel, properties, metrics, guard, null, null);
     }
 
     /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. null 이면 추세를 쓸 수 없다. */
@@ -185,8 +201,11 @@ public class PowerOptimizationService {
             Map<String, Map<Long, Double>> cpu = seriesByInstance(String.format(
                     "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"%s\"}[5m])) * 100)",
                     properties.getNodeJob()), start, end, interval);
-            // 전력은 job 라벨이 다를 수 있어 instance 로만 맞춘다(스냅샷 수집과 같은 방식). CPU 시계열에 없는 instance 는 무시.
-            Map<String, Map<Long, Double>> power = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
+            // 전력 시계열의 키는 IPMI 시리즈의 instance 라 노드 익스포터와 다를 수 있다(실장비: 중앙 IPMI 주소).
+            // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance 에 다시 키 매긴다. 구간 결과의 키가 곧 "저장소에 있는
+            // IPMI instance" 라 발견 질의를 따로 던지지 않는다.
+            Map<String, Map<Long, Double>> rawPower = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
+            Map<String, Map<Long, Double>> power = rekeyToNodes(rawPower, cpu.keySet());
 
             if (cpu.isEmpty()) {
                 return PowerOptimizationTrendResponse.empty(start, end, interval,
@@ -340,6 +359,22 @@ public class PowerOptimizationService {
     /** PEI(CPU% ÷ W)는 0.0067 같은 작은 값이라 전력 효율 요약처럼 소수 4자리로 둔다 — 2자리로 자르면 0.01 로 뭉개진다. */
     private static double round4(double v) {
         return Math.round(v * 10000.0) / 10000.0;
+    }
+
+    /**
+     * IPMI 시계열을 노드 instance 로 다시 키 매긴다 — 지점 배열·에너지 적분이 CPU 시계열 기준으로 도는 것과 모집단을 맞춘다.
+     * 어느 노드에도 이어지지 않은 IPMI 시리즈는 버린다(추세에 한 줄도 나오지 않는 노드의 전력이 섞이면 안 된다).
+     */
+    private Map<String, Map<Long, Double>> rekeyToNodes(Map<String, Map<Long, Double>> rawPower, java.util.Set<String> nodeInstances) {
+        com.innogrid.aims.scheduler.model.ExporterInstances exporters = exporterResolver.resolve(java.util.Set.of(), rawPower.keySet());
+        // 노드 전체를 한 번에 — 같은 IPMI 시리즈를 가리킨 노드가 둘이면 둘 다 빠진다. 한 시계열을 두 노드에 넣으면 합·에너지가 그 배수로 부푼다.
+        Map<String, String> ipmiOfNode = exporters.ipmiFor(nodeInstances);
+        Map<String, Map<Long, Double>> out = new LinkedHashMap<>();
+        for (String node : nodeInstances) {
+            Map<Long, Double> series = rawPower.get(ipmiOfNode.getOrDefault(node, node));
+            if (series != null && !series.isEmpty()) out.put(node, series);
+        }
+        return out;
     }
 
     /** 구간 질의 결과를 instance → (시각 → 값) 으로 편다. 저장소 응답 형태: [{metric:{instance}, values:[[초,"값"],…]}, …] */

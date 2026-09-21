@@ -107,5 +107,46 @@ class SyntheticClusterLinksTest {
         assertTrue(c.links().isEmpty());
         assertEquals(3, c.nodes().size());
         assertTrue(root instanceof Map<?, ?> m && !m.containsKey("links"));
+        assertTrue(c.workloadBandwidthMbps().isEmpty(), "요구 대역폭 절도 없으면 비어 있다");
+    }
+
+    @DisplayName("workloadBandwidthMbps 를 읽고 0 은 요구 없음으로 남기며 음수와 빈 목록은 거부한다")
+    @Test
+    void parses_workload_bandwidth_section() {
+        SyntheticCluster c = SyntheticCluster.parse(
+                new Yaml().load(NODES + "workloadBandwidthMbps: [0, 500, 2000]\n"), "test");
+        assertEquals(List.of(0.0, 500.0, 2000.0), c.workloadBandwidthMbps());
+
+        SyntheticCluster dup = SyntheticCluster.parse(
+                new Yaml().load(NODES + "workloadBandwidthMbps: [500, 500]\n"), "test");
+        assertEquals(List.of(500.0, 500.0), dup.workloadBandwidthMbps(), "데이터 MDC 와 달리 중복을 허용한다");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> SyntheticCluster.parse(new Yaml().load(NODES + "workloadBandwidthMbps: [-1]\n"), "test"));
+        assertThrows(IllegalArgumentException.class,
+                () -> SyntheticCluster.parse(new Yaml().load(NODES + "workloadBandwidthMbps: []\n"), "test"));
+    }
+
+    @DisplayName("링크 판만 요구 대역폭을 선언하고 링크 두 쌍에 대역폭이 있다")
+    @Test
+    void only_the_link_board_declares_required_bandwidth() {
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        for (String id : clusters.boardIds()) {
+            SyntheticCluster c = clusters.get(id);
+            if (BenchmarkClusters.LINK.equals(id)) {
+                assertEquals(List.of(0.0, 500.0, 2000.0), c.workloadBandwidthMbps(), id);
+                assertEquals(List.of(10000.0, 1000.0), c.links().stream().map(SyntheticCluster.Link::bandwidthMbps).toList(), id);
+            } else {
+                assertTrue(c.workloadBandwidthMbps().isEmpty(), id + " 는 요구 대역폭을 선언하지 않는다");
+            }
+        }
+    }
+
+    @DisplayName("시드 사본도 요구 대역폭 배정 목록을 그대로 물려받는다")
+    @Test
+    void seed_copy_keeps_the_bandwidth_assignment() {
+        SyntheticCluster c = SyntheticCluster.parse(
+                new Yaml().load(NODES + "workloadBandwidthMbps: [0, 500]\n"), "test");
+        assertEquals(c.workloadBandwidthMbps(), c.withSeed(99).workloadBandwidthMbps());
     }
 }

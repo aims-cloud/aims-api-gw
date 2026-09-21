@@ -60,24 +60,41 @@ public class ConstraintEvaluator {
      * @return 배치 가능하면 {@code null}, 아니면 제외 사유
      */
     public String exclusionReason(Workload workload, NodeResource node, PlacementContext ctx) {
+        return Exclusion.messageOf(exclusion(workload, node, ctx));
+    }
+
+    /**
+     * 노드가 워크로드를 받을 수 없는 까닭과 문장을 함께 돌려준다.
+     *
+     * <p>{@link #exclusionReason} 이 돌려주던 문장에 기계가 읽는 까닭을 얹은 것이다. 검사 순서와 문장은
+     * 그대로다 — 먼저 걸린 제약 하나만 돌려주고, 그 문장은 예전과 한 글자도 다르지 않다.</p>
+     *
+     * @return 배치 가능하면 {@code null}, 아니면 제외 한 건
+     */
+    public Exclusion exclusion(Workload workload, NodeResource node, PlacementContext ctx) {
         SchedulingPolicy policy = ctx.policy();
 
-        String reason = checkResources(workload, node);
-        if (reason != null) return reason;
+        Exclusion e = checkResources(workload, node);
+        if (e != null) return e;
 
-        reason = checkUsageThreshold(node, policy);
-        if (reason != null) return reason;
+        e = checkUsageThreshold(node, policy);
+        if (e != null) return e;
 
-        reason = checkThermal(workload, node, policy);
-        if (reason != null) return reason;
+        e = checkThermal(workload, node, policy);
+        if (e != null) return e;
 
-        reason = checkPower(workload, node, policy, ctx.powerBudgetWatts());
-        if (reason != null) return reason;
+        e = checkPower(workload, node, policy, ctx.powerBudgetWatts());
+        if (e != null) return e;
 
-        reason = checkLink(workload, node, ctx);
-        if (reason != null) return reason;
+        e = checkLink(workload, node, ctx);
+        if (e != null) return e;
 
         return checkMdcBudget(workload, node, ctx);
+    }
+
+    /** 까닭·문장 한 쌍을 만든다 — 검사 메서드가 쓰는 짧은 이름. */
+    private static Exclusion of(ExclusionReason reason, String format, Object... args) {
+        return new Exclusion(reason, String.format(format, args));
     }
 
     // ── C6. MDC 전력 예산 ──────────────────────────────────────
@@ -97,7 +114,7 @@ public class ConstraintEvaluator {
      * 전력을 수집하지 못했을 때</b>. 마지막은 "전력을 모르는 노드는 전력으로 막지 않는다"는 기존 원칙이다.
      * 형제 노드 중 미계측은 합계에서 빼고 <b>사유에 대수를 적어</b> 합계가 과소 평가임을 드러낸다.</p>
      */
-    private String checkMdcBudget(Workload workload, NodeResource node, PlacementContext ctx) {
+    private Exclusion checkMdcBudget(Workload workload, NodeResource node, PlacementContext ctx) {
         if (ctx.mdcBudgets().isEmpty() || node.getPowerWatts() <= 0) return null;
 
         String mdcId = node.getMdcId();
@@ -119,7 +136,7 @@ public class ConstraintEvaluator {
 
         double limit = budget.getAsDouble();
         if (sum <= limit) return null;
-        return String.format("MDC %s 전력 합계 예상 %,.0fW > 예산 %,.0fW (계측 %d대%s)",
+        return of(ExclusionReason.MDC_POWER_BUDGET_EXCEEDED, "MDC %s 전력 합계 예상 %,.0fW > 예산 %,.0fW (계측 %d대%s)",
                 mdcId, sum, limit, measured,
                 unmeasured > 0 ? String.format(", 미계측 %d대 제외", unmeasured) : "");
     }
@@ -133,7 +150,7 @@ public class ConstraintEvaluator {
      * 꺼져 있어 배치 결과가 바뀌지 않는다. 같은 MDC·미등록 쌍·라벨 없는 노드는 통과시킨다(모르는 값으로
      * 배치를 막지 않는다). UP·DEGRADED 는 제약이 아니라 점수(weighted)에서 다룬다.</p>
      */
-    private String checkLink(Workload workload, NodeResource node, PlacementContext ctx) {
+    private Exclusion checkLink(Workload workload, NodeResource node, PlacementContext ctx) {
         if (!ctx.linkAware(workload)) return null;
         String dataMdc = workload.getDataMdcId();
         String nodeMdc = node.getMdcId();
@@ -141,20 +158,21 @@ public class ConstraintEvaluator {
 
         return ctx.linkMatrix().between(dataMdc, nodeMdc)
                 .filter(LinkMatrix.Quality::isDown)
-                .map(q -> String.format("MDC 링크 단절 (%s ↔ %s DOWN)", dataMdc, nodeMdc))
+                .map(q -> of(ExclusionReason.MDC_LINK_DOWN, "MDC 링크 단절 (%s ↔ %s DOWN)", dataMdc, nodeMdc))
                 .orElse(null);
     }
 
     /** 배치 가능 여부. */
     public boolean isEligible(Workload workload, NodeResource node, PlacementContext ctx) {
-        return exclusionReason(workload, node, ctx) == null;
+        return exclusion(workload, node, ctx) == null;
     }
 
     // ── C1. 자원 가용성 ─────────────────────────────────────────
 
-    private String checkResources(Workload workload, NodeResource node) {
+    private Exclusion checkResources(Workload workload, NodeResource node) {
         if (!node.canAccommodate(workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu())) {
-            return String.format("자원 부족 (필요 CPU:%d MEM:%dMB GPU:%d, 가용 CPU:%.1f MEM:%dMB GPU:%d)",
+            return of(ExclusionReason.INSUFFICIENT_RESOURCE,
+                    "자원 부족 (필요 CPU:%d MEM:%dMB GPU:%d, 가용 CPU:%.1f MEM:%dMB GPU:%d)",
                     workload.getRequiredCpu(), workload.getRequiredMemoryMb(), workload.getRequiredGpu(),
                     node.availableCpu(), node.availableMemoryMb(), node.availableGpu());
         }
@@ -162,7 +180,7 @@ public class ConstraintEvaluator {
         // 없는 값에 숫자를 채우던 결함(단계 9)의 반대 방향 실수를 피한다. 요구량 0 이면 검사할 것이 없다.
         if (workload.getRequiredDiskGb() > 0 && node.diskCapacityGb() > 0
                 && node.availableDiskGb() < workload.getRequiredDiskGb()) {
-            return String.format("디스크 부족 (필요 %dGB, 가용 %dGB / 총량 %dGB)",
+            return of(ExclusionReason.INSUFFICIENT_DISK, "디스크 부족 (필요 %dGB, 가용 %dGB / 총량 %dGB)",
                     workload.getRequiredDiskGb(), node.availableDiskGb(), node.diskCapacityGb());
         }
         return null;
@@ -170,15 +188,15 @@ public class ConstraintEvaluator {
 
     // ── C2. 사용률 임계 ─────────────────────────────────────────
 
-    private String checkUsageThreshold(NodeResource node, SchedulingPolicy policy) {
+    private Exclusion checkUsageThreshold(NodeResource node, SchedulingPolicy policy) {
         double cpu = node.effectiveCpuUsagePercent();
         if (cpu > policy.getMaxCpuUsagePercent()) {
-            return String.format("CPU 사용률 초과 (%.1f%% > %.1f%%)",
+            return of(ExclusionReason.CPU_USAGE_EXCEEDED, "CPU 사용률 초과 (%.1f%% > %.1f%%)",
                     cpu, policy.getMaxCpuUsagePercent());
         }
         double memory = node.effectiveMemoryUsagePercent();
         if (memory > policy.getMaxMemoryUsagePercent()) {
-            return String.format("메모리 사용률 초과 (%.1f%% > %.1f%%)",
+            return of(ExclusionReason.MEMORY_USAGE_EXCEEDED, "메모리 사용률 초과 (%.1f%% > %.1f%%)",
                     memory, policy.getMaxMemoryUsagePercent());
         }
         return null;
@@ -186,12 +204,12 @@ public class ConstraintEvaluator {
 
     // ── C3. 열 상태 ────────────────────────────────────────────
 
-    private String checkThermal(Workload workload, NodeResource node, SchedulingPolicy policy) {
+    private Exclusion checkThermal(Workload workload, NodeResource node, SchedulingPolicy policy) {
         double maxTemp = policy.getMaxTemperatureCelsius();
 
         if (policy.isTemperatureAwareEnabled()) {
             if (thermalModel.isCoolingDown(node.getNodeId())) {
-                return String.format("냉각 대기 중 (%d분 남음)",
+                return of(ExclusionReason.COOLING_DOWN, "냉각 대기 중 (%d분 남음)",
                         thermalModel.remainingCooldownMinutes(node.getNodeId()));
             }
             // 냉각 대기는 실제로 뜨거웠던 노드에만 건다. 여기서 실효 온도(예약분 포함)를 쓰면
@@ -199,7 +217,7 @@ public class ConstraintEvaluator {
             // 아래 "배치 후 예상 온도"가 맡으며, 그쪽은 이번 배치만 거르고 기록을 남기지 않는다.
             if (node.getTemperatureCelsius() > maxTemp) {
                 thermalModel.markCritical(node.getNodeId());
-                return String.format("온도 초과 (%.1f°C > %.1f°C)",
+                return of(ExclusionReason.TEMPERATURE_EXCEEDED, "온도 초과 (%.1f°C > %.1f°C)",
                         node.getTemperatureCelsius(), maxTemp);
             }
         }
@@ -207,14 +225,15 @@ public class ConstraintEvaluator {
         // 워크로드가 지정한 온도 제약은 정책 설정과 무관하게 적용한다.
         if (workload.getMaxTemperatureCelsius() != null
                 && node.getTemperatureCelsius() > workload.getMaxTemperatureCelsius()) {
-            return String.format("워크로드 온도 제약 초과 (%.1f°C > %.1f°C)",
+            return of(ExclusionReason.WORKLOAD_TEMPERATURE_EXCEEDED, "워크로드 온도 제약 초과 (%.1f°C > %.1f°C)",
                     node.getTemperatureCelsius(), workload.getMaxTemperatureCelsius());
         }
 
         if (policy.isTemperatureAwareEnabled()) {
             double predicted = thermalModel.predictedTemperature(node, workload.getRequiredCpu());
             if (predicted > maxTemp) {
-                return String.format("배치 후 예상 온도 %.1f°C > 임계치 %.1f°C", predicted, maxTemp);
+                return of(ExclusionReason.PREDICTED_TEMPERATURE_EXCEEDED,
+                        "배치 후 예상 온도 %.1f°C > 임계치 %.1f°C", predicted, maxTemp);
             }
         }
         return null;
@@ -222,8 +241,8 @@ public class ConstraintEvaluator {
 
     // ── C4. 전력 ───────────────────────────────────────────────
 
-    private String checkPower(Workload workload, NodeResource node, SchedulingPolicy policy,
-                             Double runPowerBudgetWatts) {
+    private Exclusion checkPower(Workload workload, NodeResource node, SchedulingPolicy policy,
+                                 Double runPowerBudgetWatts) {
         if (policy.isPowerAwareEnabled()) {
             double requiredHeadroom = 100 - policy.getMaxPowerUsagePercent();
             // 예약분을 반영한 여유율을 본다. 실측만 보면 배치를 아무리 쌓아도 여유가 그대로라
@@ -231,27 +250,27 @@ public class ConstraintEvaluator {
             // 검사도 그냥 통과하므로, 여기서 걸러야 상한이 실제로 지켜진다.
             double headroom = powerModel.effectiveHeadroomPercent(node);
             if (headroom < requiredHeadroom) {
-                return String.format("전력 여유 부족 (여유 %.1f%%)", headroom);
+                return of(ExclusionReason.POWER_HEADROOM_EXCEEDED, "전력 여유 부족 (여유 %.1f%%)", headroom);
             }
         }
 
         // 워크로드가 지정한 전력 예산은 정책 설정과 무관하게 적용한다.
         if (workload.getMaxPowerBudgetWatts() != null
                 && node.getPowerWatts() > workload.getMaxPowerBudgetWatts()) {
-            return String.format("워크로드 전력 제약 초과 (%.1fW > %.1fW)",
+            return of(ExclusionReason.WORKLOAD_POWER_EXCEEDED, "워크로드 전력 제약 초과 (%.1fW > %.1fW)",
                     node.getPowerWatts(), workload.getMaxPowerBudgetWatts());
         }
 
         // 스케줄이 실행 단위로 지정한 예산. 워크로드 엔티티를 바꾸지 않고 적용한다.
         if (runPowerBudgetWatts != null && node.getPowerWatts() > runPowerBudgetWatts) {
-            return String.format("스케줄 전력 예산 초과 (%.1fW > %.1fW)",
+            return of(ExclusionReason.RUN_POWER_BUDGET_EXCEEDED, "스케줄 전력 예산 초과 (%.1fW > %.1fW)",
                     node.getPowerWatts(), runPowerBudgetWatts);
         }
 
         if (policy.isPowerAwareEnabled() && node.getPowerCapacityWatts() > 0) {
             double predicted = powerModel.predictedPower(node, workload.getRequiredCpu());
             if (predicted > node.getPowerCapacityWatts()) {
-                return String.format("배치 후 예상 전력 %.0fW > 용량 %.0fW",
+                return of(ExclusionReason.PREDICTED_POWER_EXCEEDED, "배치 후 예상 전력 %.0fW > 용량 %.0fW",
                         predicted, node.getPowerCapacityWatts());
             }
         }

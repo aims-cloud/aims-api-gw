@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
@@ -102,8 +103,8 @@ public class PowerAwareScheduler implements SchedulingEngine {
         boolean anyPowerMetric = false;
 
         for (NodeResource node : candidates) {
-            String exclusionReason = context.exclusionReason(workload, node);
-            boolean eligible = (exclusionReason == null);
+            Exclusion exclusion = context.exclusion(workload, node);
+            boolean eligible = (exclusion == null);
 
             boolean hasPower = node.getPowerWatts() > 0 && node.getPowerCapacityWatts() > 0;
             boolean hasThermal = node.getTemperatureCelsius() > 0;
@@ -164,7 +165,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
                     node.getMdcId(), node.getNodeId(),
                     round(cpuScore), round(memScore),
                     round(powerScore), round(thermalScore), round(netScore),
-                    totalScore, eligible, exclusionReason, details
+                    totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
 
@@ -210,15 +211,24 @@ public class PowerAwareScheduler implements SchedulingEngine {
         return (1.0 - share) * ptPart + share * resPart;
     }
 
-    /** 냉각 비용과 경고 구간 감점을 함께 본 열 점수. */
+    /**
+     * 냉각 비용과 경고 구간 감점을 함께 본 열 점수 — 입력은 <b>실효 온도</b>({@link ThermalModel#effectiveTemperature}).
+     *
+     * <p>같은 점수 안의 전력 3항(실효 사용률·실효 전력)과 자원 여유 2항은 예약분을 반영하는데 열 항만 실측 온도에 머물러 기저가 갈렸다 —
+     * 한 실행에서 같은 노드에 워크로드를 잇달아 얹어도 열 항은 첫 배치 자리에 머문다. 온도 엔진({@code TemperatureAwareScheduler})과
+     * 배치 후 예상 온도({@link ThermalModel#predictedTemperature})는 이미 실효 온도를 쓴다. 계측 게이트({@code hasThermal})는 의도된
+     * 실측이라 그대로 두고, 열관성 계수는 엔진 노브라 판 생성식의 온도 상승분과 다르므로 이 배선은 기저 일치까지만 주장한다.
+     * 예약이 0 이면 실효 온도 = 실측 온도라 값이 비트 단위로 같다.</p>
+     */
     private double thermalScore(NodeResource node, SchedulingPolicy policy) {
         double maxTemp = policy.getMaxTemperatureCelsius();
         double warnTemp = policy.getWarningTemperatureCelsius() != null
                 ? policy.getWarningTemperatureCelsius()
                 : thermalModel.defaultWarningCelsius();
 
-        double cooling = clamp01(thermalModel.coolingScore(node.getTemperatureCelsius(), maxTemp));
-        double penalty = thermalModel.warningPenalty(node.getTemperatureCelsius(), warnTemp, maxTemp);
+        double temperature = thermalModel.effectiveTemperature(node);
+        double cooling = clamp01(thermalModel.coolingScore(temperature, maxTemp));
+        double penalty = thermalModel.warningPenalty(temperature, warnTemp, maxTemp);
 
         return cooling * (1.0 - penalty);
     }

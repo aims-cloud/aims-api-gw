@@ -92,6 +92,121 @@ class PowerAwareScoringTest {
                 detail(result, "n", "전력점수"), 0.0, "기본 설정 엔진과 같은 전력점수");
     }
 
+    // ── 열 항의 실효 온도 기저 ─────────────────────────────────
+
+    private static double thermalScoreOf(ThermalModel model, double temperature, SchedulingPolicy policy) {
+        double warn = policy.getWarningTemperatureCelsius() != null ? policy.getWarningTemperatureCelsius() : model.defaultWarningCelsius();
+        double cooling = Math.max(0.0, Math.min(1.0, model.coolingScore(temperature, policy.getMaxTemperatureCelsius())));
+        return cooling * (1.0 - model.warningPenalty(temperature, warn, policy.getMaxTemperatureCelsius()));
+    }
+
+    /** 예약 0 이면 실효 온도 = 실측 온도라 열점수가 실측 식과 비트 단위로 같다 — 첫 배치는 불변. */
+    @DisplayName("예약이 없으면 열점수는 실측 온도 식과 비트 단위로 같다")
+    @Test
+    void thermal_score_without_reservation_equals_measured_formula() {
+        SchedulerProperties props = new SchedulerProperties();
+        ThermalModel model = new ThermalModel(props);
+        for (double temp : new double[] {35.6, 52.5, 68.5}) {
+            NodeResource node = node("n", 45, 40, 387, temp);
+            SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
+            assertEquals(round4(thermalScoreOf(model, temp, policy())), detail(result, "n", "열점수"), 0.0, "T=" + temp);
+        }
+        // 손검산 리터럴 하나(임계 75 · 경고 65): 52.5℃ → (1 − (52.5/75)²) × 1 = 0.51 — 헬퍼가 식을 재구현하므로 절대값 한 점은 리터럴로 고정한다
+        assertEquals(0.51, detail(scheduler.schedule(workload(1), List.of(node("n", 45, 40, 387, 52.5)), policy()), "n", "열점수"), 0.0);
+    }
+
+    /**
+     * 예약이 쌓이면 열점수가 실효 온도 T(1 + k·r) 의 식으로 내려간다 — 냉각·경고 감점 둘 다 실효 온도를 읽는다.
+     * 정정 전(실측 고정)이면 예약 뒤에도 값이 같아 여기서 실패한다.
+     */
+    @DisplayName("예약이 쌓인 노드의 열점수는 실효 온도 식으로 내려간다")
+    @Test
+    void thermal_score_follows_effective_temperature_when_reserved() {
+        SchedulerProperties props = new SchedulerProperties();
+        ThermalModel model = new ThermalModel(props);
+        NodeResource node = node("n", 45, 40, 387, 52.5);
+        double before = detail(scheduler.schedule(workload(1), List.of(node), policy()), "n", "열점수");
+        node.reserve(1, 0, 0);                                        // r = 1/8 → T_eff = 52.5 × (1 + 0.15 × 0.125) = 53.484375
+        double after = detail(scheduler.schedule(workload(1), List.of(node), policy()), "n", "열점수");
+
+        assertEquals(53.484375, model.effectiveTemperature(node), 1e-9);
+        assertEquals(round4(thermalScoreOf(model, 53.484375, policy())), after, 0.0, "실효 온도 식");
+        assertEquals(0.4915, after, 0.0, "손검산: 1 − (53.484375/75)² = 0.4915");
+        assertTrue(after < before, "예약이 쌓이면 열점수는 내려간다(감점)");
+    }
+
+    /** 실효 온도가 경고 문턱을 넘기면 감점이 생긴다 — 냉각만 실효로 바꾼 구현은 여기서 갈린다. */
+    @DisplayName("실효 온도가 경고 문턱을 넘기면 경고 감점도 실효 온도를 따른다")
+    @Test
+    void warning_penalty_uses_effective_temperature() {
+        SchedulerProperties props = new SchedulerProperties();
+        ThermalModel model = new ThermalModel(props);
+        NodeResource node = node("n", 40, 40, 300, 64.0);           // 실측은 경고(65℃) 아래
+        node.reserve(2, 0, 0);                                        // r = 0.25 → T_eff = 64 × 1.0375 = 66.4 > 65
+        SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
+        double warn = model.defaultWarningCelsius();
+
+        assertEquals(66.4, model.effectiveTemperature(node), 1e-9);
+        assertTrue(model.warningPenalty(66.4, warn, policy().getMaxTemperatureCelsius()) > 0, "실효 온도는 경고 구간");
+        assertEquals(0.0, model.warningPenalty(64.0, warn, policy().getMaxTemperatureCelsius()), 0.0, "실측 온도는 경고 아래");
+        assertEquals(round4(thermalScoreOf(model, 66.4, policy())), detail(result, "n", "열점수"), 0.0, "감점까지 실효 온도로");
+        assertEquals(0.1859, detail(result, "n", "열점수"), 0.0, "손검산: (1 − (66.4/75)²) × (1 − 0.14) = 0.1859");
+        assertTrue(detail(result, "n", "열점수") < round4(Math.min(1.0, model.coolingScore(66.4, policy().getMaxTemperatureCelsius()))), "냉각만 실효이면 감점이 빠진다");
+    }
+
+    /** 온도를 수집하지 못한 노드는 예약이 있어도 열점수 중립 — 실효 온도도 0 을 유지하고 게이트는 실측을 본다. */
+    @DisplayName("온도 미계측 노드는 예약이 있어도 열점수가 중립값이다")
+    @Test
+    void unmeasured_temperature_stays_neutral_when_reserved() {
+        NodeResource node = node("n", 40, 40, 300, 0);
+        node.reserve(2, 0, 0);
+        SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
+        assertEquals(0.5, detail(result, "n", "열점수"), 0.0);
+        assertEquals(0.0, detail(result, "n", "온도계측"), 0.0);
+    }
+
+    /**
+     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35 가 열 항 몫이고, 전력 3항 칸과 배치 후 예상
+     * 온도 칸은 예약 전과 같은 식(이미 실효 기저)이다.
+     */
+    @DisplayName("예약 뒤 총점 이동은 열 항·전력 항·자원 항 몫으로 분해된다")
+    @Test
+    void total_score_shift_from_thermal_term_matches_policy_weight() {
+        SchedulerProperties props = new SchedulerProperties();
+        PowerModel powerModel = new PowerModel(props);
+        ThermalModel thermalModel = new ThermalModel(props);
+        NodeResource node = node("n", 45, 40, 387, 52.5);
+        SchedulingResult before = scheduler.schedule(workload(1), List.of(node), policy());
+        node.reserve(1, 0, 0);
+        SchedulingResult after = scheduler.schedule(workload(1), List.of(node), policy());
+
+        // 열 항 이동은 상세 칸이 아니라 실효 온도 식으로 독립 산출한다 — 상세 칸에서 읽으면 실측 복귀 변이에서도 양변이 함께 0 이 된다
+        double dThermal = thermalScoreOf(thermalModel, 53.484375, policy()) - thermalScoreOf(thermalModel, 52.5, policy());
+        double dPei = powerModel.placementPei(node) - powerModel.normalizedPei(node);           // 전력 항 이동은 PEI 항 하나(비낭비 항등·α=1 한계항 불변)
+        double dPower = props.getPower().getPeiWeight() * dPei;
+        double thermalShare = (1.0 - props.getPower().getResourceShare()) * 0.15 / 0.35;
+        double powerShare = (1.0 - props.getPower().getResourceShare()) * 0.20 / 0.35;
+        double resourceShift = props.getPower().getResourceShare() * 0.5 * (-0.125);   // cpu 여유만 1/8 줄고 메모리는 예약 0
+        double expected = thermalShare * dThermal + powerShare * dPower + resourceShift;
+        double actual = after.candidateScores().get(0).totalScore() - before.candidateScores().get(0).totalScore();
+        assertTrue(dThermal < 0, "열 항 감점");
+        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 칸을 거치지 않으므로 그 외 반올림 없음 → 2e-4 는 두 배 여유
+        assertEquals(expected, actual, 2e-4, "총점 이동 = 열 항 몫 + 전력 항 몫 + 자원 항 몫");
+        assertEquals(round4(powerModel.placementPei(node)), detail(after, "n", "PEI"), 0.0, "전력 PEI 칸은 자기 실효 식 그대로");
+        assertEquals(round4(thermalModel.predictedTemperature(node, 1)), detail(after, "n", "배치후예상온도C"), 0.0, "예상 온도 칸은 이미 실효 기저");
+    }
+
+    /** 실효 온도가 임계(75℃)를 넘으면 냉각 항이 0 으로 잘려 열점수 0 — 음수가 아니다. 온도 인지를 끈 정책에서는 제약이 막지 않아 이 구역에 닿을 수 있다. */
+    @DisplayName("실효 온도가 임계를 넘는 후보의 열점수는 0 으로 포화하고 음수가 되지 않는다")
+    @Test
+    void thermal_score_saturates_at_zero_above_max_temperature() {
+        NodeResource node = node("n", 40, 40, 300, 74.0);
+        node.reserve(4, 0, 0);                                        // r = 0.5 → T_eff = 74 × 1.075 = 79.55 > 75
+        SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
+        assertEquals(0.0, detail(result, "n", "열점수"), 0.0);
+        assertTrue(result.candidateScores().get(0).totalScore() >= 0.0, "총점은 음수가 되지 않는다");
+    }
+
     private static double round4(double v) {
         return Math.round(v * 10000.0) / 10000.0;
     }

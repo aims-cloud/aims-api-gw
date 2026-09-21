@@ -127,6 +127,76 @@ class SyntheticModeScenarioTest {
         assertNotEquals(t.points().get(0).totalPowerWatts(), t.points().get(3).totalPowerWatts(), "시간에 따라 값이 움직인다");
     }
 
+    @DisplayName("구간 에너지 — 실값으로 소비·회수 가능이 나오고 추정분이 갈려 나온다")
+    @Test
+    void interval_energy_on_real_values() {
+        // 배포 서버는 노드 1대·전력 0 이라 이 경로를 실값으로 볼 수 없다. 가상 클러스터가 그 자리를 대신한다 —
+        // IPMI 있음 5대·없음 3대라 "일부만 계측" 이라는 실환경 모양을 그대로 만든다.
+        PowerOptimizationTrendResponse.Energy energy = optimization.trend(null, null, "5m").energy();
+
+        assertNotNull(energy, "추세를 낼 수 있으면 에너지 요약도 낸다");
+        assertNotNull(energy.consumedKwh(), "계측 노드가 5대 있으므로 소비 에너지가 나온다");
+        assertTrue(energy.consumedKwh() > 0);
+
+        assertNotNull(energy.integratedFrom());
+        assertNotNull(energy.integratedTo());
+        assertTrue(energy.integratedHours() > 0 && energy.integratedHours() <= 24.01,
+                "잰 시간은 물은 구간을 넘지 않는다: " + energy.integratedHours());
+        assertTrue(energy.integratedFrom().isBefore(energy.integratedTo()));
+    }
+
+    @DisplayName("조회 간격을 크게 줘도 에너지가 나온다")
+    @Test
+    void a_coarse_step_still_yields_energy() {
+        // 허용 간격을 5분 하한으로 고정하면 1시간 간격 조회가 통째로 구멍으로 잘려 값이 전부 비고,
+        // 사유는 "표본이 모자라다" 는 엉뚱한 까닭을 낸다. 7일을 1시간으로 보는 것은 정상적인 사용이다.
+        PowerOptimizationTrendResponse.Energy coarse = optimization.trend(null, null, "1h").energy();
+
+        assertNotNull(coarse.consumedKwh(), "간격이 커졌다고 에너지가 사라지면 안 된다");
+        assertTrue(coarse.consumedKwh() > 0);
+        assertEquals(0, coarse.gaps(), "고른 표본인데 끊긴 것으로 세면 운영자가 수집기를 의심한다");
+    }
+
+    @DisplayName("과거 구간을 물으면 그 구간 안에서만 적분한다")
+    @Test
+    void a_past_window_is_integrated_inside_that_window() {
+        java.time.OffsetDateTime to = java.time.OffsetDateTime.now().minusHours(24);
+        java.time.OffsetDateTime from = to.minusHours(2);
+
+        PowerOptimizationTrendResponse.Energy past = optimization.trend(from, to, "5m").energy();
+
+        assertNotNull(past.consumedKwh());
+        assertNotNull(past.integratedFrom());
+        assertNotNull(past.integratedTo());
+        // 즉시 질의로 구간 평균을 받으면 언제나 현재 시각에서 평가되어, 어제를 물어도 오늘 값이 온다.
+        // 이미 받아 둔 구간 시계열을 적분하면 그 일이 생기지 않는다 — 잰 구간이 물은 구간 안에 있어야 한다.
+        assertFalse(past.integratedFrom().isBefore(from.minusMinutes(6)), "잰 구간이 물은 구간보다 앞선다");
+        assertFalse(past.integratedTo().isAfter(to.plusMinutes(6)), "잰 구간이 물은 구간을 넘어간다");
+        assertTrue(past.integratedHours() <= 2.01, "2시간을 물었는데 더 길게 쟀다: " + past.integratedHours());
+    }
+
+    @DisplayName("구멍이 없는 판에서는 구간 에너지가 지점 적분과 맞아떨어진다")
+    @Test
+    void interval_energy_agrees_with_the_point_integral_when_nothing_is_missing() {
+        PowerOptimizationTrendResponse t = optimization.trend(null, null, "5m");
+
+        double stepHours = 5.0 / 60.0;
+        double fromPoints = 0;
+        for (int i = 1; i < t.points().size(); i++) {
+            Double a = t.points().get(i - 1).totalPowerWatts();
+            Double b = t.points().get(i).totalPowerWatts();
+            if (a != null && b != null) fromPoints += (a + b) / 2.0 * stepHours / 1000.0;
+        }
+
+        assertTrue(fromPoints > 0, "지점 적분이 0 이면 이 비교에 뜻이 없다");
+        assertNotNull(t.energy().consumedKwh());
+        // 이 클러스터는 IPMI 없는 3대의 시리즈가 통째로 없다 — 시리즈 안에 구멍이 뚫린 것이 아니다.
+        // 그런 판에서는 두 계산이 수학적으로 같아야 하고, 갈리면 눈금이 어긋난 것이다.
+        // 두 계산이 실제로 달라지는 것은 시리즈 중간이 비는 경우이고, 그 자리는 IntervalEnergyTest 가 값으로 고정한다.
+        assertEquals(Math.round(fromPoints * 10), Math.round(t.energy().consumedKwh() * 10),
+                "구간 에너지와 지점 적분의 눈금이 어긋난다");
+    }
+
     @DisplayName("배치 — GPU 워크로드는 GPU 노드로, 디스크 190GB 요구는 디스크 부족 노드를 피한다")
     @Test
     void placement_uses_synthetic_cluster() {

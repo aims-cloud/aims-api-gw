@@ -183,7 +183,8 @@ public record PlacementBenchmarkResponse(
             String powerControlNote,
             int randomSeedCount,
             String policyBasis,
-            String workloadDataMdcAssignment
+            String workloadDataMdcAssignment,
+            String workloadBandwidthAssignment
     ) {
         public Assumptions {
             workloadClasses = workloadClasses == null ? List.of() : List.copyOf(workloadClasses);

@@ -23,8 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 트리에서 VM 하위 CPU 항목을 선택했을 때 오른쪽 패널의 탭별 데이터를 제공한다.
  *   개요 탭     — KPI 카드 4종(Used/I/O Wait/System/Steal), CPU 목록 테이블
  *   모니터링 탭 — CPU mode 별 시계열 차트 9종 (노드 CPU 와 지표 세트가 다름)
- * VM 은 VM 상세 패널과 같이 nsId·infraId·nodeId 쿼리 파라미터로 식별하고, 다른 VM 카테고리(Memory/Network/GPU)도
- * 동일한 경로 패턴(/vm/{category}/summary|devices|metrics/trend?nsId&infraId&nodeId)을 따른다.
+ * VM 은 VM 상세 패널과 같이 nsId·infraId·vmId 쿼리 파라미터로 식별하고, 다른 VM 카테고리(Memory/Network/GPU)도
+ * 동일한 경로 패턴(/vm/{category}/summary|devices|metrics/trend?nsId&infraId&vmId)을 따른다.
  * VM 상세 패널은 ResourceExplorerVmController, 노드 CPU 는 ResourceExplorerNodeCpuController 가 담당한다.
  */
 @Tag(name = "관측 > 자원 탐색기 (VM CPU)", description = "VM CPU 카테고리 — KPI 카드, CPU 목록, 모니터링 차트")
@@ -45,8 +45,8 @@ public class ResourceExplorerVmCpuController {
     public ApiResponse<CpuSummaryResponse> getCpuSummary(@RequestParam(required = false) String roleName,
                                                          @RequestParam String nsId,
                                                          @RequestParam String infraId,
-                                                         @RequestParam String nodeId) {
-        return ApiResponse.ok(resourceExplorerVmCpuService.getCpuSummary(roleName, nsId, infraId, nodeId));
+                                                         @RequestParam String vmId) {
+        return ApiResponse.ok(resourceExplorerVmCpuService.getCpuSummary(roleName, nsId, infraId, vmId));
     }
 
     @Operation(summary = "VM CPU 목록",
@@ -59,11 +59,11 @@ public class ResourceExplorerVmCpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "socket,asc") String sort) {
-        return ApiResponse.ok(resourceExplorerVmCpuService.getCpuDevices(roleName, nsId, infraId, nodeId, page, size, sort));
+        return ApiResponse.ok(resourceExplorerVmCpuService.getCpuDevices(roleName, nsId, infraId, vmId, page, size, sort));
     }
 
     @Operation(summary = "VM CPU 모니터링 차트",
@@ -76,9 +76,9 @@ public class ResourceExplorerVmCpuController {
             @RequestParam(required = false) String roleName,
             @RequestParam String nsId,
             @RequestParam String infraId,
-            @RequestParam String nodeId,
+            @RequestParam String vmId,
             @RequestParam(defaultValue = "CPU_USED") VmCpuMetric metric,
             @RequestParam(defaultValue = "LAST_10M") NodeMetricInterval interval) {
-        return ApiResponse.ok(resourceExplorerVmCpuService.getCpuMetricTrend(roleName, nsId, infraId, nodeId, metric, interval));
+        return ApiResponse.ok(resourceExplorerVmCpuService.getCpuMetricTrend(roleName, nsId, infraId, vmId, metric, interval));
     }
 }

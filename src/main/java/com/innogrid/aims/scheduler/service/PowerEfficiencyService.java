@@ -60,17 +60,32 @@ public class PowerEfficiencyService {
 
     private final MetricsQueryGuard guard;
 
+    /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
+    private final ExporterInstanceResolver exporterResolver;
+
     @Autowired
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   SchedulerMetricsGateway metrics,
                                   SchedulerProperties properties,
-                                  MetricsQueryGuard guard) {
+                                  MetricsQueryGuard guard,
+                                  ExporterInstanceResolver exporterResolver) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
         this.metricsClient = metrics;
         this.properties = properties;
         this.guard = guard;
+        this.exporterResolver = exporterResolver != null ? exporterResolver
+                : new ExporterInstanceResolver(metrics, guard, properties);
+    }
+
+    /** 원장 없이 조립하는 형태 — 익스포터 해석은 호스트명 일치와 그대로만. */
+    public PowerEfficiencyService(SchedulingService schedulingService,
+                                  PowerModel powerModel,
+                                  SchedulerMetricsGateway metrics,
+                                  SchedulerProperties properties,
+                                  MetricsQueryGuard guard) {
+        this(schedulingService, powerModel, metrics, properties, guard, null);
     }
 
     /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. */
@@ -278,8 +293,12 @@ public class PowerEfficiencyService {
         validateRange(start, end, interval);
 
         try {
+            // 전력은 IPMI 시리즈의 instance 로 묻는다 — 노드 익스포터와 다를 수 있다(원장 → 호스트명 일치 → 그대로).
+            // 이 경로는 IPMI 만 쓰므로 DCGM 발견 질의는 던지지 않는다. 노드 한 대만 보므로 다른 노드와의 시리즈 충돌은
+            // 여기서 가리지 못한다 — 원장이 같은 instance 의 중복 등록을 409 로 막고, 수집기가 충돌을 미계측으로 떨어뜨린다.
+            String ipmiInstance = exporterResolver.resolve(java.util.Set.of(), exporterResolver.discoverIpmiInstances()).ipmiOf(nodeId);
             Map<Long, Double> power = seriesOf(String.format(
-                    "ipmi_dcmi_power_consumption_watts{instance=\"%s\"}", nodeId), start, end, interval);
+                    "ipmi_dcmi_power_consumption_watts{instance=\"%s\"}", ipmiInstance), start, end, interval);
             // 스냅샷 수집과 동일한 식. 다르면 목록 API 와 추세의 값이 맞지 않는다.
             Map<Long, Double> cpu = seriesOf(String.format(
                     "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\",instance=\"%s\"}[5m])) * 100)",

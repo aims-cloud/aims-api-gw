@@ -67,17 +67,20 @@ public class AssetController {
 
     // ── 가상화 자산 (OpenStack 하이퍼바이저 호스트 → VM) ─────────
 
-    /** 가상화 자산 — 호스트(하이퍼바이저) 목록 */
+    /** 가상화 자산 — 호스트 목록 (OpenStack 하이퍼바이저 + 퍼블릭 클라우드 provider·리전) */
     @Operation(summary = "가상화 자산 호스트 목록",
-            description = "하이퍼바이저 호스트별 요약 (vCore/할당코어/메모리/가상서버 수). vCenter 전용 필드는 null")
+            description = "provider 로 구분: openstack=하이퍼바이저 호스트(Nova, vCore/할당코어/메모리 포함), "
+                    + "aws/azure/gcp=Tumblebug 의 provider+리전(=connection). 공개 클라우드는 호스트 사용률 미제공이라 vCore/코어/메모리 null. "
+                    + "provider 파라미터(선택)로 분류 필터: 미지정=전체, openstack/aws/azure/gcp")
     @GetMapping("/virtual/hosts")
-    public ApiResponse<List<VirtualAssetDtos.HostSummary>> listVirtualHosts() {
-        return ApiResponse.ok(virtualAssetService.listHosts());
+    public ApiResponse<List<VirtualAssetDtos.HostSummary>> listVirtualHosts(
+            @RequestParam(required = false) String provider) {
+        return ApiResponse.ok(virtualAssetService.listHosts(provider));
     }
 
     /** 가상화 자산 — 호스트 하위 VM 목록 (계층 확장) */
     @Operation(summary = "가상화 자산 호스트 하위 VM 목록",
-            description = "hostId(하이퍼바이저 hostname) 확장 시 해당 호스트의 VM 계층 조회")
+            description = "hostId 확장 시 해당 호스트의 VM 계층 조회. OpenStack=하이퍼바이저 hostname, 퍼블릭 클라우드=connection(provider-리전)")
     @GetMapping("/virtual/hosts/{hostId}/vms")
     public ApiResponse<List<VirtualAssetDtos.HostVm>> listVirtualHostVms(@PathVariable String hostId) {
         return ApiResponse.ok(virtualAssetService.listHostVms(hostId));

@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.innogrid.aims.cloudbarista.tumblebug.TumblebugClient;
 import com.innogrid.aims.infra.dto.VirtualAssetDtos.HostSummary;
 import com.innogrid.aims.infra.dto.VirtualAssetDtos.HostVm;
 import com.innogrid.aims.openstack.NovaClient;
@@ -20,6 +21,7 @@ class VirtualAssetServiceTest {
 
     private OpenStackProperties props;
     private NovaClient nova;
+    private TumblebugClient tumblebug;
     private VirtualAssetService service;
 
     @BeforeEach
@@ -27,7 +29,22 @@ class VirtualAssetServiceTest {
         props = new OpenStackProperties();
         props.setZoneName("rnd openstack");
         nova = mock(NovaClient.class);
-        service = new VirtualAssetService(props, nova);
+        tumblebug = mock(TumblebugClient.class);
+        service = new VirtualAssetService(props, nova, tumblebug);
+    }
+
+    /** Tumblebug node(=VM) 한 개를 담은 infra 응답을 만든다. */
+    private static Map<String, Object> infraWithNode(String connectionName, String provider,
+                                                     String id, String name, String status,
+                                                     String publicIp) {
+        Map<String, Object> node = new HashMap<>();
+        node.put("id", id);
+        node.put("name", name);
+        node.put("status", status);
+        node.put("connectionName", connectionName);
+        node.put("connectionConfig", Map.of("providerName", provider));
+        if (publicIp != null) node.put("publicIP", publicIp);
+        return Map.of("infra", List.of(Map.of("id", "mci-1", "node", List.of(node))));
     }
 
     @Test
@@ -87,6 +104,98 @@ class VirtualAssetServiceTest {
     @Test
     void openstack_failure_returns_empty() {
         when(nova.listHypervisors()).thenThrow(new RuntimeException("down"));
+        assertThat(service.listHosts()).isEmpty();
+    }
+
+    @Test
+    void public_cloud_host_grouped_by_connection_with_null_usage() {
+        when(nova.listHypervisors()).thenReturn(Map.of());   // OpenStack 없음
+        when(tumblebug.listNamespaces()).thenReturn(Map.of("ns", List.of(Map.of("id", "default"))));
+        when(tumblebug.listInfra("default")).thenReturn(
+                infraWithNode("aws-ap-northeast-2", "aws", "vm-1", "web-seoul", "Running", "3.35.1.1"));
+
+        List<HostSummary> hosts = service.listHosts();
+
+        assertThat(hosts).hasSize(1);
+        HostSummary h = hosts.get(0);
+        assertThat(h.provider()).isEqualTo("aws");
+        assertThat(h.hostId()).isEqualTo("aws-ap-northeast-2");
+        assertThat(h.deployZone()).isEqualTo("ap-northeast-2");   // connection 에서 provider 접두어 제거
+        assertThat(h.vmCount()).isEqualTo(1);
+        // 공개 클라우드는 하이퍼바이저 사용률 제공 불가 → null
+        assertThat(h.vcore()).isNull();
+        assertThat(h.allocatedCore()).isNull();
+        assertThat(h.memoryTotalMb()).isNull();
+    }
+
+    @Test
+    void public_cloud_vms_listed_by_connection() {
+        when(tumblebug.listNamespaces()).thenReturn(Map.of("ns", List.of(Map.of("id", "default"))));
+        when(tumblebug.listInfra("default")).thenReturn(
+                infraWithNode("azure-koreacentral", "azure", "vm-9", "app-01", "Running", "20.1.2.3"));
+
+        List<HostVm> vms = service.listHostVms("azure-koreacentral");
+
+        assertThat(vms).hasSize(1);
+        assertThat(vms.get(0).vmId()).isEqualTo("vm-9");
+        assertThat(vms.get(0).vmName()).isEqualTo("app-01");
+        assertThat(vms.get(0).status()).isEqualTo("Running");
+        assertThat(vms.get(0).ipAddresses()).containsExactly("20.1.2.3");
+    }
+
+    @Test
+    void provider_filter_openstack_skips_tumblebug() {
+        Map<String, Object> hv = new HashMap<>();
+        hv.put("hypervisor_hostname", "rnd-com01");
+        hv.put("vcpus", 80);
+        when(nova.listHypervisors()).thenReturn(Map.of("hypervisors", List.of(hv)));
+
+        List<HostSummary> hosts = service.listHosts("openstack");
+
+        assertThat(hosts).hasSize(1);
+        assertThat(hosts.get(0).provider()).isEqualTo("openstack");
+        // Tumblebug 은 아예 호출하지 않는다
+        org.mockito.Mockito.verifyNoInteractions(tumblebug);
+    }
+
+    @Test
+    void provider_filter_public_skips_nova_and_filters_by_provider() {
+        when(tumblebug.listNamespaces()).thenReturn(Map.of("ns", List.of(Map.of("id", "default"))));
+        Map<String, Object> aws = nodeMap("aws-ap-northeast-2", "aws", "vm-a", "aws-vm", "Running", "3.1.1.1");
+        Map<String, Object> azure = nodeMap("azure-koreacentral", "azure", "vm-b", "az-vm", "Running", "20.1.1.1");
+        when(tumblebug.listInfra("default")).thenReturn(
+                Map.of("infra", List.of(Map.of("id", "mci-1", "node", List.of(aws, azure)))));
+
+        List<HostSummary> hosts = service.listHosts("aws");
+
+        assertThat(hosts).hasSize(1);
+        assertThat(hosts.get(0).provider()).isEqualTo("aws");
+        assertThat(hosts.get(0).hostId()).isEqualTo("aws-ap-northeast-2");
+        // Nova 는 호출하지 않는다
+        org.mockito.Mockito.verifyNoInteractions(nova);
+    }
+
+    /** Tumblebug node(=VM) 한 개 맵. */
+    private static Map<String, Object> nodeMap(String connectionName, String provider, String id,
+                                               String name, String status, String publicIp) {
+        Map<String, Object> node = new HashMap<>();
+        node.put("id", id);
+        node.put("name", name);
+        node.put("status", status);
+        node.put("connectionName", connectionName);
+        node.put("connectionConfig", Map.of("providerName", provider));
+        if (publicIp != null) node.put("publicIP", publicIp);
+        return node;
+    }
+
+    @Test
+    void openstack_nodes_excluded_from_tumblebug_source() {
+        when(nova.listHypervisors()).thenReturn(Map.of());
+        when(tumblebug.listNamespaces()).thenReturn(Map.of("ns", List.of(Map.of("id", "openstack"))));
+        when(tumblebug.listInfra("openstack")).thenReturn(
+                infraWithNode("openstack-regionone", "openstack", "vm-os", "os-vm", "Running", "192.168.0.5"));
+
+        // OpenStack provider 는 Nova 가 담당하므로 Tumblebug 소스에서 제외 → 호스트 0
         assertThat(service.listHosts()).isEmpty();
     }
 }

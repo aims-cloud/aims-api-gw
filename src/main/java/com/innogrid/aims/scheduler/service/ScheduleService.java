@@ -123,7 +123,8 @@ public class ScheduleService {
                 historyRepository.findByScheduleRunIdOrderByCreatedAtAsc(run.getId()).stream()
                         .map(ScheduleRunDetailResponse.Decision::from)
                         .toList();
-        return new ScheduleRunDetailResponse(ScheduleRunResponse.from(run), decisions);
+        return new ScheduleRunDetailResponse(ScheduleRunResponse.from(run),
+                ScheduleRunDetailResponse.ClusterSnapshot.from(run), decisions);
     }
 
     // ── 생성·수정·삭제 ──────────────────────────────────────────

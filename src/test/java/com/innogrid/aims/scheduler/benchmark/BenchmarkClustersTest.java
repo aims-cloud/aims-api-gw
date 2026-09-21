@@ -483,7 +483,8 @@ class BenchmarkClustersTest {
                 .map(n -> new Node(n.mdcId(), n.nodeId(), n.cores(), n.memoryMb(), n.gpus(),
                         n.cpuUsage(), n.memoryUsage(), n.diskTotalGb(), n.diskUsage(), n.ipmi(),
                         n.idleWatts(), n.capacityWatts(), n.capacityWatts(), n.baseTemperature(),
-                        n.networkRxBps(), n.networkTxBps(), n.trait(), n.swing()))
+                        n.networkRxBps(), n.networkTxBps(), n.trait(), n.swing(),
+                        n.gpuIdleWatts(), n.gpuCapacityWatts(), n.gpuBaseTemperature()))
                 .toList();
     }
 

@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -69,13 +70,17 @@ public class PowerOptimizationService {
     /** 노드 전력 사양 원장. null 이면(직접 조립한 테스트 경로) 정격은 설정값. */
     private final NodePowerSpecRepository powerSpecRepository;
 
+    /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
+    private final ExporterInstanceResolver exporterResolver;
+
     @Autowired
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties,
                                     SchedulerMetricsGateway metrics,
                                     MetricsQueryGuard guard,
-                                    NodePowerSpecRepository powerSpecRepository) {
+                                    NodePowerSpecRepository powerSpecRepository,
+                                    ExporterInstanceResolver exporterResolver) {
         this.schedulingService = schedulingService;
         this.powerModel = powerModel;
         this.properties = properties;
@@ -83,6 +88,18 @@ public class PowerOptimizationService {
         this.metricsClient = metrics;
         this.guard = guard;
         this.powerSpecRepository = powerSpecRepository;
+        this.exporterResolver = exporterResolver != null ? exporterResolver
+                : new ExporterInstanceResolver(metrics, guard, properties);
+    }
+
+    /** 원장 없이 조립하는 형태 — 추세의 정격은 설정값, 익스포터 해석은 호스트명 일치와 그대로만. */
+    public PowerOptimizationService(SchedulingService schedulingService,
+                                    PowerModel powerModel,
+                                    SchedulerProperties properties,
+                                    SchedulerMetricsGateway metrics,
+                                    MetricsQueryGuard guard,
+                                    NodePowerSpecRepository powerSpecRepository) {
+        this(schedulingService, powerModel, properties, metrics, guard, powerSpecRepository, null);
     }
 
     /** 원장 없이 조립하는 형태 — 추세의 정격은 설정값. */
@@ -91,7 +108,7 @@ public class PowerOptimizationService {
                                     SchedulerProperties properties,
                                     SchedulerMetricsGateway metrics,
                                     MetricsQueryGuard guard) {
-        this(schedulingService, powerModel, properties, metrics, guard, null);
+        this(schedulingService, powerModel, properties, metrics, guard, null, null);
     }
 
     /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. null 이면 추세를 쓸 수 없다. */
@@ -184,8 +201,11 @@ public class PowerOptimizationService {
             Map<String, Map<Long, Double>> cpu = seriesByInstance(String.format(
                     "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"%s\"}[5m])) * 100)",
                     properties.getNodeJob()), start, end, interval);
-            // 전력은 job 라벨이 다를 수 있어 instance 로만 맞춘다(스냅샷 수집과 같은 방식). CPU 시계열에 없는 instance 는 무시.
-            Map<String, Map<Long, Double>> power = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
+            // 전력 시계열의 키는 IPMI 시리즈의 instance 라 노드 익스포터와 다를 수 있다(실장비: 중앙 IPMI 주소).
+            // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance 에 다시 키 매긴다. 구간 결과의 키가 곧 "저장소에 있는
+            // IPMI instance" 라 발견 질의를 따로 던지지 않는다.
+            Map<String, Map<Long, Double>> rawPower = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
+            Map<String, Map<Long, Double>> power = rekeyToNodes(rawPower, cpu.keySet());
 
             if (cpu.isEmpty()) {
                 return PowerOptimizationTrendResponse.empty(start, end, interval,
@@ -216,13 +236,105 @@ public class PowerOptimizationService {
             }
             String message = anyPower ? null
                     : "전력 메트릭이 없어 전력 지표를 계산하지 못했습니다. 가동/유휴 노드 수만 제공합니다 — IPMI exporter 연동을 확인하세요";
-            return new PowerOptimizationTrendResponse(start, end, interval, points, message);
+            return new PowerOptimizationTrendResponse(start, end, interval, points, message,
+                    energyOf(cpu, power, specs, interval));
 
         } catch (RuntimeException e) {
             // 조회 실패로 500 을 내면 화면이 통째로 깨진다. 사유만 담아 빈 결과로 돌려준다(전력 효율 추세와 같은 원칙).
             log.warn("전력 최적화 추세 조회 실패: reason={}", e.getMessage());
             return PowerOptimizationTrendResponse.empty(start, end, interval, "메트릭 저장소를 조회하지 못했습니다: " + e.getMessage());
         }
+    }
+
+    /**
+     * 구간 전체의 에너지 요약.
+     *
+     * <p><b>지점 배열을 적분하지 않는다.</b> 그 배열은 전력을 못 읽은 노드를 0 으로 채워 만든 것이라, 적분하면
+     * 결손이 "0 W 를 썼다"가 되어 조용히 적게 나온다. 대신 <b>0 을 채우기 전의 원시 시계열</b>을 노드별로
+     * 적분한다 — 그 맵에는 애초에 결손 자리가 없고, 지점 배열과 달리 이미 받아 둔 값이라 질의도 늘지 않는다.</p>
+     *
+     * <p>에너지 계산이 터져도 추세는 그대로 낸다. 곁들이는 요약이지 추세의 일부가 아니다.</p>
+     */
+    private PowerOptimizationTrendResponse.Energy energyOf(
+            Map<String, Map<Long, Double>> cpu, Map<String, Map<Long, Double>> power,
+            NodePowerSpecs specs, String interval) {
+        try {
+            // 허용 간격은 조회 간격에서 낸다. 하한 5분을 그대로 쓰면 step 을 크게 준 조회가 통째로 잘린다.
+            long gapLimit = IntervalEnergy.gapLimitFor(TrendRangeSupport.stepSeconds(interval));
+            Map<String, Map<Long, IntervalEnergy.Sample>> reclaimable = new LinkedHashMap<>();
+            for (Map.Entry<String, Map<Long, Double>> e : cpu.entrySet()) {
+                String instance = e.getKey();
+                double capacity = specs.capacityOr(instance, powerModel::capacityOf);
+                Map<Long, IntervalEnergy.Sample> series = new LinkedHashMap<>();
+                for (Map.Entry<Long, Double> point : e.getValue().entrySet()) {
+                    long ts = point.getKey();
+                    Double watts = power.getOrDefault(instance, Map.of()).get(ts);
+                    // 노드 한 대를 그 시각의 상태로 세운다. 회수 대상이 아니면 그 시각 기여는 0 이다.
+                    NodeResource node = new NodeResource("-", instance, 0, 0, 0, point.getValue(), 0, 0,
+                            watts == null ? 0 : watts, capacity, 0, 0, 0);
+                    if (powerModel.isActive(node)) continue;
+                    series.put(ts, new IntervalEnergy.Sample(powerModel.wakeupPower(node), watts == null));
+                }
+                if (series.size() >= 2) reclaimable.put(instance, series);
+            }
+
+            IntervalEnergy.Result result = IntervalEnergy.integrate(reclaimable, gapLimit);
+            IntervalEnergy.Result consumedResult = IntervalEnergy.integrate(consumedSeries(cpu, power), gapLimit);
+            String reason = energyReason(result, consumedResult.kwh());
+
+            return new PowerOptimizationTrendResponse.Energy(
+                    consumedResult.kwh(), result.kwh(), result.estimatedKwh(),
+                    epochToTime(result.fromEpoch()), epochToTime(result.toEpoch()),
+                    result.present() ? result.hours() : null,
+                    result.present() ? result.nodes() : null,
+                    result.gaps(), reason);
+
+        } catch (RuntimeException e) {
+            log.warn("구간 에너지 계산 실패(추세는 그대로 낸다): reason={}", e.getMessage());
+            return new PowerOptimizationTrendResponse.Energy(null, null, null, null, null, null, null, 0,
+                    "구간 에너지를 계산하지 못했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 소비 에너지에 쓸 표본 — <b>0 을 채우기 전의</b> 원시 전력 시계열 그대로다.
+     *
+     * <p>지점 배열이 아니라 이 맵을 쓰는 것이 요점이다. 지점은 전력을 못 읽은 노드를 0 으로 채워 만들지만
+     * 이 맵에는 그 자리가 아예 없다 — 결손이 "0 W" 로 둔갑하지 않는다.</p>
+     *
+     * <p>저장소에 {@code avg_over_time} 을 묻는 방법도 있었으나 쓰지 않는다. 즉시 질의는 <b>언제나 현재
+     * 시각에서</b> 평가되어, 어제 구간을 물어도 오늘 구간의 평균이 돌아온다. 시각을 지정할 통로가 클라이언트에
+     * 없으므로, 이미 받아 둔 구간 시계열을 적분하는 편이 옳고 질의도 늘지 않는다.</p>
+     */
+    private static Map<String, Map<Long, IntervalEnergy.Sample>> consumedSeries(
+            Map<String, Map<Long, Double>> cpu, Map<String, Map<Long, Double>> power) {
+        Map<String, Map<Long, IntervalEnergy.Sample>> out = new LinkedHashMap<>();
+        power.forEach((instance, series) -> {
+            // 전력 질의에는 job 필터가 없다. 지점 배열이 CPU 시계열을 기준으로 도는 것과 모집단을 맞춘다 —
+            // 그러지 않으면 추세에 한 줄도 나오지 않는 노드의 전력이 에너지에만 섞인다.
+            if (!cpu.containsKey(instance)) return;
+            Map<Long, IntervalEnergy.Sample> samples = new LinkedHashMap<>();
+            series.forEach((ts, watts) -> samples.put(ts, new IntervalEnergy.Sample(watts, false)));
+            if (samples.size() >= 2) out.put(instance, samples);
+        });
+        return out;
+    }
+
+    /** 값이 비거나 좁아진 까닭. 정상이면 null. */
+    private static String energyReason(IntervalEnergy.Result result, Double consumed) {
+        List<String> reasons = new ArrayList<>();
+        if (consumed == null) reasons.add("전력을 실측한 노드가 없어 소비 에너지를 낼 수 없습니다");
+        if (!result.present()) reasons.add("적분할 표본이 모자라 회수 가능 에너지를 낼 수 없습니다");
+        else if (result.gaps() > 0) reasons.add(String.format(
+                "이어지지 않은 구간이 %d곳 있습니다 — 표본이 없었거나 그 시각 노드가 가동 중이었습니다. "
+                        + "실제로 적분한 시간은 integratedHours 입니다", result.gaps()));
+        if (result.present() && result.estimatedKwh() != null && result.estimatedKwh() > 0) reasons.add(
+                "회수 가능 에너지에 미계측 노드의 정격 추정분이 섞여 있습니다 — reclaimableEstimatedKwh 를 보십시오");
+        return reasons.isEmpty() ? null : String.join(" / ", reasons);
+    }
+
+    private static OffsetDateTime epochToTime(Long epochSeconds) {
+        return epochSeconds == null ? null : OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC);
     }
 
     /** 한 시각의 클러스터 상태 — 현재 진단의 {@link #cluster} 와 같은 식. */
@@ -247,6 +359,22 @@ public class PowerOptimizationService {
     /** PEI(CPU% ÷ W)는 0.0067 같은 작은 값이라 전력 효율 요약처럼 소수 4자리로 둔다 — 2자리로 자르면 0.01 로 뭉개진다. */
     private static double round4(double v) {
         return Math.round(v * 10000.0) / 10000.0;
+    }
+
+    /**
+     * IPMI 시계열을 노드 instance 로 다시 키 매긴다 — 지점 배열·에너지 적분이 CPU 시계열 기준으로 도는 것과 모집단을 맞춘다.
+     * 어느 노드에도 이어지지 않은 IPMI 시리즈는 버린다(추세에 한 줄도 나오지 않는 노드의 전력이 섞이면 안 된다).
+     */
+    private Map<String, Map<Long, Double>> rekeyToNodes(Map<String, Map<Long, Double>> rawPower, java.util.Set<String> nodeInstances) {
+        com.innogrid.aims.scheduler.model.ExporterInstances exporters = exporterResolver.resolve(java.util.Set.of(), rawPower.keySet());
+        // 노드 전체를 한 번에 — 같은 IPMI 시리즈를 가리킨 노드가 둘이면 둘 다 빠진다. 한 시계열을 두 노드에 넣으면 합·에너지가 그 배수로 부푼다.
+        Map<String, String> ipmiOfNode = exporters.ipmiFor(nodeInstances);
+        Map<String, Map<Long, Double>> out = new LinkedHashMap<>();
+        for (String node : nodeInstances) {
+            Map<Long, Double> series = rawPower.get(ipmiOfNode.getOrDefault(node, node));
+            if (series != null && !series.isEmpty()) out.put(node, series);
+        }
+        return out;
     }
 
     /** 구간 질의 결과를 instance → (시각 → 값) 으로 편다. 저장소 응답 형태: [{metric:{instance}, values:[[초,"값"],…]}, …] */

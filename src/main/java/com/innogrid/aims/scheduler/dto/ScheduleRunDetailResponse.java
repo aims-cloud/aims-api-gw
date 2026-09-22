@@ -27,7 +27,7 @@ public record ScheduleRunDetailResponse(
     /**
      * 실행 1회가 클러스터를 <b>무엇으로 바꿨는가</b>.
      *
-     * <p>실행 이력 목록(1행 응답)에는 싣지 않는다. 목록은 한 화면에 수십 행이 뜨는 자리라 행마다 열 11개를
+     * <p>실행 이력 목록(1행 응답)에는 싣지 않는다. 목록은 한 화면에 수십 행이 뜨는 자리라 행마다 열 12개를
      * 더하면 프런트가 쓰지도 않는 값으로 응답이 부풀고, 이 숫자들은 <b>한 실행을 들여다볼 때</b> 뜻이 있다.</p>
      *
      * <p>축이 둘로 갈린다. 계측 노드 수와 실측 전력 합은 배치를 얹어도 다시 재지 않으므로 전·후가 없고,
@@ -80,6 +80,11 @@ public record ScheduleRunDetailResponse(
         }
     }
 
+    /**
+     * 13필드 — 설명 누락과 스케줄 화면 DTO 9종의 합계는 {@code ScheduleSchemaContractTest} 가, 13이라는 수와 순서(맨 끝)는
+     * {@code ScheduleRunDetailDecisionApiTest} 가 고정한다. {@code exclusionCodes} 는 배치 이력 응답의 같은 이름 필드와 같은
+     * 문자열을 그대로 싣는다 — 엔진이 배치 시점에 본 후보 제외 집계라, 실행 계층이 그 뒤 배치를 되돌린 건도 그대로 남는다.
+     */
     @Schema(description = "워크로드 한 건에 대한 배치 결정 — 어느 노드를 왜 골랐는지, 또는 왜 못 골랐는지")
     public record Decision(
             @Schema(description = "배치 이력 PK")
@@ -106,14 +111,18 @@ public record ScheduleRunDetailResponse(
             @Schema(description = "결정에 쓴 배치 정책 이름")
             String policyName,
             @Schema(description = "결정 시각(UTC)")
-            OffsetDateTime decidedAt
+            OffsetDateTime decidedAt,
+            @Schema(description = "후보 노드의 제외 사유 코드 집계 — 이력 응답의 exclusionCodes 와 같은 JSON 객체 문자열(코드별 건수, "
+                    + "키 오름차순, 적격 후보 미포함). 제외가 없거나 이 필드가 생기기 전의 결정이면 null. 엔진이 배치 시점에 본 집계라 "
+                    + "실행 계층이 그 뒤 배치를 되돌린 건도 그대로 남는다")
+            String exclusionCodes
     ) {
         public static Decision from(SchedulingHistory h) {
             return new Decision(
                     h.getId(), h.getWorkloadId(), h.getWorkloadName(),
                     h.getSuccess(), h.getSelectedMdcId(), h.getSelectedNodeId(),
                     h.getFinalScore(), h.getReason(), h.getCandidateCount(),
-                    h.getEngineName(), h.getPolicyName(), h.getCreatedAt());
+                    h.getEngineName(), h.getPolicyName(), h.getCreatedAt(), h.getExclusionCodes());
         }
     }
 }

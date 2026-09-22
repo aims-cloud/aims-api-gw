@@ -50,6 +50,17 @@ class HistoryPageEndpointTest {
     private static final long WORKLOAD_B = 9_900_002L;
     /** 위 둘의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_C = 9_900_003L;
+    /** 실행 필터 시험 전용 — 실행에 묶인 행은 이 id 로만 심는다. */
+    private static final long WORKLOAD_D = 9_900_004L;
+    /**
+     * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id 는 1 부터 자라 이 대역에 닿지 않고, FK 가 없어 실행 행이
+     * 없어도 저장된다. 시험마다 다른 값을 써 서로의 정리에 기대지 않는다.
+     */
+    private static final long RUN_X = 9_900_777L;
+    /** 위와 같은 용도, 다른 시험용. */
+    private static final long RUN_Y = 9_900_778L;
+    /** 아무 행도 묶지 않는 실행 id — "없는 실행 id 는 빈 페이지" 를 볼 때만 쓴다. */
+    private static final long RUN_NONE = 9_900_999L;
 
     @BeforeEach
     void seed() {
@@ -165,6 +176,51 @@ class HistoryPageEndpointTest {
                 "A 12건 중 실패 3건(0,5,10)을 뺀 나머지. 필터가 최상위 OR 이면 이 수가 부풀어 오른다");
     }
 
+    /**
+     * 실행 필터의 모집단은 실행 상세 결정 목록과 같다 — 그 실행에 {@code linkToRun} 으로 묶인 행 전부.
+     * 기존 시드(A·B)는 실행 연결이 없으므로 제4의 워크로드 id 로 심어 위 건수 단언과 겹치지 않게 한다.
+     */
+    @DisplayName("실행 필터는 그 실행이 만든 결정만 돌려주고 다른 필터와 함께 걸어도 무너지지 않는다")
+    @Test
+    void run_filter_returns_only_that_runs_rows() throws Exception {
+        List<Long> ids = seedRun(RUN_X, 3);
+        try {
+            JsonNode d = data(get(PAGE).param("size", "100").param("scheduleRunId", String.valueOf(RUN_X)));
+            assertEquals(3, d.get("totalElements").asInt(), "실행 X 에 묶인 세 행");
+            for (JsonNode row : d.get("items")) {
+                assertEquals(RUN_X, row.get("scheduleRunId").asLong(), "묶이지 않은 행이 섞였다");
+            }
+            assertEquals(1, data(get(PAGE).param("size", "100").param("scheduleRunId", String.valueOf(RUN_X))
+                    .param("success", "false")).get("totalElements").asInt(), "실행 X 의 실패는 한 건");
+            assertEquals(0, data(get(PAGE).param("size", "100").param("scheduleRunId", String.valueOf(RUN_X))
+                    .param("workloadId", String.valueOf(WORKLOAD_A))).get("totalElements").asInt(),
+                    "A 는 실행 X 에 없다 — 필터가 최상위 OR 이면 이 수가 부풀어 오른다");
+        } finally {
+            repository.deleteAllById(ids);
+        }
+    }
+
+    /**
+     * 실행 연결이 NULL 인 행은 어떤 값으로도 되찾을 수 없다 — 묶인 행만 돌아오는지는
+     * {@link #run_filter_returns_only_that_runs_rows} 가 보므로, 여기서는 NULL 인 모집단(A 12건) 쪽에서 본다.
+     */
+    @DisplayName("실행 연결이 없는 행은 어떤 실행 id 로도 걸리지 않고, 행이 없는 실행 id 는 빈 페이지다")
+    @Test
+    void run_filter_never_matches_unlinked_rows() throws Exception {
+        List<Long> ids = seedRun(RUN_Y, 3);
+        try {
+            assertEquals(0, data(get(PAGE).param("size", "100").param("workloadId", String.valueOf(WORKLOAD_A))
+                            .param("scheduleRunId", String.valueOf(RUN_Y))).get("totalElements").asInt(),
+                    "실행 연결이 NULL 인 A 12건이 실행 Y 에 걸렸다 — NULL 은 '실행 없음' 이라 대신 넣을 값이 없다");
+            assertEquals(0, data(get(PAGE).param("size", "100").param("scheduleRunId", String.valueOf(RUN_NONE)))
+                    .get("totalElements").asInt(), "묶인 행이 없는 실행 id 는 0 건 — 오류가 아니라 빈 페이지");
+            assertEquals(3, data(get(PAGE).param("size", "100").param("workloadId", String.valueOf(WORKLOAD_D)))
+                    .get("totalElements").asInt(), "심은 행은 워크로드 필터만으로 세 건 그대로다");
+        } finally {
+            repository.deleteAllById(ids);
+        }
+    }
+
     @DisplayName("정렬은 허용 필드만 되고 나머지는 400")
     @Test
     void unpermitted_sort_field_400() throws Exception {
@@ -178,11 +234,12 @@ class HistoryPageEndpointTest {
                 .andExpect(jsonPath("$.success").value(false));
     }
 
-    @DisplayName("size 상한 100 과 page 최소 1 을 넘으면 400")
+    @DisplayName("size 상한 100 · page 최소 1 · 숫자가 아닌 실행 id 는 400")
     @Test
-    void size_over_100_or_page_0_400() throws Exception {
+    void invalid_size_page_or_run_id_400() throws Exception {
         mockMvc.perform(get(PAGE).param("size", "101")).andExpect(status().isBadRequest());
         mockMvc.perform(get(PAGE).param("page", "0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(PAGE).param("scheduleRunId", "abc")).andExpect(status().isBadRequest());
     }
 
     @DisplayName("기존 history 는 여전히 배열이다 — 다만 전량이 아니라 반환 상한까지다")
@@ -202,6 +259,17 @@ class HistoryPageEndpointTest {
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────
+
+    /** 실행 {@code runId} 에 묶인 행 {@code n} 건 — 마지막 한 건만 실패. {@code WORKLOAD_D} 로만 심는다. */
+    private List<Long> seedRun(long runId, int n) {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            SchedulingHistory h = new SchedulingHistory(WORKLOAD_D, "hp-run-" + i, "mdc-01", "n1", 0.5, "r", "weighted", "default");
+            h.linkToRun(runId, i != n - 1);
+            ids.add(repository.save(h).getId());
+        }
+        return ids;
+    }
 
     private JsonNode data(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder req) throws Exception {
         String body = mockMvc.perform(req).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

@@ -44,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 추세     seoul-01 24시간/5분 → 289 지점, 전력·CPU 채워짐
  * 배치     GPU 워크로드 dryRun → GPU 노드(seoul-02 또는 busan-03) 선택 · 디스크 190GB 요구 → daejeon-02(96% 사용)는 제외
  * 표시     /metrics-source = synthetic, 6필드
+ * 후보     /node-exporter-mappings/candidates — DCGM 후보 2(seoul-02·busan-03, 호스트명 일치) · IPMI 후보 5 · 노드 8 · unavailable 없음
  * </pre>
  */
 @SpringBootTest
@@ -221,6 +222,35 @@ class SyntheticModeScenarioTest {
         assertEquals(1.0, byNode.get("seoul-01:9100"));
         assertEquals(1.0, byNode.get("daejeon-02:9100"), "부족으로 걸린 노드도 검사 대상이었다");
         assertEquals(8, byNode.values().stream().filter(java.util.Objects::nonNull).count(), "요구가 있는 배치라 모든 후보에 키가 있다");
+    }
+
+    @DisplayName("후보 API — 모의 저장소의 DCGM 2·IPMI 5 시리즈가 호스트명 일치로 노드에 붙고, 원장 행이 있는 노드는 원장 배정으로 보인다")
+    @Test
+    void exporter_instance_candidates_from_synthetic_store() throws Exception {
+        JsonNode d = objectMapper.readTree(mockMvc.perform(get("/api/v1/scheduler/node-exporter-mappings/candidates"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("data");
+
+        assertTrue(d.get("unavailable").isEmpty(), "모의 저장소는 세 질의에 전부 답한다: " + d.get("unavailable"));
+        assertEquals(8, d.get("nodeInstances").size());
+        assertEquals(2, d.get("dcgm").size(), "GPU 노드 2대의 DCGM 시리즈: " + d.get("dcgm"));
+        assertEquals(5, d.get("ipmi").size(), "IPMI 있는 5대: " + d.get("ipmi"));
+        Set<String> candidateFields = new TreeSet<>(List.of("instance", "host", "gpuCount", "assignedNodeId", "assignedBy",
+                "claimedByNodeIds", "ledgerNodeIds"));
+        Set<String> dcgmInstances = new TreeSet<>();
+        d.get("dcgm").forEach(cand -> {
+            assertEquals(candidateFields, new TreeSet<>(cand.propertyNames()), "후보 한 줄은 7필드");
+            assertEquals(1, cand.get("claimedByNodeIds").size(), "한 노드만 이 시리즈를 얻는다: " + cand);
+            dcgmInstances.add(cand.get("instance").asString());
+            assertTrue(Set.of("HOSTNAME", "LEDGER").contains(cand.get("assignedBy").asString()),
+                    "포트만 다른 배치는 호스트명으로, 다른 시험이 남긴 원장 행이 있으면 원장으로 붙는다: " + cand);
+            assertEquals(cand.get("host").asString() + ":9100", cand.get("assignedNodeId").asString());
+            assertTrue(cand.get("gpuCount").asInt() > 0);
+        });
+        assertEquals(Set.of("seoul-02:9400", "busan-03:9400"), dcgmInstances);
+        d.get("ipmi").forEach(cand -> {
+            assertTrue(cand.get("gpuCount").isNull(), "IPMI 후보에는 카드 수가 없다");
+            assertTrue(Set.of("HOSTNAME", "LEDGER").contains(cand.get("assignedBy").asString()), cand.toString());
+        });
     }
 
     @DisplayName("표시 API — /metrics-source 는 synthetic·mockEnabled true·파일·이름·MDC 3·노드 8 의 6필드")

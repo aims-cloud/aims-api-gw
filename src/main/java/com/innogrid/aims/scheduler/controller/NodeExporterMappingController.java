@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.scheduler.dto.ExporterInstanceCandidatesResponse;
 import com.innogrid.aims.scheduler.dto.NodeExporterMappingRequest;
 import com.innogrid.aims.scheduler.dto.NodeExporterMappingResponse;
 import com.innogrid.aims.scheduler.service.NodeExporterMappingService;
@@ -37,6 +38,20 @@ public class NodeExporterMappingController {
     public ApiResponse<List<NodeExporterMappingResponse>> list(
             @Parameter(description = "노드 식별자 부분 일치 필터") @RequestParam(required = false) String nodeId) {
         return ApiResponse.ok(service.list(nodeId).stream().map(NodeExporterMappingResponse::from).toList());
+    }
+
+    @Operation(summary = "익스포터 instance 후보",
+               description = "저장소에 지금 있는 DCGM·IPMI 시리즈의 instance 와, 수집기가 그것을 어느 노드에 붙이는지(assignedBy — "
+                       + "LEDGER 원장 · HOSTNAME 호스트명 일치 · SAME_AS_NODE 노드 instance 그대로 · AMBIGUOUS 둘 이상이 가리켜 자기 instance 로 되돌림 · "
+                       + "UNASSIGNED 어느 노드도 못 얻음 → 원장에 적어야 이어짐 · UNKNOWN 노드 목록을 못 받아 배정 불명). claimedByNodeIds 는 충돌 규칙 전에 "
+                       + "그 instance 로 해석되는 노드 전부, ledgerNodeIds 는 원장에서 그것을 적은 노드 전부. gpuCount 는 DCGM 시리즈 수(= 카드 수). "
+                       + "ledgerOnly* 는 원장에 있으나 저장소에 없는 instance(오타·익스포터 다운) — 그 질의가 답했을 때만 채워집니다. "
+                       + "unavailable 에 질의 이름(dcgm·ipmi·nodes)이 있으면 그 목록은 답을 못 받은 것이라 비었다고 읽으면 안 됩니다. "
+                       + "메트릭 값은 쓰지 않고 count by(instance) 의 라벨과 시리즈 수만 봅니다. 저장소 질의 세 건을 동시에 던져 상한 한 번을 기다리며 캐시는 없습니다 — "
+                       + "화면 진입·새로고침·원장 저장 직후에만 부르고 폴링하지 마십시오.")
+    @GetMapping("/candidates")
+    public ApiResponse<ExporterInstanceCandidatesResponse> candidates() {
+        return ApiResponse.ok(ExporterInstanceCandidatesResponse.from(service.candidates()));
     }
 
     @Operation(summary = "익스포터 instance 대응 상세")

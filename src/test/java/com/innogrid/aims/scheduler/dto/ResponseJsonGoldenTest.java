@@ -42,13 +42,13 @@ public class ResponseJsonGoldenTest {
             "schedulingScore", "schedulingReason", "retryCount", "lastFailedAt",
             "createdAt", "scheduledAt"));
 
-    /** 배치 이력 응답 필드 22개. */
+    /** 배치 이력 응답 필드 23개. */
     public static final Set<String> HISTORY_FIELDS = new TreeSet<>(Set.of(
             "id", "workloadId", "workloadName", "selectedMdcId", "selectedNodeId",
             "finalScore", "cpuScore", "memoryScore", "powerScore", "temperatureScore", "networkScore",
             "nodeCpuUsage", "nodeMemoryUsage", "nodePowerWatts", "nodeTemperature",
             "candidateCount", "reason", "engineName", "policyName",
-            "scheduleRunId", "success", "createdAt"));
+            "scheduleRunId", "success", "createdAt", "exclusionCodes"));
 
     /** 배치 정책 응답 필드 20개. */
     public static final Set<String> POLICY_FIELDS = new TreeSet<>(Set.of(
@@ -97,6 +97,8 @@ public class ResponseJsonGoldenTest {
 
         assertEquals(HISTORY_FIELDS, new TreeSet<>(json.keySet()),
                 "배치 이력 응답 필드가 바뀌었다. 의도한 변경이면 HISTORY_FIELDS 를 고치고 프런트에 공지한다");
+        assertEquals("{\"INSUFFICIENT_RESOURCE\":2}", json.get("exclusionCodes"),
+                "제외 코드 집계는 객체가 아니라 문자열로 나간다 — 화면이 파싱한다는 계약");
         assertEquals(0.7321, json.get("finalScore"));
         assertEquals(3, json.get("candidateCount"));
         assertEquals(true, json.get("success"));
@@ -110,6 +112,7 @@ public class ResponseJsonGoldenTest {
         Map<String, Object> json = toMap(new SchedulingHistory(1L, "w", "mdc-01", "n1", 0.5, "r", "weighted", "default"));
 
         assertEquals(HISTORY_FIELDS, new TreeSet<>(json.keySet()));
+        assertNull(json.get("exclusionCodes"), "제외 코드 집계가 생기기 전의 행은 null — 빈 객체가 아니다");
         assertNull(json.get("success"));
         assertNull(json.get("scheduleRunId"));
     }
@@ -170,6 +173,7 @@ public class ResponseJsonGoldenTest {
             h.setScoreDetails(0.7, 0.6, 0.5, 0.4, 0.99);
             h.setNodeStatus(30.5, 40.5, 250.0, 55.0);
             h.setCandidateCount(3);
+            h.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":2}");
             h.linkToRun(77L, true);
             return h;
         }

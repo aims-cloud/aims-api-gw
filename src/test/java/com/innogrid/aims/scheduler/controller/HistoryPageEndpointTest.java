@@ -57,6 +57,7 @@ class HistoryPageEndpointTest {
             SchedulingHistory h = new SchedulingHistory(i < 12 ? WORKLOAD_A : WORKLOAD_B, "hp-" + String.format("%02d", i),
                     "mdc-01", "n1", i / 100.0, "r", i < 15 ? "weighted" : "power", "default");
             h.linkToRun(null, i % 5 != 0);   // 0,5,10,15,20 실패 → 5건 (실행 연결 없이 결과만)
+            if (i == 3) h.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":2}");   // 한 행만 집계 값 — DB 왕복 확인용
             seeded.add(repository.save(h).getId());
         }
     }
@@ -84,11 +85,26 @@ class HistoryPageEndpointTest {
         assertEquals(0, beyond.get("items").size(), "범위 밖 페이지는 빈 목록, 오류 아님");
     }
 
-    @DisplayName("항목은 이력 응답 22필드 계약을 그대로 쓴다")
+    @DisplayName("항목은 이력 응답 23필드 계약을 그대로 쓴다")
     @Test
-    void items_22_field_contract() throws Exception {
+    void items_23_field_contract() throws Exception {
         JsonNode d = data(get(PAGE).param("size", "1").param("workloadId", String.valueOf(WORKLOAD_A)));
         assertEquals(ResponseJsonGoldenTest.HISTORY_FIELDS, keys(d.get("items").get(0)));
+    }
+
+    @DisplayName("제외 코드 집계는 DB 를 거쳐 문자열 그대로 돌아오고, 값이 없는 행은 null 이다")
+    @Test
+    void exclusion_codes_survive_the_database_round_trip() throws Exception {
+        JsonNode d = data(get(PAGE).param("size", "25").param("workloadId", String.valueOf(WORKLOAD_A)));
+        JsonNode withCodes = null, without = null;
+        for (JsonNode item : d.get("items")) {
+            if (item.get("workloadName").asString().equals("hp-03")) withCodes = item;
+            else if (without == null) without = item;
+        }
+        assertNotNull(withCodes, "씨앗 hp-03 이 있어야 한다");
+        assertEquals("{\"INSUFFICIENT_RESOURCE\":2}", withCodes.get("exclusionCodes").asString(), "TEXT 열 왕복 뒤에도 문자열 그대로");
+        assertNotNull(without);
+        assertTrue(without.get("exclusionCodes").isNull(), "집계가 없는 행은 null");
     }
 
     @DisplayName("필터는 각각 그리고 함께 적용된다")

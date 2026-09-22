@@ -157,7 +157,7 @@ public class NodeResourceCollector {
         try {
             // up == 1인 노드만 수집
             Map<String, Object> upResponse = guard.call(() -> vmClient.query(
-                    String.format("up{job=\"%s\"} == 1", properties.getNodeJob())), limits.getQueryTimeoutMs());
+                    String.format(ExporterInstanceResolver.NODE_DISCOVERY, properties.getNodeJob())), limits.getQueryTimeoutMs());
             if (upResponse == null) return new Snapshot(nodes, excluded);
 
             Map<String, Object> data = (Map<String, Object>) upResponse.get("data");

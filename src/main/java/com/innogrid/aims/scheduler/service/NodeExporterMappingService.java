@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.NodeExporterMappingRequest;
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
+import com.innogrid.aims.scheduler.model.ExporterInstanceCandidates;
 import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
 
 import tools.jackson.databind.JsonNode;
@@ -35,10 +36,21 @@ public class NodeExporterMappingService {
 
     private final NodeExporterMappingRepository repository;
     private final ScheduleActorResolver actorResolver;
+    private final ExporterInstanceResolver resolver;
 
-    public NodeExporterMappingService(NodeExporterMappingRepository repository, ScheduleActorResolver actorResolver) {
+    public NodeExporterMappingService(NodeExporterMappingRepository repository, ScheduleActorResolver actorResolver,
+                                      ExporterInstanceResolver resolver) {
         this.repository = repository;
         this.actorResolver = actorResolver;
+        this.resolver = resolver;
+    }
+
+    /**
+     * 화면이 고를 후보 instance — 저장소에 지금 있는 DCGM·IPMI 시리즈와 수집기의 배정. 원장은 해석기가 스스로 읽으므로
+     * 이 메서드는 트랜잭션을 열지 않는다(발견 질의가 저장소를 기다리는 동안 DB 연결을 붙잡지 않기 위해).
+     */
+    public ExporterInstanceCandidates candidates() {
+        return resolver.candidates();
     }
 
     // ── 조회 ───────────────────────────────────────────────────

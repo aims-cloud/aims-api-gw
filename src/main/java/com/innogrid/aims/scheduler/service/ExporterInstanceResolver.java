@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 import com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway;
+import com.innogrid.aims.scheduler.model.ExporterInstanceCandidates;
 import com.innogrid.aims.scheduler.model.ExporterInstances;
 import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
@@ -37,6 +39,8 @@ public class ExporterInstanceResolver {
 
     static final String DCGM_DISCOVERY = "count by(instance) (DCGM_FI_DEV_GPU_UTIL)";
     static final String IPMI_DISCOVERY = "count by(instance) (ipmi_dcmi_power_consumption_watts)";
+    /** 지금 수집 대상인 노드 — 수집기와 같은 조건({@code up == 1}). 후보 API 가 배정을 계산할 때 쓴다. */
+    static final String NODE_DISCOVERY = "up{job=\"%s\"} == 1";
     /** GPU 축 — 카드를 접는 함수가 값마다 다르다: 사용률은 평균, 온도는 가장 뜨거운 카드, 전력은 합. */
     static final String GPU_USAGE = "avg by(instance) (DCGM_FI_DEV_GPU_UTIL)";
     static final String GPU_TEMPERATURE = "max by(instance) (DCGM_FI_DEV_GPU_TEMP)";
@@ -169,6 +173,81 @@ public class ExporterInstanceResolver {
             }
         }
         return out;
+    }
+
+    /**
+     * 익스포터 대응 화면이 고를 후보 — 세 발견 질의(DCGM·IPMI·노드)를 동시에 던져 한 상한 안에 받고
+     * {@link ExporterInstanceCandidates} 를 만든다.
+     *
+     * <p>수집기용 {@link #discoverGpuCounts}·{@link #discoverIpmiInstances} 는 저장소가 답하지 않으면 빈 집합으로 떨어진다 —
+     * 수집이 멈추지 않아야 하기 때문이다. 후보 API 는 반대로 <b>"없다" 와 "못 받았다" 를 구분해야</b> 하므로(빈 목록을 보고
+     * 원장을 지우면 안 된다) 답하지 않은 질의를 {@code unavailable} 에 이름으로 남기고, 그 질의가 뒷받침하는 칸은 모델이
+     * 비운다. 세 질의는 {@link #discoverGpuTelemetry} 와 같은 이유로 동시에 제출한다 — 차례로 기다리면 저장소가 느릴 때
+     * 상한이 세 번 겹친다. 원장은 질의를 던지기 전에 한 번 읽는다.</p>
+     */
+    public ExporterInstanceCandidates candidates() {
+        List<NodeExporterMapping> ledger = ledger();
+        List<String> unavailable = new ArrayList<>();
+        Map<String, Integer> dcgm = new HashMap<>();
+        Set<String> ipmi = new LinkedHashSet<>();
+        List<String> nodes = new ArrayList<>();
+        if (metrics == null) {
+            unavailable.addAll(List.of(ExporterInstanceCandidates.QUERY_DCGM, ExporterInstanceCandidates.QUERY_IPMI,
+                    ExporterInstanceCandidates.QUERY_NODES));
+            return ExporterInstanceCandidates.of(ledger, dcgm, ipmi, nodes, unavailable);
+        }
+        long timeout = properties.getMetrics().getQueryTimeoutMs();
+        String nodeQuery = String.format(NODE_DISCOVERY, properties.getNodeJob());
+        List<java.util.concurrent.Future<List<Map<String, Object>>>> futures = new ArrayList<>();
+        for (String q : List.of(DCGM_DISCOVERY, IPMI_DISCOVERY, nodeQuery)) futures.add(guard.submit(() -> metrics.queryResults(q)));
+        List<java.util.Optional<List<Map<String, Object>>>> rows = guard.awaitAll(futures, timeout,
+                System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout));
+
+        if (rows.get(0).isPresent()) {
+            for (Map<String, Object> row : rows.get(0).get()) {
+                String instance = instanceOf(row);
+                Integer count = seriesCountOf(row);
+                if (instance != null && count != null) dcgm.put(instance, count);
+            }
+        } else {
+            unavailable.add(ExporterInstanceCandidates.QUERY_DCGM);
+        }
+        if (rows.get(1).isPresent()) {
+            for (Map<String, Object> row : rows.get(1).get()) {
+                String instance = instanceOf(row);
+                if (instance != null) ipmi.add(instance);
+            }
+        } else {
+            unavailable.add(ExporterInstanceCandidates.QUERY_IPMI);
+        }
+        if (rows.get(2).isPresent()) {
+            for (Map<String, Object> row : rows.get(2).get()) {
+                String instance = instanceOf(row);
+                if (instance != null) nodes.add(instance);
+            }
+        } else {
+            unavailable.add(ExporterInstanceCandidates.QUERY_NODES);
+        }
+        if (!unavailable.isEmpty()) log.debug("후보 발견 질의가 답하지 않음: {}", unavailable);
+        return ExporterInstanceCandidates.of(ledger, dcgm, ipmi, nodes, unavailable);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String instanceOf(Map<String, Object> row) {
+        Map<String, String> labels = row == null ? null : (Map<String, String>) row.get("metric");
+        return labels == null ? null : labels.get("instance");
+    }
+
+    /** {@code count by(instance)} 한 행의 시리즈 수. 값이 없거나 수가 아니거나 유한하지 않으면 null — 그 행만 건너뛴다. */
+    private static Integer seriesCountOf(Map<String, Object> row) {
+        if (row == null || !(row.get("value") instanceof List<?> value) || value.size() < 2 || value.get(1) == null) return null;
+        try {
+            double d = Double.parseDouble(value.get(1).toString());
+            if (Double.isNaN(d) || Double.isInfinite(d) || d < 0) return null;
+            return (int) d;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /** 저장소에 지금 있는 IPMI 시리즈의 instance 들. 값은 쓰지 않는다. */

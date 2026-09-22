@@ -43,18 +43,22 @@ public class SchedulingHistoryQueryService {
         this.repository = repository;
     }
 
-    /** 한 페이지. {@code page} 는 1부터다. 필터는 전부 선택. */
+    /**
+     * 한 페이지. {@code page} 는 1부터다. 필터는 전부 선택 — {@code scheduleRunId} 는 지정한 스케줄 실행이 만든 결정만
+     * 돌려주므로 실행 상세의 결정 목록과 모집단이 같다.
+     */
     @Transactional(readOnly = true)
     public PageResponse<SchedulingHistoryResponse> page(Long workloadId, Boolean success, String engineName,
-                                                        int page, int size, String sort) {
+                                                        Long scheduleRunId, int page, int size, String sort) {
         Sort order = SortSupport.parse(sort, SORTABLE, DEFAULT_SORT);
         Page<SchedulingHistory> found = repository.findAll(
-                filter(workloadId, success, engineName), PageRequest.of(page - 1, size, order));
+                filter(workloadId, success, engineName, scheduleRunId), PageRequest.of(page - 1, size, order));
         Page<SchedulingHistoryResponse> mapped = found.map(SchedulingHistoryResponse::from);
         return new PageResponse<>(mapped.getContent(), page, size, mapped.getTotalElements(), mapped.getTotalPages());
     }
 
-    private static Specification<SchedulingHistory> filter(Long workloadId, Boolean success, String engineName) {
+    private static Specification<SchedulingHistory> filter(Long workloadId, Boolean success, String engineName,
+                                                           Long scheduleRunId) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (workloadId != null) predicates.add(cb.equal(root.get("workloadId"), workloadId));
@@ -67,6 +71,10 @@ public class SchedulingHistoryQueryService {
                         : cb.equal(root.get("success"), Boolean.FALSE));
             }
             if (engineName != null && !engineName.isBlank()) predicates.add(cb.equal(root.get("engineName"), engineName.trim()));
+            // 실행 id 가 NULL 인 행(단건 배치, 스케줄 삭제나 실행 이력 보존 기간 정리로 연결이 끊긴 행)은 어떤 값에도
+            // 걸리지 않는다 — success 의 NULL 포함 규칙과 다르다. 그쪽 NULL 은 "성공" 이지만 여기 NULL 은 "실행 없음" 이라
+            // 대신 넣을 값이 없다.
+            if (scheduleRunId != null) predicates.add(cb.equal(root.get("scheduleRunId"), scheduleRunId));
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

@@ -21,7 +21,7 @@
 -- 컬럼에 DEFAULT 를 두지 않는다. 배포 VM 의 이 세 표에는 컬럼 기본값이 **하나도 없고**(2026-09-04 information_schema 실측),
 -- 이 스크립트는 그 스키마의 기록이어야 한다. 값은 애플리케이션이 항상 채운다.
 -- 컬럼 구성은 엔티티를 기준으로 적었다. 나중에 ALTER 로 더해진 컬럼(resource_type·data_mdc_id·retry_count·
--- schedule_run_id·success 등)도 여기에 이미 포함돼 있어, 새 DB 는 이 파일 하나로 최종 형태가 된다.
+-- schedule_run_id·success·exclusion_codes 등)도 여기에 이미 포함돼 있어, 새 DB 는 이 파일 하나로 최종 형태가 된다.
 -- 뒤이어 2026-08-31_* 을 돌려도 전부 IF NOT EXISTS / DROP 후 재생성이라 부작용이 없다.
 
 -- ── 워크로드 ─────────────────────────────────────────────────
@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS scheduling_history (
 
     candidate_count   INTEGER          NOT NULL,
     reason            VARCHAR(500),
+    exclusion_codes   TEXT,                                     -- 제외 사유 코드별 건수 집계 JSON 문자열. 제외 없으면 NULL (2026-09-22 ALTER)
     engine_name       VARCHAR(50),
     policy_name       VARCHAR(100),
     schedule_run_id   BIGINT,                                   -- 단건 스케줄링 API 로 만든 이력은 NULL

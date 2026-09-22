@@ -55,6 +55,20 @@ public class SchedulingHistory {
     @Column(length = 500)
     private String reason;
 
+    /**
+     * 후보 노드의 제외 사유 코드를 코드별로 센 JSON 객체 문자열 — 예 {@code {"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}}.
+     * 키는 코드 이름 오름차순, 값은 그 코드로 빠진 후보 수. 모집단은 {@code candidateCount} 와 같다 — 수집 단계에서 빠진
+     * 노드는 후보가 아니라 여기에도 없고, 적격 후보는 세지 않는다. 한 노드는 먼저 걸린 제약 하나로만 세므로(C1→C6 순,
+     * 배치 응답의 {@code exclusionCode} 와 같은 규칙) 값의 합은 부적격 후보 수와 같다. 제외가 없으면 {@code null}(빈 객체
+     * 아님), 이 열이 생기기 전의 행도 {@code null}.
+     *
+     * <p>코드 하나를 열거형 열로 남기는 대안을 버리고 집계 문자열을 평문으로 둔 까닭: Hibernate 는 열거형 열을 처음 만들 때
+     * 그 시점 값 목록으로 CHECK 를 자동 생성하고 뒤에 값이 늘어도 고치지 않는다 — 제외 코드는 제약이 늘면 함께 늘어나는
+     * 목록이다.</p>
+     */
+    @Column(columnDefinition = "text")
+    private String exclusionCodes;
+
     @Column(length = 50)
     private String engineName;
 
@@ -111,6 +125,7 @@ public class SchedulingHistory {
     public double getNodeTemperature() { return nodeTemperature; }
     public int getCandidateCount() { return candidateCount; }
     public String getReason() { return reason; }
+    public String getExclusionCodes() { return exclusionCodes; }
     public String getEngineName() { return engineName; }
     public String getPolicyName() { return policyName; }
     public Long getScheduleRunId() { return scheduleRunId; }
@@ -143,4 +158,6 @@ public class SchedulingHistory {
     }
 
     public void setCandidateCount(int count) { this.candidateCount = count; }
+
+    public void setExclusionCodes(String exclusionCodes) { this.exclusionCodes = exclusionCodes; }
 }

@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
@@ -73,6 +74,11 @@ class PlacementOrderRunTest {
         assertEquals(3, sizeDetail.decisions().size());
         List<Boolean> sizeSuccess = sizeDetail.decisions().stream().map(ScheduleRunDetailResponse.Decision::success).toList();
         assertEquals(List.of(false, true, false), sizeSuccess, "2코어는 가용 1.8 에 자원 부족, 첫 1코어 성공(예약), 다음 1코어는 가용 0.8 에 실패 — VM 과 동일");
+        // 실패 결정은 후보 1대가 자원 부족으로 빠진 집계를, 성공 결정은 제외가 없어 null 을 — 이력 응답과 같은 문자열 그대로
+        List<String> sizeCodes = sizeDetail.decisions().stream().map(ScheduleRunDetailResponse.Decision::exclusionCodes).toList();
+        // List.of 는 null 원소를 받지 않아 Arrays.asList 로 만든다
+        assertEquals(Arrays.asList("{\"INSUFFICIENT_RESOURCE\":1}", null, "{\"INSUFFICIENT_RESOURCE\":1}"), sizeCodes,
+                "실행 상세의 결정 목록이 이력 행의 제외 코드 집계를 그대로 싣는다");
     }
 
     private static ScheduleRequest request(String id, String order) {

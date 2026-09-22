@@ -1,5 +1,10 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -121,6 +126,7 @@ public class PlacementService {
                 engine.getId(), context.policy().getName());
 
         history.setCandidateCount(context.nodes().size());
+        history.setExclusionCodes(exclusionCodesOf(result));
 
         // 승자를 nodeId 로 찍어 쓴다 — 아래 context.node(...) 와 같은 키여야 점수와 사용률이 같은 노드에서 온다.
         // 못 찾으면(배치 실패) 0 으로 둔다. 그 행은 총점·노드 상태도 0 이라 행 전체가 일관된다.
@@ -136,5 +142,26 @@ public class PlacementService {
                         n.getPowerWatts(), n.getTemperatureCelsius()));
 
         return history;
+    }
+
+    /**
+     * 후보 노드의 제외 사유 코드를 코드별로 센다 — {@code {"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}}.
+     *
+     * <p>엔진은 성공·실패 양쪽 모두 제외된 노드까지 포함한 후보 목록을 돌려주는데, 이력은 그동안 선택된 노드 한 건만 쓰고
+     * 나머지를 버렸다 — 사유는 문장 하나({@code reason})로만 남아 "어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나" 를 셀 수
+     * 없었다. 적격 후보(코드 없음)는 세지 않고, 제외가 하나도 없으면 {@code null}. 키는 코드 이름 오름차순이라 같은 결정은
+     * 같은 문자열이 되고, 키가 열거형 이름·값이 정수라 이스케이프가 필요 없어 직접 조립한다. 값의 뜻은
+     * {@link SchedulingHistory} 의 열 설명에 있다.</p>
+     */
+    static String exclusionCodesOf(SchedulingResult result) {
+        if (result == null) return null;
+        Map<String, Long> counts = result.candidateScores().stream()
+                .map(SchedulingResult.NodeScore::exclusionCode)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(Enum::name, TreeMap::new, Collectors.counting()));
+        if (counts.isEmpty()) return null;
+        return counts.entrySet().stream()
+                .map(e -> "\"" + e.getKey() + "\":" + e.getValue())
+                .collect(Collectors.joining(",", "{", "}"));
     }
 }

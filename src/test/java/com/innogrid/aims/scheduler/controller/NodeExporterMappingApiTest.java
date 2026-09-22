@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 익스포터 대응 원장 API 계약 — 11필드, 검증 400, 중복·공유 instance 409, 부분 수정, 미인증 403.
+ * 익스포터 대응 원장 API 계약 — 11필드, 검증 400, 중복·공유 instance 409, 부분 수정, 미인증 403, 후보 6필드.
  *
  * <p>원장이 수집 결과에 닿는지는 여기서 보지 않는다 — 이 컨텍스트는 실 게이트웨이라 노드가 없다.
  * {@code ExporterMappingCollectionTest} 가 모의 클러스터로 본다.</p>
@@ -39,6 +39,9 @@ class NodeExporterMappingApiTest {
 
     static final Set<String> FIELDS = new TreeSet<>(List.of("id", "nodeId", "dcgmInstance", "ipmiInstance", "description",
             "createdBy", "createdByName", "updatedBy", "updatedByName", "createdAt", "updatedAt"));
+
+    static final Set<String> CANDIDATE_FIELDS = new TreeSet<>(List.of("dcgm", "ipmi", "nodeInstances", "ledgerOnlyDcgm",
+            "ledgerOnlyIpmi", "unavailable"));
 
     private static final String BASE = "/api/v1/scheduler/node-exporter-mappings";
 
@@ -147,6 +150,32 @@ class NodeExporterMappingApiTest {
         mockMvc.perform(put(BASE + "/" + e.get("id").asLong()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nodeId\":\"Nemapi-D:9100\"}"))
                 .andExpect(status().isConflict());
+    }
+
+    @DisplayName("후보 응답은 6필드이고 원장에만 있는 instance 가 보이며, candidates 는 상세 라우트의 경로 변수로 새지 않는다")
+    @Test
+    void candidates_contract() throws Exception {
+        create("{\"nodeId\":\"nemapi-c:9100\",\"dcgmInstance\":\"nemapi-c-typo:9400\"}");
+
+        JsonNode d = data(mockMvc.perform(get(BASE + "/candidates")).andExpect(status().isOk()).andReturn());
+
+        assertEquals(CANDIDATE_FIELDS, new TreeSet<>(d.propertyNames()));
+        assertTrue(d.get("dcgm").isArray() && d.get("ipmi").isArray() && d.get("nodeInstances").isArray());
+        // 이 컨텍스트는 실 게이트웨이(도달 불가) — DCGM 질의가 답하지 않으면(unavailable) 원장값을 오타로 몰 수 없어 ledgerOnly 가 비고,
+        // 답했다면(빈 목록) 저장소에 없는 원장값이 '원장에만' 으로 보인다. 어느 쪽이든 서로 어긋나면 안 된다
+        List<String> unavailable = new java.util.ArrayList<>();
+        d.get("unavailable").forEach(n -> unavailable.add(n.asString()));
+        unavailable.forEach(n -> assertTrue(Set.of("dcgm", "ipmi", "nodes").contains(n), n));
+        List<String> ledgerOnly = new java.util.ArrayList<>();
+        d.get("ledgerOnlyDcgm").forEach(n -> ledgerOnly.add(n.asString()));
+        if (unavailable.contains("dcgm")) assertTrue(ledgerOnly.isEmpty(), "못 받았으면 대조하지 않는다: " + ledgerOnly);
+        else assertTrue(ledgerOnly.contains("nemapi-c-typo:9400"), "저장소에 없는 원장값: " + ledgerOnly);
+        if (unavailable.contains("nodes")) {
+            d.get("dcgm").forEach(cand -> assertEquals("UNKNOWN", cand.get("assignedBy").asString()));
+            d.get("ipmi").forEach(cand -> assertEquals("UNKNOWN", cand.get("assignedBy").asString()));
+        }
+
+        mockMvc.perform(get(BASE + "/candidates").with(anonymous())).andExpect(status().isForbidden());
     }
 
     @DisplayName("미인증은 403 이고 기존 노드 응답은 24필드 그대로다")

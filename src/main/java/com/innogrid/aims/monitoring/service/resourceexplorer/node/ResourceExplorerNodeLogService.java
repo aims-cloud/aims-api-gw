@@ -2,10 +2,14 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.*;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.*;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.Issue;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.ObservationStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.PathObservation;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
@@ -32,6 +36,8 @@ public class ResourceExplorerNodeLogService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_KEYWORD_LENGTH = 1000;
     private static final int MAX_SEARCH_LIMIT = 1000;
+    /** 후보 탐지·검증 관측 기간. 수집기가 이 기간에 실제로 보낸 파일만 후보로 낸다. */
+    private static final long OBSERVATION_LOOKBACK_SECONDS = 86_400L;
 
     private final NodeAccessService access;
     private final CollectServiceRepository repository;
@@ -74,14 +80,78 @@ public class ResourceExplorerNodeLogService {
         return pageOf(rows, page, size);
     }
 
+    /**
+     * 후보 = 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 job(수집 설정 묶음)과 그 파일. 호스트 프로세스를 보는 수단은
+     * 없으므로 PID·포트는 null 이고 capabilities 는 LOG 뿐이다. 라벨 매핑이 없는 노드는 후보가 없다(빈 목록).
+     * 이미 등록된 이름도 후보에 남긴다 — 편집 위저드가 같은 목록으로 현재 서비스를 표시하고, 중복은 저장 시 409 로 막힌다.
+     */
     public List<DiscoveredServiceResponse> getDiscoveredServices(String nodeId) {
-        access.require(nodeId);
-        throw new BusinessException(HttpStatus.NOT_IMPLEMENTED, "호스트 서비스 탐지 수단이 없습니다.");
+        NodeAccessService.AccessibleNode node = access.require(nodeId);
+        if (!NodeLogQueries.configured(node.host())) {
+            return List.of();
+        }
+        Map<String, List<NodeLogQueries.DiscoveredFile>> byService = new TreeMap<>();
+        for (NodeLogQueries.DiscoveredFile file : queries.recentFiles(node.host(), OBSERVATION_LOOKBACK_SECONDS)) {
+            String name = file.job() == null || file.job().isBlank() ? baseName(file.path()) : file.job();
+            byService.computeIfAbsent(name, ignored -> new ArrayList<>()).add(file);
+        }
+        List<DiscoveredServiceResponse> rows = new ArrayList<>();
+        for (Map.Entry<String, List<NodeLogQueries.DiscoveredFile>> entry : byService.entrySet()) {
+            rows.add(new DiscoveredServiceResponse(entry.getKey(), discoveredDescription(entry.getValue()),
+                    null, null, List.of(CollectCapability.LOG)));
+        }
+        return rows;
     }
 
+    /** 설명에 파일 경로를 실어 2단계 경로 입력의 힌트로 쓴다(응답 계약에 경로 필드가 없다). */
+    private static String discoveredDescription(List<NodeLogQueries.DiscoveredFile> files) {
+        String joined = files.stream()
+                .sorted(Comparator.comparing(NodeLogQueries.DiscoveredFile::path))
+                .map(file -> file.path() + " (" + file.count() + "건)")
+                .collect(Collectors.joining(", "));
+        String text = "최근 24시간 수집 파일: " + joined;
+        return text.length() <= MAX_DESCRIPTION_LENGTH ? text : text.substring(0, MAX_DESCRIPTION_LENGTH - 1) + "…";
+    }
+
+    /**
+     * 위저드 2단계 검증. 입력 규칙 위반만 valid=false 이고, 로그 경로별 최근 24시간 Loki 관측은 참고 정보로 함께 준다.
+     * 이름 중복은 생성·편집 요청을 구분할 수 없어 여기서 검사하지 않는다(저장 시 409).
+     */
     public CollectServiceValidationResponse validateCollectService(String nodeId, CollectServiceRequest request) {
-        access.require(nodeId);
-        throw new BusinessException(HttpStatus.NOT_IMPLEMENTED, "호스트 경로 존재·접근 권한 검증 수단이 없습니다.");
+        NodeAccessService.AccessibleNode node = access.require(nodeId);
+        List<Issue> issues = issues(request);
+        if (!issues.isEmpty()) {
+            return new CollectServiceValidationResponse(false, issues, List.of());
+        }
+        return new CollectServiceValidationResponse(true, List.of(), observe(node.host(), request));
+    }
+
+    private List<PathObservation> observe(ScopedHost host, CollectServiceRequest request) {
+        List<String> paths = request.logCollection() == null ? List.of()
+                : request.logCollection().logPaths().stream().distinct().sorted().toList();
+        if (paths.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Long> counts = null;
+        if (NodeLogQueries.configured(host)) {
+            try {
+                Instant now = Instant.now();
+                counts = queries.fileCounts(host, paths,
+                        NodeLogQueries.window(now.minusSeconds(OBSERVATION_LOOKBACK_SECONDS), now));
+            } catch (BusinessException e) {
+                // Loki 장애는 관측 불가(UNKNOWN)로 남기고 검증 자체는 통과시킨다.
+                if (e.getStatus() != HttpStatus.BAD_GATEWAY) {
+                    throw e;
+                }
+            }
+        }
+        List<PathObservation> rows = new ArrayList<>();
+        for (String path : paths) {
+            ObservationStatus status = counts == null ? ObservationStatus.UNKNOWN
+                    : counts.getOrDefault(path, 0L) > 0 ? ObservationStatus.OBSERVED : ObservationStatus.NOT_OBSERVED;
+            rows.add(new PathObservation(path, status));
+        }
+        return rows;
     }
 
     @Transactional
@@ -299,36 +369,52 @@ public class ResourceExplorerNodeLogService {
         return false;
     }
 
+    /** 저장 경로의 검증 — 첫 위반을 400 으로 올린다. 규칙은 {@link #issues} 한 곳에만 둔다. */
     static void validate(CollectServiceRequest request) {
-        if (request == null || request.serviceName() == null || request.serviceName().isBlank()
-                || request.serviceName().trim().length() > MAX_NAME_LENGTH) {
-            throw bad("서비스 이름은 공백이 아닌 " + MAX_NAME_LENGTH + "자 이내입니다.");
+        List<Issue> issues = issues(request);
+        if (!issues.isEmpty()) {
+            throw bad(issues.get(0).message());
         }
-        if (request.description() != null && request.description().length() > MAX_DESCRIPTION_LENGTH) {
-            throw bad("설명은 " + MAX_DESCRIPTION_LENGTH + "자 이내입니다.");
-        }
-
-        validateLogCollection(request.logCollection());
-        validateTraceCollection(request.traceCollection());
         // 전체 비활성화도 저장 가능. 활성화 여부와 과거 로그 조회 권한은 독립적이다.
     }
 
-    private static void validateLogCollection(CollectServiceRequest.LogCollection logs) {
+    /** 입력 규칙 위반을 필드별로 모은다. field 는 요청 JSON 경로(위저드가 입력 옆에 매핑). */
+    static List<Issue> issues(CollectServiceRequest request) {
+        List<Issue> issues = new ArrayList<>();
+        if (request == null) {
+            issues.add(new Issue("request", "요청 본문이 필요합니다."));
+            return issues;
+        }
+        if (request.serviceName() == null || request.serviceName().isBlank()
+                || request.serviceName().trim().length() > MAX_NAME_LENGTH) {
+            issues.add(new Issue("serviceName", "서비스 이름은 공백이 아닌 " + MAX_NAME_LENGTH + "자 이내입니다."));
+        }
+        if (request.description() != null && request.description().length() > MAX_DESCRIPTION_LENGTH) {
+            issues.add(new Issue("description", "설명은 " + MAX_DESCRIPTION_LENGTH + "자 이내입니다."));
+        }
+        logIssues(request.logCollection(), issues);
+        traceIssues(request.traceCollection(), issues);
+        return issues;
+    }
+
+    private static void logIssues(CollectServiceRequest.LogCollection logs, List<Issue> issues) {
         if (logs == null) {
             return;
         }
         if (logs.syslogEnabled() && !logs.enabled()) {
-            throw bad("Syslog 설정은 로그 활성화가 필요합니다.");
+            issues.add(new Issue("logCollection.syslogEnabled", "Syslog 설정은 로그 활성화가 필요합니다."));
         }
         if (logs.enabled() && logs.logPaths().isEmpty()) {
-            throw bad("로그 활성화 시 경로가 필요합니다.");
+            issues.add(new Issue("logCollection.logPaths", "로그 활성화 시 경로가 필요합니다."));
         }
         if (logs.logPaths().size() > MAX_CHILD_ROWS) {
-            throw bad("로그 경로는 최대 " + MAX_CHILD_ROWS + "개입니다.");
+            issues.add(new Issue("logCollection.logPaths", "로그 경로는 최대 " + MAX_CHILD_ROWS + "개입니다."));
         }
         for (String path : logs.logPaths()) {
             if (!isAbsoluteFilePath(path)) {
-                throw bad("로그 경로는 glob 없는 절대 파일 경로(" + MAX_PATH_LENGTH + "자 이내)여야 합니다.");
+                issues.add(new Issue("logCollection.logPaths",
+                        "로그 경로는 glob 없는 절대 파일 경로(" + MAX_PATH_LENGTH + "자 이내)여야 합니다."));
+                break;
             }
         }
     }
@@ -342,15 +428,15 @@ public class ResourceExplorerNodeLogService {
                 && !path.matches(".*[\\*?\\[\\]{}].*");
     }
 
-    private static void validateTraceCollection(CollectServiceRequest.TraceCollection traces) {
+    private static void traceIssues(CollectServiceRequest.TraceCollection traces, List<Issue> issues) {
         if (traces == null) {
             return;
         }
         if (traces.ports().size() > MAX_CHILD_ROWS) {
-            throw bad("트레이스 포트는 최대 " + MAX_CHILD_ROWS + "개입니다.");
+            issues.add(new Issue("traceCollection.ports", "트레이스 포트는 최대 " + MAX_CHILD_ROWS + "개입니다."));
         }
         if (traces.ports().stream().anyMatch(port -> port == null || port < 1 || port > 65535)) {
-            throw bad("포트는 1~65535입니다.");
+            issues.add(new Issue("traceCollection.ports", "포트는 1~65535입니다."));
         }
     }
 

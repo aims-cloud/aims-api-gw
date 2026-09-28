@@ -94,4 +94,19 @@ class NodeLogQueriesTest {
                 .isInstanceOf(BusinessException.class);
         verifyNoInteractions(loki);
     }
+    @Test void recentFilesAggregatesByJobAndFilenameOverLookbackAndSkipsUnmapped() {
+        when(loki.instant(anyString(), any())).thenReturn(List.of(
+                new Point(Map.of("job", "syslog", "filename", "/var/log/syslog"), Instant.EPOCH, 10),
+                new Point(Map.of("filename", "/var/log/orphan.log"), Instant.EPOCH, 2),
+                new Point(Map.of("job", "empty"), Instant.EPOCH, 1)));
+        List<NodeLogQueries.DiscoveredFile> result = queries.recentFiles(host, 86_400L);
+        assertThat(result).containsExactly(
+                new NodeLogQueries.DiscoveredFile("syslog", "/var/log/syslog", 10),
+                new NodeLogQueries.DiscoveredFile(null, "/var/log/orphan.log", 2));
+        verify(loki).instant(eq("sum by (job, filename) (count_over_time({instance=\"10.0.0.1:9100\", mdc_id=\"mdc-1\"}[86400s]))"), any());
+
+        ScopedHost unmapped = new ScopedHost("ADMIN", 1L, "node", null, "mdc-1", null, null, List.of());
+        assertThat(queries.recentFiles(unmapped, 86_400L)).isEmpty();
+        verifyNoMoreInteractions(loki);
+    }
 }

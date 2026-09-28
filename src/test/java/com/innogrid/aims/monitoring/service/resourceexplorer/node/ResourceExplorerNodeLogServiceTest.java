@@ -10,6 +10,10 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogFile
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceRequest;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.ObservationStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectCapability;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.*;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
@@ -146,5 +150,76 @@ class ResourceExplorerNodeLogServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(1).path()).isEqualTo("/two/app.log");
         assertThat(result.get(1).totalCount()).isZero();
+    }
+
+    // ── 후보 탐지 ───────────────────────────────────────────────
+
+    @Test void discoveredGroupsRecentLokiFilesByJobAndSortsByName() {
+        when(queries.recentFiles(host, 86_400L)).thenReturn(List.of(
+                new NodeLogQueries.DiscoveredFile("syslog", "/var/log/syslog", 10),
+                new NodeLogQueries.DiscoveredFile("aims-app", "/var/log/aims/error.log", 1),
+                new NodeLogQueries.DiscoveredFile("aims-app", "/var/log/aims/app.log", 3),
+                new NodeLogQueries.DiscoveredFile(null, "/var/log/orphan.log", 2)));
+        List<DiscoveredServiceResponse> result = service.getDiscoveredServices("1");
+        assertThat(result).extracting(DiscoveredServiceResponse::serviceName).containsExactly("aims-app", "orphan.log", "syslog");
+        assertThat(result.get(0).description()).isEqualTo("최근 24시간 수집 파일: /var/log/aims/app.log (3건), /var/log/aims/error.log (1건)");
+        assertThat(result.get(0).capabilities()).containsExactly(CollectCapability.LOG);
+        assertThat(result.get(0).pid()).isNull();
+        assertThat(result.get(0).port()).isNull();
+    }
+    @Test void discoveredIsEmptyWithoutLabelMappingAndNeverQueriesLoki() {
+        ScopedHost unmapped = new ScopedHost("ADMIN", 1L, "node", null, "mdc-1", null, null, List.of());
+        when(access.require("1")).thenReturn(new NodeAccessService.AccessibleNode(asset, unmapped));
+        assertThat(service.getDiscoveredServices("1")).isEmpty();
+        verifyNoInteractions(queries);
+    }
+    @Test void discoveredPropagatesLokiFailureInsteadOfEmptyList() {
+        when(queries.recentFiles(host, 86_400L)).thenThrow(new BusinessException(HttpStatus.BAD_GATEWAY, "down"));
+        assertThatThrownBy(() -> service.getDiscoveredServices("1"))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY));
+    }
+
+    // ── 위저드 검증 ─────────────────────────────────────────────
+
+    @Test void validateCollectsIssuesPerFieldAndSkipsObservationWhenInvalid() {
+        CollectServiceRequest request = new CollectServiceRequest(" ", "d",
+                new CollectServiceRequest.LogCollection(false, true, List.of("/var/*.log")),
+                new CollectServiceRequest.TraceCollection(true, List.of(0)));
+        CollectServiceValidationResponse result = service.validateCollectService("1", request);
+        assertThat(result.valid()).isFalse();
+        assertThat(result.issues()).extracting(CollectServiceValidationResponse.Issue::field)
+                .containsExactly("serviceName", "logCollection.syslogEnabled", "logCollection.logPaths", "traceCollection.ports");
+        assertThat(result.observations()).isEmpty();
+        verifyNoInteractions(queries);
+    }
+    @Test void validateObservesPathsAndTreatsMissingLogsAsInformational() {
+        when(queries.fileCounts(eq(host), eq(List.of("/a", "/b")), any())).thenReturn(Map.of("/a", 5L));
+        CollectServiceValidationResponse result = service.validateCollectService("1", request("name", "/b", "/a", "/a"));
+        assertThat(result.valid()).isTrue();
+        assertThat(result.issues()).isEmpty();
+        assertThat(result.observations()).extracting(CollectServiceValidationResponse.PathObservation::path).containsExactly("/a", "/b");
+        assertThat(result.observations()).extracting(CollectServiceValidationResponse.PathObservation::status)
+                .containsExactly(ObservationStatus.OBSERVED, ObservationStatus.NOT_OBSERVED);
+        verify(repository, never()).existsByAsset_IdAndServiceNameAndIdNot(anyLong(), anyString(), anyLong());
+    }
+    @Test void validateLokiFailureOrMissingMappingIsUnknownButStillValid() {
+        when(queries.fileCounts(eq(host), any(), any())).thenThrow(new BusinessException(HttpStatus.BAD_GATEWAY, "down"));
+        CollectServiceValidationResponse result = service.validateCollectService("1", request("name", "/a"));
+        assertThat(result.valid()).isTrue();
+        assertThat(result.observations()).extracting(CollectServiceValidationResponse.PathObservation::status).containsExactly(ObservationStatus.UNKNOWN);
+
+        ScopedHost unmapped = new ScopedHost("ADMIN", 1L, "node", null, "mdc-1", null, null, List.of());
+        when(access.require("1")).thenReturn(new NodeAccessService.AccessibleNode(asset, unmapped));
+        result = service.validateCollectService("1", request("name", "/a"));
+        assertThat(result.valid()).isTrue();
+        assertThat(result.observations()).extracting(CollectServiceValidationResponse.PathObservation::status).containsExactly(ObservationStatus.UNKNOWN);
+        verify(queries, times(1)).fileCounts(any(), any(), any());
+    }
+    @Test void validateWithoutLogPathsHasNoObservations() {
+        CollectServiceValidationResponse result = service.validateCollectService("1",
+                new CollectServiceRequest("name", null, null, new CollectServiceRequest.TraceCollection(true, List.of(8080))));
+        assertThat(result.valid()).isTrue();
+        assertThat(result.observations()).isEmpty();
+        verifyNoInteractions(queries);
     }
 }

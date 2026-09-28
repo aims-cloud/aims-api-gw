@@ -59,6 +59,18 @@ public class NodeLogQueries {
             return new Observation(true, true, Map.of());
         }
     }
+    /** 수집기가 최근 lookback 초 동안 이 노드에서 보낸 job·파일별 건수. job 라벨이 없는 스트림은 job=null. */
+    public record DiscoveredFile(String job, String path, long count) {}
+    /** 라벨 매핑이 없으면 빈 목록. Loki 실패는 목록 조회와 달리 감추지 않고 502 그대로 올린다(후보를 비운 것과 구분). */
+    public List<DiscoveredFile> recentFiles(ScopedHost host, long lookbackSeconds) {
+        if (!configured(host)) return List.of();
+        List<DiscoveredFile> rows = new ArrayList<>();
+        for (Point point : loki.instant(count(nodeSelector(host), lookbackSeconds, "job, filename"), Instant.now())) {
+            String path = point.labels().get("filename");
+            if (path != null && point.count() > 0) rows.add(new DiscoveredFile(point.labels().get("job"), path, point.count()));
+        }
+        return rows;
+    }
     public Map<String, Long> fileCounts(ScopedHost host, List<String> paths, Window window) {
         requireConfigured(host);
         if (paths.isEmpty()) return Map.of();

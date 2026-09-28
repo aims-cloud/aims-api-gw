@@ -10,6 +10,7 @@ import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
+import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
@@ -277,9 +278,9 @@ public class SchedulerController {
     @Operation(summary = "스케줄링 이력 페이징 조회",
                description = "배열로 최근 " + HISTORY_MAX + "건까지만 주는 /history 와 달리, 여기는 상한 없이 페이지로 전량에 닿습니다"
                        + "(총건수도 잘리지 않습니다). page 는 1부터, size 최대 100, "
-                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName·scheduleRunId·exclusionCode 필터는 선택입니다. "
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName·scheduleRunId·exclusionCode·from·to 필터는 선택입니다. "
                        + "success=true 는 성공 여부가 비어 있는 기존 행도 포함하고(비어 있으면 성공으로 봅니다), success=false 는 명시적 실패만 돌려줍니다. "
-                       + "scheduleRunId·exclusionCode 의 규칙은 각 파라미터 설명에 있습니다.")
+                       + "scheduleRunId·exclusionCode·from·to 의 규칙은 각 파라미터 설명에 있습니다.")
     @GetMapping("/history/page")
     public ApiResponse<PageResponse<SchedulingHistoryResponse>> getHistoryPage(
             @RequestParam(required = false) Long workloadId,
@@ -292,10 +293,37 @@ public class SchedulerController {
             @Parameter(description = "그 코드로 센 후보가 하나 이상 있는 결정만(한 노드는 먼저 걸린 제약 하나로만 센다). 코드 이름 대문자 그대로 — "
                     + "소문자·모르는 값은 400 과 가능한 값 목록, 빈 값은 필터 없음. 집계가 없는 결정과 옛 행은 어떤 코드에도 걸리지 않는다")
             @RequestParam(required = false) ExclusionReason exclusionCode,
+            @Parameter(description = "결정 시각(createdAt) 창의 시작, 포함 (ISO-8601, 오프셋 필수 — 쿼리의 + 는 %2B 로). 비우면 하한 없음")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @Parameter(description = "결정 시각(createdAt) 창의 끝, 미포함 (ISO-8601, 오프셋 필수 — 쿼리의 + 는 %2B 로). 비우면 상한 없음. from 이 to 보다 뒤면 400")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        return ApiResponse.ok(historyQueryService.page(workloadId, success, engineName, scheduleRunId, exclusionCode, page, size, sort));
+        return ApiResponse.ok(historyQueryService.page(workloadId, success, engineName, scheduleRunId, exclusionCode,
+                from, to, page, size, sort));
+    }
+
+    @Operation(summary = "스케줄링 이력 제외 사유 코드 합계",
+               description = "창·필터 안 배치 결정의 제외 사유 코드 집계(exclusionCodes)를 서버가 더해 코드별 결정 수·후보 수를 돌려줍니다. "
+                       + "/history/page 와 같은 조건식을 쓰므로 응답의 from·to 를 그대로 넘긴 같은 필터의 exclusionCode=CODE 총건수가 codes[CODE].decisions 와 같습니다(skipped 가 0 일 때). "
+                       + "from·to 를 둘 다 비우면 최근 " + SchedulingHistoryQueryService.DEFAULT_SUMMARY_WINDOW_DAYS + "일, 한쪽만 비우면 그쪽은 경계 없음이고 "
+                       + "응답이 실제 창을 돌려줍니다. 등장한 코드만 실리며, 집계가 없는 결정은 decisions 에만 셉니다. "
+                       + "집계 열에 인덱스가 없어 이력이 크면 창과 workloadId·scheduleRunId 로 좁혀 부르십시오.")
+    @GetMapping("/history/exclusion-summary")
+    public ApiResponse<ExclusionSummaryResponse> getHistoryExclusionSummary(
+            @RequestParam(required = false) Long workloadId,
+            @Parameter(description = "true 는 성공 여부가 비어 있는 기존 행 포함, false 는 명시적 실패만 — /history/page 와 같다")
+            @RequestParam(required = false) Boolean success,
+            @RequestParam(required = false) String engineName,
+            @Parameter(description = "지정한 스케줄 실행이 만든 결정만 — /history/page 와 같다")
+            @RequestParam(required = false) Long scheduleRunId,
+            @Parameter(description = "결정 시각(createdAt) 창의 시작, 포함 (ISO-8601, 오프셋 필수 — 쿼리의 + 는 %2B 로). 둘 다 비우면 최근 "
+                    + SchedulingHistoryQueryService.DEFAULT_SUMMARY_WINDOW_DAYS + "일, to 만 주면 하한 없음")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @Parameter(description = "결정 시각(createdAt) 창의 끝, 미포함 (ISO-8601, 오프셋 필수 — 쿼리의 + 는 %2B 로). 둘 다 비우면 지금, from 만 주면 상한 없음. from 이 to 보다 뒤면 400")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ApiResponse.ok(historyQueryService.summary(workloadId, success, engineName, scheduleRunId, from, to));
     }
 
     @Operation(summary = "워크로드별 스케줄링 이력",

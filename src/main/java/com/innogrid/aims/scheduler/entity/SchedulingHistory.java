@@ -70,6 +70,15 @@ public class SchedulingHistory {
     @Column(columnDefinition = "text")
     private String exclusionCodes;
 
+    /**
+     * 집계 문자열 안에서 코드 하나가 차지하는 키 토큰 — {@code "CODE":}. 쓰는 쪽({@code PlacementService.exclusionCodesOf})과
+     * 찾는 쪽(배치 이력 페이징의 {@code exclusionCode} 필터, LIKE 부분 일치)이 같은 형식에 기대므로 여기 한 곳에서 만든다.
+     * 형식을 바꾸면 두 쪽이 함께 바뀐다.
+     */
+    public static String exclusionCodeKey(String codeName) {
+        return "\"" + codeName + "\":";
+    }
+
     @Column(length = 50)
     private String engineName;
 

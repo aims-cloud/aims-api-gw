@@ -150,7 +150,8 @@ public class PlacementService {
      * <p>엔진은 성공·실패 양쪽 모두 제외된 노드까지 포함한 후보 목록을 돌려주는데, 이력은 그동안 선택된 노드 한 건만 쓰고
      * 나머지를 버렸다 — 사유는 문장 하나({@code reason})로만 남아 "어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나" 를 셀 수
      * 없었다. 적격 후보(코드 없음)는 세지 않고, 제외가 하나도 없으면 {@code null}. 키는 코드 이름 오름차순이라 같은 결정은
-     * 같은 문자열이 되고, 키가 열거형 이름·값이 정수라 이스케이프가 필요 없어 직접 조립한다. 값의 뜻은
+     * 같은 문자열이 되고, 키가 열거형 이름·값이 정수라 이스케이프가 필요 없어 직접 조립한다. 키 토큰은
+     * {@link SchedulingHistory#exclusionCodeKey} — 배치 이력 페이징의 {@code exclusionCode} 필터가 같은 토큰으로 찾는다. 값의 뜻은
      * {@link SchedulingHistory} 의 열 설명에 있다.</p>
      */
     static String exclusionCodesOf(SchedulingResult result) {
@@ -161,7 +162,7 @@ public class PlacementService {
                 .collect(Collectors.groupingBy(Enum::name, TreeMap::new, Collectors.counting()));
         if (counts.isEmpty()) return null;
         return counts.entrySet().stream()
-                .map(e -> "\"" + e.getKey() + "\":" + e.getValue())
+                .map(e -> SchedulingHistory.exclusionCodeKey(e.getKey()) + e.getValue())
                 .collect(Collectors.joining(",", "{", "}"));
     }
 }

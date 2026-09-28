@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.SortSupport;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
+import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
@@ -45,20 +46,22 @@ public class SchedulingHistoryQueryService {
 
     /**
      * 한 페이지. {@code page} 는 1부터다. 필터는 전부 선택 — {@code scheduleRunId} 는 지정한 스케줄 실행이 만든 결정만
-     * 돌려주므로 실행 상세의 결정 목록과 모집단이 같다.
+     * 돌려주므로 실행 상세의 결정 목록과 모집단이 같고, {@code exclusionCode} 는 그 코드로 후보가 하나 이상 빠진 결정만
+     * 돌려준다.
      */
     @Transactional(readOnly = true)
     public PageResponse<SchedulingHistoryResponse> page(Long workloadId, Boolean success, String engineName,
-                                                        Long scheduleRunId, int page, int size, String sort) {
+                                                        Long scheduleRunId, ExclusionReason exclusionCode,
+                                                        int page, int size, String sort) {
         Sort order = SortSupport.parse(sort, SORTABLE, DEFAULT_SORT);
         Page<SchedulingHistory> found = repository.findAll(
-                filter(workloadId, success, engineName, scheduleRunId), PageRequest.of(page - 1, size, order));
+                filter(workloadId, success, engineName, scheduleRunId, exclusionCode), PageRequest.of(page - 1, size, order));
         Page<SchedulingHistoryResponse> mapped = found.map(SchedulingHistoryResponse::from);
         return new PageResponse<>(mapped.getContent(), page, size, mapped.getTotalElements(), mapped.getTotalPages());
     }
 
     private static Specification<SchedulingHistory> filter(Long workloadId, Boolean success, String engineName,
-                                                           Long scheduleRunId) {
+                                                           Long scheduleRunId, ExclusionReason exclusionCode) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (workloadId != null) predicates.add(cb.equal(root.get("workloadId"), workloadId));
@@ -75,7 +78,19 @@ public class SchedulingHistoryQueryService {
             // 걸리지 않는다 — success 의 NULL 포함 규칙과 다르다. 그쪽 NULL 은 "성공" 이지만 여기 NULL 은 "실행 없음" 이라
             // 대신 넣을 값이 없다.
             if (scheduleRunId != null) predicates.add(cb.equal(root.get("scheduleRunId"), scheduleRunId));
+            // 집계 문자열은 {"CODE":n,...} 이라 키 토큰("CODE":) 단위로 맞춘다 — TEMPERATURE_EXCEEDED 로 물어도
+            // WORKLOAD_/PREDICTED_TEMPERATURE_EXCEEDED 만 든 행은 앞 따옴표 때문에 걸리지 않는다. 밑줄은 LIKE 와일드카드라
+            // 이스케이프한다. 집계가 NULL 인 행(제외 없음 · 옛 행)은 어떤 코드에도 걸리지 않는다. 앞이 % 인 LIKE 라 일반
+            // 인덱스로는 줄일 수 없어 전수 검색이다(이 열에는 인덱스도 없다).
+            if (exclusionCode != null) {
+                String key = SchedulingHistory.exclusionCodeKey(exclusionCode.name());
+                predicates.add(cb.like(root.get("exclusionCodes"), "%" + escapeLike(key) + "%", '\\'));
+            }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

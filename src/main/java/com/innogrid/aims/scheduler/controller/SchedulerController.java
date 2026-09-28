@@ -15,6 +15,7 @@ import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
+import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
@@ -276,22 +277,25 @@ public class SchedulerController {
     @Operation(summary = "스케줄링 이력 페이징 조회",
                description = "배열로 최근 " + HISTORY_MAX + "건까지만 주는 /history 와 달리, 여기는 상한 없이 페이지로 전량에 닿습니다"
                        + "(총건수도 잘리지 않습니다). page 는 1부터, size 최대 100, "
-                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName·scheduleRunId 필터는 선택입니다. "
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·finalScore·workloadName·success). workloadId·success·engineName·scheduleRunId·exclusionCode 필터는 선택입니다. "
                        + "success=true 는 성공 여부가 비어 있는 기존 행도 포함하고(비어 있으면 성공으로 봅니다), success=false 는 명시적 실패만 돌려줍니다. "
-                       + "scheduleRunId 는 지정한 스케줄 실행이 만든 결정만 돌려줍니다 — 실행 없이 만든 결정, 스케줄 삭제나 실행 이력 보존 기간 "
-                       + "정리로 연결이 끊긴 결정은 실행 id 가 비어 있어 어느 값에도 걸리지 않고, 없는 실행 id 는 빈 페이지입니다. "
-                       + "이 필터의 모집단은 실행 상세(/schedules/{id}/runs/{runId})의 decisions[] 와 같아 총건수가 같고, "
-                       + "결정의 historyId 가 여기 행의 id 와 같은 값입니다.")
+                       + "scheduleRunId·exclusionCode 의 규칙은 각 파라미터 설명에 있습니다.")
     @GetMapping("/history/page")
     public ApiResponse<PageResponse<SchedulingHistoryResponse>> getHistoryPage(
             @RequestParam(required = false) Long workloadId,
             @RequestParam(required = false) Boolean success,
             @RequestParam(required = false) String engineName,
+            @Parameter(description = "지정한 스케줄 실행이 만든 결정만 — 실행 상세(/schedules/{id}/runs/{runId})의 decisions[] 와 같은 결정 집합이라 "
+                    + "총건수가 같고 결정의 historyId 가 여기 행의 id 다. 실행 없이 만든 결정, 스케줄 삭제나 실행 이력 보존 기간 정리로 연결이 끊긴 "
+                    + "결정은 실행 id 가 비어 있어 어느 값에도 걸리지 않고, 없는 실행 id 는 빈 페이지")
             @RequestParam(required = false) Long scheduleRunId,
+            @Parameter(description = "그 코드로 센 후보가 하나 이상 있는 결정만(한 노드는 먼저 걸린 제약 하나로만 센다). 코드 이름 대문자 그대로 — "
+                    + "소문자·모르는 값은 400 과 가능한 값 목록, 빈 값은 필터 없음. 집계가 없는 결정과 옛 행은 어떤 코드에도 걸리지 않는다")
+            @RequestParam(required = false) ExclusionReason exclusionCode,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
-        return ApiResponse.ok(historyQueryService.page(workloadId, success, engineName, scheduleRunId, page, size, sort));
+        return ApiResponse.ok(historyQueryService.page(workloadId, success, engineName, scheduleRunId, exclusionCode, page, size, sort));
     }
 
     @Operation(summary = "워크로드별 스케줄링 이력",

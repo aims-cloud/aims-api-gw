@@ -192,7 +192,9 @@ public class SchedulerController {
 
     // ── 노드 자원 현황 ──────────────────────────────────────────
 
-    @Operation(summary = "실시간 노드 자원 현황", description = "스케줄링 전 후보 노드 상태 미리보기")
+    @Operation(summary = "실시간 노드 자원 현황",
+               description = "스케줄링 전 후보 노드 상태 미리보기. 디스크 축(diskCapacityGb·reservedDiskGb·availableDiskGb, GB)은 "
+                       + "C1 디스크 검사와 같은 식이며 총량 0 은 모름 — 그 노드는 디스크 요구 배치에서 디스크 검사를 건너뜁니다.")
     @GetMapping("/nodes")
     public ApiResponse<List<NodeResponse>> getNodeResources() {
         return ApiResponse.ok(schedulingService.getNodeResources().stream().map(NodeResponse::from).toList());
@@ -208,7 +210,7 @@ public class SchedulerController {
     }
 
     @Operation(summary = "노드 단건 자원 현황",
-               description = "가용량·예약분·전력·온도를 한 대만 조회합니다.")
+               description = "가용량·예약분·전력·온도·디스크 축(총량 0 = 모름)을 한 대만 조회합니다.")
     @GetMapping("/nodes/{nodeId}")
     public ApiResponse<NodeResponse> getNodeResource(@PathVariable String nodeId) {
         return ApiResponse.ok(NodeResponse.from(schedulingService.getNodeResource(nodeId)));

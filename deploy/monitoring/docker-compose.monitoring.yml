@@ -19,7 +19,8 @@ services:
       - "19291:19291"   # remote_write 수신 (세부1,3이 여기로 전송)
       - "10902:10902"   # HTTP (상태 확인)
     volumes:
-      - receive-data:/data/receive
+      # 운영 서버(k8s-cp)는 호스트 ./data 아래를 bind mount 로 쓴다. named volume 으로 두면 재기동 시 빈 저장소로 시작한다(2026-09-28 사고).
+      - ./data/receive:/data/receive
       - ./thanos-bucket.yml:/etc/thanos/bucket.yml
     depends_on:
       - minio
@@ -54,7 +55,7 @@ services:
       - --http-address=0.0.0.0:10906
       - --objstore.config-file=/etc/thanos/bucket.yml
     volumes:
-      - store-data:/data/store
+      - ./data/store:/data/store
       - ./thanos-bucket.yml:/etc/thanos/bucket.yml
     depends_on:
       - minio
@@ -74,7 +75,7 @@ services:
       - --retention.resolution-1h=365d
       - --wait
     volumes:
-      - compact-data:/data/compact
+      - ./data/compact:/data/compact
       - ./thanos-bucket.yml:/etc/thanos/bucket.yml
     depends_on:
       - minio
@@ -181,9 +182,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  receive-data:
-  store-data:
-  compact-data:
   minio-data:
   loki-data:
   alloy-data:

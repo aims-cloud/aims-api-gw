@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -16,9 +17,11 @@ import com.innogrid.aims.scheduler.service.ScheduleActorResolver;
 import com.innogrid.aims.scheduler.service.ScheduleExecutionService;
 import com.innogrid.aims.scheduler.service.ScheduleService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -127,15 +130,24 @@ public class ScheduleController {
 
     @Operation(summary = "실행 이력",
             description = "스케줄 ID/시작 시간/종료 시간/처리 상태/메시지와 집계 건수를 조회합니다. "
+                    + "status·triggerType·from·to 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
                     + "자동 실행이 대상 0건으로 끝난 경우는 이력을 남기지 않습니다 — "
                     + "그 사실은 스케줄 상세의 최근 실행 메시지에서 확인할 수 있습니다.")
     @GetMapping("/{id}/runs")
     public ApiResponse<PageResponse<ScheduleRunResponse>> getRuns(
             @PathVariable Long id,
+            @Parameter(description = "처리 상태 — RUNNING·COMPLETED·FAILED. 대문자 그대로, 다른 값은 400. 비우면 전체")
+            @RequestParam(required = false) ScheduleRun.RunStatus status,
+            @Parameter(description = "실행 주체 — AUTO(주기 실행)·MANUAL(즉시 실행). 대문자 그대로, 다른 값은 400. 비우면 전체")
+            @RequestParam(required = false) ScheduleRun.TriggerType triggerType,
+            @Parameter(description = "시작 시각(startedAt) 창의 시작, 포함 (ISO-8601, 오프셋 필수 — 쿼리의 + 는 %2B 로). 비우면 하한 없음")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @Parameter(description = "시작 시각(startedAt) 창의 끝, 미포함 (ISO-8601, 오프셋 필수 — 쿼리의 + 는 %2B 로). 비우면 상한 없음. from 이 to 보다 뒤면 400")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "startedAt,desc") String sort) {
-        return ApiResponse.ok(scheduleService.runs(id, page, size, sort));
+        return ApiResponse.ok(scheduleService.runs(id, status, triggerType, from, to, page, size, sort));
     }
 
     @Operation(summary = "실행 상세",

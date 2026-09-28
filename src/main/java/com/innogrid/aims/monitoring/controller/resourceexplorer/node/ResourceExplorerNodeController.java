@@ -157,16 +157,20 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "탐지된 수집 후보 서비스 목록",
-            description = "서비스 추가 위저드 1단계 드롭다운 — 노드 에이전트가 탐지한 서비스의 "
-                    + "이름/설명/PID/포트/수집 가능 유형(로그·트레이스)을 조회합니다.")
+            description = "서비스 추가 위저드 1단계 드롭다운 — 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 "
+                    + "job(수집 설정 묶음)을 후보로 냅니다. 설명에 수집 파일 경로와 건수가 들어갑니다. "
+                    + "호스트 프로세스 탐지 수단은 없어 PID·포트는 null, capabilities 는 LOG 만입니다. "
+                    + "노드의 Loki 라벨 매핑이 없으면 빈 목록, Loki 조회 실패는 502 입니다.")
     @GetMapping("/services/discovered")
     public ApiResponse<List<DiscoveredServiceResponse>> getDiscoveredServices(@PathVariable String nodeId) {
         return ApiResponse.ok(resourceExplorerNodeLogService.getDiscoveredServices(nodeId));
     }
 
     @Operation(summary = "수집 설정 유효성 검증",
-            description = "위저드 2단계 '다음' 클릭 시 — 로그·트레이스 수집 중 하나 이상 활성화 여부와 "
-                    + "로그 경로·트레이스 포트 유효성을 검증합니다.")
+            description = "위저드 2단계 '다음' 클릭 시 — 이름·설명 길이, 로그 경로 형식(glob 없는 절대 경로)·개수, "
+                    + "Syslog 토글 종속, 트레이스 포트 범위를 검증해 issues(field=요청 JSON 경로)로 돌려줍니다. "
+                    + "valid=true 이면 observations 에 로그 경로별 최근 24시간 Loki 관측(OBSERVED/NOT_OBSERVED/UNKNOWN)을 "
+                    + "함께 줍니다. 미관측은 오류가 아닙니다(아직 수집되지 않는 파일 등록이 목적). 이름 중복은 저장 시 409 입니다.")
     @PostMapping("/services/validate")
     public ApiResponse<CollectServiceValidationResponse> validateCollectService(
             @PathVariable String nodeId,
@@ -175,7 +179,7 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "수집 서비스 추가",
-            description = "수집 희망 설정을 원장에 저장합니다. 수집기 설정에는 반영되지 않습니다. 탐지·호스트 검증은 미지원입니다.")
+            description = "수집 희망 설정을 원장에 저장합니다. 수집기 설정에는 반영되지 않으며 호스트의 파일 존재·권한은 확인하지 않습니다.")
     @PortalLog(screen = "노드 수집 서비스", action = "생성", content = "'수집 서비스 생성: ' + #request.serviceName",
             refType = "COLLECT_SERVICE", refId = "#result.data.serviceId")
     @PostMapping("/services")

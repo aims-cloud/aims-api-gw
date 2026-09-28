@@ -8,6 +8,9 @@ import com.innogrid.aims.common.log.PortalLog;
 import com.innogrid.aims.monitoring.controller.resourceexplorer.node.ResourceExplorerNodeController;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogFileResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceRequest;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectCapability;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse;
 import com.innogrid.aims.monitoring.service.resourceexplorer.node.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,9 +44,22 @@ class NodeLogControllerTest {
                 .thenThrow(new BusinessException(HttpStatus.NOT_FOUND, "missing"));
         mvc.perform(get(base + "/10/logs/summary")).andExpect(status().isNotFound());
     }
-    @Test void discoveryKeeps501() throws Exception {
-        when(logs.getDiscoveredServices("1")).thenThrow(new BusinessException(HttpStatus.NOT_IMPLEMENTED, "unsupported"));
-        mvc.perform(get(base + "/discovered")).andExpect(status().isNotImplemented());
+    @Test void discoveryReturnsLokiBackedCandidates() throws Exception {
+        when(logs.getDiscoveredServices("1")).thenReturn(List.of(
+                new DiscoveredServiceResponse("syslog", "최근 24시간 수집 파일: /var/log/syslog (10건)", null, null, List.of(CollectCapability.LOG))));
+        mvc.perform(get(base + "/discovered")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].serviceName").value("syslog"))
+                .andExpect(jsonPath("$.data[0].capabilities[0]").value("LOG"));
+    }
+    @Test void validateReturnsIssuesAndObservationsInsteadOf501() throws Exception {
+        when(logs.validateCollectService(eq("1"), any())).thenReturn(new CollectServiceValidationResponse(true, List.of(),
+                List.of(new CollectServiceValidationResponse.PathObservation("/var/log/syslog", CollectServiceValidationResponse.ObservationStatus.OBSERVED))));
+        mvc.perform(post(base + "/validate").contentType("application/json")
+                        .content("{\"serviceName\":\"syslog\",\"logCollection\":{\"enabled\":true,\"syslogEnabled\":false,\"logPaths\":[\"/var/log/syslog\"]}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.valid").value(true))
+                .andExpect(jsonPath("$.data.issues").isEmpty())
+                .andExpect(jsonPath("$.data.observations[0].status").value("OBSERVED"));
     }
     @Test void allTraceRoutesValidateAccessBeforeUniform501() throws Exception {
         for (String route : List.of("/summary", "/trend", "/methods", "/endpoints", "/ports", "", "/trace-id", "/trace-id/logs")) {

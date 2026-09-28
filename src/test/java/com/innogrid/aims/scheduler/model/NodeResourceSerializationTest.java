@@ -20,8 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  *
  * <p>응답 형태의 주인은 이제 {@link NodeResponse} 다. 예전에는 {@code NodeResource} 를 DTO 없이 그대로
  * 내보내 모델에 {@code get} 메서드를 하나 추가하면 {@code GET /api/v1/scheduler/nodes} 응답에 필드가
- * 조용히 늘었다. DTO 도입 후에는 그 위험이 사라졌지만, 계약 자체(24필드)는 프런트와의 약속이라
+ * 조용히 늘었다. DTO 도입 후에는 그 위험이 사라졌지만, 계약 자체(27필드)는 프런트와의 약속이라
  * 여기서 여전히 못 박는다 — DTO 에 컴포넌트를 추가하면 이 테스트가 막는다.</p>
+ *
+ * <p>디스크 축 3칸({@code diskCapacityGb}·{@code reservedDiskGb}·{@code availableDiskGb})은 DTO 에만 있다.
+ * 모델은 그 셋을 {@code get} 없는 이름으로 두므로 모델 직렬화는 여전히 24필드다 — 두 집합의 차가 정확히
+ * 그 세 키인지도 고정한다.</p>
  *
  * <p>계산용 메서드를 {@code get} 없이 짓는 규율은 유지한다. 이제는 API 보호 수단이 아니라
  * "모델을 조회 응답과 혼동하지 않게 하는 관례"다. 그 전제가 지켜지는지도 함께 확인한다.</p>
@@ -32,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 @SpringBootTest
 class NodeResourceSerializationTest {
 
-    /** 현재 노드 조회 응답이 담는 필드 전체. 늘리거나 줄이려면 프런트와 합의가 필요하다. */
-    private static final Set<String> EXPECTED_FIELDS = new TreeSet<>(Set.of(
+    /** 모델이 {@code get} 으로 내보내는 필드 — 디스크 축을 뺀 24개. */
+    private static final Set<String> MODEL_FIELDS = new TreeSet<>(Set.of(
             "mdcId", "nodeId",
             "totalCpu", "totalMemoryMb", "totalGpu",
             "cpuUsagePercent", "memoryUsagePercent", "diskUsagePercent",
@@ -45,6 +49,20 @@ class NodeResourceSerializationTest {
             "availableCpu", "availableMemoryMb", "availableGpu"
     ));
 
+    /** DTO 에만 있는 디스크 축 3칸. 모델은 이 셋을 {@code get} 없는 이름으로 둔다. */
+    private static final Set<String> DISK_FIELDS = new TreeSet<>(Set.of(
+            "diskCapacityGb", "reservedDiskGb", "availableDiskGb"
+    ));
+
+    /** 현재 노드 조회 응답이 담는 필드 전체(27). 늘리거나 줄이려면 프런트와 합의가 필요하다. */
+    private static final Set<String> EXPECTED_FIELDS = union(MODEL_FIELDS, DISK_FIELDS);
+
+    private static Set<String> union(Set<String> a, Set<String> b) {
+        Set<String> out = new TreeSet<>(a);
+        out.addAll(b);
+        return out;
+    }
+
     @Autowired
     ObjectMapper objectMapper;
 
@@ -53,6 +71,7 @@ class NodeResourceSerializationTest {
     void response_fields_unchanged() {
         Set<String> actual = fieldsOf(NodeResponse.from(sample()));
 
+        assertEquals(27, EXPECTED_FIELDS.size(), "모델 24 + 디스크 3 — 겹치는 이름이 생기면 여기서 잡힌다");
         assertEquals(EXPECTED_FIELDS, actual,
                 "노드 조회 응답의 필드가 바뀌었다. 의도한 변경이면 EXPECTED_FIELDS 를 고치고 프런트에 공지한다");
     }
@@ -69,7 +88,40 @@ class NodeResourceSerializationTest {
         assertFalse(actual.contains("powerHeadroomPercent"));
         assertFalse(actual.contains("snapshot"));
         assertFalse(actual.contains("effectiveCpuUsagePercent"));
-        assertEquals(EXPECTED_FIELDS, actual, "모델 자체의 직렬화도 24필드다 — DTO 와 어긋나면 동치 테스트가 깨진다");
+        assertEquals(MODEL_FIELDS, actual, "모델 자체의 직렬화는 디스크 축을 뺀 24필드다 — DTO 와 어긋나면 동치 테스트가 깨진다");
+        assertFalse(actual.contains("diskCapacityGb"));
+        assertFalse(actual.contains("availableDiskGb"));
+        assertFalse(actual.contains("reservedDiskGb"));
+    }
+
+    /** 세 디스크 칸이 제 자리로 가고, 가용량은 모델 계산식(총량 × (1 − 사용률) − 예약, 0 하한)과 같다. */
+    @DisplayName("디스크 총량·예약·가용이 응답의 제 칸에 실린다")
+    @Test
+    void disk_fields_land_in_their_own_slots() {
+        NodeResource node = sample().withDiskCapacityGb(100);   // 사용률 30%
+        node.reserve(0, 0, 0, 20);
+
+        NodeResponse r = NodeResponse.from(node);
+
+        assertEquals(100L, r.diskCapacityGb());
+        assertEquals(20L, r.reservedDiskGb());
+        assertEquals(50L, r.availableDiskGb(), "100 × 0.7 − 20");
+        assertEquals(30.0, r.diskUsagePercent(), "사용률 칸은 그대로");
+        assertEquals(node.availableDiskGb(), r.availableDiskGb(), "모델 계산식과 동일");
+    }
+
+    /** 총량을 모르는 노드(0)는 가용도 0 이고, 예약은 그래도 쌓인다 — 화면이 0/0 을 "모름"으로 읽는 근거. */
+    @DisplayName("디스크 총량을 모르면 가용은 0 이고 예약은 남는다")
+    @Test
+    void unknown_disk_capacity_reports_zero_available() {
+        NodeResource node = sample();   // 총량 미설정 = 0
+        node.reserve(0, 0, 0, 5);
+
+        NodeResponse r = NodeResponse.from(node);
+
+        assertEquals(0L, r.diskCapacityGb());
+        assertEquals(0L, r.availableDiskGb());
+        assertEquals(5L, r.reservedDiskGb());
     }
 
     /** 세 GPU 칸이 각자 제 자리로 간다 — 셋 다 double 이라 인자 순서가 바뀌어도 컴파일되므로 값으로 잡는다. */

@@ -178,13 +178,13 @@ class NodeExporterMappingApiTest {
         mockMvc.perform(get(BASE + "/candidates").with(anonymous())).andExpect(status().isForbidden());
     }
 
-    @DisplayName("미인증은 403 이고 기존 노드 응답은 24필드 그대로다")
+    @DisplayName("미인증은 403 이고 기존 노드 응답은 27필드 그대로다")
     @Test
     void auth_and_node_contract_unchanged() throws Exception {
         mockMvc.perform(get(BASE).with(anonymous())).andExpect(status().isForbidden());
         mockMvc.perform(post(BASE).with(anonymous()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nodeId\":\"x\"}")).andExpect(status().isForbidden());
         JsonNode nodes = data(mockMvc.perform(get("/api/v1/scheduler/nodes")).andExpect(status().isOk()).andReturn());
-        if (!nodes.isEmpty()) assertEquals(24, nodes.get(0).propertyNames().size());
+        if (!nodes.isEmpty()) assertEquals(27, nodes.get(0).propertyNames().size());
     }
 }

@@ -52,6 +52,8 @@ class HistoryPageEndpointTest {
     private static final long WORKLOAD_C = 9_900_003L;
     /** 실행 필터 시험 전용 — 실행에 묶인 행은 이 id 로만 심는다. */
     private static final long WORKLOAD_D = 9_900_004L;
+    /** 제외 코드 키 경계 시험 전용 — A·B 의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
+    private static final long WORKLOAD_E = 9_900_005L;
     /**
      * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id 는 1 부터 자라 이 대역에 닿지 않고, FK 가 없어 실행 행이
      * 없어도 저장된다. 시험마다 다른 값을 써 서로의 정리에 기대지 않는다.
@@ -68,7 +70,10 @@ class HistoryPageEndpointTest {
             SchedulingHistory h = new SchedulingHistory(i < 12 ? WORKLOAD_A : WORKLOAD_B, "hp-" + String.format("%02d", i),
                     "mdc-01", "n1", i / 100.0, "r", i < 15 ? "weighted" : "power", "default");
             h.linkToRun(null, i % 5 != 0);   // 0,5,10,15,20 실패 → 5건 (실행 연결 없이 결과만)
-            if (i == 3) h.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":2}");   // 한 행만 집계 값 — DB 왕복 확인용
+            // 집계 값이 있는 행 셋 — DB 왕복(hp-03)과 코드 필터(hp-03·hp-07 은 성공, hp-20 은 실패·power) 확인용
+            if (i == 3) h.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":2}");
+            if (i == 7) h.setExclusionCodes("{\"COOLING_DOWN\":1,\"INSUFFICIENT_RESOURCE\":1}");
+            if (i == 20) h.setExclusionCodes("{\"TEMPERATURE_EXCEEDED\":1}");
             seeded.add(repository.save(h).getId());
         }
     }
@@ -110,12 +115,65 @@ class HistoryPageEndpointTest {
         JsonNode withCodes = null, without = null;
         for (JsonNode item : d.get("items")) {
             if (item.get("workloadName").asString().equals("hp-03")) withCodes = item;
-            else if (without == null) without = item;
+            else if (item.get("workloadName").asString().equals("hp-01")) without = item;
         }
         assertNotNull(withCodes, "씨앗 hp-03 이 있어야 한다");
         assertEquals("{\"INSUFFICIENT_RESOURCE\":2}", withCodes.get("exclusionCodes").asString(), "TEXT 열 왕복 뒤에도 문자열 그대로");
         assertNotNull(without);
         assertTrue(without.get("exclusionCodes").isNull(), "집계가 없는 행은 null");
+    }
+
+    @DisplayName("제외 코드 필터는 그 코드 키가 든 행만 고르고, 집계가 없는 행은 어떤 코드로도 고르지 않는다")
+    @Test
+    void exclusion_code_filter_matches_only_rows_containing_the_code() throws Exception {
+        JsonNode d = data(get(PAGE).param("size", "100").param("workloadId", String.valueOf(WORKLOAD_A))
+                .param("exclusionCode", "INSUFFICIENT_RESOURCE"));
+        assertEquals(2, d.get("totalElements").asInt(), "A 의 hp-03·hp-07");
+        for (JsonNode row : d.get("items")) {
+            assertTrue(row.get("exclusionCodes").asString().contains("\"INSUFFICIENT_RESOURCE\":"), "키 단위로 맞는다");
+        }
+        assertEquals(1, countByCode(WORKLOAD_A, "COOLING_DOWN"), "A 의 hp-07");
+        assertEquals(1, countByCode(WORKLOAD_B, "TEMPERATURE_EXCEEDED"), "B 의 hp-20");
+        assertEquals(0, countByCode(WORKLOAD_A, "MDC_LINK_DOWN"), "집계가 NULL 인 행은 어떤 코드에도 걸리지 않는다");
+    }
+
+    /**
+     * 짧은 코드로 긴 이름의 행을 물을 때만 앞 따옴표가 일한다 — 반대 방향(긴 코드로 짧은 행)은 따옴표 없이도 0 이라
+     * 증거가 못 된다. 밑줄 자리만 다른 키는 실제 코드에 없지만 열이 평문 TEXT(CHECK 없음)라 합성 키로 심는다.
+     */
+    @DisplayName("제외 코드 필터는 키 이름 전체로 맞춘다 — 긴 이름의 꼬리나 밑줄 자리의 다른 글자에 걸리지 않는다")
+    @Test
+    void exclusion_code_filter_matches_whole_key_only() throws Exception {
+        List<Long> ids = new ArrayList<>();
+        for (String codes : List.of("{\"WORKLOAD_TEMPERATURE_EXCEEDED\":1}",   // 앞 따옴표가 없으면 TEMPERATURE_EXCEEDED 에 걸린다
+                                    "{\"INSUFFICIENTxRESOURCE\":1}")) {        // 밑줄을 풀면 INSUFFICIENT_RESOURCE 에 걸린다
+            SchedulingHistory h = new SchedulingHistory(WORKLOAD_E, "hp-key", "mdc-01", "n1", 0.5, "r", "weighted", "default");
+            h.linkToRun(null, true);
+            h.setExclusionCodes(codes);
+            ids.add(repository.save(h).getId());
+        }
+        try {
+            assertEquals(0, countByCode(WORKLOAD_E, "TEMPERATURE_EXCEEDED"), "긴 이름의 꼬리에 걸렸다 — 키 앞 따옴표가 빠졌다");
+            assertEquals(1, countByCode(WORKLOAD_E, "WORKLOAD_TEMPERATURE_EXCEEDED"), "긴 이름 자체는 잡혀야 한다");
+            assertEquals(0, countByCode(WORKLOAD_E, "INSUFFICIENT_RESOURCE"), "밑줄이 LIKE 와일드카드로 풀렸다");
+        } finally {
+            repository.deleteAllById(ids);
+        }
+    }
+
+    @DisplayName("제외 코드 필터는 다른 필터와 함께 걸어도 무너지지 않는다")
+    @Test
+    void exclusion_code_filter_combines_with_other_filters() throws Exception {
+        assertEquals(2, countByCode(WORKLOAD_A, "INSUFFICIENT_RESOURCE", "success", "true"),
+                "성공했지만 다른 후보가 빠진 결정 — hp-03·hp-07");
+        assertEquals(0, countByCode(WORKLOAD_A, "INSUFFICIENT_RESOURCE", "success", "false"),
+                "A 의 실패 행에는 그 코드가 없다 — 필터가 최상위 OR 이면 이 수가 부풀어 오른다");
+        assertEquals(1, countByCode(WORKLOAD_B, "TEMPERATURE_EXCEEDED", "success", "false"),
+                "실패한 결정에도 코드 필터가 걸린다 — 운영의 주 모집단");
+        assertEquals(0, countByCode(WORKLOAD_B, "INSUFFICIENT_RESOURCE"), "B 에는 그 코드가 없다");
+        assertEquals(1, countByCode(WORKLOAD_B, "TEMPERATURE_EXCEEDED", "engineName", "power"), "B 의 hp-20 은 power");
+        assertEquals(0, countByCode(WORKLOAD_B, "TEMPERATURE_EXCEEDED", "engineName", "weighted"), "B 의 hp-20 은 weighted 가 아니다");
+        assertEquals(12, countByCode(WORKLOAD_A, ""), "빈 값은 필터 없음 — A 12건 그대로");
     }
 
     @DisplayName("필터는 각각 그리고 함께 적용된다")
@@ -234,12 +292,19 @@ class HistoryPageEndpointTest {
                 .andExpect(jsonPath("$.success").value(false));
     }
 
-    @DisplayName("size 상한 100 · page 최소 1 · 숫자가 아닌 실행 id 는 400")
+    @DisplayName("size 상한 100 · page 최소 1 · 숫자가 아닌 실행 id · 모르는 제외 코드는 400")
     @Test
-    void invalid_size_page_or_run_id_400() throws Exception {
+    void invalid_size_page_run_id_or_code_400() throws Exception {
         mockMvc.perform(get(PAGE).param("size", "101")).andExpect(status().isBadRequest());
         mockMvc.perform(get(PAGE).param("page", "0")).andExpect(status().isBadRequest());
         mockMvc.perform(get(PAGE).param("scheduleRunId", "abc")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(PAGE).param("exclusionCode", "BOGUS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("exclusionCode")))
+                .andExpect(jsonPath("$.message").value(containsString("INSUFFICIENT_RESOURCE")));   // 가능한 값 목록을 돌려준다
+        mockMvc.perform(get(PAGE).param("exclusionCode", "insufficient_resource"))
+                .andExpect(status().isBadRequest());   // 대문자 그대로 — 대소문자를 풀면 계약이 바뀐다
     }
 
     @DisplayName("기존 history 는 여전히 배열이다 — 다만 전량이 아니라 반환 상한까지다")
@@ -259,6 +324,13 @@ class HistoryPageEndpointTest {
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────
+
+    /** 워크로드 하나에 제외 코드 필터(와 추가 파라미터 쌍)를 건 총건수. */
+    private int countByCode(long workloadId, String code, String... extraPairs) throws Exception {
+        var req = get(PAGE).param("size", "1").param("workloadId", String.valueOf(workloadId)).param("exclusionCode", code);
+        for (int i = 0; i + 1 < extraPairs.length; i += 2) req = req.param(extraPairs[i], extraPairs[i + 1]);
+        return data(req).get("totalElements").asInt();
+    }
 
     /** 실행 {@code runId} 에 묶인 행 {@code n} 건 — 마지막 한 건만 실패. {@code WORKLOAD_D} 로만 심는다. */
     private List<Long> seedRun(long runId, int n) {

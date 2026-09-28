@@ -35,6 +35,8 @@ import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
+import jakarta.persistence.criteria.Predicate;
+
 /**
  * 스케줄 CRUD 와 조회.
  *
@@ -101,14 +103,43 @@ public class ScheduleService {
         return ScheduleResponse.from(require(id));
     }
 
-    /** 실행 이력. 자동 실행이 대상 0건으로 끝난 경우는 이력이 남지 않는다. */
+    /**
+     * 실행 이력. 자동 실행이 대상 0건으로 끝난 경우는 이력이 남지 않는다.
+     *
+     * <p>필터는 전부 선택이고 AND 로 겹친다. {@code from}·{@code to} 는 시작 시각({@code startedAt})의
+     * 반개구간 {@code [from, to)} 이며 기본 창이 없다 — 배치 이력 페이징과 같은 규칙이다.
+     * 시작이 끝보다 뒤면 400.</p>
+     */
     @Transactional(readOnly = true)
-    public PageResponse<ScheduleRunResponse> runs(Long id, int page, int size, String sort) {
+    public PageResponse<ScheduleRunResponse> runs(Long id, ScheduleRun.RunStatus status, ScheduleRun.TriggerType triggerType,
+                                                  OffsetDateTime from, OffsetDateTime to, int page, int size, String sort) {
         Schedule schedule = require(id);
+        requireOrderedWindow(from, to);
         Sort order = SortSupport.parse(sort, RUN_SORTABLE, DEFAULT_RUN_SORT);
-        Page<ScheduleRun> found = runRepository.findByScheduleId(
-                schedule.getId(), PageRequest.of(page - 1, size, order));
+        Page<ScheduleRun> found = runRepository.findAll(
+                runFilter(schedule.getId(), status, triggerType, from, to), PageRequest.of(page - 1, size, order));
         return toPageResponse(found.map(ScheduleRunResponse::from), page, size);
+    }
+
+    private static void requireOrderedWindow(OffsetDateTime from, OffsetDateTime to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "기간의 시작이 끝보다 뒤입니다");
+        }
+    }
+
+    /** 스케줄은 필수, 나머지는 null 이면 조건 없음. */
+    private static Specification<ScheduleRun> runFilter(Long scheduleId, ScheduleRun.RunStatus status,
+                                                        ScheduleRun.TriggerType triggerType,
+                                                        OffsetDateTime from, OffsetDateTime to) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("scheduleId"), scheduleId));
+            if (status != null) predicates.add(cb.equal(root.get("status"), status));
+            if (triggerType != null) predicates.add(cb.equal(root.get("triggerType"), triggerType));
+            if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("startedAt"), from));
+            if (to != null) predicates.add(cb.lessThan(root.get("startedAt"), to));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     /** 실행 1건의 상세 — 워크로드별 배치 결정을 함께 돌려준다. */

@@ -116,7 +116,7 @@
 | GET | `/thermal/cooldowns` | 냉각 대기 중인 노드 |
 | GET | `/engines` | 선택 가능한 엔진 `[{id, name}]` |
 | GET | `/history` | 배치 이력. 최신순 배열, **최근 1000건까지** |
-| GET | `/history/page` | 배치 이력 페이징. 상한 없음. `workloadId`, `success`, `engineName`, `scheduleRunId` 필터(아래 주의 5) |
+| GET | `/history/page` | 배치 이력 페이징. 상한 없음. `workloadId`, `success`, `engineName`, `scheduleRunId`, `exclusionCode` 필터(아래 주의 5) |
 | GET | `/workloads/{id}/history` | 워크로드별 배치 이력 |
 | GET | `/metrics-source` | 지금 보고 있는 메트릭 출처 |
 
@@ -127,7 +127,7 @@
    GPU 축 세 칸도 같은 규약입니다 — 아래 **노드 응답의 GPU 축** 참고.
 3. **단건 배치에 `dryRun=true`** 를 주면 저장 없이 결과만 돌려줍니다. 모의 배치 화면에 그대로 쓸 수 있습니다.
 4. 배치 이력에는 최종 점수와 항목별 점수(CPU·메모리·전력·온도·네트워크), 선택 당시 노드 상태, 후보 수, 사유, 엔진명, 정책명, 그리고 후보 노드의 **제외 사유 코드 집계(`exclusionCodes`)**가 함께 있습니다(23필드). `exclusionCodes` 를 읽는 법은 아래 **`exclusionCodes`(배치 이력 · 실행 상세 결정)** 을 보십시오.
-5. `/history` 는 배열이고 상한이 있습니다. 전체가 필요하면 `/history/page` 를 쓰십시오. 필터 네 가지는 전부 선택입니다 — `workloadId` · `success`(`true` 는 성공 여부가 비어 있는 옛 행도 포함, `false` 는 명시적 실패만) · `engineName` · `scheduleRunId`. 실행 단위로 모아 보는 법은 아래 **실행 필터(`/history/page?scheduleRunId=`)** 를 보십시오.
+5. `/history` 는 배열이고 상한이 있습니다. 전체가 필요하면 `/history/page` 를 쓰십시오. 필터 다섯 가지는 전부 선택입니다 — `workloadId` · `success`(`true` 는 성공 여부가 비어 있는 옛 행도 포함, `false` 는 명시적 실패만) · `engineName` · `scheduleRunId` · `exclusionCode`(그 코드로 센 후보가 하나 이상 있는 결정만 — 아래 **`exclusionCodes`(배치 이력 · 실행 상세 결정)** 의 **필터** 행). 실행 단위로 모아 보는 법은 아래 **실행 필터(`/history/page?scheduleRunId=`)** 를 보십시오.
 6. **재시도에 15분 간격이 있습니다.** 배치에 실패한 워크로드는 곧바로 다시 시도하지 않고 15분 뒤부터 대상이 됩니다. 실행 결과가 "대상 없음 (재시도 대기 N건 — 15분 뒤 다시 시도합니다)" 이면 정상이며 기다리면 됩니다.
 7. **"대상 없음 (재시도 소진 N건)" 은 실행이 실패로 끝납니다.** 사람이 되살리기 전에는 그 스케줄이 아무 일도 못 하기 때문입니다. 일괄 재개 API 를 안내하십시오.
 8. **일괄 재개는 리소스 종류나 기간 중 하나가 필수**이고 한 번에 500건까지입니다. 조건 없이 부르면 400 입니다. 응답은 `resumedCount` 와 되살린 워크로드 목록입니다.
@@ -159,6 +159,7 @@
 | `null` | 제외가 하나도 없는 결정, 그리고 이 필드가 생기기 전의 옛 행. 빈 객체 `{}` 는 오지 않습니다 |
 | 코드 목록 | 배치 결정 응답의 `exclusionCode` 와 같은 14종 — `INSUFFICIENT_RESOURCE`·`INSUFFICIENT_DISK`·`CPU_USAGE_EXCEEDED`·`MEMORY_USAGE_EXCEEDED`·`COOLING_DOWN`·`TEMPERATURE_EXCEEDED`·`WORKLOAD_TEMPERATURE_EXCEEDED`·`PREDICTED_TEMPERATURE_EXCEEDED`·`POWER_HEADROOM_EXCEEDED`·`WORKLOAD_POWER_EXCEEDED`·`RUN_POWER_BUDGET_EXCEEDED`·`PREDICTED_POWER_EXCEEDED`·`MDC_LINK_DOWN`·`MDC_POWER_BUDGET_EXCEEDED`. 이름은 바뀌지 않지만 **늘 수는 있습니다** |
 | 범위 | "어떤 사유가 몇 건" 을 세는 통계용입니다. 실행 상세(`/schedules/{id}/runs/{runId}`)의 결정 목록에도 같은 형식으로 실립니다(2장 주의 8). 두 응답이 같은 저장 값을 싣습니다. 후보별 상세(어느 노드가 어떤 사유)는 여전히 dryRun·단건 배치 응답에만 있습니다 |
+| 필터 | `/history/page?exclusionCode=CODE` 는 그 코드로 **센** 후보가 하나 이상 있는 결정만 돌려줍니다 — 한 노드는 먼저 걸린 제약 하나로만 세므로(위 행) 자원이 모자라면서 뜨겁기도 했던 노드는 `TEMPERATURE_EXCEEDED` 로 걸리지 않습니다. 총건수(`totalElements`)는 **결정 수**이지 빠진 후보 수가 아닙니다 — 후보 수는 각 행 `exclusionCodes` 의 그 코드 값을 더해야 나옵니다. 코드 이름은 대문자 그대로 주고(소문자·모르는 값은 400 과 가능한 값 목록), 빈 값(`exclusionCode=`)은 필터를 걸지 않은 것과 같습니다. 문자열의 키 단위로 맞추므로 `TEMPERATURE_EXCEEDED` 로 물어도 `WORKLOAD_TEMPERATURE_EXCEEDED` 만 든 행은 걸리지 않습니다. `null` 행(제외 없음 · 옛 행)은 어떤 코드에도 걸리지 않습니다. `success=true` 와 조합하면 "성공했지만 다른 후보가 빠진 결정", `success=false` 와 조합하면 "그 코드가 걸림돌 중 하나였던 실패" 입니다. 한 번에 코드 하나만 받습니다. 정렬에 보조 키가 없어 `createdAt` 이 같은 결정은 페이지 경계에서 겹치거나 빠질 수 있습니다(아래 **실행 필터** 의 「정렬·크기」). 이 조건은 앞이 `%` 인 부분 일치라 인덱스를 타지 못해 이력 전체를 훑으므로, 이력이 크게 쌓이면 `workloadId`·`scheduleRunId` 와 함께 거는 편이 빠릅니다. 모든 코드의 건수를 한 번에 주는 합계는 없습니다 — 합계가 필요하면 받은 행의 `exclusionCodes` 를 파싱해 더하십시오 |
 
 **화면이 할 일**
 - 문자열이므로 파싱해서 읽습니다.
@@ -409,6 +410,7 @@
 | (이번) | 2026-09-22 | 익스포터 대응 | **후보 `instance` 발견 API** `GET /node-exporter-mappings/candidates` 신설(엔드포인트 **64 → 65**). 저장소에 지금 있는 DCGM·IPMI 시리즈의 `instance` 와 수집기의 배정 근거(`assignedBy` 6값)·충돌 당사자·원장 노드·원장에만 있는 값·답하지 않은 질의 이름을 냅니다. 답하지 않은 질의가 뒷받침하는 칸은 서버가 비워 둡니다(6장). 이전에는 화면이 저장소에서 `count by(instance)` 를 직접 확인해 입력해야 했습니다(6장). 기존 64 엔드포인트·응답·`configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest` 전부 불변 — 엔진·비교 판·설정을 건드리지 않습니다 | 엔드포인트 추가. 기존 화면 영향 없음. 배포 서버는 DCGM·IPMI 타깃이 down 이라 두 목록이 비고 `unavailable` 도 비어 있는 것이 옳은 답입니다(9장) |
 | #82 | 2026-09-22 | 배치 이력 | 이력 응답에 **`exclusionCodes`** 추가(**22 → 23필드**) — 후보 노드의 제외 사유 코드를 코드별로 센 JSON 객체 문자열(적격 후보 미포함 · 제외 없으면 `null` · 옛 행 `null`). 엔진이 돌려주던 후보별 `exclusionCode` 를 이력이 버리고 있었고, 그동안은 사유 문장(`reason`) 하나만 남아 코드 기준 집계가 불가능했습니다(이력 API 의 필터·정렬 항목은 늘지 않았습니다 — 코드별 집계는 화면 파싱 또는 DB 질의로 합니다). 모집단은 `candidateCount`, 한 노드는 먼저 걸린 제약 하나로만 셈(3장 주의 4). 스키마: `scheduling_history.exclusion_codes` TEXT 열 1개(`deploy/sql/2026-09-22_scheduling_history_exclusion_codes.sql`, 평문 — 열거형 CHECK 를 두지 않아 코드가 늘어도 저장이 깨지지 않음). 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest`·배치 결과 불변, 엔드포인트 65 불변 | 필드 추가(새 키는 맨 끝). 키 집합을 고정한 화면은 한 번 조정. 값은 문자열이라 파싱해서 사용. 표에 없는 코드 키가 올 수 있음 |
 | #83 | 2026-09-22 | 실행 이력 상세 | 실행 상세의 결정 목록(`decisions[]`)에 **`exclusionCodes`** 추가(**12 → 13필드**, 맨 끝) — 이력 응답과 같은 JSON 객체 문자열(코드별 건수 · 적격 후보 미포함 · 제외 없거나 옛 행이면 `null`). 그동안 실행 상세의 실패 결정은 엔진 총괄 문장(`reason`) 한 줄뿐이었고, 같은 값이 이력 행에 있어도 이력 조회에는 실행 기준 필터(`scheduleRunId`)가 없어 실행 단위로 모아 볼 수 없었습니다. 실행 이력 목록·즉시 실행 응답·엔진·비교 판·스키마·엔드포인트 65 전부 불변 | 필드 추가(새 키는 맨 끝). 결정 목록의 키 집합을 고정한 화면은 한 번 조정. 값은 문자열이라 파싱해서 사용(3장) |
-| (이번) | 2026-09-22 | 배치 이력 | 페이징 조회(`/history/page`)에 **`scheduleRunId` 필터** 추가 — 한 스케줄 실행이 만든 배치 결정을 이력 API 에서 실행 단위로 모아 봅니다. 실행 상세 `decisions[]` 와 같은 모집단이라 두 응답의 총건수가 같습니다(정렬·페이지 크기 차이와 실행 id 가 비는 행의 규칙은 3장 **실행 필터** 블록). 필터 4종을 3장 주의 5 에 함께 기재했습니다. 열 `schedule_run_id` 와 인덱스는 기존이라 스키마 변경 없음. 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest 0cafa69fbcc9`·엔드포인트 65 불변 | 필드·형태 변경 없음. 질의 파라미터 하나 추가 — 쓰지 않으면 응답 불변 |
+| #84 | 2026-09-22 | 배치 이력 | 페이징 조회(`/history/page`)에 **`scheduleRunId` 필터** 추가 — 한 스케줄 실행이 만든 배치 결정을 이력 API 에서 실행 단위로 모아 봅니다. 실행 상세 `decisions[]` 와 같은 모집단이라 두 응답의 총건수가 같습니다(정렬·페이지 크기 차이와 실행 id 가 비는 행의 규칙은 3장 **실행 필터** 블록). 필터 4종을 3장 주의 5 에 함께 기재했습니다. 열 `schedule_run_id` 와 인덱스는 기존이라 스키마 변경 없음. 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest 0cafa69fbcc9`·엔드포인트 65 불변 | 필드·형태 변경 없음. 질의 파라미터 하나 추가 — 쓰지 않으면 응답 불변 |
+| (이번) | 2026-09-28 | 배치 이력 | 페이징 조회(`/history/page`)에 **`exclusionCode` 필터** 추가 — 그 코드로 센 후보가 하나 이상 있는 결정만 서버에서 걸러 총건수(결정 수)·페이지를 코드 기준으로 얻습니다(#82 가 "화면 파싱 또는 DB 질의로" 남긴 것 중 행 고르기 — 코드별 합계는 여전히 화면이 `exclusionCodes` 를 더합니다). 키 단위 매칭 · `null` 행 미해당 · 빈 값은 필터 없음 · 소문자·모르는 코드 400 · 부분 일치라 전수 검색(3장 **`exclusionCodes`** 의 **필터** 행). 응답 필드·형태·엔드포인트 65·스키마 변경 없음. 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest 0cafa69fbcc9` 불변 | 필드·형태 변경 없음. 질의 파라미터 하나 추가 — 쓰지 않으면 응답 불변 |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 번호가 없던 변경이며, 병합된 뒤에도 아직 번호를 채우지 못한 행이 남아 있습니다.

@@ -34,7 +34,7 @@ class HistoryQueryLimitTest {
 
     private final SchedulingHistoryRepository repository = mock(SchedulingHistoryRepository.class);
     private final SchedulerController controller =
-            new SchedulerController(null, null, null, null, repository, null);
+            new SchedulerController(null, null, null, null, repository, null, null);
 
     @DisplayName("전체 이력 조회는 상한보다 한 건 더 읽는 상한을 저장소에 넘긴다")
     @Test

@@ -5,12 +5,14 @@ import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.innogrid.aims.scheduler.entity.Workload;
 
-public interface WorkloadRepository extends JpaRepository<Workload, Long> {
+/** 워크로드 저장소. 페이징 목록({@code /workloads/page})의 선택 필터는 {@link JpaSpecificationExecutor} 로 조합한다. */
+public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSpecificationExecutor<Workload> {
     List<Workload> findByStatusOrderByCreatedAtDesc(Workload.WorkloadStatus status);
     List<Workload> findByAssignedNodeIdOrderByScheduledAtDesc(String nodeId);
     List<Workload> findAllByOrderByCreatedAtDesc();

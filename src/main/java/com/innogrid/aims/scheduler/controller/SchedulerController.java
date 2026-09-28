@@ -1,9 +1,10 @@
 package com.innogrid.aims.scheduler.controller;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
-
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
@@ -25,9 +26,11 @@ import com.innogrid.aims.scheduler.service.EnumSupport;
 import com.innogrid.aims.scheduler.service.PowerEfficiencyService;
 import com.innogrid.aims.scheduler.service.SchedulingHistoryQueryService;
 import com.innogrid.aims.scheduler.service.SchedulingService;
+import com.innogrid.aims.scheduler.service.WorkloadQueryService;
 import com.innogrid.aims.scheduler.service.WorkloadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -75,24 +78,28 @@ public class SchedulerController {
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
     private final SchedulingHistoryQueryService historyQueryService;
+    private final WorkloadQueryService workloadQueryService;
 
     public SchedulerController(SchedulingService schedulingService,
                                PowerEfficiencyService powerEfficiencyService,
                                WorkloadService workloadService,
                                WorkloadRepository workloadRepository,
                                SchedulingHistoryRepository historyRepository,
-                               SchedulingHistoryQueryService historyQueryService) {
+                               SchedulingHistoryQueryService historyQueryService,
+                               WorkloadQueryService workloadQueryService) {
         this.schedulingService = schedulingService;
         this.powerEfficiencyService = powerEfficiencyService;
         this.workloadService = workloadService;
         this.workloadRepository = workloadRepository;
         this.historyRepository = historyRepository;
         this.historyQueryService = historyQueryService;
+        this.workloadQueryService = workloadQueryService;
     }
 
     // ── 워크로드 ────────────────────────────────────────────────
 
-    @Operation(summary = "워크로드 목록 조회")
+    @Operation(summary = "워크로드 목록 조회",
+               description = "배열로 상한 없이 전량을 돌려줍니다(최신순). 표 화면처럼 페이지·총건수·필터·정렬이 필요하면 /workloads/page 를 쓰십시오.")
     @GetMapping("/workloads")
     public ApiResponse<List<WorkloadResponse>> listWorkloads(@RequestParam(required = false) String status) {
         List<Workload> found = status != null
@@ -100,6 +107,41 @@ public class SchedulerController {
                         parseEnum(Workload.WorkloadStatus.class, status, "상태"))
                 : workloadRepository.findAllByOrderByCreatedAtDesc();
         return ApiResponse.ok(found.stream().map(WorkloadResponse::from).toList());
+    }
+
+    @Operation(summary = "워크로드 페이징 조회",
+               description = "배열로 전량을 주는 /workloads 와 달리 페이지·총건수·필터·정렬을 지원합니다. page 는 1부터, size 최대 100, "
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·name·status·resourceType·requiredCpu·requiredMemoryMb·requiredGpu·requiredDiskGb·retryCount·scheduledAt·lastFailedAt — "
+                       + "priority 는 문자열 저장이라 사전순이 되어 허용하지 않습니다). 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
+                       + "status·resourceType·keyword·assignedNodeId 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
+                       + "status 는 여러 값을 받아 서로 OR 입니다(status=SCHEDULED&status=RUNNING 또는 쉼표).")
+    @GetMapping("/workloads/page")
+    public ApiResponse<PageResponse<WorkloadResponse>> getWorkloadPage(
+            @Parameter(description = "상태 — 여러 개면 반복(status=SCHEDULED&status=RUNNING)이나 쉼표로, 서로 OR. 대소문자 무시, 다른 값은 400. 비우면 전체",
+                       schema = @Schema(allowableValues = {"PENDING", "SCHEDULED", "RUNNING", "COMPLETED", "FAILED"}))
+            @RequestParam(required = false) List<String> status,
+            @Parameter(description = "리소스 종류 — 대소문자 무시, 다른 값은 400. VM 은 종류를 비워 둔 행(생성 때 생략·옛 행)도 포함합니다(실행이 VM 으로 해석하는 것과 같음). 비우면 전체",
+                       schema = @Schema(allowableValues = {"VM", "GPU", "NPU", "CONTAINER"}))
+            @RequestParam(required = false) String resourceType,
+            @Parameter(description = "이름·설명만의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). id·노드는 찾지 않습니다. % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "마지막으로 배정된 노드 id(/nodes 의 nodeId 와 같은 값)와 정확히 일치하는 행만(앞뒤 공백은 뺌). 완료·실패 뒤에도 남으므로 지금 도는 것만 보려면 status 와 함께. 비우면 필터 없음")
+            @RequestParam(required = false) String assignedNodeId,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort) {
+        Set<Workload.WorkloadStatus> statuses = EnumSet.noneOf(Workload.WorkloadStatus.class);
+        if (status != null) {
+            for (String one : status) {
+                if (one == null) continue;
+                for (String piece : one.split(",")) {   // 반복 파라미터와 쉼표 목록을 모두 받는다
+                    if (!piece.isBlank()) statuses.add(parseEnum(Workload.WorkloadStatus.class, piece, "상태"));
+                }
+            }
+        }
+        Workload.ResourceType typeValue = resourceType == null || resourceType.isBlank() ? null
+                : parseEnum(Workload.ResourceType.class, resourceType, "리소스 종류");
+        return ApiResponse.ok(workloadQueryService.page(statuses, typeValue, keyword, assignedNodeId, page, size, sort));
     }
 
     @Operation(summary = "워크로드 생성",

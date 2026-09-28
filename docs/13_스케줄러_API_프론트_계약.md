@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 대상 화면: 지능형 예측 진단 > 스케줄러, 지능형 예측 진단 > 전력 최적화 진단
-- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 66개
+- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 67개
 - 관련 문서: docs/10 알람 API 프론트 계약(같은 형식), docs/06 자원 탐색기 트리 설계(역할 스코프)
 
 **필드 하나하나의 진실은 Swagger(`/swagger-ui/index.html`, `/v3/api-docs`)입니다.** 이 문서는 필드를 전수로 옮기지 않습니다. 대신 화면을 붙일 때 Swagger 만으로는 알기 어려운 것 — 경로 묶음, 공통 규칙, 값이 비는 조건, 오류가 나는 조건, 그리고 앞으로 바뀔 예정 — 을 적습니다. 필드 목록이 필요하면 Swagger 를 보고, 이 문서와 다르면 코드가 맞습니다.
@@ -16,9 +16,9 @@
 | 기본 경로 | `/api/v1/scheduler` |
 | 인증 | `Authorization: Bearer <JWT>`. 전 경로 인증 필요 |
 | 응답 래퍼 | `{ success, data, message }`. 실패면 `success=false` 이고 `message` 에 한국어 사유 |
-| 목록 | 페이징은 `data` 가 `{ items, page, size, totalElements, totalPages }`. **`page` 는 1부터**, `size` 는 **최대 100**(기본값은 경로마다 다름 — 스케줄·실행 이력 10, 배치 이력·전달 기록 20) |
+| 목록 | 페이징은 `data` 가 `{ items, page, size, totalElements, totalPages }`. **`page` 는 1부터**, `size` 는 **최대 100**(기본값은 경로마다 다름 — 스케줄·실행 이력 10, 배치 이력·전달 기록·워크로드 페이징 20) |
 | 배열 응답 | 페이징이 아닌 목록은 `data` 가 배열(노드·엔진·제약·이력 등) |
-| 정렬 | `sort={필드},{asc|desc}`. 허용 밖이면 400 이고 메시지에 가능한 값을 나열 |
+| 정렬 | `sort={필드},{asc|desc}`. 허용 밖이면 400 이고 메시지에 가능한 값을 나열. 값이 같은 행의 순서는 경로마다 다릅니다(1.1절 아래 **보조 정렬**) |
 | 열거형 | 전부 대문자 문자열. 요청 시 소문자를 받아 주는 자리가 일부 있으나 응답은 항상 대문자 |
 | 시각 | ISO-8601 offset 문자열(`2026-09-10T09:00:00+09:00`) |
 | 기간 `from`·`to` | API 마다 규칙이 다릅니다. 배치 이력 페이징(결정 시각 `createdAt`)과 스케줄 실행 이력(시작 시각 `startedAt`)은 `[from, to)`·기본 창 없음·비운 쪽은 경계 없음. 제외 사유 합계는 `[from, to)`·둘 다 비우면 최근 30일·한쪽만 비우면 그쪽 경계 없음. 전력·효율 추세는 `to` 를 비우면 지금, `from` 을 비우면 `to` 의 24시간 전. 일괄 재개는 마지막 실패 시각 `[from, to]`(양끝 포함)·비운 쪽은 경계 없음. 모든 곳에서 시작이 끝보다 뒤면 400 |
@@ -31,6 +31,11 @@
 | 스케줄 목록 | `createdAt,desc` | scheduleId, name, resourceType, cronExpression, description, autoRun, enabled, lastRunAt, lastRunFinishedAt, lastRunStatus, nextRunAt, createdAt, updatedAt |
 | 실행 이력 | `startedAt,desc` | startedAt, finishedAt, status, triggerType, targetCount, successCount, failedCount |
 | 배치 이력 | `createdAt,desc` | createdAt, finalScore, workloadName, success |
+| 전달 기록 | `requestedAt,desc` | id, requestedAt, respondedAt, status, workloadId |
+| 워크로드 페이징 | `createdAt,desc` | createdAt, name, status, resourceType, requiredCpu, requiredMemoryMb, requiredGpu, requiredDiskGb, retryCount, scheduledAt, lastFailedAt |
+
+- **보조 정렬.** 워크로드 페이징만 값이 같은 행을 `id` 로 한 번 더 정렬합니다(방향은 요청 정렬을 따름 — 최신순이면 `id` 내림차순). 그래서 `status`·`resourceType` 처럼 동률이 많은 필드로 정렬해도, 조회 사이에 데이터가 바뀌지 않는 한 페이지 경계에서 행이 겹치거나 빠지지 않습니다. 스케줄·실행 이력·배치 이력·전달 기록은 아직 보조 키가 없습니다(3장 **실행 필터** 의 「정렬·크기」).
+- **워크로드 페이징의 정렬 단서.** `priority` 는 문자열 저장이라 사전순(CRITICAL·HIGH·LOW·NORMAL)이 되어 높낮이 순서와 달라 허용하지 않습니다. `status`·`resourceType` 도 사전순이며 같은 값끼리 묶는 용도입니다. `resourceType`·`retryCount`·`scheduledAt`·`lastFailedAt` 는 비어 있을 수 있고, null 행은 배포 DB(PostgreSQL)에서 asc 면 맨 뒤, desc 면 맨 앞입니다(로컬 H2 는 반대). `retryCount` 의 null 은 0회로 읽되 asc 에서 1회 이상인 행보다 뒤에 옵니다.
 
 ### 1.2 상태 값
 
@@ -100,13 +105,14 @@
 
 ---
 
-## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (21)
+## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (22)
 
 진단 화면과 스케줄 화면이 함께 씁니다.
 
 | 메서드 | 경로 | 용도 |
 |---|---|---|
-| GET / POST | `/workloads` | 목록(`status` 필터) / 생성 |
+| GET / POST | `/workloads` | 목록(`status` 필터 · 최신순 배열 · **전량** — 표 화면은 `/workloads/page`) / 생성 |
+| GET | `/workloads/page` | 목록 페이징. `status`, `resourceType`, `keyword`, `assignedNodeId` 필터(아래 주의 12) |
 | GET / DELETE | `/workloads/{id}` | 상세 / 삭제 |
 | GET | `/workloads/resource-types` | 리소스 종류 목록 |
 | PATCH | `/workloads/{id}/status` | 상태 변경 |
@@ -140,6 +146,10 @@
 9. **워크로드 생성에 `requiredBandwidthMbps`(Mbps, 유한한 0 초과)를 선택으로 줄 수 있습니다.** 값이 반영되려면 **세 가지가 모두** 맞아야 합니다 — ① 정책의 데이터 MDC 친화도가 켜져 있고, ② 그 워크로드에 `dataMdcId` 가 있고, ③ 배치 엔진이 `weighted` 여야 합니다. 링크 점수를 총점에 섞는 엔진은 `weighted` 하나뿐이라 `power`·`temperature` 로 배치하면 요구 대역폭은 **전혀 반영되지 않습니다**. 셋이 맞으면 MDC 링크 원장의 대역폭이 이 값에 모자란 비율만큼 링크 점수를 깎습니다(제약이 아니라 점수라 부족해도 배치는 됩니다). 주지 않으면 `null` 이고 예전과 똑같이 계산됩니다. 원장에 대역폭이 없는 링크와 같은 MDC·미등록 원격 쌍은 견줄 값이 없어 영향이 없습니다 — 그래서 **요구가 링크의 몇 배로 크면 대역폭을 적어 둔 링크가 안 적은 링크보다 낮은 점수를 받을 수 있습니다**(20ms 링크 기준 요구가 2.5배를 넘을 때). 값을 지우는 API 는 없으므로(워크로드는 생성·상태 변경·삭제만) 되돌리려면 원장을 직접 고쳐야 합니다.
 10. **엔진 목록의 `name` 은 자바 클래스명**(`PowerAwareScheduler` 등)입니다. 화면에 그대로 노출하기 어려우니 `id`(`weighted`·`power`·`temperature`)로 판단하고 표시 문구는 프론트에서 정하십시오. 표시명 추가는 후속 과제로 두었습니다.
 11. **디스크를 요구한 배치(`requiredDiskGb > 0`)의 후보 상세에는 `details.디스크검사` 가 붙습니다.** `1.0` 은 노드의 파일시스템 총량을 알아 C1 디스크 검사의 대상인 노드, `0.0` 은 총량을 몰라 디스크 요구를 보지 않고 통과시킨 노드입니다 — **적격·부적격과는 무관**하고(CPU 부족으로 걸린 노드도 총량을 알면 `1.0`), 부족은 `exclusionCode = INSUFFICIENT_DISK` 로 옵니다. 키의 유무는 워크로드가, 값은 노드가 정하므로 한 응답 안의 후보들은 같은 키 집합을 갖습니다 — 키를 표의 열로 쓴다면 응답마다 열을 다시 잡으십시오. 키가 없는 것은 "검사 안 함" 이 아니라 디스크 요구가 없는 배치입니다. `0.0` 노드가 적격에 있으면 서버가 배치 1회당 WARN 한 줄(마운트 설정·노드 예시)을 남깁니다. 노드 응답의 `diskUsagePercent` 는 총량을 모르는 노드에서도 0 이라 "여유" 로 읽으면 안 됩니다 — 총량을 아는지는 이 키 또는 노드 응답의 `diskCapacityGb`(0 = 모름, 아래 디스크 축)로 알 수 있습니다.
+12. **워크로드 표는 `GET /workloads/page` 를 쓰십시오.** 기존 `/workloads` 는 배열로 상한 없이 전량을 주고 워크로드는 자동 정리가 없어 계속 늘어납니다. 페이징 응답은 1장 「목록」의 `{ items, page, size, totalElements, totalPages }`(행은 `/workloads` 와 같은 23필드) · `page` 1부터 · `size` 기본 20 최대 100 · 기본 정렬 `createdAt,desc` 이고 허용 필드와 보조 정렬은 1.1절에 있습니다.
+   **필터 넷**은 전부 선택이고 AND 로 겹치며 총건수(`totalElements`)는 필터를 반영합니다. `status`(다섯 값 · 대소문자 무시 · 다른 값은 400 에 가능한 값 목록 · **여러 개면 반복 `status=SCHEDULED&status=RUNNING` 이나 쉼표로, 서로 OR**) · `resourceType`(`VM`·`GPU`·`NPU`·`CONTAINER` · 대소문자 무시 · 한 번에 한 값 · **`VM` 은 종류를 비워 둔 행(생성 때 생략한 행·옛 행)도 포함**합니다 — 실행이 비어 있는 종류를 VM 으로 해석하는 것과 같은 규칙이고, 응답의 `resourceType` 은 원값(`null`) 그대로이니 표에는 VM 으로 표기해도 됩니다) · `keyword`(이름·설명만의 부분 일치 · id·노드는 찾지 않음 · 앞뒤 공백 제거 · 대소문자 무시(영문 기준) · `%` 와 `_` 는 문자 그대로 찾음) · `assignedNodeId`(`/nodes` 의 `nodeId` 와 같은 값 · 앞뒤 공백을 뺀 뒤 정확히 일치 · **마지막으로 배정된 노드**라 완료·실패·대기 복귀 뒤에도 남고 실행 계층이 거부해 실패한 행만 비워집니다 — 그 노드에 지금 올라가 있는 것만 보려면 `status=SCHEDULED&status=RUNNING` 을 함께 거십시오). 빈 값은 필터 없음입니다.
+   **동률과 조회 사이의 변경.** 같은 값으로 정렬된 행은 `id` 로 한 번 더 정렬되어 페이지를 이어 받아도 겹치거나 빠지지 않습니다 — 조회 사이에 데이터가 바뀌지 않을 때의 보장입니다. 조회 사이에 워크로드가 생기거나 지워지거나 스케줄 실행이 상태·배치 시각·재시도 값을 바꾸면(그 필드로 필터·정렬한 경우) 행이 한 칸씩 밀리거나 당겨져 겹치거나 빠질 수 있습니다(오프셋 페이징 공통).
+   **삭제와 목록.** `DELETE /workloads/{id}` 는 `SCHEDULED`·`RUNNING` 이면 409 이므로 두 상태에서는 삭제 버튼을 막으십시오. 삭제는 곧바로 반영돼 다음 조회의 `totalElements` 가 줄어듭니다. `page` 가 `totalPages` 를 넘으면 오류가 아니라 빈 `items` 이니 끝 페이지의 마지막 행을 지웠으면 한 페이지 앞을 부르십시오. 배치 이력은 함께 지워지지 않습니다.
 
 **노드 응답의 GPU 축** — `gpuUsagePercent` · `gpuTemperatureCelsius` · `gpuPowerWatts` (21 → 24필드)
 
@@ -439,7 +449,8 @@
 | #84 | 2026-09-22 | 배치 이력 | 페이징 조회(`/history/page`)에 **`scheduleRunId` 필터** 추가 — 한 스케줄 실행이 만든 배치 결정을 이력 API 에서 실행 단위로 모아 봅니다. 실행 상세 `decisions[]` 와 같은 모집단이라 두 응답의 총건수가 같습니다(정렬·페이지 크기 차이와 실행 id 가 비는 행의 규칙은 3장 **실행 필터** 블록). 필터 4종을 3장 주의 5 에 함께 기재했습니다. 열 `schedule_run_id` 와 인덱스는 기존이라 스키마 변경 없음. 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest 0cafa69fbcc9`·엔드포인트 65 불변 | 필드·형태 변경 없음. 질의 파라미터 하나 추가 — 쓰지 않으면 응답 불변 |
 | #85 | 2026-09-28 | 배치 이력 | 페이징 조회(`/history/page`)에 **`exclusionCode` 필터** 추가 — 그 코드로 센 후보가 하나 이상 있는 결정만 서버에서 걸러 총건수(결정 수)·페이지를 코드 기준으로 얻습니다(#82 가 "화면 파싱 또는 DB 질의로" 남긴 것 중 행 고르기 — 코드별 합계는 여전히 화면이 `exclusionCodes` 를 더합니다). 키 단위 매칭 · `null` 행 미해당 · 빈 값은 필터 없음 · 소문자·모르는 코드 400 · 부분 일치라 전수 검색(3장 **`exclusionCodes`** 의 **필터** 행). 응답 필드·형태·엔드포인트 65·스키마 변경 없음. 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest 0cafa69fbcc9` 불변 | 필드·형태 변경 없음. 질의 파라미터 하나 추가 — 쓰지 않으면 응답 불변 |
 | #86 | 2026-09-28 | 배치 이력 | **`GET /history/exclusion-summary`** 신설(엔드포인트 **65 → 66**) — 창·필터 안 결정의 제외 사유 코드 집계를 서버가 더해 코드별 결정 수·후보 수를 돌려줍니다(#82 가 "화면 파싱 또는 DB 질의로", #85 가 "코드별 합계는 여전히 화면이 더합니다" 로 남긴 공백). 페이징과 같은 조건식이라 응답의 창을 넘긴 같은 필터의 `exclusionCode=CODE` 총건수가 `codes[CODE].decisions` 와 같습니다(`skipped` 0 일 때). 함께 `/history/page` 에 **`from`·`to` 창**(`[from, to)`, ISO-8601, 기본 창 없음)을 추가했습니다. 합계도 같은 창을 받되 둘 다 비우면 최근 30일이고, 응답이 실제 창을 돌려줍니다. 형식이 어긋난 집계 행은 건너뛰어 `skipped` 로 셉니다(3장 **`exclusionCodes`** 의 **합계** 행). 기존 응답 필드·형태·스키마 변경 없음. 엔진·비교 판·설정 무접촉 — `configDigest 1487c10f4e97`·판 다이제스트·`entriesDigest 0cafa69fbcc9` 불변 | 엔드포인트 추가 · 페이징에 질의 파라미터 둘 추가 — 쓰지 않으면 기존 응답 불변 |
-| (이번) | 2026-09-28 | 노드 | 노드 응답에 **디스크 축 3칸** `diskCapacityGb`·`reservedDiskGb`·`availableDiskGb` 추가(**24 → 27필드**, GB 정수). C1 디스크 검사와 같은 식의 총량·예약·가용이며 `diskCapacityGb = 0` 은 모름(그 노드는 디스크 때문에는 빠지지 않고 `availableDiskGb` 도 0). CPU·메모리·GPU 와 같이 총량·예약·가용 축의 제자리에 넣었습니다(3장 「노드 응답의 디스크 축」). | 필드 추가 — 노드 응답 키 집합을 고정한 화면은 한 번 조정 · 기존 24키의 값·상대 순서 불변 · 새 키 셋은 세 자리(`totalGpu` 뒤 · `reservedGpu` 뒤 · 맨 끝)에 흩어짐 · 엔드포인트 66·이력 응답·엔진·판 불변 |
-| (이번) | 2026-09-28 | 실행 이력 | 실행 이력 목록(`/schedules/{id}/runs`)에 **`status`·`triggerType`·`from`·`to` 필터** 추가 — 처리 상태·실행 주체·시작 시각 창(`[from, to)`, 기본 창 없음)으로 서버가 걸러 총건수를 돌려줍니다(2장 주의 9). 지금까지는 정렬·페이징만 받아 화면이 전 페이지를 받아 걸러야 했습니다. | 질의 파라미터 넷 추가 — 쓰지 않으면 기존 응답 불변 · 응답 형태·필드·엔드포인트 66 불변 · 열거값 밖의 `status`·`triggerType` 은 이제 400 |
+| #88 | 2026-09-28 | 노드 | 노드 응답에 **디스크 축 3칸** `diskCapacityGb`·`reservedDiskGb`·`availableDiskGb` 추가(**24 → 27필드**, GB 정수). C1 디스크 검사와 같은 식의 총량·예약·가용이며 `diskCapacityGb = 0` 은 모름(그 노드는 디스크 때문에는 빠지지 않고 `availableDiskGb` 도 0). CPU·메모리·GPU 와 같이 총량·예약·가용 축의 제자리에 넣었습니다(3장 「노드 응답의 디스크 축」). | 필드 추가 — 노드 응답 키 집합을 고정한 화면은 한 번 조정 · 기존 24키의 값·상대 순서 불변 · 새 키 셋은 세 자리(`totalGpu` 뒤 · `reservedGpu` 뒤 · 맨 끝)에 흩어짐 · 엔드포인트 66·이력 응답·엔진·판 불변 |
+| #89 | 2026-09-28 | 실행 이력 | 실행 이력 목록(`/schedules/{id}/runs`)에 **`status`·`triggerType`·`from`·`to` 필터** 추가 — 처리 상태·실행 주체·시작 시각 창(`[from, to)`, 기본 창 없음)으로 서버가 걸러 총건수를 돌려줍니다(2장 주의 9). 지금까지는 정렬·페이징만 받아 화면이 전 페이지를 받아 걸러야 했습니다. | 질의 파라미터 넷 추가 — 쓰지 않으면 기존 응답 불변 · 응답 형태·필드·엔드포인트 66 불변 · 열거값 밖의 `status`·`triggerType` 은 이제 400 |
+| (이번) | 2026-09-28 | 워크로드 | **`GET /workloads/page`** 신설(엔드포인트 **66 → 67**) — 워크로드 목록의 페이징·총건수·필터(`status` 다중값 OR · `resourceType` · `keyword` · `assignedNodeId`)·정렬(허용 필드 11개 · `priority` 제외)과 `id` 보조 정렬, 행은 `/workloads` 와 같은 23필드(3장 주의 12). 기존 `/workloads` 는 배열로 상한 없이 그대로이고 워크로드는 자동 정리가 없어 표 화면은 새 경로를 씁니다. | 엔드포인트 추가 · 기존 `/workloads` 응답 형태·필드 불변(Swagger 설명만 추가) · 엔진·판·설정 무접촉 |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 번호가 없던 변경이며, 병합된 뒤에도 아직 번호를 채우지 못한 행이 남아 있습니다.

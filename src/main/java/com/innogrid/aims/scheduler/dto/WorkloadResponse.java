@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 import com.innogrid.aims.scheduler.entity.Workload;
 
 /**
- * 워크로드 응답 — {@code /scheduler/workloads} 4종이 공유한다.
+ * 워크로드 응답 — 워크로드를 돌려주는 {@code /scheduler/workloads} 경로 전부(목록·페이징·상세·생성·상태 전이·일괄 재개)가 공유한다.
  *
  * <p>필드 23개(원래 21개 + {@code lastFailedAt} + {@code requiredBandwidthMbps})는 {@link Workload} 엔티티를 그대로 직렬화하던 계약과 <b>거의 동일</b>하다
  * ({@code ResponseJsonGoldenTest} 가 고정). 엔티티에 컬럼이나 {@code get} 메서드를 더해도 이 응답은

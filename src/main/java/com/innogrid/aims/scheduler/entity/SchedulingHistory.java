@@ -11,7 +11,7 @@ import jakarta.persistence.*;
 @Entity
 @Table(name = "scheduling_history", indexes = {
         // 이 표는 지워지지 않는다(연구 근거 보존) — 단조 증가하므로 조회는 전부 인덱스를 타야 한다.
-        // 실행 상세 화면: 한 실행이 만든 결정 목록
+        // 실행 상세 화면과 배치 이력의 실행 필터: 한 실행이 만든 결정 목록
         @Index(name = "idx_scheduling_history_run", columnList = "scheduleRunId"),
         // 워크로드별 이력: 특정 워크로드의 결정 흐름
         @Index(name = "idx_scheduling_history_workload_created", columnList = "workloadId, createdAt"),

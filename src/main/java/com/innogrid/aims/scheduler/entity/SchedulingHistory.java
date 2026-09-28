@@ -1,6 +1,9 @@
 package com.innogrid.aims.scheduler.entity;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import jakarta.persistence.*;
 
@@ -77,6 +80,37 @@ public class SchedulingHistory {
      */
     public static String exclusionCodeKey(String codeName) {
         return "\"" + codeName + "\":";
+    }
+
+    /**
+     * 집계 문자열을 코드 → 후보 수로 되읽는다 — {@link #exclusionCodeKey} 와 짝이라 형식이 바뀌면 함께 바뀐다.
+     * {@code null}·빈 문자열은 빈 맵, 형식이 어긋나거나 값이 음수면 빈 {@link Optional}(부르는 쪽이 건너뛰고 센다). 키는 이름 오름차순.
+     */
+    public static Optional<SortedMap<String, Integer>> parseExclusionCodes(String codes) {
+        SortedMap<String, Integer> out = new TreeMap<>();
+        if (codes == null || codes.isBlank()) return Optional.of(out);
+        String body = codes.trim();
+        if (!body.startsWith("{") || !body.endsWith("}")) return Optional.empty();
+        body = body.substring(1, body.length() - 1).trim();
+        if (body.isEmpty()) return Optional.of(out);
+        for (String entry : body.split(",", -1)) {
+            int colon = entry.lastIndexOf(':');
+            if (colon < 0) return Optional.empty();
+            String key = entry.substring(0, colon).trim();
+            String value = entry.substring(colon + 1).trim();
+            // 키는 "CODE" 꼴이어야 하고 따옴표 바로 뒤에 콜론이 와야 한다 — 페이징의 LIKE 토큰("CODE":)과 같은 모집단이어야 등식이 선다
+            if (key.length() < 3 || !key.startsWith("\"") || !key.endsWith("\"") || entry.charAt(colon - 1) != '"') return Optional.empty();
+            String code = key.substring(1, key.length() - 1);
+            if (code.contains("\"")) return Optional.empty();
+            try {
+                int count = Integer.parseInt(value);
+                if (count < 0) return Optional.empty();
+                if (out.put(code, count) != null) return Optional.empty();   // 중복 키 — 쓰는 쪽은 만들지 않는다
+            } catch (NumberFormatException e) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(out);
     }
 
     @Column(length = 50)

@@ -1,27 +1,39 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.util.SortSupport;
+import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 
 /**
- * 배치 이력 페이징 조회 — {@code GET /scheduler/history/page}.
+ * 배치 이력 페이징 조회와 제외 사유 합계 — {@code GET /scheduler/history/page} · {@code /history/exclusion-summary}.
  *
  * <p>기존 {@code GET /history} 는 배열로 돌려준다 — 응답 형태를 바꾸면 프런트가 깨지므로 그 경로는 배열 그대로 두고,
  * 페이징·필터·정렬은 새 경로에서 한다. 다만 그 배열은 <b>더 이상 전량이 아니다</b>: 이력은 삭제되지 않아 단조
@@ -35,33 +47,106 @@ import jakarta.persistence.criteria.Predicate;
 @Service
 public class SchedulingHistoryQueryService {
 
+    private static final Logger log = LoggerFactory.getLogger(SchedulingHistoryQueryService.class);
+
     static final Set<String> SORTABLE = Set.of("createdAt", "finalScore", "workloadName", "success");
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+    /** 합계에서 {@code from}·{@code to} 를 둘 다 비웠을 때의 창 — 계약 3장 「합계」 행과 {@code ExclusionSummaryResponse} 의 {@code from} 설명이 같은 수를 적는다. */
+    public static final int DEFAULT_SUMMARY_WINDOW_DAYS = 30;
 
     private final SchedulingHistoryRepository repository;
+    /** 합계의 열 투영 질의용 — 저장소 메서드 없이 같은 Specification 을 재사용하려고 공유 EntityManager 를 직접 쓴다(새 빈 등록 없음). */
+    private final EntityManager entityManager;
 
-    public SchedulingHistoryQueryService(SchedulingHistoryRepository repository) {
+    public SchedulingHistoryQueryService(SchedulingHistoryRepository repository, EntityManager entityManager) {
         this.repository = repository;
+        this.entityManager = entityManager;
     }
 
     /**
      * 한 페이지. {@code page} 는 1부터다. 필터는 전부 선택 — {@code scheduleRunId} 는 지정한 스케줄 실행이 만든 결정만
      * 돌려주므로 실행 상세의 결정 목록과 모집단이 같고, {@code exclusionCode} 는 그 코드로 후보가 하나 이상 빠진 결정만
-     * 돌려준다.
+     * 돌려준다. {@code from}(포함)·{@code to}(미포함)는 {@code createdAt} 창이고 기본 창은 없다.
      */
     @Transactional(readOnly = true)
     public PageResponse<SchedulingHistoryResponse> page(Long workloadId, Boolean success, String engineName,
                                                         Long scheduleRunId, ExclusionReason exclusionCode,
+                                                        OffsetDateTime from, OffsetDateTime to,
                                                         int page, int size, String sort) {
+        requireOrderedWindow(from, to);
         Sort order = SortSupport.parse(sort, SORTABLE, DEFAULT_SORT);
         Page<SchedulingHistory> found = repository.findAll(
-                filter(workloadId, success, engineName, scheduleRunId, exclusionCode), PageRequest.of(page - 1, size, order));
+                filter(workloadId, success, engineName, scheduleRunId, exclusionCode, from, to),
+                PageRequest.of(page - 1, size, order));
         Page<SchedulingHistoryResponse> mapped = found.map(SchedulingHistoryResponse::from);
         return new PageResponse<>(mapped.getContent(), page, size, mapped.getTotalElements(), mapped.getTotalPages());
     }
 
+    /**
+     * 창·필터 안 결정의 제외 사유 코드 합계. 페이지와 같은 조건식을 쓰므로 응답의 {@code from}·{@code to} 를 넘긴 같은 필터의
+     * {@code exclusionCode=CODE} 총건수가 {@code codes[CODE].decisions} 와 같다({@code skipped} 가 0 일 때). 창은 {@code from}·{@code to} 를
+     * 둘 다 비우면 {@value #DEFAULT_SUMMARY_WINDOW_DAYS}일, {@code to} 만 비우면 상한 없음, {@code from} 만 비우면 하한 없음 — 한쪽 경계
+     * 규칙은 페이징과 같고, 페이징에는 기본 창이 없다. 합산은 Java 에서 한다 — 집계 열이 TEXT 라 DB 집계로
+     * 묶기 어렵고 형식이 어긋난 행은 건너뛰어 세어야 하기 때문이다. 행은 엔티티가 아니라 {@code id}·{@code exclusionCodes} 두 열만
+     * 투영해 읽는다 — 창을 한쪽만 주면 모집단이 이력 전량이 될 수 있어서다. 결정 수와 집계 행은 별도 문장이라 동시에 적재되는 행이
+     * 두 문장 사이에 끼면 한 건 어긋날 수 있다(READ COMMITTED, 곧 스스로 맞는다).
+     */
+    @Transactional(readOnly = true)
+    public ExclusionSummaryResponse summary(Long workloadId, Boolean success, String engineName, Long scheduleRunId,
+                                            OffsetDateTime from, OffsetDateTime to) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime start = (from == null && to == null) ? now.minusDays(DEFAULT_SUMMARY_WINDOW_DAYS) : from;
+        OffsetDateTime end = to != null ? to : (from == null ? now : null);
+        requireOrderedWindow(start, end);
+        Specification<SchedulingHistory> spec = filter(workloadId, success, engineName, scheduleRunId, null, start, end);
+        long decisions = repository.count(spec);
+        SortedMap<String, long[]> sums = new TreeMap<>();   // [결정 수, 후보 수]
+        long withExclusions = 0;
+        List<Long> skippedIds = new ArrayList<>();
+        for (Object[] row : exclusionCodeRows(spec)) {
+            Long id = (Long) row[0];
+            String raw = (String) row[1];
+            var parsed = SchedulingHistory.parseExclusionCodes(raw);
+            if (parsed.isEmpty()) {
+                skippedIds.add(id);
+                continue;
+            }
+            if (parsed.get().isEmpty()) continue;
+            withExclusions++;
+            parsed.get().forEach((code, count) -> {
+                long[] s = sums.computeIfAbsent(code, k -> new long[2]);
+                s[0]++;
+                s[1] += count;
+            });
+        }
+        if (!skippedIds.isEmpty()) {
+            log.warn("배치 이력 {}건의 제외 사유 집계 형식이 어긋나 합계에서 건너뜁니다 (id 일부 {}개: {})",
+                    skippedIds.size(), Math.min(5, skippedIds.size()), skippedIds.subList(0, Math.min(5, skippedIds.size())));
+        }
+        SortedMap<String, ExclusionSummaryResponse.CodeCount> codes = new TreeMap<>();
+        sums.forEach((code, s) -> codes.put(code, new ExclusionSummaryResponse.CodeCount(s[0], s[1])));
+        return new ExclusionSummaryResponse(start, end, decisions, withExclusions, skippedIds.size(), codes);
+    }
+
+    /** 창·필터 안에서 집계가 있는 행의 {@code [id, exclusionCodes]} — 엔티티를 올리지 않고 두 열만 읽는다. */
+    private List<Object[]> exclusionCodeRows(Specification<SchedulingHistory> spec) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Object[]> query = cb.createQuery(Object[].class);
+        Root<SchedulingHistory> root = query.from(SchedulingHistory.class);
+        query.multiselect(root.get("id"), root.get("exclusionCodes"))
+                .where(spec.toPredicate(root, query, cb), cb.isNotNull(root.get("exclusionCodes")));
+        return entityManager.createQuery(query).getResultList();
+    }
+
+    private static void requireOrderedWindow(OffsetDateTime from, OffsetDateTime to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "기간의 시작이 끝보다 뒤입니다");
+        }
+    }
+
     private static Specification<SchedulingHistory> filter(Long workloadId, Boolean success, String engineName,
-                                                           Long scheduleRunId, ExclusionReason exclusionCode) {
+                                                           Long scheduleRunId, ExclusionReason exclusionCode,
+                                                           OffsetDateTime from, OffsetDateTime to) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (workloadId != null) predicates.add(cb.equal(root.get("workloadId"), workloadId));
@@ -86,6 +171,9 @@ public class SchedulingHistoryQueryService {
                 String key = SchedulingHistory.exclusionCodeKey(exclusionCode.name());
                 predicates.add(cb.like(root.get("exclusionCodes"), "%" + escapeLike(key) + "%", '\\'));
             }
+            // 창은 반개구간 [from, to) — createdAt 인덱스(workloadId 와 함께면 복합 인덱스)를 탈 수 있다
+            if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from));
+            if (to != null) predicates.add(cb.lessThan(root.get("createdAt"), to));
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

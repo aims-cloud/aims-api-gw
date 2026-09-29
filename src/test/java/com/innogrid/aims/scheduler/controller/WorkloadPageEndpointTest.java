@@ -60,12 +60,13 @@ class WorkloadPageEndpointTest {
     private final List<Long> seeded = new ArrayList<>();
 
     /**
-     * 8건 — 종류 VM 3 · GPU 3 · 비어 있음 2, 상태 PENDING 5 · SCHEDULED 1 · FAILED 2.
+     * 8건 — 종류 VM 3 · GPU 3 · 비어 있음 2, 상태 PENDING 5 · SCHEDULED 1 · FAILED 2,
+     * 우선순위 LOW 1 · NORMAL 3(세터를 안 불러 기본값) · HIGH 2 · CRITICAL 2.
      * <pre>
-     *   0 VM   PENDING            4 GPU  PENDING
-     *   1 VM   FAILED(1회)        5 GPU  SCHEDULED(node-a)
-     *   2 VM   PENDING  이름 "_"   6 null PENDING
-     *   3 GPU  FAILED(소진 · 상한 회) 설명 "%"   7 null PENDING
+     *   0 VM   PENDING   LOW                 4 GPU  PENDING   HIGH
+     *   1 VM   FAILED(1회)   HIGH            5 GPU  SCHEDULED(node-a)   CRITICAL
+     *   2 VM   PENDING  이름 "_"   (NORMAL)  6 null PENDING   (NORMAL)
+     *   3 GPU  FAILED(소진 · 상한 회) 설명 "%"   CRITICAL   7 null PENDING   (NORMAL)
      * </pre>
      */
     @BeforeEach
@@ -74,10 +75,14 @@ class WorkloadPageEndpointTest {
         Workload.ResourceType[] types = {
                 Workload.ResourceType.VM, Workload.ResourceType.VM, Workload.ResourceType.VM, Workload.ResourceType.GPU,
                 Workload.ResourceType.GPU, Workload.ResourceType.GPU, null, null };
+        Workload.WorkloadPriority[] priorities = {
+                Workload.WorkloadPriority.LOW, Workload.WorkloadPriority.HIGH, null, Workload.WorkloadPriority.CRITICAL,
+                Workload.WorkloadPriority.HIGH, Workload.WorkloadPriority.CRITICAL, null, null };   // null = 세터 안 부름 → 기본 NORMAL
         for (int i = 0; i < 8; i++) {
             String name = prefix + (i == 2 ? "-under_score" : "-" + i);
             Workload w = new Workload(name, 1 + i, 256 * (i + 1));
             w.setResourceType(types[i]);
+            if (priorities[i] != null) w.setPriority(priorities[i]);
             if (i == 3) w.setDescription("100% " + prefix);
             if (i == 1) w.markFailed("시험용");
             if (i == 3) for (int k = 0; k < properties.getMaxRetryCount(); k++) w.markFailed("시험용");   // 재시도 소진
@@ -158,6 +163,70 @@ class WorkloadPageEndpointTest {
         for (JsonNode row : page("keyword", prefix, "resourceType", "VM").get("items")) {
             assertTrue(row.get("resourceType").isNull() || "VM".equals(row.get("resourceType").asString()), row.toString());
         }
+    }
+
+    @DisplayName("우선순위 필터는 여러 값을 반복·쉼표로 받아 OR 이고 대소문자를 무시하며 다른 필터와 AND 로 겹친다")
+    @Test
+    void priority_filter_multi_value_or() throws Exception {
+        assertEquals(1, total("priority", "LOW"));
+        assertEquals(3, total("priority", "normal"), "대소문자 무시 · 세터를 안 부른 행은 기본 NORMAL");
+        assertEquals(2, total("priority", " High "), "앞뒤 공백 허용");
+        assertEquals(2, total("priority", "CRITICAL"));
+        assertEquals(8, total("priority", "LOW") + total("priority", "NORMAL") + total("priority", "HIGH") + total("priority", "CRITICAL"),
+                "네 값이 전체를 나눈다 — 우선순위가 빈 행은 없다");
+        assertEquals(4, total("priority", "HIGH", "priority", "critical"), "반복은 OR");
+        assertEquals(4, total("priority", "HIGH,CRITICAL"), "쉼표 목록도 OR");
+        assertEquals(4, total("priority", "low, Normal"), "쉼표 뒤 공백·대소문자 섞임");
+        assertEquals(5, total("priority", "HIGH,LOW", "priority", "critical"), "반복과 쉼표를 섞어도 전부 OR — 프레임워크 변환이 아니라 수동 분해가 받는 형태");
+        assertEquals(2, total("priority", "HIGH,HIGH"), "같은 값 반복은 한 번");
+        assertEquals(8, total("priority", ","), "쉼표만이면 필터 없음");
+        assertEquals(8, total("priority", ""), "빈 값은 필터 없음");
+        // 다른 필터와 AND
+        assertEquals(1, total("priority", "CRITICAL", "status", "SCHEDULED"), "5번 행");
+        assertEquals(1, total("priority", "CRITICAL", "retryExhausted", "true"), "3번 행");
+        assertEquals(1, total("priority", "HIGH", "resourceType", "VM"), "1번 행 — GPU 인 4번은 빠진다");
+        assertEquals(3, total("priority", "NORMAL", "resourceType", "vm"), "2번 + 종류가 빈 6·7번 — VM 의 OR 가 괄호로 묶인다");
+        assertEquals(1, total("priority", "HIGH,CRITICAL", "assignedNodeId", "node-a"));
+        assertEquals(0, total("priority", "LOW", "status", "FAILED"));
+        assertEquals(2, total("priority", "HIGH", "status", "PENDING,FAILED"));
+        // 걸러진 행의 집합·값·응답 형태
+        JsonNode d = page("keyword", prefix, "priority", "high,critical");
+        assertEquals(Set.of(seeded.get(1), seeded.get(3), seeded.get(4), seeded.get(5)), new HashSet<>(ids(d.get("items"))));
+        for (JsonNode row : d.get("items")) {
+            assertTrue(Set.of("HIGH", "CRITICAL").contains(row.get("priority").asString()), row.toString());
+            Set<String> keys = new TreeSet<>();
+            row.propertyNames().forEach(keys::add);
+            assertEquals(ResponseJsonGoldenTest.WORKLOAD_FIELDS, keys, "필터를 걸어도 행은 23필드 그대로");
+        }
+        // 모르는 값은 400 과 가능한 값 목록 — 정렬 필드로는 여전히 받지 않는다
+        mockMvc.perform(get(PAGE).param("priority", "urgent")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("CRITICAL")));
+        mockMvc.perform(get(PAGE).param("priority", "HIGH,nope")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("LOW")));
+        mockMvc.perform(get(PAGE).param("priority", "HIGH").param("sort", "priority,asc")).andExpect(status().isBadRequest());
+    }
+
+    @DisplayName("우선순위·상태 허용값 문서는 열거형과 같다")
+    @Test
+    void page_allowable_values_match_the_enums() {
+        java.lang.reflect.Method m = java.util.Arrays.stream(SchedulerController.class.getDeclaredMethods())
+                .filter(x -> x.getName().equals("getWorkloadPage")).findFirst().orElseThrow();
+        java.util.Map<String, Set<String>> declared = new java.util.HashMap<>();
+        for (java.lang.reflect.Parameter p : m.getParameters()) {
+            io.swagger.v3.oas.annotations.Parameter doc = p.getAnnotation(io.swagger.v3.oas.annotations.Parameter.class);
+            if (doc == null || doc.schema().allowableValues().length == 0) continue;
+            String[] values = doc.schema().allowableValues();
+            Set<String> set = new HashSet<>(java.util.Arrays.asList(values));
+            assertEquals(values.length, set.size(), "허용값에 중복이 있다: " + doc.description());
+            if (doc.description().startsWith("우선순위")) declared.put("priority", set);
+            if (doc.description().startsWith("상태")) declared.put("status", set);
+        }
+        assertEquals(Set.of("priority", "status"), declared.keySet(),
+                "허용값을 선언한 파라미터는 상태·우선순위 둘 — 설명 첫말('상태 —'·'우선순위 —')로 찾는다");
+        assertEquals(java.util.Arrays.stream(Workload.WorkloadPriority.values()).map(Enum::name).collect(java.util.stream.Collectors.toSet()),
+                declared.get("priority"), "우선순위 허용값이 열거형과 갈렸다");
+        assertEquals(java.util.Arrays.stream(Workload.WorkloadStatus.values()).map(Enum::name).collect(java.util.stream.Collectors.toSet()),
+                declared.get("status"), "상태 허용값이 열거형과 갈렸다");
     }
 
     @DisplayName("키워드는 이름·설명의 소문자 부분 일치이고 % 와 _ 는 문자 그대로 찾는다")

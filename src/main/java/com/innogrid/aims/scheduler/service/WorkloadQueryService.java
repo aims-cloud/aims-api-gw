@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.SortSupport;
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -47,31 +48,47 @@ public class WorkloadQueryService {
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final WorkloadRepository repository;
+    /** 재시도 소진 판정의 상한 — 읽기만 한다. */
+    private final SchedulerProperties properties;
 
-    public WorkloadQueryService(WorkloadRepository repository) {
+    public WorkloadQueryService(WorkloadRepository repository, SchedulerProperties properties) {
         this.repository = repository;
+        this.properties = properties;
     }
 
     /**
      * 페이지는 1부터. 필터는 전부 선택이고 AND 로 겹친다. {@code statuses} 는 비어 있으면 조건 없음, 여럿이면 OR —
-     * 노드 화면의 "지금 올라가 있는 것"(SCHEDULED·RUNNING)을 한 번에 거르기 위해서다.
+     * 노드 화면의 "지금 올라가 있는 것"(SCHEDULED·RUNNING)을 한 번에 거르기 위해서다. {@code retryExhausted} 는
+     * 재시도 소진(FAILED 이고 {@code retryCount >= maxRetryCount}) 행만({@code true}) 또는 그 나머지({@code false}) —
+     * 저장소의 소진 조회·집계와 같은 식이라 일괄 재개 화면의 목록이 그 건수와 맞는다.
      */
     @Transactional(readOnly = true)
     public PageResponse<WorkloadResponse> page(Collection<Workload.WorkloadStatus> statuses, Workload.ResourceType resourceType,
-                                               String keyword, String assignedNodeId,
+                                               String keyword, String assignedNodeId, Boolean retryExhausted,
                                                int page, int size, String sort) {
         Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
         Page<Workload> found = repository.findAll(
-                filter(statuses, resourceType, keyword, assignedNodeId), PageRequest.of(page - 1, size, order));
+                filter(statuses, resourceType, keyword, assignedNodeId, retryExhausted, properties.getMaxRetryCount()),
+                PageRequest.of(page - 1, size, order));
         Page<WorkloadResponse> mapped = found.map(WorkloadResponse::from);
         return new PageResponse<>(mapped.getContent(), page, size, mapped.getTotalElements(), mapped.getTotalPages());
     }
 
     private static Specification<Workload> filter(Collection<Workload.WorkloadStatus> statuses, Workload.ResourceType resourceType,
-                                                  String keyword, String assignedNodeId) {
+                                                  String keyword, String assignedNodeId, Boolean retryExhausted, int maxRetryCount) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (statuses != null && !statuses.isEmpty()) predicates.add(root.get("status").in(statuses));
+            if (retryExhausted != null) {
+                // 소진 = FAILED 이고 retryCount >= 상한. retryCount 가 null 인 행은 0회라 소진이 아니다(IS NULL 을 명시해 부정에서도 남긴다)
+                Predicate exhausted = cb.and(
+                        cb.equal(root.get("status"), Workload.WorkloadStatus.FAILED),
+                        cb.greaterThanOrEqualTo(root.get("retryCount"), maxRetryCount));
+                predicates.add(retryExhausted ? exhausted
+                        : cb.or(cb.notEqual(root.get("status"), Workload.WorkloadStatus.FAILED),
+                                cb.isNull(root.get("retryCount")),
+                                cb.lessThan(root.get("retryCount"), maxRetryCount)));
+            }
             if (resourceType != null) {
                 Predicate same = cb.equal(root.get("resourceType"), resourceType);
                 // 종류를 비워 둔 행(생성 때 생략·옛 행)은 VM 으로 해석한다 — 실행의 후보 조회(matchNullType)와 같은 규칙

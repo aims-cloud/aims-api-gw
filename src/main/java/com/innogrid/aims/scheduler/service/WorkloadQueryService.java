@@ -60,25 +60,29 @@ public class WorkloadQueryService {
      * 페이지는 1부터. 필터는 전부 선택이고 AND 로 겹친다. {@code statuses} 는 비어 있으면 조건 없음, 여럿이면 OR —
      * 노드 화면의 "지금 올라가 있는 것"(SCHEDULED·RUNNING)을 한 번에 거르기 위해서다. {@code retryExhausted} 는
      * 재시도 소진(FAILED 이고 {@code retryCount >= maxRetryCount}) 행만({@code true}) 또는 그 나머지({@code false}) —
-     * 저장소의 소진 조회·집계와 같은 식이라 일괄 재개 화면의 목록이 그 건수와 맞는다.
+     * 저장소의 소진 조회·집계와 같은 식이라 일괄 재개 화면의 목록이 그 건수와 맞는다. {@code priorities} 도 {@code statuses} 와 같이
+     * 비어 있으면 조건 없음, 여럿이면 OR — 컬럼이 NOT NULL(생성 때 생략하면 NORMAL)이라 null 분기는 없다.
      */
     @Transactional(readOnly = true)
     public PageResponse<WorkloadResponse> page(Collection<Workload.WorkloadStatus> statuses, Workload.ResourceType resourceType,
                                                String keyword, String assignedNodeId, Boolean retryExhausted,
+                                               Collection<Workload.WorkloadPriority> priorities,
                                                int page, int size, String sort) {
         Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
         Page<Workload> found = repository.findAll(
-                filter(statuses, resourceType, keyword, assignedNodeId, retryExhausted, properties.getMaxRetryCount()),
+                filter(statuses, resourceType, keyword, assignedNodeId, retryExhausted, priorities, properties.getMaxRetryCount()),
                 PageRequest.of(page - 1, size, order));
         Page<WorkloadResponse> mapped = found.map(WorkloadResponse::from);
         return new PageResponse<>(mapped.getContent(), page, size, mapped.getTotalElements(), mapped.getTotalPages());
     }
 
     private static Specification<Workload> filter(Collection<Workload.WorkloadStatus> statuses, Workload.ResourceType resourceType,
-                                                  String keyword, String assignedNodeId, Boolean retryExhausted, int maxRetryCount) {
+                                                  String keyword, String assignedNodeId, Boolean retryExhausted,
+                                                  Collection<Workload.WorkloadPriority> priorities, int maxRetryCount) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (statuses != null && !statuses.isEmpty()) predicates.add(root.get("status").in(statuses));
+            if (priorities != null && !priorities.isEmpty()) predicates.add(root.get("priority").in(priorities));
             if (retryExhausted != null) {
                 // 소진 = FAILED 이고 retryCount >= 상한. retryCount 가 null 인 행은 0회라 소진이 아니다(IS NULL 을 명시해 부정에서도 남긴다)
                 Predicate exhausted = cb.and(

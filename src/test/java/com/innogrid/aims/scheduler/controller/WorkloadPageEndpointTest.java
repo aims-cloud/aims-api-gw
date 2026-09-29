@@ -16,11 +16,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ResponseJsonGoldenTest;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
+import jakarta.persistence.EntityManager;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -49,6 +52,9 @@ class WorkloadPageEndpointTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired WorkloadRepository repository;
+    @Autowired SchedulerProperties properties;
+    @Autowired EntityManager em;
+    @Autowired TransactionTemplate tx;
 
     private String prefix;
     private final List<Long> seeded = new ArrayList<>();
@@ -57,9 +63,9 @@ class WorkloadPageEndpointTest {
      * 8건 — 종류 VM 3 · GPU 3 · 비어 있음 2, 상태 PENDING 5 · SCHEDULED 1 · FAILED 2.
      * <pre>
      *   0 VM   PENDING            4 GPU  PENDING
-     *   1 VM   FAILED             5 GPU  SCHEDULED(node-a)
+     *   1 VM   FAILED(1회)        5 GPU  SCHEDULED(node-a)
      *   2 VM   PENDING  이름 "_"   6 null PENDING
-     *   3 GPU  FAILED   설명 "%"   7 null PENDING
+     *   3 GPU  FAILED(소진 · 상한 회) 설명 "%"   7 null PENDING
      * </pre>
      */
     @BeforeEach
@@ -73,7 +79,8 @@ class WorkloadPageEndpointTest {
             Workload w = new Workload(name, 1 + i, 256 * (i + 1));
             w.setResourceType(types[i]);
             if (i == 3) w.setDescription("100% " + prefix);
-            if (i == 1 || i == 3) w.markFailed("시험용");
+            if (i == 1) w.markFailed("시험용");
+            if (i == 3) for (int k = 0; k < properties.getMaxRetryCount(); k++) w.markFailed("시험용");   // 재시도 소진
             if (i == 5) w.assignTo("mdc-01", "node-a", 0.5, "시험용");
             seeded.add(repository.save(w).getId());
         }
@@ -131,6 +138,23 @@ class WorkloadPageEndpointTest {
         assertEquals(1, total("assignedNodeId", " node-a "), "노드 id 앞뒤 공백은 뺀다");
         assertEquals(5, total("resourceType", " Vm "), "열거값은 대소문자 섞임·앞뒤 공백 허용");
         assertEquals(5, total("status", " Pending "));
+        assertTrue(properties.getMaxRetryCount() >= 2, "아래 기대값은 상한 ≥ 2 를 전제로 한다(1회 실패 행이 소진이 아니어야 함)");
+        assertEquals(1, total("retryExhausted", "true"), "소진 = FAILED 이고 retryCount >= 상한 — 3번 행");
+        assertEquals(7, total("retryExhausted", "false"), "나머지 — FAILED 1회 행과 retryCount null 행 포함");
+        assertEquals(0, total("retryExhausted", "true", "status", "PENDING"));
+        assertEquals(1, total("retryExhausted", "true", "status", "FAILED,PENDING"));
+        assertEquals(1, total("retryExhausted", "true", "resourceType", "GPU"));
+        assertEquals(8, total("retryExhausted", ""), "빈 값은 필터 없음");
+        for (JsonNode row : page("keyword", prefix, "retryExhausted", "true").get("items")) {
+            assertEquals("FAILED", row.get("status").asString());
+            assertTrue(row.get("retryCount").asInt() >= properties.getMaxRetryCount(), row.toString());
+        }
+        // FAILED 인데 retryCount 가 null 인 옛 행(엔티티 메서드로는 못 만듦) — 0회라 소진이 아니어야 한다
+        tx.executeWithoutResult(s -> em.createQuery("update Workload w set w.retryCount = null where w.id = :id")
+                .setParameter("id", seeded.get(1)).executeUpdate());
+        assertEquals(1, total("retryExhausted", "true"), "null 행은 소진에 들지 않는다");
+        assertEquals(7, total("retryExhausted", "false"), "null 행은 나머지에 남는다");
+        assertEquals(1, total("retryExhausted", "false", "status", "FAILED"), "FAILED 이면서 소진이 아닌 행 = null 행");
         for (JsonNode row : page("keyword", prefix, "resourceType", "VM").get("items")) {
             assertTrue(row.get("resourceType").isNull() || "VM".equals(row.get("resourceType").asString()), row.toString());
         }
@@ -174,6 +198,7 @@ class WorkloadPageEndpointTest {
         mockMvc.perform(get(PAGE).param("page", "0")).andExpect(status().isBadRequest());
         mockMvc.perform(get(PAGE).param("status", "PENDING,nope")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("PENDING")));
+        mockMvc.perform(get(PAGE).param("retryExhausted", "nope")).andExpect(status().isBadRequest());
     }
 
     @DisplayName("총 페이지를 넘는 요청은 빈 목록과 원래 총건수를 주고 size 상한 100 은 허용된다")

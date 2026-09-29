@@ -17,6 +17,9 @@ import com.innogrid.aims.monitoring.ResourceExplorerProperties;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService.Unit;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
+import com.innogrid.aims.monitoring.service.agent.AgentTargetsService;
+import com.innogrid.aims.monitoring.service.agent.CollectServicesChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
@@ -54,18 +57,24 @@ public class ResourceExplorerNodeLogService {
     private final PortalLogContextResolver users;
     private final HostServiceStatusMetricsQueryService systemdUnits;
     private final Pattern systemdExclude;
+    private final ApplicationEventPublisher events;
+    private final AgentTargetsService agentTargets;
 
     public ResourceExplorerNodeLogService(NodeAccessService access,
                                           CollectServiceRepository repository,
                                           NodeLogQueries queries,
                                           PortalLogContextResolver users,
                                           HostServiceStatusMetricsQueryService systemdUnits,
-                                          ResourceExplorerProperties properties) {
+                                          ResourceExplorerProperties properties,
+                                          ApplicationEventPublisher events,
+                                          AgentTargetsService agentTargets) {
         this.access = access;
         this.repository = repository;
         this.queries = queries;
         this.users = users;
         this.systemdUnits = systemdUnits;
+        this.events = events;
+        this.agentTargets = agentTargets;
         String exclude = properties.getDiscoverySystemdExclude();
         this.systemdExclude = exclude == null || exclude.isBlank() ? null : Pattern.compile(exclude);
     }
@@ -144,9 +153,13 @@ public class ResourceExplorerNodeLogService {
         return new ArrayList<>(byName.values());
     }
 
-    /** 활성 상태의 {@code *.service} 유닛만, 제외 패턴을 거쳐 ".service" 를 뗀 이름으로. 후보가 아니면 null */
+    /**
+     * 활성 상태의 {@code *.service} 유닛만, 제외 패턴을 거쳐 ".service" 를 뗀 이름으로. 후보가 아니면 null.
+     * {@code oneshot} 은 한 번 실행되고 끝나는 유닛(cloud-init, apparmor 등)이라 상주 프로세스가 없어 제외한다.
+     */
     private String candidateNameOf(Unit unit) {
-        if (unit.state() != ServiceUnitState.ACTIVE || unit.name() == null || !unit.name().endsWith(SERVICE_UNIT_SUFFIX)) {
+        if (unit.state() != ServiceUnitState.ACTIVE || unit.name() == null || !unit.name().endsWith(SERVICE_UNIT_SUFFIX)
+                || "oneshot".equals(unit.type())) {
             return null;
         }
         if (systemdExclude != null && systemdExclude.matcher(unit.name()).find()) {
@@ -219,6 +232,7 @@ public class ResourceExplorerNodeLogService {
 
         CollectService service = new CollectService(node.asset(), user);
         save(service, node.host().assetId(), request);
+        events.publishEvent(new CollectServicesChangedEvent(node.host().assetId()));   // 커밋 뒤 노드 목록 반영
 
         // 쓰기는 Loki 가용성에 의존하지 않는다. 관측은 목록 재조회에서 수행한다.
         return response(service, initialStatus(node.host(), service));
@@ -231,6 +245,7 @@ public class ResourceExplorerNodeLogService {
         CollectService service = requireService(node.host().assetId(), serviceId);
         validate(request);
         save(service, node.host().assetId(), request);
+        events.publishEvent(new CollectServicesChangedEvent(node.host().assetId()));
 
         return response(service, initialStatus(node.host(), service));
     }
@@ -239,6 +254,13 @@ public class ResourceExplorerNodeLogService {
     public void deleteCollectService(String nodeId, String serviceId) {
         NodeAccessService.AccessibleNode node = access.require(nodeId);
         repository.delete(requireService(node.host().assetId(), serviceId));
+        events.publishEvent(new CollectServicesChangedEvent(node.host().assetId()));
+    }
+
+    /** 이 노드의 수집 에이전트에 원장 목록이 반영됐는지 — 스코프 검증 뒤 에이전트 원장 상태 */
+    public AgentTargetsStatusResponse getAgentTargetsStatus(String nodeId) {
+        NodeAccessService.AccessibleNode node = access.require(nodeId);
+        return agentTargets.status(node.host().assetId());
     }
 
     // ── 서비스 로그 조회 ────────────────────────────────────────

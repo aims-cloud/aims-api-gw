@@ -50,8 +50,13 @@ final class LogPathPresets {
             key = key.substring(0, key.length() - ".service".length());
         }
         int at = key.indexOf('@');
+        String instance = at > 0 ? key.substring(at + 1) : "";
         if (at > 0) {
             key = key.substring(0, at);
+        }
+        // Debian 계열 postgresql@{버전}-{클러스터} 인스턴스는 로그 파일 이름에 그 값이 그대로 들어간다.
+        if (key.equals("postgresql") && !instance.isEmpty() && instance.matches("[a-z0-9._-]+")) {
+            return List.of("/var/log/postgresql/postgresql-" + instance + ".log");
         }
         return PRESETS.getOrDefault(key, List.of());
     }

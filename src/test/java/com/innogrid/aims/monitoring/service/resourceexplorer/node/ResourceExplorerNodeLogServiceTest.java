@@ -19,6 +19,9 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.Serv
 import com.innogrid.aims.monitoring.ResourceExplorerProperties;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService.Unit;
+import com.innogrid.aims.monitoring.service.agent.AgentTargetsService;
+import com.innogrid.aims.monitoring.service.agent.CollectServicesChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.*;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
@@ -37,8 +40,10 @@ class ResourceExplorerNodeLogServiceTest {
     NodeLogQueries queries = mock(NodeLogQueries.class);
     PortalLogContextResolver users = mock(PortalLogContextResolver.class);
     HostServiceStatusMetricsQueryService systemd = mock(HostServiceStatusMetricsQueryService.class);
+    ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+    AgentTargetsService agentTargets = mock(AgentTargetsService.class);
     ResourceExplorerNodeLogService service = new ResourceExplorerNodeLogService(access, repository, queries, users, systemd,
-            new ResourceExplorerProperties());
+            new ResourceExplorerProperties(), events, agentTargets);
     ScopedHost host = new ScopedHost("ADMIN", 1L, "node", null, "mdc-1", null, "10.0.0.1:9100", List.of());
     Asset asset = new Asset("mdc-1", Asset.AssetType.GPU_SERVER, "node");
     Instant start = Instant.parse("2026-09-11T00:00:00Z");
@@ -98,6 +103,7 @@ class ResourceExplorerNodeLogServiceTest {
         assertThat(result.serviceName()).isEqualTo("name");
         assertThat(result.logStatus()).isEqualTo(LogStatus.UNKNOWN);
         verifyNoInteractions(queries);
+        verify(events).publishEvent(new CollectServicesChangedEvent(1L));    // 커밋 뒤 목록 반영 트리거
     }
     @Test void duplicateNameReturnsConflict() {
         when(users.resolve()).thenReturn(new PortalLogContext("user@example.com", null, null, null, null, null));
@@ -123,6 +129,14 @@ class ResourceExplorerNodeLogServiceTest {
         service.deleteCollectService("1", "10");
         verify(repository).delete(row);
         verifyNoInteractions(queries);
+        verify(events).publishEvent(new CollectServicesChangedEvent(1L));
+    }
+    @Test void conflictOrValidationFailureDoesNotTriggerTargetsSync() {
+        when(users.resolve()).thenReturn(new PortalLogContext("user@example.com", null, null, null, null, null));
+        when(repository.existsByAsset_IdAndServiceNameAndIdNot(1L, "name", -1L)).thenReturn(true);
+        assertThatThrownBy(() -> service.createCollectService("1", request("name", "/a"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.createCollectService("1", request("name", "/var/*.log"))).isInstanceOf(BusinessException.class);
+        verifyNoInteractions(events);
     }
     @Test void validatorsRejectGlobsAndOutOfRangePorts() {
         assertThatThrownBy(() -> ResourceExplorerNodeLogService.validate(request("name", "/var/*.log"))).isInstanceOf(BusinessException.class);
@@ -190,6 +204,7 @@ class ResourceExplorerNodeLogServiceTest {
                 new Unit("nginx.service", "forking", ServiceUnitState.ACTIVE),
                 new Unit("syslog.service", "simple", ServiceUnitState.ACTIVE),          // Loki 후보와 이름 겹침 → Loki 우선
                 new Unit("postgresql.service", "notify", ServiceUnitState.INACTIVE),   // 비활성 제외
+                new Unit("cloud-init.service", "oneshot", ServiceUnitState.ACTIVE),     // oneshot 제외
                 new Unit("systemd-journald.service", "notify", ServiceUnitState.ACTIVE), // 제외 패턴
                 new Unit("docker.socket", "", ServiceUnitState.ACTIVE),                  // .service 아님
                 new Unit("Docker.service", null, ServiceUnitState.ACTIVE)));
@@ -205,7 +220,8 @@ class ResourceExplorerNodeLogServiceTest {
     }
     @Test void logPathPresetsMatchUnitNamesCaseInsensitivelyAndIgnoreInstanceSuffix() {
         assertThat(LogPathPresets.forUnit("NGINX.service")).containsExactly("/var/log/nginx/access.log", "/var/log/nginx/error.log");
-        assertThat(LogPathPresets.forUnit("postgresql@16-main.service")).contains("/var/log/postgresql/postgresql-16-main.log");
+        assertThat(LogPathPresets.forUnit("postgresql@16-main.service")).containsExactly("/var/log/postgresql/postgresql-16-main.log");
+        assertThat(LogPathPresets.forUnit("postgresql.service")).hasSize(2);
         assertThat(LogPathPresets.forUnit("httpd")).containsExactly("/var/log/httpd/access_log", "/var/log/httpd/error_log");
         assertThat(LogPathPresets.forUnit("containerd.service")).isEmpty();
         assertThat(LogPathPresets.forUnit(null)).isEmpty();

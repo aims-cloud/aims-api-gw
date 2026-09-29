@@ -157,10 +157,11 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "탐지된 수집 후보 서비스 목록",
-            description = "서비스 추가 위저드 1단계 드롭다운 — 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 "
-                    + "job(수집 설정 묶음)을 후보로 냅니다. 설명에 수집 파일 경로와 건수가 들어갑니다. "
-                    + "호스트 프로세스 탐지 수단은 없어 PID·포트는 null, capabilities 는 LOG 만입니다. "
-                    + "노드의 Loki 라벨 매핑이 없으면 빈 목록, Loki 조회 실패는 502 입니다.")
+            description = "서비스 추가 위저드 1단계 드롭다운. 후보 원천은 둘이며 source 로 구분합니다. "
+                    + "LOKI: 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 job(수집 설정 묶음), 설명에 수집 파일 경로와 건수. "
+                    + "SYSTEMD: node_exporter systemd 콜렉터(--collector.systemd)가 보고하는 활성 *.service 유닛, 로그 경로는 2단계에서 입력. "
+                    + "같은 이름은 LOKI 우선, 이름순. PID·포트는 null, capabilities 는 LOG 만입니다. "
+                    + "Loki 라벨 매핑이 없으면 LOKI 원천이 빠지고, Loki 조회 실패는 502, systemd 원천은 콜렉터 없음·Thanos 장애 시 조용히 빠집니다.")
     @GetMapping("/services/discovered")
     public ApiResponse<List<DiscoveredServiceResponse>> getDiscoveredServices(@PathVariable String nodeId) {
         return ApiResponse.ok(resourceExplorerNodeLogService.getDiscoveredServices(nodeId));

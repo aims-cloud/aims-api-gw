@@ -46,10 +46,13 @@ class NodeLogControllerTest {
     }
     @Test void discoveryReturnsLokiBackedCandidates() throws Exception {
         when(logs.getDiscoveredServices("1")).thenReturn(List.of(
-                new DiscoveredServiceResponse("syslog", "최근 24시간 수집 파일: /var/log/syslog (10건)", null, null, List.of(CollectCapability.LOG))));
+                new DiscoveredServiceResponse("syslog", "최근 24시간 수집 파일: /var/log/syslog (10건)", null, null, List.of(CollectCapability.LOG),
+                        DiscoveredServiceResponse.DiscoveredSource.LOKI, List.of("/var/log/syslog"))));
         mvc.perform(get(base + "/discovered")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].serviceName").value("syslog"))
-                .andExpect(jsonPath("$.data[0].capabilities[0]").value("LOG"));
+                .andExpect(jsonPath("$.data[0].capabilities[0]").value("LOG"))
+                .andExpect(jsonPath("$.data[0].source").value("LOKI"))
+                .andExpect(jsonPath("$.data[0].suggestedLogPaths[0]").value("/var/log/syslog"));
     }
     @Test void validateReturnsIssuesAndObservationsInsteadOf501() throws Exception {
         when(logs.validateCollectService(eq("1"), any())).thenReturn(new CollectServiceValidationResponse(true, List.of(),

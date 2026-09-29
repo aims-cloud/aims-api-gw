@@ -2,6 +2,7 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
@@ -10,6 +11,12 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.*;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.Issue;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.ObservationStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.PathObservation;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse.DiscoveredSource;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceUnitState;
+import com.innogrid.aims.monitoring.ResourceExplorerProperties;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService.Unit;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
@@ -39,19 +46,28 @@ public class ResourceExplorerNodeLogService {
     /** 후보 탐지·검증 관측 기간. 수집기가 이 기간에 실제로 보낸 파일만 후보로 낸다. */
     private static final long OBSERVATION_LOOKBACK_SECONDS = 86_400L;
 
+    private static final String SERVICE_UNIT_SUFFIX = ".service";
+
     private final NodeAccessService access;
     private final CollectServiceRepository repository;
     private final NodeLogQueries queries;
     private final PortalLogContextResolver users;
+    private final HostServiceStatusMetricsQueryService systemdUnits;
+    private final Pattern systemdExclude;
 
     public ResourceExplorerNodeLogService(NodeAccessService access,
                                           CollectServiceRepository repository,
                                           NodeLogQueries queries,
-                                          PortalLogContextResolver users) {
+                                          PortalLogContextResolver users,
+                                          HostServiceStatusMetricsQueryService systemdUnits,
+                                          ResourceExplorerProperties properties) {
         this.access = access;
         this.repository = repository;
         this.queries = queries;
         this.users = users;
+        this.systemdUnits = systemdUnits;
+        String exclude = properties.getDiscoverySystemdExclude();
+        this.systemdExclude = exclude == null || exclude.isBlank() ? null : Pattern.compile(exclude);
     }
 
     // ── 수집 서비스 관리 ────────────────────────────────────────
@@ -81,26 +97,63 @@ public class ResourceExplorerNodeLogService {
     }
 
     /**
-     * 후보 = 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 job(수집 설정 묶음)과 그 파일. 호스트 프로세스를 보는 수단은
-     * 없으므로 PID·포트는 null 이고 capabilities 는 LOG 뿐이다. 라벨 매핑이 없는 노드는 후보가 없다(빈 목록).
-     * 이미 등록된 이름도 후보에 남긴다 — 편집 위저드가 같은 목록으로 현재 서비스를 표시하고, 중복은 저장 시 409 로 막힌다.
+     * 후보 두 원천을 이름순 한 목록으로 합친다.
+     * <ul>
+     *   <li>LOKI — 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 job(수집 설정 묶음)과 그 파일. 라벨 매핑이 없는 노드는
+     *       이 원천이 없고, Loki 조회 실패는 502 로 올린다(후보 없음과 구분).</li>
+     *   <li>SYSTEMD — node_exporter systemd 콜렉터가 보고하는 활성 상태 {@code *.service} 유닛. 로그 경로는 모르므로 2단계 입력이
+     *       필요하다. exporter 타겟이 없거나 콜렉터가 꺼져 있거나 Thanos 장애면 이 원천만 조용히 빠진다(보조 원천).</li>
+     * </ul>
+     * 같은 이름이면 Loki 후보를 우선한다(이미 수집 중인 파일 정보가 더 유용). 호스트 프로세스를 보는 수단은 없으므로 PID·포트는 null,
+     * capabilities 는 LOG 뿐이다. 이미 등록된 이름도 후보에 남긴다 — 편집 위저드가 같은 목록으로 현재 서비스를 표시하고, 중복은
+     * 저장 시 409 로 막힌다.
      */
     public List<DiscoveredServiceResponse> getDiscoveredServices(String nodeId) {
         NodeAccessService.AccessibleNode node = access.require(nodeId);
-        if (!NodeLogQueries.configured(node.host())) {
-            return List.of();
+        Map<String, DiscoveredServiceResponse> byName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+
+        if (NodeLogQueries.configured(node.host())) {
+            Map<String, List<NodeLogQueries.DiscoveredFile>> byJob = new TreeMap<>();
+            for (NodeLogQueries.DiscoveredFile file : queries.recentFiles(node.host(), OBSERVATION_LOOKBACK_SECONDS)) {
+                String name = file.job() == null || file.job().isBlank() ? baseName(file.path()) : file.job();
+                byJob.computeIfAbsent(name, ignored -> new ArrayList<>()).add(file);
+            }
+            for (Map.Entry<String, List<NodeLogQueries.DiscoveredFile>> entry : byJob.entrySet()) {
+                List<String> observedPaths = entry.getValue().stream()
+                        .map(NodeLogQueries.DiscoveredFile::path).distinct().sorted().toList();
+                byName.put(entry.getKey(), new DiscoveredServiceResponse(entry.getKey(), discoveredDescription(entry.getValue()),
+                        null, null, List.of(CollectCapability.LOG), DiscoveredSource.LOKI, observedPaths));
+            }
         }
-        Map<String, List<NodeLogQueries.DiscoveredFile>> byService = new TreeMap<>();
-        for (NodeLogQueries.DiscoveredFile file : queries.recentFiles(node.host(), OBSERVATION_LOOKBACK_SECONDS)) {
-            String name = file.job() == null || file.job().isBlank() ? baseName(file.path()) : file.job();
-            byService.computeIfAbsent(name, ignored -> new ArrayList<>()).add(file);
+
+        String instance = node.host().instance();
+        if (instance != null && !instance.isBlank()) {
+            for (Unit unit : systemdUnits.units(MetricSelector.instance(instance))) {
+                String serviceName = candidateNameOf(unit);
+                if (serviceName == null || byName.containsKey(serviceName)) {
+                    continue;
+                }
+                String type = unit.type() == null || unit.type().isBlank() ? "" : ", " + unit.type();
+                List<String> presets = LogPathPresets.forUnit(unit.name());
+                String hint = presets.isEmpty() ? " — 로그 경로는 2단계에서 입력" : " — 기본 로그 경로 제안 " + presets.size() + "건";
+                byName.put(serviceName, new DiscoveredServiceResponse(serviceName,
+                        "systemd 유닛 " + unit.name() + " (active" + type + ")" + hint,
+                        null, null, List.of(CollectCapability.LOG), DiscoveredSource.SYSTEMD, presets));
+            }
         }
-        List<DiscoveredServiceResponse> rows = new ArrayList<>();
-        for (Map.Entry<String, List<NodeLogQueries.DiscoveredFile>> entry : byService.entrySet()) {
-            rows.add(new DiscoveredServiceResponse(entry.getKey(), discoveredDescription(entry.getValue()),
-                    null, null, List.of(CollectCapability.LOG)));
+        return new ArrayList<>(byName.values());
+    }
+
+    /** 활성 상태의 {@code *.service} 유닛만, 제외 패턴을 거쳐 ".service" 를 뗀 이름으로. 후보가 아니면 null */
+    private String candidateNameOf(Unit unit) {
+        if (unit.state() != ServiceUnitState.ACTIVE || unit.name() == null || !unit.name().endsWith(SERVICE_UNIT_SUFFIX)) {
+            return null;
         }
-        return rows;
+        if (systemdExclude != null && systemdExclude.matcher(unit.name()).find()) {
+            return null;
+        }
+        String name = unit.name().substring(0, unit.name().length() - SERVICE_UNIT_SUFFIX.length()).trim();
+        return name.isEmpty() ? null : name;
     }
 
     /** 설명에 파일 경로를 실어 2단계 경로 입력의 힌트로 쓴다(응답 계약에 경로 필드가 없다). */

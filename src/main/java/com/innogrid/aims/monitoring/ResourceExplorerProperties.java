@@ -28,6 +28,16 @@ public class ResourceExplorerProperties {
      */
     private Duration metricsPresenceWindow = Duration.ofHours(24);
 
+    /**
+     * 수집 서비스 후보 탐지에서 제외할 systemd 유닛 이름 정규식(docs/11 §5.2). node_exporter 쪽 {@code --collector.systemd.unit-exclude}
+     * (docs/03 §2.1)와 같은 취지이며, exporter 에 제외 패턴이 없는 노드를 위해 백엔드에서 한 번 더 거른다. 유닛 이름(".service" 포함)에 find 로 적용.
+     */
+    private String discoverySystemdExclude =
+            "^(systemd-|getty@|serial-getty@|snap[.-]|snapd|dbus|polkit|rsyslog|cron|user@|apt-|unattended-upgrades|"
+            + "networkd-dispatcher|ModemManager|udisks2|upower|packagekit|fwupd|plymouth|console-setup|keyboard-setup|"
+            + "setvtrgb|e2scrub|ua-|ubuntu-advantage|multipathd|lvm2-|blk-availability|finalrd|irqbalance|thermald|"
+            + "kmod-static-nodes|sys-|dev-|proc-|run-|boot-)";
+
     public Duration getMetricsCacheTtl() { return metricsCacheTtl; }
     public void setMetricsCacheTtl(Duration metricsCacheTtl) { this.metricsCacheTtl = metricsCacheTtl; }
 
@@ -36,4 +46,7 @@ public class ResourceExplorerProperties {
 
     public Duration getMetricsPresenceWindow() { return metricsPresenceWindow; }
     public void setMetricsPresenceWindow(Duration metricsPresenceWindow) { this.metricsPresenceWindow = metricsPresenceWindow; }
+
+    public String getDiscoverySystemdExclude() { return discoverySystemdExclude; }
+    public void setDiscoverySystemdExclude(String discoverySystemdExclude) { this.discoverySystemdExclude = discoverySystemdExclude; }
 }

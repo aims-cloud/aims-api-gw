@@ -14,6 +14,14 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectSer
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse.ObservationStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectCapability;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse.DiscoveredSource;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceUnitState;
+import com.innogrid.aims.monitoring.ResourceExplorerProperties;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService.Unit;
+import com.innogrid.aims.monitoring.service.agent.AgentTargetsService;
+import com.innogrid.aims.monitoring.service.agent.CollectServicesChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.*;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
@@ -31,7 +39,11 @@ class ResourceExplorerNodeLogServiceTest {
     CollectServiceRepository repository = mock(CollectServiceRepository.class);
     NodeLogQueries queries = mock(NodeLogQueries.class);
     PortalLogContextResolver users = mock(PortalLogContextResolver.class);
-    ResourceExplorerNodeLogService service = new ResourceExplorerNodeLogService(access, repository, queries, users);
+    HostServiceStatusMetricsQueryService systemd = mock(HostServiceStatusMetricsQueryService.class);
+    ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+    AgentTargetsService agentTargets = mock(AgentTargetsService.class);
+    ResourceExplorerNodeLogService service = new ResourceExplorerNodeLogService(access, repository, queries, users, systemd,
+            new ResourceExplorerProperties(), events, agentTargets);
     ScopedHost host = new ScopedHost("ADMIN", 1L, "node", null, "mdc-1", null, "10.0.0.1:9100", List.of());
     Asset asset = new Asset("mdc-1", Asset.AssetType.GPU_SERVER, "node");
     Instant start = Instant.parse("2026-09-11T00:00:00Z");
@@ -91,6 +103,7 @@ class ResourceExplorerNodeLogServiceTest {
         assertThat(result.serviceName()).isEqualTo("name");
         assertThat(result.logStatus()).isEqualTo(LogStatus.UNKNOWN);
         verifyNoInteractions(queries);
+        verify(events).publishEvent(new CollectServicesChangedEvent(1L));    // 커밋 뒤 목록 반영 트리거
     }
     @Test void duplicateNameReturnsConflict() {
         when(users.resolve()).thenReturn(new PortalLogContext("user@example.com", null, null, null, null, null));
@@ -116,6 +129,14 @@ class ResourceExplorerNodeLogServiceTest {
         service.deleteCollectService("1", "10");
         verify(repository).delete(row);
         verifyNoInteractions(queries);
+        verify(events).publishEvent(new CollectServicesChangedEvent(1L));
+    }
+    @Test void conflictOrValidationFailureDoesNotTriggerTargetsSync() {
+        when(users.resolve()).thenReturn(new PortalLogContext("user@example.com", null, null, null, null, null));
+        when(repository.existsByAsset_IdAndServiceNameAndIdNot(1L, "name", -1L)).thenReturn(true);
+        assertThatThrownBy(() -> service.createCollectService("1", request("name", "/a"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.createCollectService("1", request("name", "/var/*.log"))).isInstanceOf(BusinessException.class);
+        verifyNoInteractions(events);
     }
     @Test void validatorsRejectGlobsAndOutOfRangePorts() {
         assertThatThrownBy(() -> ResourceExplorerNodeLogService.validate(request("name", "/var/*.log"))).isInstanceOf(BusinessException.class);
@@ -166,11 +187,51 @@ class ResourceExplorerNodeLogServiceTest {
         assertThat(result.get(0).capabilities()).containsExactly(CollectCapability.LOG);
         assertThat(result.get(0).pid()).isNull();
         assertThat(result.get(0).port()).isNull();
+        assertThat(result).extracting(DiscoveredServiceResponse::source).containsOnly(DiscoveredSource.LOKI);
+        assertThat(result.get(0).suggestedLogPaths()).containsExactly("/var/log/aims/app.log", "/var/log/aims/error.log");
+        assertThat(result.get(2).suggestedLogPaths()).containsExactly("/var/log/syslog");
     }
     @Test void discoveredIsEmptyWithoutLabelMappingAndNeverQueriesLoki() {
         ScopedHost unmapped = new ScopedHost("ADMIN", 1L, "node", null, "mdc-1", null, null, List.of());
         when(access.require("1")).thenReturn(new NodeAccessService.AccessibleNode(asset, unmapped));
         assertThat(service.getDiscoveredServices("1")).isEmpty();
+        verifyNoInteractions(queries, systemd);
+    }
+    @Test void discoveredAddsActiveSystemdServiceUnitsAfterLokiAndFiltersNoise() {
+        when(queries.recentFiles(host, 86_400L)).thenReturn(List.of(
+                new NodeLogQueries.DiscoveredFile("syslog", "/var/log/syslog", 10)));
+        when(systemd.units(any())).thenReturn(List.of(
+                new Unit("nginx.service", "forking", ServiceUnitState.ACTIVE),
+                new Unit("syslog.service", "simple", ServiceUnitState.ACTIVE),          // Loki 후보와 이름 겹침 → Loki 우선
+                new Unit("postgresql.service", "notify", ServiceUnitState.INACTIVE),   // 비활성 제외
+                new Unit("cloud-init.service", "oneshot", ServiceUnitState.ACTIVE),     // oneshot 제외
+                new Unit("systemd-journald.service", "notify", ServiceUnitState.ACTIVE), // 제외 패턴
+                new Unit("docker.socket", "", ServiceUnitState.ACTIVE),                  // .service 아님
+                new Unit("Docker.service", null, ServiceUnitState.ACTIVE)));
+        List<DiscoveredServiceResponse> result = service.getDiscoveredServices("1");
+        assertThat(result).extracting(DiscoveredServiceResponse::serviceName).containsExactly("Docker", "nginx", "syslog");
+        assertThat(result).extracting(DiscoveredServiceResponse::source)
+                .containsExactly(DiscoveredSource.SYSTEMD, DiscoveredSource.SYSTEMD, DiscoveredSource.LOKI);
+        assertThat(result.get(1).description()).isEqualTo("systemd 유닛 nginx.service (active, forking) — 기본 로그 경로 제안 2건");
+        assertThat(result.get(1).suggestedLogPaths()).containsExactly("/var/log/nginx/access.log", "/var/log/nginx/error.log");
+        assertThat(result.get(0).description()).isEqualTo("systemd 유닛 Docker.service (active) — 로그 경로는 2단계에서 입력");
+        assertThat(result.get(0).suggestedLogPaths()).isEmpty();                                  // journald 전용, 프리셋 없음
+        assertThat(result.get(2).description()).startsWith("최근 24시간 수집 파일");
+    }
+    @Test void logPathPresetsMatchUnitNamesCaseInsensitivelyAndIgnoreInstanceSuffix() {
+        assertThat(LogPathPresets.forUnit("NGINX.service")).containsExactly("/var/log/nginx/access.log", "/var/log/nginx/error.log");
+        assertThat(LogPathPresets.forUnit("postgresql@16-main.service")).containsExactly("/var/log/postgresql/postgresql-16-main.log");
+        assertThat(LogPathPresets.forUnit("postgresql.service")).hasSize(2);
+        assertThat(LogPathPresets.forUnit("httpd")).containsExactly("/var/log/httpd/access_log", "/var/log/httpd/error_log");
+        assertThat(LogPathPresets.forUnit("containerd.service")).isEmpty();
+        assertThat(LogPathPresets.forUnit(null)).isEmpty();
+    }
+    @Test void discoveredUsesSystemdOnlyWhenLokiMappingMissingButExporterTargetExists() {
+        ScopedHost noMdc = new ScopedHost("ADMIN", 1L, "node", null, null, null, "10.0.0.1:9100", List.of());
+        when(access.require("1")).thenReturn(new NodeAccessService.AccessibleNode(asset, noMdc));
+        when(systemd.units(any())).thenReturn(List.of(new Unit("nginx.service", "simple", ServiceUnitState.ACTIVE)));
+        List<DiscoveredServiceResponse> result = service.getDiscoveredServices("1");
+        assertThat(result).extracting(DiscoveredServiceResponse::serviceName).containsExactly("nginx");
         verifyNoInteractions(queries);
     }
     @Test void discoveredPropagatesLokiFailureInsteadOfEmptyList() {

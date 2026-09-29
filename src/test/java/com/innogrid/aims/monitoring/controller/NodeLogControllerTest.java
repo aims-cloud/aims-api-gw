@@ -46,10 +46,22 @@ class NodeLogControllerTest {
     }
     @Test void discoveryReturnsLokiBackedCandidates() throws Exception {
         when(logs.getDiscoveredServices("1")).thenReturn(List.of(
-                new DiscoveredServiceResponse("syslog", "최근 24시간 수집 파일: /var/log/syslog (10건)", null, null, List.of(CollectCapability.LOG))));
+                new DiscoveredServiceResponse("syslog", "최근 24시간 수집 파일: /var/log/syslog (10건)", null, null, List.of(CollectCapability.LOG),
+                        DiscoveredServiceResponse.DiscoveredSource.LOKI, List.of("/var/log/syslog"))));
         mvc.perform(get(base + "/discovered")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].serviceName").value("syslog"))
-                .andExpect(jsonPath("$.data[0].capabilities[0]").value("LOG"));
+                .andExpect(jsonPath("$.data[0].capabilities[0]").value("LOG"))
+                .andExpect(jsonPath("$.data[0].source").value("LOKI"))
+                .andExpect(jsonPath("$.data[0].suggestedLogPaths[0]").value("/var/log/syslog"));
+    }
+    @Test void agentTargetsStatusIsExposedUnderServices() throws Exception {
+        when(logs.getAgentTargetsStatus("1")).thenReturn(new com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.AgentTargetsStatusResponse(
+                com.innogrid.aims.monitoring.entity.AgentTransport.LOCAL,
+                com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.AgentTargetsStatusResponse.TargetsStatus.APPLIED, null, 2, null));
+        mvc.perform(get(base + "/agent")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.transport").value("LOCAL"))
+                .andExpect(jsonPath("$.data.targetsStatus").value("APPLIED"))
+                .andExpect(jsonPath("$.data.targetCount").value(2));
     }
     @Test void validateReturnsIssuesAndObservationsInsteadOf501() throws Exception {
         when(logs.validateCollectService(eq("1"), any())).thenReturn(new CollectServiceValidationResponse(true, List.of(),

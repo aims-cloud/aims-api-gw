@@ -24,6 +24,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogLeve
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogListResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.AgentTargetsStatusResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceRequest;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse;
@@ -177,6 +178,15 @@ public class ResourceExplorerNodeController {
             @PathVariable String nodeId,
             @RequestBody CollectServiceRequest request) {
         return ApiResponse.ok(resourceExplorerNodeLogService.validateCollectService(nodeId, request));
+    }
+
+    @Operation(summary = "수집 에이전트 목록 반영 상태",
+            description = "이 노드의 수집 에이전트(Alloy)에 원장의 수집 파일 목록이 반영됐는지. NO_AGENT: 목록을 전송하지 않는 노드(에이전트 미구성), "
+                    + "PENDING: 반영 대기, APPLIED: 반영됨(appliedAt), FAILED: 반영 실패(message). targetCount 는 원장으로 계산한 동적 수집 파일 수(정적 4개 제외). "
+                    + "서비스 등록·수정·삭제 커밋 직후와 60초 주기 재적용 스케줄러가 반영을 시도합니다.")
+    @GetMapping("/services/agent")
+    public ApiResponse<AgentTargetsStatusResponse> getAgentTargetsStatus(@PathVariable String nodeId) {
+        return ApiResponse.ok(resourceExplorerNodeLogService.getAgentTargetsStatus(nodeId));
     }
 
     @Operation(summary = "수집 서비스 추가",

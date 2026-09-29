@@ -93,6 +93,49 @@ loki.source.file "aims_app" {
   legacy_positions_file = "/var/lib/alloy/legacy/positions.yaml"
 }
 
+// ── 포털에서 등록한 수집 서비스 파일 (동적 대상) ─────────────────
+// 백엔드가 수집 서비스 원장으로 file_sd JSON(/var/lib/alloy/targets/log-targets.json)을 갱신하면
+// discovery.file 이 30초 안에 감지해 대상을 바꾼다(재시작 없음). 목록 형식과 갱신 주체는 docs/11 §4.4·§5.3.
+// 목록의 __path__ 는 호스트 경로다. 컨테이너에는 호스트 루트가 /host 로 마운트되므로 읽을 때 /host 를 붙이고,
+// Loki 로 보낼 때 filename 라벨에서 다시 떼어 원장 경로와 글자까지 같게 유지한다(자원 탐색기 조회 키).
+// 정적 job(syslog·auth·kern·aims-app)의 경로는 백엔드가 목록에서 제외해 중복 적재를 막는다.
+
+discovery.file "collect" {
+  files            = ["/var/lib/alloy/targets/log-targets.json"]
+  refresh_interval = "30s"
+}
+
+discovery.relabel "collect" {
+  targets = discovery.file.collect.targets
+
+  rule {
+    source_labels = ["__path__"]
+    regex         = "(.*)"
+    target_label  = "__path__"
+    replacement   = "/host$1"
+  }
+}
+
+loki.relabel "collect" {
+  forward_to = [loki.write.default.receiver]
+
+  rule {
+    source_labels = ["filename"]
+    regex         = "/host(/.*)"
+    target_label  = "filename"
+    replacement   = "$1"
+  }
+}
+
+loki.source.file "collect" {
+  targets    = discovery.relabel.collect.output
+  forward_to = [loki.relabel.collect.receiver]
+
+  file_match {
+    enabled = true
+  }
+}
+
 // ── Loki 전송 ───────────────────────────────────────────────
 
 loki.write "default" {

@@ -79,7 +79,7 @@ public class NodeLogQueries {
     public Map<ServiceLogLevel, Long> levelCounts(ScopedHost host, List<String> paths, Window window) {
         requireConfigured(host);
         if (paths.isEmpty()) return Map.of();
-        return byLevel(loki.instant(count(selector(host, paths, null), window.seconds(), "level"), window.to()));
+        return byLevel(loki.instant(count(selector(host, paths, null), window.seconds(), LEVEL_GROUP), window.to()));
     }
 
     public ServiceLogTrendResponse trend(ScopedHost host, List<String> paths, Window window, String interval) {
@@ -91,18 +91,18 @@ public class NodeLogQueries {
         Map<Long, Map<ServiceLogLevel, Long>> counts = new HashMap<>();
         long full = window.seconds() / step;
         if (!paths.isEmpty() && full > 0) {
-            List<Point> points = loki.range(count(selector(host, paths, null), step, "level"),
+            List<Point> points = loki.range(count(selector(host, paths, null), step, LEVEL_GROUP),
                     window.from().plusSeconds(step), window.from().plusSeconds(full * step), step);
             for (Point point : points) {
                 long start = point.time().getEpochSecond() - step;
                 Map<ServiceLogLevel, Long> levels = counts.computeIfAbsent(start, ignored -> new EnumMap<>(ServiceLogLevel.class));
-                levels.merge(ServiceLogLevel.normalize(point.labels().get("level")), point.count(), Long::sum);
+                levels.merge(effectiveLevel(point.labels()), point.count(), Long::sum);
             }
         }
         long remainder = window.seconds() % step;
         if (!paths.isEmpty() && remainder > 0) {
             counts.put(window.from().plusSeconds(full * step).getEpochSecond(),
-                    byLevel(loki.instant(count(selector(host, paths, null), remainder, "level"), window.to())));
+                    byLevel(loki.instant(count(selector(host, paths, null), remainder, LEVEL_GROUP), window.to())));
         }
         List<ServiceLogTrendResponse.Bucket> buckets = new ArrayList<>();
         for (long i = 0; i < bucketCount; i++) {
@@ -127,27 +127,55 @@ public class NodeLogQueries {
         List<ServiceLogListResponse.Entry> entries = lines.stream().sorted(Comparator.comparing(LokiQueryClient.LogLine::time).reversed()
                         .thenComparing(line -> line.labels().getOrDefault("filename", "")).thenComparing(LokiQueryClient.LogLine::message))
                 .limit(limit).map(line -> new ServiceLogListResponse.Entry(line.time().atOffset(ZoneOffset.UTC),
-                        ServiceLogLevel.normalize(line.labels().get("level")), line.labels().get("filename"), line.message())).toList();
+                        effectiveLevel(line.labels()), line.labels().get("filename"), line.message())).toList();
         return new ServiceLogListResponse(total, entries);
     }
 
+    /**
+     * 집계 그룹. 파이프라인이 붙인 {@code level} 과 Loki 3.x 가 붙이는 {@code detected_level}(구조화 메타데이터)을 함께 받아
+     * {@link #effectiveLevel} 로 합친다. Loki 는 detected_level 을 level 라벨에서 먼저 유도하므로 둘이 어긋나지 않는다(docs/11 §3).
+     */
+    static final String LEVEL_GROUP = "level, detected_level";
+
+    /** 파이프라인 level 이 있으면 그것, 없으면 Loki detected_level. 둘 다 없으면 UNKNOWN */
+    static ServiceLogLevel effectiveLevel(Map<String, String> labels) {
+        String level = labels.get("level");
+        if (level == null || level.isBlank()) level = labels.get("detected_level");
+        return ServiceLogLevel.normalize(level);
+    }
+
+    /** 레벨별 Loki 값. detected_level 은 소문자이고 critical·fatal 도 낸다 */
+    private static String levelPattern(ServiceLogLevel level) {
+        return switch (level) {
+            case WARNING -> "warn|warning";
+            case ERROR -> "error|critical|fatal";
+            default -> level.name().toLowerCase(Locale.ROOT);
+        };
+    }
+
+    /**
+     * 스트림 선택자 + (레벨 필터가 있으면) 파이프라인 라벨 필터. 레벨은 스트림 라벨이 아니라 {@code detected_level} 로 거른다 —
+     * 레벨 추출 파이프라인이 없는 파일(동적 수집, syslog)도 Loki 의 감지값으로 걸러지고, level 라벨이 있는 파일은 Loki 가 그 값을
+     * detected_level 로 옮겨 주므로 결과가 같다. UNKNOWN 을 고르면 선택하지 않은 레벨을 제외하는 부정 매처라 감지값이 없는 줄도 남는다.
+     */
     static String selector(ScopedHost host, List<String> paths, List<ServiceLogLevel> levels) {
         if (paths.isEmpty()) throw bad("조회 경로가 필요합니다.");
         String base = nodeSelector(host);
         StringBuilder result = new StringBuilder(base.substring(0, base.length() - 1));
         if (paths.size() == 1) result.append(", filename=").append(quote(paths.get(0)));
         else result.append(", filename=~").append(quote(paths.stream().map(NodeLogQueries::regexLiteral).collect(Collectors.joining("|", "(", ")"))));
+        result.append('}');
         if (levels != null && !levels.isEmpty()) {
             Set<ServiceLogLevel> selected = EnumSet.copyOf(levels);
             boolean unknown = selected.contains(ServiceLogLevel.UNKNOWN);
             List<String> patterns = new ArrayList<>();
             for (ServiceLogLevel level : List.of(ServiceLogLevel.INFO, ServiceLogLevel.WARNING, ServiceLogLevel.ERROR, ServiceLogLevel.DEBUG)) {
-                if (selected.contains(level) != unknown) patterns.add(level == ServiceLogLevel.WARNING ? "warn|warning" : level.name().toLowerCase(Locale.ROOT));
+                if (selected.contains(level) != unknown) patterns.add(levelPattern(level));
             }
-            if (!patterns.isEmpty()) result.append(unknown ? ", level!~" : ", level=~")
+            if (!patterns.isEmpty()) result.append(unknown ? " | detected_level!~" : " | detected_level=~")
                     .append(quote("(?i:" + String.join("|", patterns) + ")"));
         }
-        return result.append('}').toString();
+        return result.toString();
     }
     private static String nodeSelector(ScopedHost host) {
         requireConfigured(host);
@@ -191,7 +219,7 @@ public class NodeLogQueries {
     }
     private static Map<ServiceLogLevel, Long> byLevel(List<Point> points) {
         Map<ServiceLogLevel, Long> result = new EnumMap<>(ServiceLogLevel.class);
-        for (Point point : points) result.merge(ServiceLogLevel.normalize(point.labels().get("level")), point.count(), Long::sum);
+        for (Point point : points) result.merge(effectiveLevel(point.labels()), point.count(), Long::sum);
         return result;
     }
     private static BusinessException bad(String message) { return new BusinessException(HttpStatus.BAD_REQUEST, message); }

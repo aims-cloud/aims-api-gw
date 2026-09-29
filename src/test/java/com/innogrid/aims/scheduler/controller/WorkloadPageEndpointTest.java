@@ -198,12 +198,43 @@ class WorkloadPageEndpointTest {
             row.propertyNames().forEach(keys::add);
             assertEquals(ResponseJsonGoldenTest.WORKLOAD_FIELDS, keys, "필터를 걸어도 행은 23필드 그대로");
         }
-        // 모르는 값은 400 과 가능한 값 목록 — 정렬 필드로는 여전히 받지 않는다
+        // 모르는 값은 400 과 가능한 값 목록 — 필터와 등급 순 정렬은 함께 쓸 수 있다
         mockMvc.perform(get(PAGE).param("priority", "urgent")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("CRITICAL")));
         mockMvc.perform(get(PAGE).param("priority", "HIGH,nope")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("LOW")));
-        mockMvc.perform(get(PAGE).param("priority", "HIGH").param("sort", "priority,asc")).andExpect(status().isBadRequest());
+        assertEquals(List.of(seeded.get(1), seeded.get(4)), ids(page("keyword", prefix, "priority", "HIGH", "sort", "priority,asc").get("items")),
+                "필터 HIGH 두 행을 등급 순 asc 로 — 같은 등급이라 id 오름차순");
+    }
+
+    @DisplayName("우선순위 정렬은 알파벳순이 아니라 등급 순이고 같은 등급은 id 로 이어지며 페이지 경계에서 겹치거나 빠지지 않는다")
+    @Test
+    void priority_sort_is_rank_order_with_id_tiebreak() throws Exception {
+        List<Long> s = seeded;
+        List<Long> asc = List.of(s.get(0), s.get(2), s.get(6), s.get(7), s.get(1), s.get(4), s.get(3), s.get(5));
+        List<Long> desc = List.of(s.get(5), s.get(3), s.get(4), s.get(1), s.get(7), s.get(6), s.get(2), s.get(0));
+        JsonNode ascItems = page("keyword", prefix, "sort", "priority,asc").get("items");
+        assertEquals(asc, ids(ascItems), "LOW → NORMAL(2·6·7 id 오름차순) → HIGH(1·4) → CRITICAL(3·5) — 알파벳순이면 CRITICAL 이 먼저 온다");
+        assertEquals("LOW", ascItems.get(0).get("priority").asString());
+        assertEquals(desc, ids(page("keyword", prefix, "sort", "priority,desc").get("items")),
+                "CRITICAL(5·3 id 내림차순) → HIGH(4·1) → NORMAL(7·6·2) → LOW — 같은 등급은 첫 키 방향으로 id");
+        assertEquals(asc, ids(page("keyword", prefix, "sort", "priority").get("items")), "방향 생략은 asc");
+        assertEquals(asc, ids(page("keyword", prefix, "sort", "priority,ASC").get("items")), "방향 대소문자 무시");
+
+        List<Long> stitched = new ArrayList<>();
+        for (int p = 1; p <= 3; p++) {
+            JsonNode d = page("keyword", prefix, "sort", "priority,asc", "size", "3", "page", String.valueOf(p));
+            assertEquals(8, d.get("totalElements").asLong(), "count 질의는 등급 정렬을 지운 채 세어도 총건수가 같다");
+            assertEquals(3, d.get("totalPages").asLong());
+            for (JsonNode row : d.get("items")) stitched.add(row.get("id").asLong());
+        }
+        assertEquals(asc, stitched, "세 페이지(3·3·2)를 이어 붙이면 전체와 같다 — NORMAL 이 1·2쪽 경계에 걸쳐도 겹침·빠짐 없음");
+
+        assertEquals(List.of(s.get(5), s.get(3), s.get(4), s.get(1)),
+                ids(page("keyword", prefix, "priority", "HIGH,CRITICAL", "sort", "priority,desc").get("items")), "필터와 함께");
+        assertEquals(List.of(s.get(0), s.get(2), s.get(6), s.get(7), s.get(4)),
+                ids(page("keyword", prefix, "status", "PENDING", "sort", "priority,asc").get("items")), "상태 필터와 함께 — FAILED 1·3, SCHEDULED 5 제외");
+        mockMvc.perform(get(PAGE).param("sort", "priority,sideways")).andExpect(status().isBadRequest());
     }
 
     @DisplayName("우선순위·상태 허용값 문서는 열거형과 같다")
@@ -242,7 +273,7 @@ class WorkloadPageEndpointTest {
         assertEquals(total0(), total0("keyword", "   "), "공백만이면 필터 없음");
     }
 
-    @DisplayName("정렬은 허용 필드만 받고 priority 와 모르는 필드·모르는 값은 400 이다")
+    @DisplayName("정렬은 허용 필드만 받고 모르는 필드·모르는 값은 400 이다")
     @Test
     void sort_and_invalid_values_400() throws Exception {
         List<Long> cpuAsc = ids(page("keyword", prefix, "sort", "requiredCpu,asc").get("items"));
@@ -251,13 +282,13 @@ class WorkloadPageEndpointTest {
         assertEquals(List.of(seeded.get(2), seeded.get(7), seeded.get(6), seeded.get(5), seeded.get(4),
                 seeded.get(3), seeded.get(1), seeded.get(0)), nameDesc, "이름 내림차순 — '-under_score'('u' 가 숫자보다 큼) 뒤 -7…-0");
 
-        for (String field : List.of("createdAt", "name", "status", "resourceType", "requiredCpu", "requiredMemoryMb",
+        for (String field : List.of("createdAt", "name", "status", "resourceType", "priority", "requiredCpu", "requiredMemoryMb",
                 "requiredGpu", "requiredDiskGb", "retryCount", "scheduledAt", "lastFailedAt")) {
-            page("keyword", prefix, "sort", field + ",desc");   // 허용 필드 11 전부 실제 정렬이 돈다(속성명 오타면 500)
+            page("keyword", prefix, "sort", field + ",desc");   // 허용 필드 12 전부 실제 정렬이 돈다(속성명 오타면 500)
         }
-        mockMvc.perform(get(PAGE).param("sort", "priority,asc")).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("createdAt")));
-        mockMvc.perform(get(PAGE).param("sort", "nope,asc")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(PAGE).param("sort", "nope,asc")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("createdAt")))
+                .andExpect(jsonPath("$.message", containsString("priority")));
         mockMvc.perform(get(PAGE).param("status", "nope")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("PENDING")));
         mockMvc.perform(get(PAGE).param("resourceType", "disk")).andExpect(status().isBadRequest())

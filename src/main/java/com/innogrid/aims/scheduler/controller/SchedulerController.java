@@ -111,8 +111,8 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 페이징 조회",
                description = "배열로 전량을 주는 /workloads 와 달리 페이지·총건수·필터·정렬을 지원합니다. page 는 1부터, size 최대 100, "
-                       + "sort 는 '{필드},{asc|desc}' (createdAt·name·status·resourceType·requiredCpu·requiredMemoryMb·requiredGpu·requiredDiskGb·retryCount·scheduledAt·lastFailedAt — "
-                       + "priority 는 DB 에 이름 문자열로 저장돼 정렬하면 높낮이가 아닌 알파벳순이 되므로 허용하지 않습니다 — 필터로는 받습니다). 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·name·status·resourceType·priority·requiredCpu·requiredMemoryMb·requiredGpu·requiredDiskGb·retryCount·scheduledAt·lastFailedAt — "
+                       + "priority 는 DB 에 이름 문자열로 저장되지만 등급 순 LOW→NORMAL→HIGH→CRITICAL 로 정렬합니다). 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
                        + "status·priority·resourceType·keyword·assignedNodeId·retryExhausted 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
                        + "status·priority 는 여러 값을 받아 서로 OR 입니다(status=SCHEDULED&status=RUNNING · priority=HIGH,CRITICAL 처럼 반복 또는 쉼표). "
                        + "retryExhausted=true 는 재시도 소진(FAILED 이고 retryCount 가 /workloads/retry-policy 의 상한 이상) 행만, false 는 그 나머지입니다.")
@@ -130,7 +130,7 @@ public class SchedulerController {
             @RequestParam(required = false) String assignedNodeId,
             @Parameter(description = "true 면 재시도 소진 행만(status FAILED 이고 retryCount ≥ 상한 — 일괄 재개 대상), false 면 그 나머지. 비우면 필터 없음. 값은 true·false(해석할 수 없는 값은 400)")
             @RequestParam(required = false) Boolean retryExhausted,
-            @Parameter(description = "우선순위 — 여러 개면 반복(priority=HIGH&priority=CRITICAL)이나 쉼표로, 서로 OR. 대소문자 무시, 다른 값은 400. 생성 때 생략한 행은 NORMAL. 정렬 필드로는 받지 않습니다. 비우면 전체",
+            @Parameter(description = "우선순위 — 여러 개면 반복(priority=HIGH&priority=CRITICAL)이나 쉼표로, 서로 OR. 대소문자 무시, 다른 값은 400. 생성 때 생략한 행은 NORMAL. sort=priority 는 등급 순. 비우면 전체",
                        schema = @Schema(allowableValues = {"LOW", "NORMAL", "HIGH", "CRITICAL"}))
             @RequestParam(required = false) List<String> priority,
             @RequestParam(defaultValue = "1") @Min(1) int page,

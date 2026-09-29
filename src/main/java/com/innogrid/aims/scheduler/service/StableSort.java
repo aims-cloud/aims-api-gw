@@ -11,7 +11,8 @@ import org.springframework.data.domain.Sort;
  * <p>방향은 첫 정렬 키를 따른다 — 기본 최신순이면 {@code id} 내림차순, {@code createdAt,asc} 면 오름차순이다.
  * 적용 자리는 다섯 곳이다 — 스케줄 목록({@code ScheduleService.list}), 실행 이력({@code ScheduleService.runs}),
  * 배치 이력 페이징({@code SchedulingHistoryQueryService.page}), 전달 기록({@code PlacementDispatchService.page}),
- * 워크로드 페이징({@code WorkloadQueryService.page}). 실행 상세의 결정 목록은 저장소 메서드가 {@code createdAt}·{@code id}
+ * 워크로드 페이징({@code WorkloadQueryService.page} — {@code priority} 등급 순 정렬은 여기서 만든 키 목록을 그대로
+ * Criteria 정렬로 옮기므로 규칙이 같다). 실행 상세의 결정 목록은 저장소 메서드가 {@code createdAt}·{@code id}
  * 오름차순이라 배치 이력 페이징 {@code sort=createdAt,asc} 와 행 순서가 같다. 알람·포털 로그 목록은 보조 키를
  * {@code id} 내림차순으로 고정하지만, 스케줄러는 이 이유로 방향을 따른다.</p>
  *

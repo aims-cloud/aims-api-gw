@@ -1,6 +1,8 @@
 package com.innogrid.aims.scheduler.controller;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.TreeSet;
 
@@ -63,6 +65,8 @@ class HistoryPageEndpointTest {
     private static final long RUN_Y = 9_900_778L;
     /** 아무 행도 묶지 않는 실행 id — "없는 실행 id 는 빈 페이지" 를 볼 때만 쓴다. */
     private static final long RUN_NONE = 9_900_999L;
+    /** 동률 페이지 경계 시험 전용 — 성공 12건만 심어 success 가 전부 같은 값이 되게 한다. 다른 시드의 건수 단언과 겹치지 않는 id. */
+    private static final long WORKLOAD_G = 9_900_011L;
 
     @BeforeEach
     void seed() {
@@ -274,6 +278,33 @@ class HistoryPageEndpointTest {
                     .get("totalElements").asInt(), "묶인 행이 없는 실행 id 는 0 건 — 오류가 아니라 빈 페이지");
             assertEquals(3, data(get(PAGE).param("size", "100").param("workloadId", String.valueOf(WORKLOAD_D)))
                     .get("totalElements").asInt(), "심은 행은 워크로드 필터만으로 세 건 그대로다");
+        } finally {
+            repository.deleteAllById(ids);
+        }
+    }
+
+    @DisplayName("같은 값으로 정렬해도 페이지를 이어 붙이면 중복·누락 없이 id 가 첫 키 방향으로 이어진다")
+    @Test
+    void tied_sort_pages_are_stitched_by_id_in_first_key_direction() throws Exception {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            SchedulingHistory h = new SchedulingHistory(WORKLOAD_G, "hp-tie-" + i, "mdc-01", "n1", 0.5, "r", "weighted", "default");
+            h.linkToRun(null, true);
+            ids.add(repository.save(h).getId());
+        }
+        try {
+            List<Long> stitched = new ArrayList<>();
+            for (int p = 1; p <= 3; p++) {
+                JsonNode d = data(get(PAGE).param("workloadId", String.valueOf(WORKLOAD_G))
+                        .param("sort", "success,desc").param("size", "5").param("page", String.valueOf(p)));
+                assertEquals(12, d.get("totalElements").asInt());
+                for (JsonNode row : d.get("items")) stitched.add(row.get("id").asLong());
+            }
+            assertEquals(12, stitched.size(), "세 페이지(5·5·2)를 이어 붙이면 12건");
+            assertEquals(12, new HashSet<>(stitched).size(), "페이지 경계에서 행이 겹쳤다 " + stitched);
+            List<Long> expected = new ArrayList<>(ids);
+            expected.sort(Comparator.reverseOrder());
+            assertEquals(expected, stitched, "동률은 id 내림차순 — 첫 키 방향을 따른다");
         } finally {
             repository.deleteAllById(ids);
         }

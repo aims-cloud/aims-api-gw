@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -262,6 +264,22 @@ class ScheduleServiceTest {
         PageResponse<ScheduleResponse> second = scheduleService.list(null, null, null, 2, 2, "scheduleId,asc");
         assertEquals(1, second.items().size());
         assertEquals("job-3", second.items().get(0).scheduleId());
+    }
+
+    @DisplayName("같은 사용 여부로 정렬해도 한 건씩 페이지를 넘기면 id 내림차순으로 겹침·빠짐 없이 이어진다")
+    @Test
+    void tied_enabled_sort_pages_by_id_desc() {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) ids.add(scheduleService.create(request("tie-" + i, "0 0 2 * * ?")).id());
+
+        List<Long> stitched = new ArrayList<>();
+        for (int p = 1; p <= 3; p++) {
+            PageResponse<ScheduleResponse> one = scheduleService.list(null, null, null, p, 1, "enabled,desc");
+            assertEquals(3, one.totalElements());
+            stitched.add(one.items().get(0).id());
+        }
+        ids.sort(Comparator.reverseOrder());
+        assertEquals(ids, stitched, "사용 여부가 전부 true 라 순서는 id 만으로 — 첫 키 방향(내림차순)");
     }
 
     @DisplayName("검색어와 필터가 동작한다")

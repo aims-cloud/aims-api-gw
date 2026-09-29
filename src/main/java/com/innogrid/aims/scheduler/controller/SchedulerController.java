@@ -113,8 +113,9 @@ public class SchedulerController {
                description = "배열로 전량을 주는 /workloads 와 달리 페이지·총건수·필터·정렬을 지원합니다. page 는 1부터, size 최대 100, "
                        + "sort 는 '{필드},{asc|desc}' (createdAt·name·status·resourceType·requiredCpu·requiredMemoryMb·requiredGpu·requiredDiskGb·retryCount·scheduledAt·lastFailedAt — "
                        + "priority 는 문자열 저장이라 사전순이 되어 허용하지 않습니다). 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
-                       + "status·resourceType·keyword·assignedNodeId 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
-                       + "status 는 여러 값을 받아 서로 OR 입니다(status=SCHEDULED&status=RUNNING 또는 쉼표).")
+                       + "status·resourceType·keyword·assignedNodeId·retryExhausted 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
+                       + "status 는 여러 값을 받아 서로 OR 입니다(status=SCHEDULED&status=RUNNING 또는 쉼표). "
+                       + "retryExhausted=true 는 재시도 소진(FAILED 이고 retryCount 가 /workloads/retry-policy 의 상한 이상) 행만, false 는 그 나머지입니다.")
     @GetMapping("/workloads/page")
     public ApiResponse<PageResponse<WorkloadResponse>> getWorkloadPage(
             @Parameter(description = "상태 — 여러 개면 반복(status=SCHEDULED&status=RUNNING)이나 쉼표로, 서로 OR. 대소문자 무시, 다른 값은 400. 비우면 전체",
@@ -127,6 +128,8 @@ public class SchedulerController {
             @RequestParam(required = false) String keyword,
             @Parameter(description = "마지막으로 배정된 노드 id(/nodes 의 nodeId 와 같은 값)와 정확히 일치하는 행만(앞뒤 공백은 뺌). 완료·실패 뒤에도 남으므로 지금 도는 것만 보려면 status 와 함께. 비우면 필터 없음")
             @RequestParam(required = false) String assignedNodeId,
+            @Parameter(description = "true 면 재시도 소진 행만(status FAILED 이고 retryCount ≥ 상한 — 일괄 재개 대상), false 면 그 나머지. 비우면 필터 없음. 값은 true·false(해석할 수 없는 값은 400)")
+            @RequestParam(required = false) Boolean retryExhausted,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
@@ -141,7 +144,7 @@ public class SchedulerController {
         }
         Workload.ResourceType typeValue = resourceType == null || resourceType.isBlank() ? null
                 : parseEnum(Workload.ResourceType.class, resourceType, "리소스 종류");
-        return ApiResponse.ok(workloadQueryService.page(statuses, typeValue, keyword, assignedNodeId, page, size, sort));
+        return ApiResponse.ok(workloadQueryService.page(statuses, typeValue, keyword, assignedNodeId, retryExhausted, page, size, sort));
     }
 
     @Operation(summary = "워크로드 생성",

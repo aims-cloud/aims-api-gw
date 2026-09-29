@@ -4,7 +4,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -144,6 +147,28 @@ class ScheduleRunListFilterApiTest {
             }
             for (JsonNode row : p1.get("items")) assertEquals("COMPLETED", row.get("status").asString());
             for (JsonNode row : p2.get("items")) assertEquals("COMPLETED", row.get("status").asString());
+        } finally {
+            clean(s);
+        }
+    }
+
+    @DisplayName("동률이 있는 상태로 정렬해도 두 건씩 이어 붙이면 상태 내림차순·id 내림차순이고 겹침·빠짐이 없다")
+    @Test
+    void tied_status_sort_pages_follow_id_in_first_key_direction() throws Exception {
+        Seeded s = seed();
+        try {
+            Map<Long, String> statusOf = new HashMap<>();
+            for (JsonNode row : items(s)) statusOf.put(row.get("runId").asLong(), row.get("status").asString());
+
+            List<Long> stitched = new ArrayList<>();
+            for (int p = 1; p <= 3; p++) {
+                JsonNode d = page(s, "sort", "status,desc", "size", "2", "page", String.valueOf(p));
+                assertEquals(6, d.get("totalElements").asLong());
+                for (JsonNode row : d.get("items")) stitched.add(row.get("runId").asLong());
+            }
+            List<Long> expected = new ArrayList<>(s.runIds());
+            expected.sort(Comparator.comparing((Long id) -> statusOf.get(id)).reversed().thenComparing(Comparator.<Long>reverseOrder()));
+            assertEquals(expected, stitched, "상태는 문자열 내림차순(RUNNING·FAILED·COMPLETED), 같은 상태는 id 내림차순");
         } finally {
             clean(s);
         }

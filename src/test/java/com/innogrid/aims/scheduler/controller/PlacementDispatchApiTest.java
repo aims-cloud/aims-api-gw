@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -16,6 +18,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
+import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -46,6 +50,8 @@ class PlacementDispatchApiTest {
             "status", "idempotencyKey", "externalRef", "message", "requestedAt", "respondedAt", "createdBy"));
 
     private static final String BASE = "/api/v1/scheduler";
+    /** 실재 실행과 겹치지 않는 예약 대역의 실행 id — 동률 페이지 시험 전용. */
+    private static final long RUN_Z = 9_900_880L;
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -146,6 +152,38 @@ class PlacementDispatchApiTest {
         mockMvc.perform(get(BASE + "/dispatches").param("status", "weird")).andExpect(status().isBadRequest());
         mockMvc.perform(get(BASE + "/dispatches").param("size", "101")).andExpect(status().isBadRequest());
         mockMvc.perform(get(BASE + "/dispatches").param("sort", "nodeId,asc")).andExpect(status().isBadRequest());
+    }
+
+    @DisplayName("상태가 모두 같아도 페이지를 이어 붙이면 id 가 첫 키 방향으로 이어지고, id 정렬은 요청 그대로 받는다")
+    @Test
+    void tied_status_pages_follow_id_in_first_key_direction() throws Exception {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            Workload w = workloadRepository.save(new Workload("dpapi-tie-" + i, 1, 64));
+            ids.add(dispatchRepository.save(new PlacementDispatch(w, RUN_Z, "tester")).getId());
+        }
+        List<Long> descending = new ArrayList<>(ids);
+        descending.sort(Comparator.reverseOrder());
+
+        List<Long> stitched = new ArrayList<>();
+        for (int p = 1; p <= 3; p++) {
+            JsonNode page = data(mockMvc.perform(get(BASE + "/dispatches").param("scheduleRunId", String.valueOf(RUN_Z))
+                    .param("sort", "status,desc").param("size", "5").param("page", String.valueOf(p))).andExpect(status().isOk()).andReturn());
+            assertEquals(12, page.get("totalElements").asLong());
+            for (JsonNode row : page.get("items")) {
+                assertEquals("REQUESTED", row.get("status").asString());
+                stitched.add(row.get("id").asLong());
+            }
+        }
+        assertEquals(descending, stitched, "동률은 id 내림차순 — 세 페이지(5·5·2)에 겹침·빠짐 없음");
+
+        JsonNode byId = data(mockMvc.perform(get(BASE + "/dispatches").param("scheduleRunId", String.valueOf(RUN_Z))
+                .param("sort", "id,asc").param("size", "100")).andExpect(status().isOk()).andReturn());
+        List<Long> ascending = new ArrayList<>();
+        for (JsonNode row : byId.get("items")) ascending.add(row.get("id").asLong());
+        List<Long> sorted = new ArrayList<>(ids);
+        sorted.sort(Comparator.naturalOrder());
+        assertEquals(sorted, ascending, "sort=id,asc 는 요청 방향 그대로 id 오름차순 — 보조 키 중복 부착 여부는 StableSortTest 가 본다");
     }
 
     @DisplayName("워크로드를 삭제하면 그 디스패치 기록도 사라진다 — 실행 중이면 삭제 자체가 409")

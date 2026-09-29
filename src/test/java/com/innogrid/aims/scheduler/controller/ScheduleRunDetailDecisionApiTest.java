@@ -1,6 +1,11 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,12 +18,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
+import jakarta.persistence.EntityManager;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -47,6 +54,8 @@ class ScheduleRunDetailDecisionApiTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired ScheduleRunRepository runRepository;
     @Autowired SchedulingHistoryRepository historyRepository;
+    @Autowired EntityManager em;
+    @Autowired TransactionTemplate tx;
 
     @DisplayName("결정 한 줄은 13키이고 exclusionCodes 가 맨 끝에 문자열 그대로, 집계가 없는 결정은 null 로 실린다")
     @Test
@@ -97,6 +106,39 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
+    @DisplayName("결정 시각이 같아도 실행 상세와 이력 페이징의 결정 순서가 id 로 같고, 최신순 페이지를 이어 붙이면 정확히 뒤집힌다")
+    @Test
+    void tied_decisions_share_id_order_between_run_detail_and_history_page() throws Exception {
+        Seeded s = seedTied(4);
+        try {
+            pinCreatedAt(s.historyIds(), OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(5).truncatedTo(ChronoUnit.SECONDS));
+            List<Long> ascending = new ArrayList<>(s.historyIds());
+            ascending.sort(Comparator.naturalOrder());
+
+            List<Long> fromDetail = new ArrayList<>();
+            for (JsonNode row : runDetail(s).get("decisions")) fromDetail.add(row.get("historyId").asLong());
+            List<Long> fromPage = new ArrayList<>();
+            for (JsonNode row : data(get(HISTORY_PAGE).param("scheduleRunId", String.valueOf(s.runId()))
+                    .param("sort", "createdAt,asc").param("size", "100")).get("items")) fromPage.add(row.get("id").asLong());
+            // H2 는 동률을 삽입 순(id 오름차순)으로 주는 경향이 있어 오름차순 단언만으로는 보조 키 누락을 못 잡는다 — 검출은 아래 내림차순 페이지 단언이 맡는다.
+            assertEquals(ascending, fromDetail, "실행 상세는 createdAt 동률을 id 오름차순으로 싣는다");
+            assertEquals(fromDetail, fromPage, "sort=createdAt,asc 페이징과 실행 상세의 행 순서가 같다");
+
+            List<Long> descending = new ArrayList<>();
+            for (int p = 1; p <= 2; p++) {
+                for (JsonNode row : data(get(HISTORY_PAGE).param("scheduleRunId", String.valueOf(s.runId()))
+                        .param("sort", "createdAt,desc").param("size", "2").param("page", String.valueOf(p))).get("items")) {
+                    descending.add(row.get("id").asLong());
+                }
+            }
+            List<Long> reversed = new ArrayList<>(ascending);
+            Collections.reverse(reversed);
+            assertEquals(reversed, descending, "최신순 두 페이지를 이어 붙이면 오름차순의 정확한 역순 — 경계에서 겹치거나 빠지지 않는다");
+        } finally {
+            clean(s);
+        }
+    }
+
     // ── 시딩 ───────────────────────────────────────────────────
 
     private record Seeded(long scheduleId, long runId, List<Long> historyIds) { }
@@ -133,6 +175,42 @@ class ScheduleRunDetailDecisionApiTest {
             }
             throw e;
         }
+    }
+
+    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id 는 예약 대역 9_930_003, 동률 시험 전용. */
+    private Seeded seedTied(int n) throws Exception {
+        String key = "rdtie-" + Long.toHexString(System.nanoTime());
+        JsonNode schedule = objectMapper.readTree(mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scheduleId\":\"" + key + "\",\"name\":\"" + key + "\",\"cronExpression\":\"0 0 2 * * ?\",\"resourceType\":\"GPU\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("data");
+        long scheduleId = schedule.get("id").asLong();
+        List<Long> historyIds = new ArrayList<>();
+        try {
+            ScheduleRun run = new ScheduleRun(scheduleId, key, ScheduleRun.TriggerType.MANUAL, "tester");
+            run.recordCounts(n, n, 0, false);
+            run.finish(ScheduleRun.RunStatus.COMPLETED, "시험용");
+            run = runRepository.save(run);
+            for (int i = 0; i < n; i++) {
+                SchedulingHistory h = new SchedulingHistory(9_930_003L, key + "-" + i, "mdc-01", "n1", 0.5, "최고 점수", "weighted", "default");
+                h.setCandidateCount(1);
+                h.linkToRun(run.getId(), true);
+                historyIds.add(historyRepository.save(h).getId());
+            }
+            return new Seeded(scheduleId, run.getId(), historyIds);
+        } catch (Throwable e) {
+            try {
+                clean(scheduleId, historyIds);
+            } catch (Exception cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
+            throw e;
+        }
+    }
+
+    /** 저장 경로가 채운 결정 시각을 하나로 덮어 동률을 만든다 — 실행 이력 필터 시험의 backdate 와 같은 방식. */
+    private void pinCreatedAt(List<Long> ids, OffsetDateTime at) {
+        tx.executeWithoutResult(st -> em.createQuery("update SchedulingHistory h set h.createdAt = :t where h.id in :ids")
+                .setParameter("t", at).setParameter("ids", ids).executeUpdate());
     }
 
     private JsonNode runDetail(Seeded s) throws Exception {

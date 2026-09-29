@@ -92,7 +92,7 @@ public class ScheduleService {
     @Transactional(readOnly = true)
     public PageResponse<ScheduleResponse> list(String keyword, Workload.ResourceType resourceType,
                                                Boolean enabled, int page, int size, String sort) {
-        Sort order = SortSupport.parse(sort, SORTABLE, DEFAULT_SORT);
+        Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
         Page<Schedule> found = scheduleRepository.findAll(
                 filter(keyword, resourceType, enabled), PageRequest.of(page - 1, size, order));
         return toPageResponse(found.map(ScheduleResponse::from), page, size);
@@ -115,7 +115,7 @@ public class ScheduleService {
                                                   OffsetDateTime from, OffsetDateTime to, int page, int size, String sort) {
         Schedule schedule = require(id);
         requireOrderedWindow(from, to);
-        Sort order = SortSupport.parse(sort, RUN_SORTABLE, DEFAULT_RUN_SORT);
+        Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, RUN_SORTABLE, DEFAULT_RUN_SORT));
         Page<ScheduleRun> found = runRepository.findAll(
                 runFilter(schedule.getId(), status, triggerType, from, to), PageRequest.of(page - 1, size, order));
         return toPageResponse(found.map(ScheduleRunResponse::from), page, size);
@@ -151,7 +151,7 @@ public class ScheduleService {
                         "실행 이력을 찾을 수 없습니다: " + runId));
 
         List<ScheduleRunDetailResponse.Decision> decisions =
-                historyRepository.findByScheduleRunIdOrderByCreatedAtAsc(run.getId()).stream()
+                historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId()).stream()
                         .map(ScheduleRunDetailResponse.Decision::from)
                         .toList();
         return new ScheduleRunDetailResponse(ScheduleRunResponse.from(run),

@@ -21,8 +21,11 @@ public interface SchedulingHistoryRepository extends JpaRepository<SchedulingHis
     /** 전체 이력 최신순. 위와 같은 이유로 상한이 필수다. */
     List<SchedulingHistory> findAllByOrderByCreatedAtDesc(Limit limit);
 
-    /** 실행 1건이 만든 결정들. 실행 상세에서 쓴다. */
-    List<SchedulingHistory> findByScheduleRunIdOrderByCreatedAtAsc(Long scheduleRunId);
+    /**
+     * 실행 1건이 만든 결정들. 실행 상세에서 쓴다. 결정 시각이 같으면 {@code id} 오름차순 —
+     * 배치 이력 페이징 {@code sort=createdAt,asc} 와 행 순서가 같다.
+     */
+    List<SchedulingHistory> findByScheduleRunIdOrderByCreatedAtAscIdAsc(Long scheduleRunId);
 
     /**
      * 실행 이력을 지울 때 연결을 끊을 대상.

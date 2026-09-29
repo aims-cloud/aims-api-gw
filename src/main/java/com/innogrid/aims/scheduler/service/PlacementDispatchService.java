@@ -219,7 +219,7 @@ public class PlacementDispatchService {
                                                         int page, int size, String sort) {
         DispatchStatus parsed = (status == null || status.isBlank()) ? null
                 : EnumSupport.parse(DispatchStatus.class, status, "디스패치 상태");
-        Sort order = SortSupport.parse(sort, SORTABLE, DEFAULT_SORT);
+        Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
         Page<PlacementDispatch> found = repository.findAll(filter(parsed, workloadId, scheduleRunId),
                 PageRequest.of(page - 1, size, order));
         Page<PlacementDispatchResponse> mapped = found.map(PlacementDispatchResponse::from);

@@ -64,7 +64,7 @@ public class ScheduleController {
     @Operation(summary = "스케줄 목록",
             description = "스케줄 ID/스케줄명/리소스 종류/실행 주기/설명/자동 실행/사용 여부/시작·종료 시간/처리 상태. "
                     + "검색어와 리소스 종류·사용 여부 필터, 컬럼 정렬, 페이징을 지원합니다. "
-                    + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
+                    + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다. " + "같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다.")
     @GetMapping
     public ApiResponse<PageResponse<ScheduleResponse>> getSchedules(
             @RequestParam(required = false) String keyword,
@@ -131,6 +131,7 @@ public class ScheduleController {
     @Operation(summary = "실행 이력",
             description = "스케줄 ID/시작 시간/종료 시간/처리 상태/메시지와 집계 건수를 조회합니다. "
                     + "status·triggerType·from·to 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
+                    + "sort 는 '{필드},{asc|desc}' 형식이고 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
                     + "자동 실행이 대상 0건으로 끝난 경우는 이력을 남기지 않습니다 — "
                     + "그 사실은 스케줄 상세의 최근 실행 메시지에서 확인할 수 있습니다.")
     @GetMapping("/{id}/runs")
@@ -152,6 +153,7 @@ public class ScheduleController {
 
     @Operation(summary = "실행 상세",
             description = "실행 1건이 내린 워크로드별 배치 결정(선택 노드·점수·사유)을 함께 돌려줍니다. "
+                    + "결정은 결정 시각·id 오름차순이라 /history/page?scheduleRunId=&sort=createdAt,asc 와 행 순서가 같습니다. "
                     + "제약 조건 기반 스케줄링이 무엇을 근거로 배치했는지 확인하는 용도입니다.")
     @GetMapping("/{id}/runs/{runId}")
     public ApiResponse<ScheduleRunDetailResponse> getRunDetail(@PathVariable Long id,

@@ -74,7 +74,7 @@ public class SchedulingHistoryQueryService {
                                                         OffsetDateTime from, OffsetDateTime to,
                                                         int page, int size, String sort) {
         requireOrderedWindow(from, to);
-        Sort order = SortSupport.parse(sort, SORTABLE, DEFAULT_SORT);
+        Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
         Page<SchedulingHistory> found = repository.findAll(
                 filter(workloadId, success, engineName, scheduleRunId, exclusionCode, from, to),
                 PageRequest.of(page - 1, size, order));

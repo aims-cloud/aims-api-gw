@@ -38,7 +38,8 @@ public class PlacementDispatchController {
     @Operation(summary = "디스패치 목록(페이지)",
                description = "status(REQUESTED·ACCEPTED·RUNNING·COMPLETED·FAILED·REJECTED·UNAVAILABLE·TIMED_OUT, 대소문자 무시. "
                        + "TIMED_OUT 은 record 모드에서는 나오지 않습니다)·"
-                       + "workloadId·scheduleRunId 필터는 선택. page 는 1부터, size 는 1~100. sort 는 `필드,방향`(id·requestedAt·respondedAt·status·workloadId).")
+                       + "workloadId·scheduleRunId 필터는 선택. page 는 1부터, size 는 1~100. sort 는 `필드,방향`(id·requestedAt·respondedAt·status·workloadId). "
+                       + "같은 값으로 정렬된 행은 id 로 한 번 더 정렬합니다(sort 가 id 면 그대로).")
     @GetMapping("/dispatches")
     public ApiResponse<PageResponse<PlacementDispatchResponse>> page(
             @RequestParam(required = false) String status,

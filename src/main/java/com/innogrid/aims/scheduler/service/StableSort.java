@@ -9,9 +9,11 @@ import org.springframework.data.domain.Sort;
  * DB 가 순서를 정하지 않으므로, 그대로 두면 페이지 경계에서 행이 겹치거나 빠진다.
  *
  * <p>방향은 첫 정렬 키를 따른다 — 기본 최신순이면 {@code id} 내림차순, {@code createdAt,asc} 면 오름차순이다.
- * 배치 이력에 붙일 때 실행 상세의 결정 목록(지금은 {@code createdAt} 오름차순만)에도 {@code id} 를 더하면
- * 두 응답의 행 순서가 같아진다. 알람·포털 로그 목록은 보조 키를 {@code id} 내림차순으로 고정하지만,
- * 스케줄러는 이 이유로 방향을 따른다.</p>
+ * 적용 자리는 다섯 곳이다 — 스케줄 목록({@code ScheduleService.list}), 실행 이력({@code ScheduleService.runs}),
+ * 배치 이력 페이징({@code SchedulingHistoryQueryService.page}), 전달 기록({@code PlacementDispatchService.page}),
+ * 워크로드 페이징({@code WorkloadQueryService.page}). 실행 상세의 결정 목록은 저장소 메서드가 {@code createdAt}·{@code id}
+ * 오름차순이라 배치 이력 페이징 {@code sort=createdAt,asc} 와 행 순서가 같다. 알람·포털 로그 목록은 보조 키를
+ * {@code id} 내림차순으로 고정하지만, 스케줄러는 이 이유로 방향을 따른다.</p>
  *
  * <p>스프링 빈이 아니고 스케줄러 서비스 패키지 밖에서는 보이지 않는다. 공용 {@code SortSupport} 는 손대지 않는다.</p>
  */

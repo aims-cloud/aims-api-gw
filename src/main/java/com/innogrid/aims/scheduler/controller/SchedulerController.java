@@ -15,6 +15,7 @@ import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadReleaseResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
@@ -192,6 +193,18 @@ public class SchedulerController {
         }
         Workload.WorkloadStatus target = parseEnum(Workload.WorkloadStatus.class, request.status(), "상태");
         return ApiResponse.ok(WorkloadResponse.from(schedulingService.changeStatus(workloadId, target)));
+    }
+
+    @Operation(summary = "워크로드 배치 예약 취소",
+               description = "SCHEDULED 워크로드의 배정을 풀고 PENDING 으로 되돌립니다(재대기 — 다음 스케줄 실행이 다시 대상으로 잡습니다). "
+                       + "재시도 횟수는 바뀌지 않고 배치 이력은 그대로입니다. 현재 결정의 전달 기록이 ACCEPTED 면 FAILED 로 마감되고 비고가 '예약 취소 — 운영자 요청(호출 계정)' 으로 시작합니다(기존 비고는 뒤에 이어짐). "
+                       + "없으면 404. SCHEDULED 가 아니거나(RUNNING 은 실행 계층 결과로 끝내십시오) 전달 기록이 전달 중·실행 중이면 409. "
+                       + "삭제하려면 먼저 이 API 로 예약을 풀어야 합니다. 재시도 상한에 걸린 워크로드를 단건 배치로 올린 뒤 취소하면 "
+                       + "재시도 횟수가 그대로라 스케줄 실행 대상이 아니며 단건 배치로만 다시 배치됩니다.")
+    @PostMapping("/workloads/{workloadId}/release")
+    public ApiResponse<WorkloadReleaseResponse> releaseWorkload(@PathVariable Long workloadId) {
+        SchedulingService.Release r = schedulingService.release(workloadId);
+        return ApiResponse.ok(WorkloadReleaseResponse.from(r.workload(), r.releasedMdcId(), r.releasedNodeId(), r.dispatch()));
     }
 
     /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. 요청 DTO 와 같은 규칙({@link EnumSupport}). */

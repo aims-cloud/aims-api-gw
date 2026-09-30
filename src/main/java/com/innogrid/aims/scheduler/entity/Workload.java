@@ -196,6 +196,26 @@ public class Workload {
     }
 
     /**
+     * 운영자가 배치 예약을 취소한다 — 배정을 풀고 <b>대기(PENDING)</b>로 돌아간다.
+     *
+     * <p>실패가 아니므로 재시도 횟수·마지막 실패 시각은 건드리지 않는다({@link #failDispatch} 와 다른 점). 전이표
+     * ({@link WorkloadStatus#canTransitionTo})에는 SCHEDULED→PENDING 이 없고 그대로 둔다 — 상태 변경 API 로는 배정과
+     * 전달 기록을 정리하지 못한 채 되돌아가는 일이 없어야 하므로, 되돌리기는 이 <b>별도 진입점</b>으로만 한다.
+     * {@code scheduledAt} 은 추적을 위해 남긴다. 대기로 돌아간 워크로드는 다음 스케줄 실행이 다시 대상으로 잡는다.</p>
+     *
+     * @return SCHEDULED 가 아니어서 아무것도 바꾸지 않았으면 false
+     */
+    public boolean release(String reason) {
+        if (this.status != WorkloadStatus.SCHEDULED) return false;
+        this.status = WorkloadStatus.PENDING;
+        this.assignedMdcId = null;
+        this.assignedNodeId = null;
+        this.schedulingScore = null;
+        this.schedulingReason = reason;
+        return true;
+    }
+
+    /**
      * 실행 상태를 전이한다. 허용되지 않는 전이는 false 를 돌려준다.
      *
      * <p>FAILED 에서 PENDING 으로 되돌릴 때는 재시도 횟수를 지운다. 그러지 않으면
@@ -236,7 +256,8 @@ public class Workload {
          * 여기서는 배치 이후의 실행 흐름만 다룬다.
          *
          * <p>FAILED→PENDING 만 예외로 허용한다. 재시도 상한에 걸려 대상에서 빠진 워크로드를
-         * 운영자가 되살릴 유일한 경로다.</p>
+         * 운영자가 되살릴 유일한 경로다. SCHEDULED→PENDING(예약 취소)은 여기 없고 {@link Workload#release} 라는
+         * 별도 진입점이 배정·전달 기록 정리와 함께 한다.</p>
          */
         public boolean canTransitionTo(WorkloadStatus target) {
             return switch (this) {

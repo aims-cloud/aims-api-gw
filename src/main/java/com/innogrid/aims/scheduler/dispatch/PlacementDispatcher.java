@@ -23,6 +23,18 @@ public interface PlacementDispatcher {
 
     Outcome dispatch(Request request);
 
+    /**
+     * 운영자가 배치 예약을 취소했다 — 이미 수락(ACCEPTED)한 결정을 실행 계층에 되돌리라고 알리는 자리.
+     *
+     * <p>기록형 디스패처는 실행 계층이 없어 할 일이 없고, 원격 구현체가 생기면 여기서 취소 요청을 보낸다. 기본은 아무
+     * 것도 하지 않는다. 예외를 던지지 않는 것이 원칙이다 — 던져도 서비스는 취소를 계속하고 전달 기록 비고에 남긴다.</p>
+     *
+     * <p><b>호출자의 DB 트랜잭션 안에서 불린다</b>({@code afterPlacement} 의 디스패치 호출이 트랜잭션 밖인 것과 다르다).
+     * 원격 구현체는 여기서 곧바로 외부 호출을 하지 말고 커밋 뒤({@code TransactionSynchronization.afterCommit})로
+     * 미뤄야 한다 — 그러지 않으면 롤백 때 원격은 취소됐는데 DB 는 그대로인 상태가 된다.</p>
+     */
+    default void cancel(Request request) {}
+
     /** 실행 계층에 넘길 내용. 결정 자체는 이미 저장된 뒤라 여기서는 읽기만 한다. */
     record Request(Long dispatchId, String idempotencyKey,
                    Long workloadId, String workloadName, String resourceType,

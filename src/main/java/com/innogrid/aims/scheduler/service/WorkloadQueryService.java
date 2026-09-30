@@ -148,20 +148,15 @@ public class WorkloadQueryService {
                         ? cb.or(same, cb.isNull(root.get("resourceType"))) : same);
             }
             if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + escapeLike(keyword.trim().toLowerCase(Locale.ROOT)) + "%";
+                String like = LikePatterns.contains(keyword.trim().toLowerCase(Locale.ROOT));
                 predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("name")), like, '\\'),
-                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, '\\')));
+                        cb.like(cb.lower(root.get("name")), like, LikePatterns.ESCAPE),
+                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, LikePatterns.ESCAPE)));
             }
             if (assignedNodeId != null && !assignedNodeId.isBlank()) {
                 predicates.add(cb.equal(root.get("assignedNodeId"), assignedNodeId.trim()));
             }
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };
-    }
-
-    /** LIKE 와일드카드를 문자 그대로 찾도록 이스케이프한다 — 배치 이력의 코드 필터와 같은 규칙. */
-    static String escapeLike(String value) {
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

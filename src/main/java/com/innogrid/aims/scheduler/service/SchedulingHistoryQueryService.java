@@ -169,16 +169,12 @@ public class SchedulingHistoryQueryService {
             // 인덱스로는 줄일 수 없어 전수 검색이다(이 열에는 인덱스도 없다).
             if (exclusionCode != null) {
                 String key = SchedulingHistory.exclusionCodeKey(exclusionCode.name());
-                predicates.add(cb.like(root.get("exclusionCodes"), "%" + escapeLike(key) + "%", '\\'));
+                predicates.add(cb.like(root.get("exclusionCodes"), LikePatterns.contains(key), LikePatterns.ESCAPE));
             }
             // 창은 반개구간 [from, to) — createdAt 인덱스(workloadId 와 함께면 복합 인덱스)를 탈 수 있다
             if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from));
             if (to != null) predicates.add(cb.lessThan(root.get("createdAt"), to));
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-    }
-
-    static String escapeLike(String value) {
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

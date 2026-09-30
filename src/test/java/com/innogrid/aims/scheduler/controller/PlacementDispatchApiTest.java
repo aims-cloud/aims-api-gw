@@ -80,7 +80,8 @@ class PlacementDispatchApiTest {
                 .content("{\"name\":\"" + name + "\",\"requiredCpu\":1,\"requiredMemoryMb\":64}")).andExpect(status().isOk()).andReturn());
         long wid = w.get("id").asLong();
         mockMvc.perform(post(BASE + "/workloads/" + wid + "/schedule")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.success").value(true));
+                .andExpect(jsonPath("$.data.success").value(true))
+                .andExpect(jsonPath("$.data.policyName").isString());   // 응답 JSON 에 적용 정책 이름이 실린다
         JsonNode list = data(mockMvc.perform(get(BASE + "/workloads/" + wid + "/dispatches")).andExpect(status().isOk()).andReturn());
         assertEquals(1, list.size());
         return new long[] {wid, list.get(0).get("id").asLong()};

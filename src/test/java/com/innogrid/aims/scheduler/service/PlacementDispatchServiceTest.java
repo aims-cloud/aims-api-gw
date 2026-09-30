@@ -231,6 +231,9 @@ class PlacementDispatchServiceTest {
         assertFalse(r.success());
         assertTrue(r.reason().contains("n1") && r.reason().contains("점검 중"));
         assertTrue(schedulingService.dispatch(w, SchedulingResult.failure("x"), null).reason().equals("x"), "실패 결정은 그대로");
+        SchedulingResult withPolicy = schedulingService.dispatch(w, ok().withPolicyName("vm-only"), null);
+        assertFalse(withPolicy.success());
+        assertEquals("vm-only", withPolicy.policyName(), "거부로 낮춘 결과에도 적용 정책 이름이 남는다");
     }
 
     @DisplayName("콜백의 externalRef 200자·message 500자 초과는 400 — DB 길이 위반 500 을 막는다")

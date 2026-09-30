@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
+import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.entity.Workload.ResourceType;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 
@@ -90,5 +91,22 @@ class PolicyResolutionRulesTest {
         p.setResourceType(type);
         p.setActive(true);
         return p;
+    }
+
+    @DisplayName("저장 없는 선택은 단계를 밝히고 정책이 없을 때도 행을 만들지 않는다")
+    @Test
+    void choose_policy_reports_source_without_saving() {
+        PolicyChoice none = schedulingService.choosePolicy(ResourceType.VM);
+        assertEquals(PolicyChoice.Source.DEFAULT, none.source());
+        assertFalse(none.persisted(), "저장하지 않은 기본값");
+        assertEquals("default", none.policy().getName());
+        assertEquals(0, repository.count(), "읽기 선택은 행을 만들지 않는다");
+
+        repository.save(active("common", null));
+        repository.save(active("gpu", ResourceType.GPU));
+        assertEquals(PolicyChoice.Source.COMMON, schedulingService.choosePolicy(ResourceType.VM).source());
+        assertEquals(PolicyChoice.Source.RESOURCE_TYPE, schedulingService.choosePolicy(ResourceType.GPU).source());
+        assertTrue(schedulingService.choosePolicy(ResourceType.GPU).persisted());
+        assertEquals(2, repository.count());
     }
 }

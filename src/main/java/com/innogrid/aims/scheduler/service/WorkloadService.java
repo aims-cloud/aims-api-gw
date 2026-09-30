@@ -100,8 +100,11 @@ public class WorkloadService {
         Workload.WorkloadStatus status = workload.getStatus();
         if (status == Workload.WorkloadStatus.SCHEDULED || status == Workload.WorkloadStatus.RUNNING) {
             throw new BusinessException(HttpStatus.CONFLICT, String.format(
-                    "실행 중인 워크로드는 삭제할 수 없습니다 (상태 %s, 노드 %s). 먼저 상태를 COMPLETED 또는 FAILED 로 바꾸세요",
-                    status, workload.getAssignedNodeId()));
+                    "실행 중인 워크로드는 삭제할 수 없습니다 (상태 %s, 노드 %s). %s",
+                    status, workload.getAssignedNodeId(),
+                    status == Workload.WorkloadStatus.SCHEDULED
+                            ? "먼저 예약 취소(POST /workloads/{id}/release)로 배정을 푸세요"
+                            : "먼저 상태를 COMPLETED 또는 FAILED 로 바꾸세요"));
         }
         if (dispatchRepository != null) dispatchRepository.deleteByWorkloadId(id);   // FK 가 없어 여기서 함께 지운다
         workloadRepository.delete(workload);

@@ -37,6 +37,7 @@ class PlacementDispatchServiceTest {
     @Autowired PlacementDispatchRepository dispatchRepository;
     @Autowired WorkloadRepository workloadRepository;
     @MockitoBean DispatcherRegistry registry;
+    @Autowired com.innogrid.aims.scheduler.config.SchedulerProperties properties;
 
     @AfterEach
     void clean() {
@@ -245,5 +246,115 @@ class PlacementDispatchServiceTest {
         assertEquals(400, assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "RUNNING", "x".repeat(201), null)).getStatus().value());
         assertEquals(400, assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "RUNNING", null, "y".repeat(501))).getStatus().value());
         assertEquals(DispatchStatus.RUNNING, service.applyResult(d.getId(), "RUNNING", "x".repeat(200), "y".repeat(500)).getStatus());
+    }
+
+    // ── 예약 취소 ──────────────────────────────────────────────
+
+    @DisplayName("예약 취소는 현재 결정의 ACCEPTED 기록만 FAILED 로 마감하고 옛 결정의 기록은 건드리지 않는다")
+    @Test
+    void release_closes_only_current_dispatch() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-rel-cur");
+        PlacementDispatch old = service.afterPlacement(w, ok(), null);
+        assertEquals(DispatchStatus.ACCEPTED, old.getStatus());
+        // 같은 워크로드를 다시 배정 — 멱등키(배정 시각 ms)가 달라질 때까지 재배정한다
+        do {
+            w.assignTo("mdc-01", "n2", 0.6, "재배치");
+        } while (PlacementDispatch.keyOf(w).equals(old.getIdempotencyKey()));
+        w = workloadRepository.saveAndFlush(w);
+        PlacementDispatch current = service.afterPlacement(w, ok(), null);
+        assertNotEquals(old.getId(), current.getId());
+
+        SchedulingService.Release r = schedulingService.release(w.getId());
+
+        assertEquals(Workload.WorkloadStatus.PENDING, r.workload().getStatus());
+        assertNull(r.workload().getAssignedNodeId());
+        assertEquals("n2", r.releasedNodeId());
+        assertEquals(current.getId(), r.dispatch().getId());
+        assertEquals(DispatchStatus.FAILED, r.dispatch().getStatus());
+        assertTrue(r.dispatch().getMessage().contains("예약 취소"));
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(old.getId()).orElseThrow().getStatus(), "옛 결정의 기록은 그대로");
+    }
+
+    @DisplayName("전달 중(REQUESTED)인 기록이 있으면 취소는 409 이고 워크로드는 SCHEDULED 로 남는다")
+    @Test
+    void release_conflicts_while_requested() {
+        Workload w = assigned("dps-rel-req");
+        dispatchRepository.saveAndFlush(new PlacementDispatch(w, null, "u"));   // REQUESTED 그대로
+
+        BusinessException e = assertThrows(BusinessException.class, () -> schedulingService.release(w.getId()));
+
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT, e.getStatus());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, workloadRepository.findById(w.getId()).orElseThrow().getStatus());
+    }
+
+    @DisplayName("전달 기록이 없는 배정(전달 기능 이전 데이터)도 취소되고 dispatch 는 null 이다")
+    @Test
+    void release_without_dispatch_record() {
+        Workload w = assigned("dps-rel-none");
+
+        SchedulingService.Release r = schedulingService.release(w.getId());
+
+        assertNull(r.dispatch());
+        assertEquals(Workload.WorkloadStatus.PENDING, r.workload().getStatus());
+        assertEquals("n1", r.releasedNodeId());
+        assertEquals("mdc-01", r.releasedMdcId());
+    }
+
+    @DisplayName("취소는 디스패처의 취소 훅을 한 번 부르고 훅이 예외를 던져도 취소를 끝낸다")
+    @Test
+    void release_calls_dispatcher_cancel_hook() {
+        List<PlacementDispatcher.Request> cancelled = new java.util.ArrayList<>();
+        PlacementDispatcher hooked = new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) { return Outcome.accepted("ext", "ok"); }
+            @Override public void cancel(Request request) { cancelled.add(request); throw new IllegalStateException("원격 없음"); }
+        };
+        when(registry.current()).thenReturn(hooked);
+        Workload w = assigned("dps-rel-hook");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+
+        SchedulingService.Release r = schedulingService.release(w.getId());
+
+        assertEquals(1, cancelled.size());
+        assertEquals(d.getId(), cancelled.get(0).dispatchId());
+        assertEquals(w.getId(), cancelled.get(0).workloadId());
+        assertEquals(0.7, cancelled.get(0).score(), "훅 요청은 취소 전의 결정 값(점수)으로 채운다");
+        assertEquals("ok", cancelled.get(0).reason());
+        assertEquals(DispatchStatus.FAILED, r.dispatch().getStatus(), "훅 예외에도 마감은 끝난다");
+        assertTrue(r.dispatch().getMessage().contains("취소 훅 예외: IllegalStateException"), "훅 예외는 비고에 남는다");
+    }
+
+    @DisplayName("재시도 소진 워크로드를 단건 배치로 올린 뒤 취소하면 재시도 횟수가 남아 스케줄 실행 대상이 아니다")
+    @Test
+    void release_keeps_exhaustion_out_of_schedule_targets() {
+        int max = properties.getMaxRetryCount();
+        Workload w = new Workload("dps-rel-exh", 2, 512);
+        for (int i = 0; i < max; i++) w.markFailed("자원 부족");
+        w.assignTo("mdc-01", "n1", 0.7, "단건 배치");   // 단건 배치는 소진을 보지 않는다
+        w = workloadRepository.saveAndFlush(w);
+
+        SchedulingService.Release r = schedulingService.release(w.getId());
+
+        assertEquals(Workload.WorkloadStatus.PENDING, r.workload().getStatus());
+        assertEquals(max, r.workload().resolveRetryCount(), "취소는 재시도 회계를 지우지 않는다");
+        List<Workload> targets = workloadRepository.findSchedulingCandidates(
+                List.of(Workload.WorkloadStatus.PENDING, Workload.WorkloadStatus.FAILED), Workload.ResourceType.VM, true, max,
+                java.time.OffsetDateTime.now().plusYears(1));
+        assertTrue(targets.stream().noneMatch(x -> x.getId().equals(r.workload().getId())), "재시도 상한 조건에 걸려 대상에서 빠진다");
+    }
+
+    @DisplayName("취소된 워크로드는 다음 컨텍스트의 노드 예약에서 빠진다")
+    @Test
+    void release_frees_reservation_in_next_context() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-rel-resv");
+        service.afterPlacement(w, ok(), null);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, workloadRepository.findById(w.getId()).orElseThrow().getStatus());
+
+        schedulingService.release(w.getId());
+
+        assertTrue(workloadRepository.findByStatusIn(List.of(Workload.WorkloadStatus.SCHEDULED, Workload.WorkloadStatus.RUNNING))
+                .stream().noneMatch(x -> x.getId().equals(w.getId())), "예약 장부(SCHEDULED·RUNNING 행)에서 빠진다");
     }
 }

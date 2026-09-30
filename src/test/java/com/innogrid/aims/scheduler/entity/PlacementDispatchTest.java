@@ -80,4 +80,35 @@ class PlacementDispatchTest {
         assertEquals(1, w.getRetryCount());
         assertEquals("거부", w.getSchedulingReason());
     }
+
+    @DisplayName("예약 취소는 FAILED 로 마감하고 표지를 앞에 붙이며 그 뒤 RUNNING·COMPLETED 보고는 거부, FAILED 재보고는 무변경이다")
+    @Test
+    void cancel_closes_as_failed_with_note() {
+        PlacementDispatch d = new PlacementDispatch(workload(), null, "u");
+        d.accept("ext-9", "수락");
+        assertNotNull(d.getRespondedAt());
+
+        d.cancel("예약 취소 — 운영자 요청(tester)");
+
+        assertEquals(DispatchStatus.FAILED, d.getStatus());
+        assertTrue(d.getStatus().terminal());
+        assertEquals("예약 취소 — 운영자 요청(tester) / 수락", d.getMessage(), "표지가 앞, 기존 메시지가 뒤");
+        assertNotNull(d.getRespondedAt());
+        assertFalse(d.report(DispatchStatus.RUNNING, null, null), "끝 상태라 실행 보고 거부");
+        assertFalse(d.report(DispatchStatus.COMPLETED, null, null));
+        assertTrue(d.report(DispatchStatus.FAILED, null, "늦은 실패"), "같은 상태 재보고는 멱등");
+        assertEquals("예약 취소 — 운영자 요청(tester) / 수락", d.getMessage(), "무변경 — 메시지도 덮이지 않는다");
+    }
+
+    @DisplayName("기존 비고가 길어도 예약 취소 표지는 앞에 남고 뒤가 잘린다")
+    @Test
+    void cancel_keeps_marker_when_message_is_long() {
+        PlacementDispatch d = new PlacementDispatch(workload(), null, "u");
+        d.accept(null, "x".repeat(PlacementDispatch.MESSAGE_MAX - 10));
+
+        d.cancel("예약 취소 — 운영자 요청(tester)");
+
+        assertEquals(PlacementDispatch.MESSAGE_MAX, d.getMessage().length());
+        assertTrue(d.getMessage().startsWith("예약 취소 — 운영자 요청(tester) / xxx"));
+    }
 }

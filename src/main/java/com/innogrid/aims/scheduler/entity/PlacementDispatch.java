@@ -29,7 +29,7 @@ public class PlacementDispatch {
      * <pre>
      * REQUESTED ─▶ ACCEPTED ─▶ RUNNING ─▶ COMPLETED
      *      │            │           └────▶ FAILED
-     *      │            └──────────────────▶ FAILED
+     *      │            └──────────────────▶ FAILED   (실행 실패 콜백 · 또는 운영자의 예약 취소 — 비고가 "예약 취소 — " 로 시작)
      *      ├─▶ REJECTED     실행 계층이 거부 (워크로드는 FAILED + 배정 해제)
      *      ├─▶ UNAVAILABLE  실행 계층에 닿지 못함 (워크로드는 FAILED + 배정 해제)
      *      └─▶ TIMED_OUT    원격 모드에서 응답 시간 상한 초과 — <b>record 모드에서는 도달하지 않는다</b>
@@ -136,6 +136,21 @@ public class PlacementDispatch {
     public void close(DispatchStatus outcome, String message) {
         this.status = outcome;
         this.message = message;
+        this.respondedAt = OffsetDateTime.now();
+    }
+
+    /**
+     * 운영자가 배치 예약을 취소해 이 결정을 끝낸다 — 상태는 기존 값 {@code FAILED} 로 마감하고 비고로 구별한다.
+     *
+     * <p>새 상태 값을 두지 않는 이유: 상태 컬럼에 값 목록 CHECK 제약이 있고 {@code ddl-auto=update} 는 기존 제약을 고치지
+     * 않아, 새 값은 배포 서버에서 UPDATE 실패가 된다. FAILED 는 이미 끝 상태라 늦게 온 RUNNING·COMPLETED 콜백은 전이표에서
+     * 거부(409)되고, 늦은 FAILED 재보고는 무변경으로 끝난다 — 원하는 동작이 값 추가 없이 성립한다.</p>
+     */
+    public void cancel(String text) {
+        this.status = DispatchStatus.FAILED;
+        // 표지를 앞에 둔다 — 기존 비고가 길어 잘려도 "예약 취소" 구별 수단은 남아야 한다(note 는 뒤에 붙여 표지가 잘릴 수 있다)
+        String merged = (this.message == null || this.message.isBlank()) ? text : text + " / " + this.message;
+        this.message = merged.length() > MESSAGE_MAX ? merged.substring(0, MESSAGE_MAX) : merged;
         this.respondedAt = OffsetDateTime.now();
     }
 

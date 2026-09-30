@@ -18,6 +18,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -411,6 +412,35 @@ public class SchedulingService {
         }
         return workloadRepository.save(workload);
     }
+
+    /**
+     * 배치 예약을 취소한다 — SCHEDULED 워크로드를 대기로 되돌리고 배정을 풀며, 현재 결정의 전달 기록을 마감한다.
+     *
+     * <p>상태 변경 API 의 SCHEDULED→FAILED→PENDING 조합과 다른 점: 배정 컬럼이 남지 않고, 재시도 회계를 지우지 않으며,
+     * 중간 FAILED 가 드러나지 않고, 전달 기록이 ACCEPTED 로 방치되지 않는다. 배치 이력은 연구 근거라 건드리지 않는다.
+     * 노드 예약은 워크로드 행에서 매번 다시 계산하므로 PENDING 이 되면 다음 컨텍스트부터 저절로 빠진다.</p>
+     *
+     * @return 취소 뒤 워크로드 · 풀린 배정 · 마감된(또는 없는) 전달 기록
+     */
+    @Transactional
+    public Release release(Long workloadId) {
+        Workload workload = workloadRepository.findById(workloadId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "워크로드를 찾을 수 없습니다: " + workloadId));
+        if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) {
+            throw new BusinessException(HttpStatus.CONFLICT, workload.getStatus() == Workload.WorkloadStatus.RUNNING
+                    ? "실행 중인 워크로드는 예약을 취소할 수 없습니다 — 실행 계층 결과로 끝내십시오"
+                    : String.format("취소할 예약이 없습니다 — 워크로드가 %s 상태입니다(SCHEDULED 만 가능)", workload.getStatus()));
+        }
+        String mdcId = workload.getAssignedMdcId();
+        String nodeId = workload.getAssignedNodeId();
+        PlacementDispatch dispatch = dispatchService == null ? null : dispatchService.cancelCurrent(workload);
+        workload.release("예약 취소 — 이전 배정 " + mdcId + "/" + nodeId);
+        return new Release(workloadRepository.save(workload), mdcId, nodeId, dispatch);
+    }
+
+    /** 예약 취소의 결과 묶음. */
+    public record Release(Workload workload, String releasedMdcId, String releasedNodeId, PlacementDispatch dispatch) {}
 
     /**
      * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.

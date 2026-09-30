@@ -25,6 +25,7 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
@@ -289,24 +290,43 @@ public class SchedulingService {
      * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 단계 13 점검). 없을 때만 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
+        return resolvePolicyChoice(resourceType).policy();
+    }
+
+    /**
+     * {@link #resolvePolicy(Workload.ResourceType)} 와 같은 선택에 <b>출처</b>를 붙인 것. ④ 단계에서 {@code default} 행이
+     * 없으면 여기서 만들어 저장한다(실행·배치 경로 — 이력이 정책 이름을 가리켜야 한다).
+     */
+    public PolicyChoice resolvePolicyChoice(Workload.ResourceType resourceType) {
+        PolicyChoice choice = choosePolicy(resourceType);
+        if (choice.persisted()) return choice;
+        return new PolicyChoice(policyRepository.save(choice.policy()), choice.source(), true);
+    }
+
+    /**
+     * 정책을 고르되 <b>아무것도 저장하지 않는다</b>. ④ 단계에서 {@code default} 행이 없으면 저장하지 않은 기본값 객체를
+     * {@code persisted = false} 로 돌려준다 — 미리보기처럼 읽기 요청이 행을 만들면 안 되는 호출자가 쓴다.
+     * 선택 규칙·WARN 은 {@link #resolvePolicy(Workload.ResourceType)} 와 같다.
+     */
+    public PolicyChoice choosePolicy(Workload.ResourceType resourceType) {
         if (resourceType != null) {
             Optional<SchedulingPolicy> byType =
                     pickOne(policyRepository.findByActiveTrueAndResourceTypeOrderByNameAsc(resourceType), resourceType.name())
                             .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
-            if (byType.isPresent()) return byType.get();
+            if (byType.isPresent()) return new PolicyChoice(byType.get(), PolicyChoice.Source.RESOURCE_TYPE, true);
         }
         // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
         // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
         Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
                 .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
-        if (common.isPresent()) return common.get();
+        if (common.isPresent()) return new PolicyChoice(common.get(), PolicyChoice.Source.COMMON, true);
 
         Optional<SchedulingPolicy> existing = policyRepository.findByName(DEFAULT_POLICY_NAME);
         if (existing.isPresent()) {
             log.warn("활성 배치 정책이 없어 비활성 상태의 '{}' 정책 값으로 배치합니다 (저장·상태 변경 없음)", DEFAULT_POLICY_NAME);
-            return existing.get();
+            return new PolicyChoice(existing.get(), PolicyChoice.Source.DEFAULT, true);
         }
-        return policyRepository.save(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"));
+        return new PolicyChoice(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"), PolicyChoice.Source.DEFAULT, false);
     }
 
     /** 활성 정책 목록에서 하나를 결정적으로 고른다(이름순 첫 번째). 둘 이상이면 WARN. */

@@ -282,6 +282,35 @@ class ScheduleServiceTest {
         assertEquals(ids, stitched, "사용 여부가 전부 true 라 순서는 id 만으로 — 첫 키 방향(내림차순)");
     }
 
+    @DisplayName("검색어의 % 와 _ 는 와일드카드가 아니라 문자 그대로 찾는다")
+    @Test
+    void keyword_matches_wildcards_literally() {
+        scheduleService.create(request("k1", "a_b", null, null));
+        scheduleService.create(request("k2", "100%", null, null));
+        scheduleService.create(request("k3", "axb", null, null));
+
+        assertEquals(1, scheduleService.list("a_b", null, null, 1, 10, null).totalElements(), "_ 가 와일드카드면 axb 까지 2");
+        assertEquals(1, scheduleService.list("100%", null, null, 1, 10, null).totalElements());
+        assertEquals(0, scheduleService.list("a%b", null, null, 1, 10, null).totalElements(), "% 가 와일드카드면 a_b·axb 2");
+        assertEquals(1, scheduleService.list(" A_B ", null, null, 1, 10, null).totalElements(), "앞뒤 공백 제거·대소문자 무시");
+    }
+
+    @DisplayName("resourceType=VM 은 종류를 비워 둔 스케줄도 포함하고 다른 종류는 제외한다")
+    @Test
+    void vm_filter_includes_null_type() {
+        scheduleService.create(request("t-null", "종류 없음", null, null));   // resourceType = null
+        scheduleService.create(new ScheduleRequest("t-vm", "브이엠", Workload.ResourceType.VM,
+                "0 0 2 * * ?", null, null, null, null, null, null, null));
+        scheduleService.create(new ScheduleRequest("t-gpu", "지피유", Workload.ResourceType.GPU,
+                "0 0 2 * * ?", null, null, null, null, null, null, null));
+
+        PageResponse<ScheduleResponse> vm = scheduleService.list(null, Workload.ResourceType.VM, null, 1, 10, "scheduleId,asc");
+        assertEquals(List.of("t-null", "t-vm"), vm.items().stream().map(ScheduleResponse::scheduleId).toList(),
+                "실행이 VM 으로 해석하는 종류 빈 스케줄이 목록 VM 필터에도 든다");
+        assertNull(vm.items().get(0).resourceType(), "응답은 원값(null) 그대로");
+        assertEquals(1, scheduleService.list(null, Workload.ResourceType.GPU, null, 1, 10, null).totalElements());
+    }
+
     @DisplayName("검색어와 필터가 동작한다")
     @Test
     void keyword_and_filters_work() {

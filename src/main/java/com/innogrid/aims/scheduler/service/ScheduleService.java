@@ -415,22 +415,26 @@ public class ScheduleService {
     private Specification<Schedule> filter(String keyword, Workload.ResourceType resourceType,
                                            Boolean enabled) {
         return (root, query, cb) -> {
-            var predicates = new ArrayList<jakarta.persistence.criteria.Predicate>();
+            var predicates = new ArrayList<Predicate>();
             if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+                // %·_ 는 문자 그대로 — 워크로드 페이징과 같은 이스케이프 규칙(escape 인자를 명시해 DB 기본값에 기대지 않는다)
+                String like = LikePatterns.contains(keyword.trim().toLowerCase(Locale.ROOT));
                 predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("scheduleId")), like),
-                        cb.like(cb.lower(root.get("name")), like),
-                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like)));
+                        cb.like(cb.lower(root.get("scheduleId")), like, LikePatterns.ESCAPE),
+                        cb.like(cb.lower(root.get("name")), like, LikePatterns.ESCAPE),
+                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, LikePatterns.ESCAPE)));
             }
             if (resourceType != null) {
-                predicates.add(cb.equal(root.get("resourceType"), resourceType));
+                Predicate same = cb.equal(root.get("resourceType"), resourceType);
+                // 종류를 비워 둔 스케줄은 실행이 VM 으로 해석한다(Schedule.resolveResourceType) — 워크로드 페이징과 같은 규칙
+                predicates.add(resourceType == Workload.ResourceType.VM
+                        ? cb.or(same, cb.isNull(root.get("resourceType"))) : same);
             }
             if (enabled != null) {
                 predicates.add(cb.equal(root.get("enabled"), enabled));
             }
             return predicates.isEmpty() ? cb.conjunction()
-                    : cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+                    : cb.and(predicates.toArray(Predicate[]::new));
         };
     }
 

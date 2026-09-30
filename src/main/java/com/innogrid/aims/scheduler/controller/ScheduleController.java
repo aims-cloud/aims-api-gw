@@ -67,7 +67,9 @@ public class ScheduleController {
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다. " + "같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다.")
     @GetMapping
     public ApiResponse<PageResponse<ScheduleResponse>> getSchedules(
+            @Parameter(description = "스케줄 ID·스케줄명·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
             @RequestParam(required = false) String keyword,
+            @Parameter(description = "리소스 종류. VM 은 종류를 비워 둔 스케줄(생성 때 생략)도 포함합니다(실행이 VM 으로 해석하는 것과 같음). 비우면 전체")
             @RequestParam(required = false) Workload.ResourceType resourceType,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(defaultValue = "1") @Min(1) int page,

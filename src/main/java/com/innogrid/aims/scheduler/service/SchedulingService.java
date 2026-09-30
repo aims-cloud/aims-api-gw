@@ -112,10 +112,10 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure(noActiveNodesReason(context));
+            return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
 
-        SchedulingResult result = placementService.place(workload, context, engineId);
+        SchedulingResult result = placementService.place(workload, context, engineId).withPolicyName(policyNameOf(context));
         return dispatch(workload, result, null);
     }
 
@@ -253,12 +253,17 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure(noActiveNodesReason(context));
+            return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
-        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context);
+        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context).withPolicyName(policyNameOf(context));
         // 모의 배치(dryRun)도 알린다 — 운영자가 실제 배치 전에 확인하는 경로다
         ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, properties.getDiskMountPoint());
         return result;
+    }
+
+    /** 응답에 실을 적용 정책 이름 — 컨텍스트에 정책이 없으면 null. */
+    private static String policyNameOf(PlacementContext context) {
+        return context.policy() == null ? null : context.policy().getName();
     }
 
     /**

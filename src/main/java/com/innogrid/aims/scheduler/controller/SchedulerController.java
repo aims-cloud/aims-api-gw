@@ -234,7 +234,8 @@ public class SchedulerController {
     @Operation(summary = "워크로드 스케줄링 실행",
                description = "engine: weighted(가중치), power(전력최적화), temperature(온도최적화). "
                        + "dryRun=true 로 부르면 배치하지 않고 제약 평가 결과만 돌려줍니다 — "
-                       + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다.")
+                       + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다. "
+                       + "응답의 policyName 은 이 결정에 적용된 배치 정책 이름이며 실패·모의 배치 결과에도 있습니다.")
     @PostMapping("/workloads/{workloadId}/schedule")
     public ApiResponse<?> scheduleWorkload(@PathVariable Long workloadId,
                                            @RequestParam(defaultValue = "weighted") String engine,

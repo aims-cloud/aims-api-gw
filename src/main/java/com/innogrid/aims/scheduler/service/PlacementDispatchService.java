@@ -131,7 +131,8 @@ public class PlacementDispatchService {
     public static SchedulingResult downgrade(SchedulingResult result, PlacementDispatch dispatch) {
         if (dispatch == null || result == null || !result.success()) return result;
         if (dispatch.getStatus() == DispatchStatus.REJECTED || dispatch.getStatus() == DispatchStatus.UNAVAILABLE) {
-            return SchedulingResult.failure("배치 결정은 " + dispatch.getNodeId() + " 이었으나 실행 계층이 받지 않음: " + dispatch.getMessage());
+            return SchedulingResult.failure("배치 결정은 " + dispatch.getNodeId() + " 이었으나 실행 계층이 받지 않음: " + dispatch.getMessage(),
+                    result.policyName());
         }
         return result;
     }

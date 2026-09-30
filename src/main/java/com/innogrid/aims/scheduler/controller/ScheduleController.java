@@ -10,6 +10,7 @@ import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -118,6 +119,18 @@ public class ScheduleController {
     }
 
     // ── 실행 ───────────────────────────────────────────────────
+
+    @Operation(summary = "실행 미리보기",
+            description = "이 스케줄을 지금 실행하면 적용될 배치 정책·엔진(과 고른 단계)과 대상·재시도 대기·재시도 소진 "
+                    + "건수를 저장 없이 돌려줍니다. 실행 권한을 잡지 않고 노드도 모으지 않습니다. "
+                    + "대상 건수는 시도할 건수이며 성공할 건수가 아닙니다(성공 여부는 워크로드별 모의 배치로). "
+                    + "대상이 0건이면 emptyReason·emptyMessage 에 실행이 남길 사유와 같은 문구가 실립니다. "
+                    + "사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 200 입니다. 스케줄이 없거나 지정한 정책이 지워졌으면 404 입니다. "
+                    + "화면 분기는 emptyReason 으로 하고 emptyMessage 는 표시용으로만 쓰십시오.")
+    @GetMapping("/{id}/preview")
+    public ApiResponse<ScheduleRunPreviewResponse> preview(@PathVariable Long id) {
+        return ApiResponse.ok(executionService.preview(id));
+    }
 
     @Operation(summary = "즉시 실행",
             description = "선택한 스케줄을 지금 한 번 실행하고 완료된 실행 이력을 돌려줍니다(동기). "

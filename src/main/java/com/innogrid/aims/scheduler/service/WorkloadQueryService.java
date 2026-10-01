@@ -8,6 +8,7 @@ import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,12 @@ import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Order;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 
 /**
  * 워크로드 페이징 조회 — {@code GET /scheduler/workloads/page}.
@@ -38,13 +44,14 @@ import jakarta.persistence.criteria.Predicate;
 public class WorkloadQueryService {
 
     /**
-     * 정렬을 허용할 필드. {@code priority} 는 뺀다 — 문자열로 저장돼 사전순(CRITICAL·HIGH·LOW·NORMAL)이 되어
-     * 우선순위 순서와 다르다.
+     * 정렬을 허용할 필드. {@code priority} 는 문자열로 저장돼 그대로 정렬하면 사전순(CRITICAL·HIGH·LOW·NORMAL)이 되므로,
+     * 등급 순(LOW → NORMAL → HIGH → CRITICAL)으로 바꿔 정렬한다({@link #priorityRank}).
      */
     static final Set<String> SORTABLE = Set.of(
-            "createdAt", "name", "status", "resourceType",
+            "createdAt", "name", "status", "resourceType", "priority",
             "requiredCpu", "requiredMemoryMb", "requiredGpu", "requiredDiskGb",
             "retryCount", "scheduledAt", "lastFailedAt");
+    private static final String PRIORITY = "priority";
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final WorkloadRepository repository;
@@ -69,11 +76,52 @@ public class WorkloadQueryService {
                                                Collection<Workload.WorkloadPriority> priorities,
                                                int page, int size, String sort) {
         Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
-        Page<Workload> found = repository.findAll(
-                filter(statuses, resourceType, keyword, assignedNodeId, retryExhausted, priorities, properties.getMaxRetryCount()),
-                PageRequest.of(page - 1, size, order));
+        Specification<Workload> spec = filter(statuses, resourceType, keyword, assignedNodeId, retryExhausted, priorities,
+                properties.getMaxRetryCount());
+        Pageable pageable;
+        if (order.getOrderFor(PRIORITY) != null) {
+            // 등급 순은 Pageable 의 Sort 로 표현할 수 없다 — unsorted 로 넘겨야 Specification 이 건 orderBy 가 남는다
+            // (Spring Data 는 Pageable 에 정렬이 있으면 그것으로 덮어쓰고, count 질의에서는 Specification 의 정렬을 지운다).
+            spec = orderedBy(spec, order);
+            pageable = PageRequest.of(page - 1, size);
+        } else {
+            pageable = PageRequest.of(page - 1, size, order);
+        }
+        Page<Workload> found = repository.findAll(spec, pageable);
         Page<WorkloadResponse> mapped = found.map(WorkloadResponse::from);
         return new PageResponse<>(mapped.getContent(), page, size, mapped.getTotalElements(), mapped.getTotalPages());
+    }
+
+    /**
+     * {@code order} 의 키를 그대로 Criteria 정렬로 옮기되 {@code priority} 만 등급 번호로 바꾼다.
+     * {@code id} 보조 키와 방향은 {@link StableSort} 가 이미 붙였으므로 여기서는 번역만 한다.
+     */
+    private static Specification<Workload> orderedBy(Specification<Workload> base, Sort order) {
+        return (root, query, cb) -> {
+            Predicate where = base.toPredicate(root, query, cb);
+            List<Order> orders = new ArrayList<>();
+            for (Sort.Order o : order) {
+                Expression<?> key = PRIORITY.equals(o.getProperty()) ? priorityRank(root, cb) : root.get(o.getProperty());
+                orders.add(o.isAscending() ? cb.asc(key) : cb.desc(key));
+            }
+            query.orderBy(orders);
+            return where;
+        };
+    }
+
+    /**
+     * 열거형 선언 순서(LOW, NORMAL, HIGH, CRITICAL)가 곧 등급이라 값이 늘어도 따라간다. 컬럼이 NOT NULL 이라
+     * {@code otherwise} 에는 닿지 않지만, 닿는다면 "생략하면 NORMAL" 규칙과 같게 NORMAL 자리로 둔다.
+     * THEN 값은 리터럴로 — 바인드 파라미터는 드라이버·방언에 따라 ORDER BY 의 형 추론이 달라질 수 있어 피한다
+     * (렌더링된 SQL 은 WHEN 비교값이 바인드, THEN 이 리터럴이며 PostgreSQL 에서 정상 동작을 확인했다).
+     */
+    private static Expression<Integer> priorityRank(Root<Workload> root, CriteriaBuilder cb) {
+        Path<Workload.WorkloadPriority> path = root.get(PRIORITY);
+        CriteriaBuilder.Case<Integer> rank = cb.selectCase();
+        for (Workload.WorkloadPriority value : Workload.WorkloadPriority.values()) {
+            rank = rank.when(cb.equal(path, value), cb.literal(value.ordinal()));
+        }
+        return rank.otherwise(cb.literal(Workload.WorkloadPriority.NORMAL.ordinal()));
     }
 
     private static Specification<Workload> filter(Collection<Workload.WorkloadStatus> statuses, Workload.ResourceType resourceType,
@@ -100,20 +148,15 @@ public class WorkloadQueryService {
                         ? cb.or(same, cb.isNull(root.get("resourceType"))) : same);
             }
             if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + escapeLike(keyword.trim().toLowerCase(Locale.ROOT)) + "%";
+                String like = LikePatterns.contains(keyword.trim().toLowerCase(Locale.ROOT));
                 predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("name")), like, '\\'),
-                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, '\\')));
+                        cb.like(cb.lower(root.get("name")), like, LikePatterns.ESCAPE),
+                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, LikePatterns.ESCAPE)));
             }
             if (assignedNodeId != null && !assignedNodeId.isBlank()) {
                 predicates.add(cb.equal(root.get("assignedNodeId"), assignedNodeId.trim()));
             }
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };
-    }
-
-    /** LIKE 와일드카드를 문자 그대로 찾도록 이스케이프한다 — 배치 이력의 코드 필터와 같은 규칙. */
-    static String escapeLike(String value) {
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

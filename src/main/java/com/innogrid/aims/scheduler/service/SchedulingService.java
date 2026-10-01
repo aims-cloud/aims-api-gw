@@ -18,6 +18,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -25,6 +26,7 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
@@ -112,10 +114,10 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure(noActiveNodesReason(context));
+            return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
 
-        SchedulingResult result = placementService.place(workload, context, engineId);
+        SchedulingResult result = placementService.place(workload, context, engineId).withPolicyName(policyNameOf(context));
         return dispatch(workload, result, null);
     }
 
@@ -253,12 +255,17 @@ public class SchedulingService {
 
         PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure(noActiveNodesReason(context));
+            return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
-        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context);
+        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context).withPolicyName(policyNameOf(context));
         // 모의 배치(dryRun)도 알린다 — 운영자가 실제 배치 전에 확인하는 경로다
         ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, properties.getDiskMountPoint());
         return result;
+    }
+
+    /** 응답에 실을 적용 정책 이름 — 컨텍스트에 정책이 없으면 null. */
+    private static String policyNameOf(PlacementContext context) {
+        return context.policy() == null ? null : context.policy().getName();
     }
 
     /**
@@ -284,24 +291,43 @@ public class SchedulingService {
      * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 단계 13 점검). 없을 때만 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
+        return resolvePolicyChoice(resourceType).policy();
+    }
+
+    /**
+     * {@link #resolvePolicy(Workload.ResourceType)} 와 같은 선택에 <b>출처</b>를 붙인 것. ④ 단계에서 {@code default} 행이
+     * 없으면 여기서 만들어 저장한다(실행·배치 경로 — 이력이 정책 이름을 가리켜야 한다).
+     */
+    public PolicyChoice resolvePolicyChoice(Workload.ResourceType resourceType) {
+        PolicyChoice choice = choosePolicy(resourceType);
+        if (choice.persisted()) return choice;
+        return new PolicyChoice(policyRepository.save(choice.policy()), choice.source(), true);
+    }
+
+    /**
+     * 정책을 고르되 <b>아무것도 저장하지 않는다</b>. ④ 단계에서 {@code default} 행이 없으면 저장하지 않은 기본값 객체를
+     * {@code persisted = false} 로 돌려준다 — 미리보기처럼 읽기 요청이 행을 만들면 안 되는 호출자가 쓴다.
+     * 선택 규칙·WARN 은 {@link #resolvePolicy(Workload.ResourceType)} 와 같다.
+     */
+    public PolicyChoice choosePolicy(Workload.ResourceType resourceType) {
         if (resourceType != null) {
             Optional<SchedulingPolicy> byType =
                     pickOne(policyRepository.findByActiveTrueAndResourceTypeOrderByNameAsc(resourceType), resourceType.name())
                             .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
-            if (byType.isPresent()) return byType.get();
+            if (byType.isPresent()) return new PolicyChoice(byType.get(), PolicyChoice.Source.RESOURCE_TYPE, true);
         }
         // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
         // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
         Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
                 .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
-        if (common.isPresent()) return common.get();
+        if (common.isPresent()) return new PolicyChoice(common.get(), PolicyChoice.Source.COMMON, true);
 
         Optional<SchedulingPolicy> existing = policyRepository.findByName(DEFAULT_POLICY_NAME);
         if (existing.isPresent()) {
             log.warn("활성 배치 정책이 없어 비활성 상태의 '{}' 정책 값으로 배치합니다 (저장·상태 변경 없음)", DEFAULT_POLICY_NAME);
-            return existing.get();
+            return new PolicyChoice(existing.get(), PolicyChoice.Source.DEFAULT, true);
         }
-        return policyRepository.save(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"));
+        return new PolicyChoice(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"), PolicyChoice.Source.DEFAULT, false);
     }
 
     /** 활성 정책 목록에서 하나를 결정적으로 고른다(이름순 첫 번째). 둘 이상이면 WARN. */
@@ -386,6 +412,35 @@ public class SchedulingService {
         }
         return workloadRepository.save(workload);
     }
+
+    /**
+     * 배치 예약을 취소한다 — SCHEDULED 워크로드를 대기로 되돌리고 배정을 풀며, 현재 결정의 전달 기록을 마감한다.
+     *
+     * <p>상태 변경 API 의 SCHEDULED→FAILED→PENDING 조합과 다른 점: 배정 컬럼이 남지 않고, 재시도 회계를 지우지 않으며,
+     * 중간 FAILED 가 드러나지 않고, 전달 기록이 ACCEPTED 로 방치되지 않는다. 배치 이력은 연구 근거라 건드리지 않는다.
+     * 노드 예약은 워크로드 행에서 매번 다시 계산하므로 PENDING 이 되면 다음 컨텍스트부터 저절로 빠진다.</p>
+     *
+     * @return 취소 뒤 워크로드 · 풀린 배정 · 마감된(또는 없는) 전달 기록
+     */
+    @Transactional
+    public Release release(Long workloadId) {
+        Workload workload = workloadRepository.findById(workloadId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "워크로드를 찾을 수 없습니다: " + workloadId));
+        if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) {
+            throw new BusinessException(HttpStatus.CONFLICT, workload.getStatus() == Workload.WorkloadStatus.RUNNING
+                    ? "실행 중인 워크로드는 예약을 취소할 수 없습니다 — 실행 계층 결과로 끝내십시오"
+                    : String.format("취소할 예약이 없습니다 — 워크로드가 %s 상태입니다(SCHEDULED 만 가능)", workload.getStatus()));
+        }
+        String mdcId = workload.getAssignedMdcId();
+        String nodeId = workload.getAssignedNodeId();
+        PlacementDispatch dispatch = dispatchService == null ? null : dispatchService.cancelCurrent(workload);
+        workload.release("예약 취소 — 이전 배정 " + mdcId + "/" + nodeId);
+        return new Release(workloadRepository.save(workload), mdcId, nodeId, dispatch);
+    }
+
+    /** 예약 취소의 결과 묶음. */
+    public record Release(Workload workload, String releasedMdcId, String releasedNodeId, PlacementDispatch dispatch) {}
 
     /**
      * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.

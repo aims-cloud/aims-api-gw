@@ -15,6 +15,7 @@ import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadReleaseResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
 import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
@@ -111,8 +112,8 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 페이징 조회",
                description = "배열로 전량을 주는 /workloads 와 달리 페이지·총건수·필터·정렬을 지원합니다. page 는 1부터, size 최대 100, "
-                       + "sort 는 '{필드},{asc|desc}' (createdAt·name·status·resourceType·requiredCpu·requiredMemoryMb·requiredGpu·requiredDiskGb·retryCount·scheduledAt·lastFailedAt — "
-                       + "priority 는 DB 에 이름 문자열로 저장돼 정렬하면 높낮이가 아닌 알파벳순이 되므로 허용하지 않습니다 — 필터로는 받습니다). 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
+                       + "sort 는 '{필드},{asc|desc}' (createdAt·name·status·resourceType·priority·requiredCpu·requiredMemoryMb·requiredGpu·requiredDiskGb·retryCount·scheduledAt·lastFailedAt — "
+                       + "priority 는 DB 에 이름 문자열로 저장되지만 등급 순 LOW→NORMAL→HIGH→CRITICAL 로 정렬합니다). 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
                        + "status·priority·resourceType·keyword·assignedNodeId·retryExhausted 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
                        + "status·priority 는 여러 값을 받아 서로 OR 입니다(status=SCHEDULED&status=RUNNING · priority=HIGH,CRITICAL 처럼 반복 또는 쉼표). "
                        + "retryExhausted=true 는 재시도 소진(FAILED 이고 retryCount 가 /workloads/retry-policy 의 상한 이상) 행만, false 는 그 나머지입니다.")
@@ -130,7 +131,7 @@ public class SchedulerController {
             @RequestParam(required = false) String assignedNodeId,
             @Parameter(description = "true 면 재시도 소진 행만(status FAILED 이고 retryCount ≥ 상한 — 일괄 재개 대상), false 면 그 나머지. 비우면 필터 없음. 값은 true·false(해석할 수 없는 값은 400)")
             @RequestParam(required = false) Boolean retryExhausted,
-            @Parameter(description = "우선순위 — 여러 개면 반복(priority=HIGH&priority=CRITICAL)이나 쉼표로, 서로 OR. 대소문자 무시, 다른 값은 400. 생성 때 생략한 행은 NORMAL. 정렬 필드로는 받지 않습니다. 비우면 전체",
+            @Parameter(description = "우선순위 — 여러 개면 반복(priority=HIGH&priority=CRITICAL)이나 쉼표로, 서로 OR. 대소문자 무시, 다른 값은 400. 생성 때 생략한 행은 NORMAL. sort=priority 는 등급 순. 비우면 전체",
                        schema = @Schema(allowableValues = {"LOW", "NORMAL", "HIGH", "CRITICAL"}))
             @RequestParam(required = false) List<String> priority,
             @RequestParam(defaultValue = "1") @Min(1) int page,
@@ -194,6 +195,18 @@ public class SchedulerController {
         return ApiResponse.ok(WorkloadResponse.from(schedulingService.changeStatus(workloadId, target)));
     }
 
+    @Operation(summary = "워크로드 배치 예약 취소",
+               description = "SCHEDULED 워크로드의 배정을 풀고 PENDING 으로 되돌립니다(재대기 — 다음 스케줄 실행이 다시 대상으로 잡습니다). "
+                       + "재시도 횟수는 바뀌지 않고 배치 이력은 그대로입니다. 현재 결정의 전달 기록이 ACCEPTED 면 FAILED 로 마감되고 비고가 '예약 취소 — 운영자 요청(호출 계정)' 으로 시작합니다(기존 비고는 뒤에 이어짐). "
+                       + "없으면 404. SCHEDULED 가 아니거나(RUNNING 은 실행 계층 결과로 끝내십시오) 전달 기록이 전달 중·실행 중이면 409. "
+                       + "삭제하려면 먼저 이 API 로 예약을 풀어야 합니다. 재시도 상한에 걸린 워크로드를 단건 배치로 올린 뒤 취소하면 "
+                       + "재시도 횟수가 그대로라 스케줄 실행 대상이 아니며 단건 배치로만 다시 배치됩니다.")
+    @PostMapping("/workloads/{workloadId}/release")
+    public ApiResponse<WorkloadReleaseResponse> releaseWorkload(@PathVariable Long workloadId) {
+        SchedulingService.Release r = schedulingService.release(workloadId);
+        return ApiResponse.ok(WorkloadReleaseResponse.from(r.workload(), r.releasedMdcId(), r.releasedNodeId(), r.dispatch()));
+    }
+
     /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. 요청 DTO 와 같은 규칙({@link EnumSupport}). */
     private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String label) {
         return EnumSupport.parse(type, value, label);
@@ -234,7 +247,8 @@ public class SchedulerController {
     @Operation(summary = "워크로드 스케줄링 실행",
                description = "engine: weighted(가중치), power(전력최적화), temperature(온도최적화). "
                        + "dryRun=true 로 부르면 배치하지 않고 제약 평가 결과만 돌려줍니다 — "
-                       + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다.")
+                       + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다. "
+                       + "응답의 policyName 은 이 결정에 적용된 배치 정책 이름이며 실패·모의 배치 결과에도 있습니다.")
     @PostMapping("/workloads/{workloadId}/schedule")
     public ApiResponse<?> scheduleWorkload(@PathVariable Long workloadId,
                                            @RequestParam(defaultValue = "weighted") String engine,

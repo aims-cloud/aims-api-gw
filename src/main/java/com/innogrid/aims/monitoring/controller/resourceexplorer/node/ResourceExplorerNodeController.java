@@ -291,11 +291,17 @@ public class ResourceExplorerNodeController {
     }
 
     // ── 로그/트레이스 탭 — 서비스 트레이스 (트레이스 서브탭 + 트레이스 상세 페이지) ──
+    // 2026-09-30 범위 제외: 계획서·요구사항에 없는 화면 유래 기능. 계약(경로·응답 DTO)은 프론트 호환을 위해 남기고
+    // 전부 @Deprecated + 501 로 둔다. 재개 시 Confluence "노드 로그/트레이스 기능 API 흐름 및 수집 에이전트 관리 설계" §9 기준.
 
     @Operation(summary = "서비스 트레이스 KPI",
-            description = "트레이스 서브탭 카드 4종 — 수집 상태, 총 요청 수, 요청률(req/s), 평균 응답(ms). "
-                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "트레이스 서브탭 카드 4종 — 수집 상태, 총 요청 수, 요청률(req/s), 평균 응답(ms). "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/summary")
+    @Deprecated
     public ApiResponse<ServiceTraceSummaryResponse> getServiceTraceSummary(
             @PathVariable String nodeId,
             @PathVariable String serviceId,
@@ -308,9 +314,13 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "서비스 요청량 추이",
-            description = "버킷별 요청 수 막대 차트. 차트 드래그 구간 선택의 요청 수 합산은 프론트가 버킷 합으로 계산합니다. "
-                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "버킷별 요청 수 막대 차트. 차트 드래그 구간 선택의 요청 수 합산은 프론트가 버킷 합으로 계산합니다. "
+                    + "from/to 미지정 시 오늘 00시~현재입니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/trend")
+    @Deprecated
     public ApiResponse<ServiceTraceTrendResponse> getServiceTraceTrend(
             @PathVariable String nodeId,
             @PathVariable String serviceId,
@@ -324,8 +334,12 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "메서드 분포",
-            description = "도넛 차트 — 총 요청 수와 HTTP 메서드(GET/HEAD/POST/PUT/DELETE)별 건수를 조회합니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "도넛 차트 — 총 요청 수와 HTTP 메서드(GET/HEAD/POST/PUT/DELETE)별 건수를 조회합니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/methods")
+    @Deprecated
     public ApiResponse<TraceMethodDistributionResponse> getServiceTraceMethods(
             @PathVariable String nodeId,
             @PathVariable String serviceId,
@@ -338,8 +352,12 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "엔드포인트 상위 목록",
-            description = "메서드별 상위 엔드포인트와 요청 수를 조회합니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "메서드별 상위 엔드포인트와 요청 수를 조회합니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/endpoints")
+    @Deprecated
     public ApiResponse<List<TraceEndpointStatResponse>> getServiceTraceEndpoints(
             @PathVariable String nodeId,
             @PathVariable String serviceId,
@@ -353,8 +371,12 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "트레이스 포트 목록",
-            description = "트레이스 상세 페이지 좌측 체크박스용 — 관측된 포트 목록을 조회합니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "트레이스 상세 페이지 좌측 체크박스용 — 관측된 포트 목록을 조회합니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/ports")
+    @Deprecated
     public ApiResponse<List<Integer>> getServiceTracePorts(
             @PathVariable String nodeId,
             @PathVariable String serviceId) {
@@ -362,10 +384,14 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "트레이스 목록/검색",
-            description = "시간 역순 트레이스 목록 — ports·statusClasses(2XX|4XX|5XX) 다중 필터, "
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "시간 역순 트레이스 목록 — ports·statusClasses(2XX|4XX|5XX) 다중 필터, "
                     + "엔드포인트 키워드, 최소 소요(ms), limit 지원. 최근 트레이스 위젯과 상세 페이지 목록에 공용입니다. "
-                    + "from/to 미지정 시 오늘 00시~현재입니다.")
+                    + "from/to 미지정 시 오늘 00시~현재입니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces")
+    @Deprecated
     public ApiResponse<TraceListResponse> searchServiceTraces(
             @PathVariable String nodeId,
             @PathVariable String serviceId,
@@ -384,9 +410,13 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "트레이스 상세",
-            description = "트레이스 상세 패널 — 루트/시작/총 소요/스팬 수/상태/포트 요약 카드와 "
-                    + "스팬 워터폴(시작 오프셋·소요·전체 대비 %·부모 스팬)을 조회합니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "트레이스 상세 패널 — 루트/시작/총 소요/스팬 수/상태/포트 요약 카드와 "
+                    + "스팬 워터폴(시작 오프셋·소요·전체 대비 %·부모 스팬)을 조회합니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/{traceId}")
+    @Deprecated
     public ApiResponse<TraceDetailResponse> getServiceTraceDetail(
             @PathVariable String nodeId,
             @PathVariable String serviceId,
@@ -395,9 +425,13 @@ public class ResourceExplorerNodeController {
     }
 
     @Operation(summary = "트레이스 관련 로그",
-            description = "트레이스 상세 패널 '관련 로그' 토글 — 트레이스 시간창의 로그를 조회합니다. "
-                    + "분할/병합 모드는 files 조합으로 처리하며 응답은 서비스 로그 목록과 동일 구조입니다.")
+            description = "[범위 제외 2026-09-30] 트레이스 기능은 협약 계획서·요구사항에 없는 화면 유래 기능이라 이번 연차 범위에서 제외했습니다. "
+                    + "접근 검증 후 501 을 유지하며, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현합니다. "
+                    + "트레이스 상세 패널 '관련 로그' 토글 — 트레이스 시간창의 로그를 조회합니다. "
+                    + "분할/병합 모드는 files 조합으로 처리하며 응답은 서비스 로그 목록과 동일 구조입니다.",
+            deprecated = true)
     @GetMapping("/services/{serviceId}/traces/{traceId}/logs")
+    @Deprecated
     public ApiResponse<ServiceLogListResponse> getServiceTraceLogs(
             @PathVariable String nodeId,
             @PathVariable String serviceId,

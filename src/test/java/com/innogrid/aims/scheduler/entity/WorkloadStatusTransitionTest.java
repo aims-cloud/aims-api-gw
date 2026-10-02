@@ -232,4 +232,14 @@ class WorkloadStatusTransitionTest {
         assertFalse(workload.transitionTo(WorkloadStatus.PENDING));
         assertEquals(WorkloadStatus.SCHEDULED, workload.getStatus());
     }
+
+    @DisplayName("편집할 수 있는 상태는 대기와 실패뿐이다")
+    @Test
+    void editable_only_in_pending_and_failed() {
+        assertTrue(WorkloadStatus.PENDING.isEditable());
+        assertTrue(WorkloadStatus.FAILED.isEditable());
+        assertFalse(WorkloadStatus.SCHEDULED.isEditable(), "예약 장부 행");
+        assertFalse(WorkloadStatus.RUNNING.isEditable(), "예약 장부 행");
+        assertFalse(WorkloadStatus.COMPLETED.isEditable(), "실행 기록");
+    }
 }

@@ -1,0 +1,106 @@
+// AIMS 노드 로그 수집 에이전트 — Grafana Alloy (세부1 물리 노드 전달용, docs/11 §5.3 PULL 전송).
+//
+// 이 파일은 모든 노드에 같은 내용으로 두고, 노드마다 다른 값은 alloy.env 로 넣는다.
+//   NODE_INSTANCE    이 노드의 node_exporter 를 Prometheus 가 긁는 주소(host:port). 메트릭과 로그를 묶는 조인 키라 글자까지 같아야 한다.
+//   MDC_ID           이 노드가 속한 마이크로 데이터센터 식별자(자산관리의 MDC id 와 동일).
+//   LOKI_PUSH_URL    AIMS 수집 서버의 Loki push 주소. 예) http://<수집서버>:3100/loki/api/v1/push
+//   AIMS_TARGETS_URL AIMS 백엔드의 수집 대상 목록 API. 예) http://<백엔드>:8080/api/v1/agent/targets
+//                    노드 식별은 NODE_INSTANCE 를 쿼리로 붙여서 한다(별도 토큰 없음).
+//
+// 라벨 계약(instance, mdc_id, job, filename)은 AIMS 가 조회에 쓰는 키이므로 바꾸지 않는다.
+// 백엔드는 이 노드에 접속하지 않는다. 포털에서 등록한 수집 파일 목록은 Alloy 가 30초마다 백엔드에서 가져간다(discovery.http).
+
+// ── 시스템 로그 (정적) ──────────────────────────────────────
+// Debian/Ubuntu 와 RHEL 계열 경로를 함께 둔다. 없는 파일은 그냥 매칭되지 않는다.
+
+loki.source.file "syslog" {
+  targets = [
+    { __address__ = "localhost", __path__ = "/var/log/syslog",   job = "syslog" },
+    { __address__ = "localhost", __path__ = "/var/log/messages", job = "syslog" },
+  ]
+  forward_to = [loki.write.default.receiver]
+
+  file_match {
+    enabled = true
+  }
+}
+
+loki.source.file "auth" {
+  targets = [
+    { __address__ = "localhost", __path__ = "/var/log/auth.log", job = "auth-log" },
+    { __address__ = "localhost", __path__ = "/var/log/secure",   job = "auth-log" },
+  ]
+  forward_to = [loki.write.default.receiver]
+
+  file_match {
+    enabled = true
+  }
+}
+
+loki.source.file "kern" {
+  targets = [{
+    __address__ = "localhost",
+    __path__    = "/var/log/kern.log",
+    job         = "kern-log",
+  }]
+  forward_to = [loki.write.default.receiver]
+
+  file_match {
+    enabled = true
+  }
+}
+
+// ── 포털에서 등록한 수집 서비스 파일 (동적 대상, 백엔드에서 가져옴) ──
+// 호출하는 쪽은 이 Alloy 뿐이다(Prometheus 와 무관). 응답은 discovery.http 가 읽는 목록 JSON:
+// [{ "targets": ["localhost"], "labels": { "__path__": 호스트 경로, "job": "collect/<서비스>", "service_id": "<id>" } }]
+// 목록의 __path__ 는 호스트 경로다. 컨테이너에는 호스트 루트가 /host 로 마운트되므로 읽을 때 /host 를 붙이고,
+// Loki 로 보낼 때 filename 라벨에서 다시 떼어 포털에 등록한 경로와 글자까지 같게 유지한다(자원 탐색기 조회 키).
+
+discovery.http "collect" {
+  url              = string.format("%s?instance=%s", sys.env("AIMS_TARGETS_URL"), sys.env("NODE_INSTANCE"))
+  refresh_interval = "30s"
+}
+
+discovery.relabel "collect" {
+  targets = discovery.http.collect.targets
+
+  rule {
+    source_labels = ["__path__"]
+    regex         = "(.*)"
+    target_label  = "__path__"
+    replacement   = "/host$1"
+  }
+}
+
+loki.relabel "collect" {
+  forward_to = [loki.write.default.receiver]
+
+  rule {
+    source_labels = ["filename"]
+    regex         = "/host(/.*)"
+    target_label  = "filename"
+    replacement   = "$1"
+  }
+}
+
+loki.source.file "collect" {
+  targets    = discovery.relabel.collect.output
+  forward_to = [loki.relabel.collect.receiver]
+
+  file_match {
+    enabled = true
+  }
+}
+
+// ── Loki 전송 ───────────────────────────────────────────────
+
+loki.write "default" {
+  endpoint {
+    url = sys.env("LOKI_PUSH_URL")
+  }
+  // 이 노드에서 나가는 모든 로그 스트림에 붙는 식별 라벨. 값은 alloy.env 에서 온다.
+  external_labels = {
+    instance = sys.env("NODE_INSTANCE"),
+    mdc_id   = sys.env("MDC_ID"),
+  }
+}

@@ -2,6 +2,7 @@ package com.innogrid.aims.monitoring.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,4 +22,8 @@ public interface MonitoringTargetRepository extends JpaRepository<MonitoringTarg
      *  호출측이 트랜잭션 밖에서 asset 을 읽으므로 함께 적재한다 */
     @EntityGraph(attributePaths = "asset")
     List<MonitoringTarget> findByAsset_IdIn(Collection<Long> assetIds);
+
+    /** 수집 에이전트 PULL — 노드 Alloy 가 보낸 instance(address:port)로 node_exporter 타겟과 그 자산을 찾는다 */
+    @EntityGraph(attributePaths = "asset")
+    Optional<MonitoringTarget> findFirstByAddressAndPortAndExporterType(String address, int port, ExporterType exporterType);
 }

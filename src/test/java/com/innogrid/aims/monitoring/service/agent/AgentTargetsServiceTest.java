@@ -13,8 +13,11 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectSer
 import com.innogrid.aims.monitoring.entity.AgentNode;
 import com.innogrid.aims.monitoring.entity.AgentTransport;
 import com.innogrid.aims.monitoring.entity.CollectService;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.AgentNodeRepository;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.agent.CollectTargetsBuilder.Targets;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -29,8 +32,9 @@ class AgentTargetsServiceTest {
     CollectTargetsBuilder builder = new CollectTargetsBuilder(new AgentProperties());
     AgentNodeRepository nodes = mock(AgentNodeRepository.class);
     CollectServiceRepository services = mock(CollectServiceRepository.class);
+    MonitoringTargetRepository targets = mock(MonitoringTargetRepository.class);
     LocalFileTargetsPublisher local = new LocalFileTargetsPublisher();
-    AgentTargetsService service = new AgentTargetsService(nodes, services, builder, List.of(local));
+    AgentTargetsService service = new AgentTargetsService(nodes, services, targets, builder, List.of(local));
     Asset asset = new Asset("mdc-01", Asset.AssetType.GPU_SERVER, "k8s-cp");
 
     CollectService registered(long id, String name, boolean enabled, String... paths) {
@@ -133,6 +137,44 @@ class AgentTargetsServiceTest {
         ReflectionTestUtils.setField(a, "assetId", 7L);
         when(nodes.findByTransportNot(AgentTransport.NONE)).thenReturn(List.of(a));
         assertThat(service.syncCandidates()).containsExactly(7L);
+    }
+
+    // ── PULL 전송 (노드 Alloy 가 가져감) ─────────────────────────
+
+    @Test void pullNodeOnlyRecordsDesiredHashOnSyncAndAppliesWhenServed() {
+        ReflectionTestUtils.setField(asset, "id", 5L);
+        AgentNode node = new AgentNode(asset, AgentTransport.NONE, null);
+        node.configurePull("tester");
+        assertThat(node.getTransport()).isEqualTo(AgentTransport.PULL);
+        assertThat(node.getTargetsPath()).isNull();
+        when(nodes.findById(5L)).thenReturn(Optional.of(node));
+        when(services.findByAsset_Id(5L)).thenReturn(List.of(registered(12, "nginx", true, "/var/log/nginx/access.log")));
+
+        service.sync(5L);                                                     // 밀어 넣을 곳이 없으니 원하는 해시만
+        assertThat(node.getTargetsHashDesired()).isNotNull();
+        assertThat(node.getTargetsAppliedAt()).isNull();
+        assertThat(node.getTargetsError()).isNull();
+        AgentTargetsStatusResponse pending = service.status(5L);
+        assertThat(pending.targetsStatus()).isEqualTo(TargetsStatus.PENDING);
+        assertThat(pending.message()).contains("가져가지 않았습니다");
+
+        MonitoringTarget exporter = new MonitoringTarget("mdc-01", "k8s-cp", "10.0.0.21", 9100, ExporterType.NODE_EXPORTER);
+        ReflectionTestUtils.setField(exporter, "asset", asset);
+        when(targets.findFirstByAddressAndPortAndExporterType("10.0.0.21", 9100, ExporterType.NODE_EXPORTER))
+                .thenReturn(Optional.of(exporter));
+        Optional<String> served = service.serve("10.0.0.21:9100");            // Alloy 가 instance 로 가져감 → 적용 기록
+        assertThat(served).isPresent();
+        assertThat(served.get()).contains("/var/log/nginx/access.log").contains("\"job\" : \"collect/nginx\"");
+        assertThat(node.getTargetsHashApplied()).isEqualTo(node.getTargetsHashDesired());
+        assertThat(service.status(5L).targetsStatus()).isEqualTo(TargetsStatus.APPLIED);
+
+        assertThat(service.serve("10.0.0.99:9100")).isEmpty();                 // 등록되지 않은 instance
+        assertThat(service.serve("10.0.0.21")).isEmpty();                      // 포트 없음
+        assertThat(service.serve("10.0.0.21:abc")).isEmpty();                  // 포트 형식 오류
+        assertThat(service.serve(null)).isEmpty();
+        assertThat(service.serve(" ")).isEmpty();
+        node.configureTransport(AgentTransport.LOCAL, "/tmp/x.json", "tester");
+        assertThat(service.serve("10.0.0.21:9100")).isEmpty();                 // PULL 이 아닌 노드는 거부
     }
 
     // ── 상태 응답 ───────────────────────────────────────────────

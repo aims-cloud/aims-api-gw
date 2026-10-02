@@ -34,7 +34,10 @@ public class AgentNode {
     @Column(name = "transport", nullable = false, length = 16)
     private AgentTransport transport = AgentTransport.NONE;
 
-    /** 목록 파일 경로. LOCAL 은 백엔드가 직접 쓰는 로컬 경로, SSH 는 노드 안 경로 */
+    /**
+     * 목록 파일 경로. LOCAL 은 백엔드가 직접 쓰는 로컬 경로, SSH 는 노드 안 경로. PULL 은 쓰지 않는다(null) —
+     * PULL 노드는 node_exporter 타겟 주소(instance)로 식별되어 목록 API 로 가져간다(deploy/sql/2026-10-02_agent_nodes.sql).
+     */
     @Column(name = "targets_path", length = 500)
     private String targetsPath;
 
@@ -97,6 +100,13 @@ public class AgentNode {
     public void configureTransport(AgentTransport transport, String targetsPath, String updatedBy) {
         this.transport = transport;
         this.targetsPath = targetsPath;
+        this.updatedBy = updatedBy;
+    }
+
+    /** PULL 전송으로 바꾼다. 목록 파일 경로는 쓰지 않으므로 비운다 */
+    public void configurePull(String updatedBy) {
+        this.transport = AgentTransport.PULL;
+        this.targetsPath = null;
         this.updatedBy = updatedBy;
     }
 

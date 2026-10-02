@@ -4,12 +4,16 @@ import java.time.OffsetDateTime;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.AgentTargetsStatusResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.AgentTargetsStatusResponse.TargetsStatus;
 import com.innogrid.aims.monitoring.entity.AgentNode;
 import com.innogrid.aims.monitoring.entity.AgentTransport;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.AgentNodeRepository;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.agent.CollectTargetsBuilder.Targets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,13 +36,16 @@ public class AgentTargetsService {
 
     private final AgentNodeRepository nodes;
     private final CollectServiceRepository services;
+    private final MonitoringTargetRepository targets;
     private final CollectTargetsBuilder builder;
     private final Map<AgentTransport, AgentTargetsPublisher> publishers = new EnumMap<>(AgentTransport.class);
 
     public AgentTargetsService(AgentNodeRepository nodes, CollectServiceRepository services,
-                               CollectTargetsBuilder builder, List<AgentTargetsPublisher> publishers) {
+                               MonitoringTargetRepository targets, CollectTargetsBuilder builder,
+                               List<AgentTargetsPublisher> publishers) {
         this.nodes = nodes;
         this.services = services;
+        this.targets = targets;
         this.builder = builder;
         for (AgentTargetsPublisher publisher : publishers) {
             this.publishers.put(publisher.transport(), publisher);
@@ -55,6 +62,10 @@ public class AgentTargetsService {
         Targets targets = builder.build(services.findByAsset_Id(assetId));
         node.markDesired(targets.hash());
 
+        if (node.getTransport() == AgentTransport.PULL) {
+            // 노드 Alloy 가 가져가는 방식 — 여기서는 원하는 해시만 두고, 적용 기록은 serve() 가 남긴다
+            return;
+        }
         AgentTargetsPublisher publisher = publishers.get(node.getTransport());
         if (publisher == null) {
             node.markApplyFailed("전송 방식 " + node.getTransport() + " 은 아직 지원하지 않습니다.");
@@ -73,6 +84,44 @@ public class AgentTargetsService {
             node.markApplyFailed(reason);
             log.warn("수집 대상 목록 반영 실패: asset={} path={} — {}", assetId, node.getTargetsPath(), reason);
         }
+    }
+
+    /**
+     * PULL 전송 — 노드 Alloy 가 자기 instance(node_exporter 주소 {@code address:port})로 목록을 가져간다.
+     * instance 로 node_exporter 타겟 → 자산 → PULL 에이전트 행을 찾아 원장 목록을 만들어 돌려주고, 그 해시를 "적용됨"으로
+     * 기록한다(Alloy 가 받아 간 목록이 곧 노드에 반영된 목록). 모르는 instance 이거나 PULL 노드가 아니면 빈 Optional.
+     * 토큰은 두지 않는다 — 백엔드가 사내 대역에서만 열려 있다는 전제이며, 목록에는 파일 경로만 있다.
+     */
+    @Transactional
+    public Optional<String> serve(String instance) {
+        if (instance == null || instance.isBlank()) {
+            return Optional.empty();
+        }
+        int colon = instance.lastIndexOf(':');
+        if (colon <= 0 || colon == instance.length() - 1) {
+            return Optional.empty();
+        }
+        int port;
+        try {
+            port = Integer.parseInt(instance.substring(colon + 1));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+        MonitoringTarget target = targets.findFirstByAddressAndPortAndExporterType(
+                instance.substring(0, colon), port, ExporterType.NODE_EXPORTER).orElse(null);
+        if (target == null || target.getAsset() == null) {
+            return Optional.empty();
+        }
+        Long assetId = target.getAsset().getId();
+        AgentNode node = nodes.findById(assetId).orElse(null);
+        if (node == null || node.getTransport() != AgentTransport.PULL) {
+            return Optional.empty();
+        }
+        Targets built = builder.build(services.findByAsset_Id(assetId));
+        node.markDesired(built.hash());
+        node.markApplied(built.hash(), OffsetDateTime.now());
+        log.debug("수집 대상 목록 제공(pull): instance={} asset={} files={}", instance, assetId, built.count());
+        return Optional.of(built.json());
     }
 
     /**
@@ -98,7 +147,10 @@ public class AgentTargetsService {
                     node.getTargetsError());
         }
         if (node.isTargetsPending() || node.getTargetsAppliedAt() == null) {
-            return new AgentTargetsStatusResponse(node.getTransport(), TargetsStatus.PENDING, node.getTargetsAppliedAt(), count, null);
+            String message = node.getTransport() == AgentTransport.PULL && node.getTargetsAppliedAt() == null
+                    ? "노드의 Alloy 가 아직 목록을 가져가지 않았습니다(설치·NODE_INSTANCE 값·방화벽 확인)."
+                    : null;
+            return new AgentTargetsStatusResponse(node.getTransport(), TargetsStatus.PENDING, node.getTargetsAppliedAt(), count, message);
         }
         return new AgentTargetsStatusResponse(node.getTransport(), TargetsStatus.APPLIED, node.getTargetsAppliedAt(), count, null);
     }

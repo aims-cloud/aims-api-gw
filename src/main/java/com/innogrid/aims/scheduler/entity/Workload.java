@@ -144,6 +144,8 @@ public class Workload {
     public OffsetDateTime getScheduledAt() { return scheduledAt; }
 
     // Setters
+    /** 이름 변경은 편집 API 만 쓴다. 배치 이력·전달 기록은 결정 당시 이름을 따로 저장하므로 바뀌지 않는다. */
+    public void setName(String name) { this.name = name; }
     public void setDescription(String description) { this.description = description; }
     public void setRequiredCpu(int requiredCpu) { this.requiredCpu = requiredCpu; }
     public void setRequiredMemoryMb(int requiredMemoryMb) { this.requiredMemoryMb = requiredMemoryMb; }
@@ -249,6 +251,18 @@ public class Workload {
 
     public enum WorkloadStatus {
         PENDING, SCHEDULED, RUNNING, COMPLETED, FAILED;
+
+        /**
+         * 정의(요구량·종류·우선순위 등)를 편집할 수 있는 상태인가 — 대기(PENDING)와 실패(FAILED)만.
+         *
+         * <p>배치된(SCHEDULED)·실행 중(RUNNING) 워크로드는 행 자체가 노드 예약 장부라 요구량을 바꾸면 재배치 없이 장부만
+         * 어긋나고, 실행 계층이 받은 요구와도 달라진다. 완료(COMPLETED)는 무엇을 돌렸는지의 유일한 기록이다(배치 이력은
+         * 요구량을 저장하지 않는다). 엔티티가 아니라 열거형에 둔다 — 엔티티에 {@code isX} 를 더하면 엔티티 직렬화 키가 늘어
+         * 응답 DTO 동등성 시험({@code ResponseDtoEquivalenceTest})이 깨진다.</p>
+         */
+        public boolean isEditable() {
+            return this == PENDING || this == FAILED;
+        }
 
         /**
          * 이 상태에서 대상 상태로 넘어갈 수 있는지 판단한다.

@@ -7,12 +7,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadUpdateRequest;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
+import tools.jackson.databind.JsonNode;
+
 /**
- * 워크로드 생성·삭제 — 요청 검증과 상태 규칙을 한곳에 둔다.
+ * 워크로드 생성·편집·삭제 — 요청 검증과 상태 규칙을 한곳에 둔다.
  *
  * <p>검증은 애너테이션이 아니라 여기서 {@link BusinessException} 으로 한다. 이 프로젝트는 검증 예외가
  * 기본 처리로 넘어가면 400 이 아니라 403 이 되는 경로가 있어(단계 3·10-② 기록), 서비스에서 던지는 편이
@@ -85,6 +88,78 @@ public class WorkloadService {
     }
 
     /**
+     * 편집(부분 갱신). 보낸 키만 바꾸고 없는 키는 유지한다.
+     *
+     * <pre>
+     * 없음                         → 404
+     * SCHEDULED                    → 409 (먼저 예약 취소)
+     * RUNNING · COMPLETED          → 409
+     * 본문 없음 · 칸 검증 실패      → 400 (생성과 같은 규칙과 사유 문구 · 비울 수 있는 여섯 칸은 JSON 타입도 검사)
+     * PENDING · FAILED             → 200
+     * </pre>
+     *
+     * <p><b>상태를 본문보다 먼저 본다</b> — 편집할 수 없는 워크로드라면 본문이 맞아도 소용없으므로 진짜 막힌 이유를 먼저
+     * 알린다(삭제·예약 취소와 같은 순서). <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400 이면 엔티티는 전혀
+     * 바뀌지 않는다(트랜잭션 롤백에만 기대지 않는다). 깨진 JSON 처럼 본문을 읽지 못한 400 은 이 메서드에 오기 전에
+     * 프레임워크가 내므로 404·409 보다 앞선다.</p>
+     *
+     * <p>재시도 회계(횟수·마지막 실패 시각)와 배정·사유·시각 칸은 건드리지 않는다. 회계를 지우는 길은 명시적 되살리기
+     * (FAILED→PENDING · 일괄 재개)와 완료뿐이다 — 편집이 지우면 재시도 상한을 우회하는 숨은 되살리기가 된다.</p>
+     */
+    @Transactional
+    public Workload update(Long id, WorkloadUpdateRequest request) {
+        Workload workload = workloadRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다: " + id));
+
+        Workload.WorkloadStatus status = workload.getStatus();
+        if (!status.isEditable()) {
+            throw new BusinessException(HttpStatus.CONFLICT, switch (status) {
+                case SCHEDULED -> String.format("배치된 워크로드는 편집할 수 없습니다 (상태 SCHEDULED, 노드 %s). "
+                        + "먼저 예약 취소(POST /workloads/{id}/release)로 배정을 푸세요", workload.getAssignedNodeId());
+                case RUNNING -> String.format("실행 중인 워크로드는 편집할 수 없습니다 (상태 RUNNING, 노드 %s)",
+                        workload.getAssignedNodeId());
+                default -> "완료된 워크로드는 실행 기록이라 편집할 수 없습니다 — 다시 돌리려면 새로 생성하세요";
+            });
+        }
+        if (request == null) throw badRequest("요청 본문이 필요합니다");
+
+        // 먼저 전부 검증해 지역 값에 담는다
+        String name = request.name() == null ? null : requireText(request.name(), "워크로드 이름", NAME_MAX);
+        Integer cpu = request.requiredCpu() == null ? null : requireAtLeast(request.requiredCpu(), 1, "요구 CPU");
+        Integer memory = request.requiredMemoryMb() == null ? null
+                : requireAtLeast(request.requiredMemoryMb(), 1, "요구 메모리(MB)");
+        Integer gpu = request.requiredGpu() == null ? null : requireAtLeast(request.requiredGpu(), 0, "요구 GPU");
+        Integer disk = request.requiredDiskGb() == null ? null
+                : requireAtLeast(request.requiredDiskGb(), 0, "요구 디스크(GB)");
+        Workload.ResourceType type = request.resourceType() == null ? null
+                : EnumSupport.parse(Workload.ResourceType.class, request.resourceType(), "리소스 종류");
+        Workload.WorkloadPriority priority = request.priority() == null ? null
+                : EnumSupport.parse(Workload.WorkloadPriority.class, request.priority(), "우선순위");
+        Clearable<String> description = clearableText(request.description(), "설명", DESCRIPTION_MAX);
+        Clearable<String> dataMdc = clearableMdcId(request.dataMdcId(), "데이터 MDC");
+        Clearable<String> preferredMdc = clearableMdcId(request.preferredMdcId(), "선호 MDC");
+        Clearable<Double> power = clearablePositive(request.maxPowerBudgetWatts(), "노드 전력 상한(W)");
+        Clearable<Double> temperature = clearablePositive(request.maxTemperatureCelsius(), "온도 상한(°C)");
+        Clearable<Double> bandwidth = clearablePositive(request.requiredBandwidthMbps(), "요구 대역폭(Mbps)");
+
+        // 그다음 한꺼번에 반영한다
+        if (name != null) workload.setName(name);
+        if (cpu != null) workload.setRequiredCpu(cpu);
+        if (memory != null) workload.setRequiredMemoryMb(memory);
+        if (gpu != null) workload.setRequiredGpu(gpu);
+        if (disk != null) workload.setRequiredDiskGb(disk);
+        if (type != null) workload.setResourceType(type);
+        if (priority != null) workload.setPriority(priority);
+        if (description.sent()) workload.setDescription(description.value());
+        if (dataMdc.sent()) workload.setDataMdcId(dataMdc.value());
+        if (preferredMdc.sent()) workload.setPreferredMdcId(preferredMdc.value());
+        if (power.sent()) workload.setMaxPowerBudgetWatts(power.value());
+        if (temperature.sent()) workload.setMaxTemperatureCelsius(temperature.value());
+        if (bandwidth.sent()) workload.setRequiredBandwidthMbps(bandwidth.value());
+        return workloadRepository.save(workload);
+    }
+
+    /**
      * 삭제. 없으면 404, 실행 중(SCHEDULED·RUNNING)이면 409.
      *
      * <p>스케줄러의 예약 장부는 별도 테이블이 아니라 <b>워크로드 행 자체</b>다(배치 노드가 적힌 SCHEDULED·RUNNING 행).
@@ -152,6 +227,42 @@ public class WorkloadService {
             throw badRequest(String.format("%s은(는) 유한한 0 보다 큰 수여야 합니다: %s", label, value));
         }
         return value;
+    }
+
+    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null 이면 {@code null}). */
+    private record Clearable<T>(boolean sent, T value) {
+        static <T> Clearable<T> keep() { return new Clearable<>(false, null); }
+        static <T> Clearable<T> set(T value) { return new Clearable<>(true, value); }
+    }
+
+    /** 키 없음 → 유지, 명시적 null → 비움, 문자열 → 길이 검증(생성과 마찬가지로 앞뒤 공백을 지우지 않음), 그 외 → 400. */
+    private static Clearable<String> clearableText(JsonNode node, String label, int max) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isString()) throw badRequest(label + "은(는) 문자열이어야 합니다");
+        return Clearable.set(limit(node.asString(), label, max));
+    }
+
+    /** 키 없음 → 유지, 명시적 null → 비움, 문자열 → 생성과 같은 MDC 규칙(앞뒤 공백 제거 · 빈 값은 비움), 그 외 → 400. */
+    private static Clearable<String> clearableMdcId(JsonNode node, String label) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isString()) throw badRequest(label + "은(는) 문자열이어야 합니다");
+        return Clearable.set(optionalMdcId(node.asString(), label));
+    }
+
+    /**
+     * 키 없음 → 유지, 명시적 null → 비움, 숫자 → 생성과 같은 양수 규칙, 그 외(숫자 문자열 포함) → 400.
+     * 생성 요청은 {@code "100"} 같은 숫자 문자열을 받아 주지만 여기서는 받지 않는다 — MDC 링크 원장 수정과 같은 규칙이다.
+     *
+     * <p>값은 {@code numberValue().doubleValue()} 로 꺼낸다. {@code asDouble()} 은 double 범위를 넘는 큰 정수에서
+     * {@code JsonNodeException} 을 던지는데 처리기가 없어 400 이 되지 못한다. 이쪽은 ±무한대가 되어 양수 검사가 400 으로 막는다.</p>
+     */
+    private static Clearable<Double> clearablePositive(JsonNode node, String label) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isNumber()) throw badRequest(label + "은(는) 숫자여야 합니다");
+        return Clearable.set(requirePositive(node.numberValue().doubleValue(), label));
     }
 
     private static BusinessException badRequest(String message) {

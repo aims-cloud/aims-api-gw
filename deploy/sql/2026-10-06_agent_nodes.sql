@@ -1,16 +1,22 @@
--- 수집 에이전트 원장(agent_nodes) 재생성 — PULL 전송 추가 (docs/11 §4.4·§5.3).
--- 처음 만든 2026-09-29 스크립트(운영 적용 완료)를 대체한다. 기존 표를 지우고 새 정의로 다시 만들며, k8s-cp 의 LOCAL 시드도 다시 넣는다.
--- 이 표는 운영자가 시드한 전송 방식과 목록 적용 상태(해시·시각)만 담으므로 지워도 잃는 것이 없다 —
--- 적용 상태는 재적용 스케줄러(60초)가 다음 주기에 다시 채운다. collect_services 등 다른 표는 건드리지 않는다.
--- 적용: sudo -u postgres psql -d aims -f 2026-10-02_agent_nodes.sql
+-- 수집 에이전트 원장(agent_nodes) 재생성 - 물리 자산 또는 Tumblebug VM 소유 (docs/11 §4.4).
+-- 2026-10-02 스크립트(운영 적용 완료)를 대체한다. 기존 표를 지우고 서로게이트 PK(id)로 다시 만들며, k8s-cp 의 LOCAL 시드도 다시 넣는다.
+-- 이 표는 운영자가 넣은 전송 방식·설치 상태와 목록 적용 상태(해시·시각)만 담는다. 적용 상태는 재적용 스케줄러(60초)가 다시 채우고,
+-- PULL 로 바꿔 둔 물리 노드 행이 있었다면 아래 템플릿으로 다시 넣는다. collect_services 등 다른 표는 건드리지 않는다.
+-- 적용: sudo -u postgres psql -d aims -v ON_ERROR_STOP=1 -f 2026-10-06_agent_nodes.sql
 BEGIN;
 
 DROP TABLE IF EXISTS agent_nodes;
 
 CREATE TABLE agent_nodes (
-    asset_id BIGINT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    id BIGSERIAL PRIMARY KEY,
+    -- 물리 노드 에이전트(자산당 1행). VM 에이전트면 NULL
+    asset_id BIGINT REFERENCES assets(id) ON DELETE CASCADE,
+    -- VM 에이전트의 Tumblebug 키(VM 당 1행). 물리 노드면 셋 다 NULL
+    tb_ns VARCHAR(200),
+    tb_infra VARCHAR(200),
+    tb_node VARCHAR(200),
     -- NONE: 전송 안 함 / LOCAL: 백엔드가 같은 서버의 파일을 직접 씀 /
-    -- PULL: 노드 Alloy 가 자기 instance(node_exporter address:port)로 목록 API 를 가져감 / SSH: 열거만 유지(구현 계획 없음)
+    -- PULL: Alloy 가 자기 식별 라벨(물리 노드 instance, VM tb 키)로 목록 API 를 가져감 / SSH: 열거만 유지(구현 계획 없음)
     transport VARCHAR(16) NOT NULL DEFAULT 'NONE' CHECK (transport IN ('NONE', 'LOCAL', 'SSH', 'PULL')),
     -- 목록 파일 경로. LOCAL 만 쓰고 PULL 은 NULL
     targets_path VARCHAR(500),
@@ -33,7 +39,12 @@ CREATE TABLE agent_nodes (
     targets_error TEXT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-    updated_by VARCHAR(200)
+    updated_by VARCHAR(200),
+    CONSTRAINT uk_agent_nodes_asset UNIQUE (asset_id),
+    CONSTRAINT uk_agent_nodes_vm UNIQUE (tb_ns, tb_infra, tb_node),
+    CONSTRAINT ck_agent_nodes_owner CHECK (
+        (asset_id IS NOT NULL AND tb_ns IS NULL AND tb_infra IS NULL AND tb_node IS NULL)
+        OR (asset_id IS NULL AND tb_ns IS NOT NULL AND tb_infra IS NOT NULL AND tb_node IS NOT NULL))
 );
 ALTER TABLE agent_nodes OWNER TO aims;
 
@@ -44,7 +55,7 @@ FROM assets WHERE name = 'k8s-cp';
 
 COMMIT;
 
--- ── PULL 노드 등록 절차 (노드마다 1회, 운영자 수동) ─────────────────────────────────────
+-- ── 물리 노드 PULL 등록 (세부1 노드, 노드마다 1회, 운영자 수동) ──────────────────────
 -- 전제: 자산관리 > 물리 자산에 노드가 등록되어 있고, 그 자산에 NODE_EXPORTER 타겟(monitoring_target.address:port)이 연결되어 있다.
 --       노드 Alloy 는 그 address:port 값을 NODE_INSTANCE 로 갖고 목록 API 를 부른다. 토큰·비밀값은 없다.
 --
@@ -54,4 +65,8 @@ COMMIT;
 --    ON CONFLICT (asset_id) DO UPDATE
 --      SET transport = 'PULL', targets_path = NULL, updated_at = now();
 --
--- 노드 Alloy 가 처음 가져가면 targets_applied_at 이 채워지고 GET /services/agent 가 APPLIED 가 된다(deploy/alloy-node/README.md).
+-- ── Tumblebug VM ─────────────────────────────────────────────────────────────────
+-- VM 에이전트 행은 VM 에이전트 설치 API 가 만든다(transport=PULL). 수동으로 넣을 때는:
+--
+--    INSERT INTO agent_nodes (tb_ns, tb_infra, tb_node, transport, updated_by)
+--    VALUES ('<nsId>', '<infraId>', '<nodeId>', 'PULL', 'deploy-sql');

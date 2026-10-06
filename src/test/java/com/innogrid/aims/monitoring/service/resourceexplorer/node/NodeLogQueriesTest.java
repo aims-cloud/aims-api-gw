@@ -7,6 +7,7 @@ import com.innogrid.aims.monitoring.LokiQueryClient;
 import com.innogrid.aims.monitoring.LokiQueryClient.Point;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.*;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
+import com.innogrid.aims.monitoring.service.resourceexplorer.vm.VmLogScope;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import static org.assertj.core.api.Assertions.*;
@@ -24,6 +25,18 @@ class NodeLogQueriesTest {
         assertThat(selector).contains("instance=\"10.0.0.1:9100\"", "mdc_id=\"mdc-1\"", "a\\\\.log", "b\\\\|c\\\\.log");
         assertThat(NodeLogQueries.selector(host, List.of("/var/a\".log"), null)).contains("filename=\"/var/a\\\".log\"");
         assertThat(NodeLogQueries.quote("x\"\\\n")).isEqualTo("\"x\\\"\\\\\\n\"");
+    }
+
+    @Test void vmScopeSelectsByTumblebugLabelsAndNeedsAllThree() {
+        VmLogScope vm = new VmLogScope("ns-1", "infra-1", "vm-1");
+        assertThat(NodeLogQueries.selector(vm, List.of("/var/log/nginx/access.log"), null))
+                .isEqualTo("{tb_ns=\"ns-1\", tb_infra=\"infra-1\", tb_node=\"vm-1\", filename=\"/var/log/nginx/access.log\"}");
+        assertThat(NodeLogQueries.configured(vm)).isTrue();
+        VmLogScope partial = new VmLogScope("ns-1", null, "vm-1");
+        assertThat(NodeLogQueries.configured(partial)).isFalse();
+        assertThat(queries.recent(partial, List.of("/a")).status(List.of("/a"))).isEqualTo(LogStatus.UNCONFIGURED);
+        assertThat(queries.recentFiles(partial, 86_400L)).isEmpty();
+        verifyNoInteractions(loki);
     }
 
     @Test void missingLogsAreNotMissingConfigurationAndFailuresAreUnknown() {

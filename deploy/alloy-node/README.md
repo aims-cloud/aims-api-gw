@@ -85,7 +85,7 @@ Alloy 는 단일 바이너리라 systemd 로도 띄울 수 있습니다. `grafan
 
 노드마다 1회. 자산관리 > 물리 자산에 노드가 등록되어 있고, 그 자산에 node_exporter 수집 대상(`monitoring_target`, address:port)이 연결되어 있어야 합니다.
 
-1. `agent_nodes` 에 `transport='PULL'` 행을 넣습니다(`deploy/sql/2026-10-02_agent_nodes.sql` 의 템플릿). 토큰 발급은 없습니다.
+1. `agent_nodes` 에 `transport='PULL'` 행을 넣습니다(`deploy/sql/2026-10-06_agent_nodes.sql` 의 템플릿). 토큰 발급은 없습니다.
 2. 2장의 값 네 개를 설치 담당자에게 전달합니다. `NODE_INSTANCE` 는 그 자산의 node_exporter 타겟 `address:port` 와 글자까지 같아야 합니다.
 3. 설치 뒤 `GET /api/v1/monitoring/resource-explorer/node/{nodeId}/services/agent` 가 `transport=PULL`, `targetsStatus=APPLIED` 인지 확인합니다.
    한 번도 가져가지 않았으면 PENDING 과 안내 메시지가 내려옵니다.

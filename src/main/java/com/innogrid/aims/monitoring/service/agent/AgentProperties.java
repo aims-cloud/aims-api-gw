@@ -16,11 +16,21 @@ public class AgentProperties {
     private List<String> staticLogPaths = List.of(
             "/var/log/syslog", "/var/log/auth.log", "/var/log/kern.log", "/var/log/aims/*.log");
 
+    /**
+     * 배포 패키지(deploy/alloy-node·deploy/alloy-vm)의 Alloy 정적 설정이 읽는 경로 — PULL 노드(세부1 노드, TB VM)용.
+     * k8s-cp(LOCAL)의 정적 설정과 달리 Debian·RHEL 경로를 함께 읽고 AIMS 앱 로그는 없다.
+     */
+    private List<String> remoteStaticLogPaths = List.of(
+            "/var/log/syslog", "/var/log/messages", "/var/log/auth.log", "/var/log/secure", "/var/log/kern.log");
+
     /** 재적용 스케줄러 주기(초). 원하는 목록과 노드의 실제 파일이 다르면 다시 쓴다. */
     private long reconcileIntervalSeconds = 60;
 
     public List<String> getStaticLogPaths() { return staticLogPaths; }
     public void setStaticLogPaths(List<String> staticLogPaths) { this.staticLogPaths = staticLogPaths; }
+
+    public List<String> getRemoteStaticLogPaths() { return remoteStaticLogPaths; }
+    public void setRemoteStaticLogPaths(List<String> remoteStaticLogPaths) { this.remoteStaticLogPaths = remoteStaticLogPaths; }
 
     public long getReconcileIntervalSeconds() { return reconcileIntervalSeconds; }
     public void setReconcileIntervalSeconds(long reconcileIntervalSeconds) { this.reconcileIntervalSeconds = reconcileIntervalSeconds; }

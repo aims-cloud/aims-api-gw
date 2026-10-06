@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.Schedule;
@@ -315,7 +316,23 @@ public class ScheduleExecutionService {
      */
     @Transactional(readOnly = true)
     public ScheduleRunPreviewResponse preview(Long id) {
-        Schedule schedule = scheduleService.require(id);
+        return previewOf(scheduleService.require(id));
+    }
+
+    /**
+     * 저장 전 폼 값으로 보는 미리보기 — 저장된 스케줄의 미리보기와 같은 해석·같은 질의이고, 스케줄을 만들지 않는다.
+     *
+     * <p>응답 값을 바꾸는 칸은 셋이다 — 리소스 종류·정책·엔진. 온도 상한·배치 순서는 실행과 같은 해석에 쓰이지만
+     * 응답에는 드러나지 않는다(정책 이름은 사본이어도 같고, 정렬은 건수를 바꾸지 않는다). 전력 상한은 노드를 모은 뒤
+     * 노드 단위로 거는 제약이라 건수에 닿지 않고(저장된 미리보기도 같다), 스케줄명·실행 주기·자동 실행은
+     * 실행 해석과 무관하다. {@code id} 는 없으니 {@code null} 이다.</p>
+     */
+    @Transactional(readOnly = true)
+    public ScheduleRunPreviewResponse previewDraft(ScheduleRequest request) {
+        return previewOf(scheduleService.draft(request));
+    }
+
+    private ScheduleRunPreviewResponse previewOf(Schedule schedule) {
         PolicyChoice policy = policyChoiceFor(schedule, false);
         EngineChoice engine = engineChoiceFor(schedule, policy.policy());
 

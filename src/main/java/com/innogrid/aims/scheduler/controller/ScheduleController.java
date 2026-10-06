@@ -120,6 +120,21 @@ public class ScheduleController {
 
     // ── 실행 ───────────────────────────────────────────────────
 
+    @Operation(summary = "저장 전 스케줄 미리보기",
+            description = "생성 폼의 값을 그대로 보내면 저장하지 않고 '이 값으로 지금 실행하면' 적용될 정책·엔진과 "
+                    + "대상·재시도 대기·재시도 소진 건수를 돌려줍니다. 응답은 실행 미리보기와 같은 열네 키이고 id 는 null 입니다. "
+                    + "결과를 바꾸는 칸은 resourceType·policyId·engine 셋이고, maxTemperatureCelsius·placementOrder 는 실행과 같은 해석에 "
+                    + "쓰이지만 응답 값에는 드러나지 않습니다. scheduleId·enabled 는 보낸 값을 그대로 돌려줍니다. "
+                    + "스케줄명·실행 주기·자동 실행·전력 상한은 보지 않고(전력 상한은 실행 때 노드 단위로 적용) 설명은 300자 상한만 검사합니다. "
+                    + "scheduleId 형식·중복과 실행 주기도 검사하지 않으므로 200 이 저장 성공을 뜻하지는 않습니다. "
+                    + "키를 빼면 기존 값이 아니라 기본값(VM · 사용 중 · 정책 상속)으로 해석하므로 편집 폼은 병합한 전체 값을 보내십시오. "
+                    + "본문이 없으면 400, 엔진·배치 순서·설명 형식 오류는 400, 없는 정책 id 는 404 입니다. "
+                    + "노드를 모으지 않고 실행 권한을 잡지 않으며 default 정책도 만들지 않습니다.")
+    @PostMapping("/preview")
+    public ApiResponse<ScheduleRunPreviewResponse> previewDraft(@RequestBody(required = false) ScheduleRequest request) {
+        return ApiResponse.ok(executionService.previewDraft(request));
+    }
+
     @Operation(summary = "실행 미리보기",
             description = "이 스케줄을 지금 실행하면 적용될 배치 정책·엔진(과 고른 단계)과 대상·재시도 대기·재시도 소진 "
                     + "건수를 저장 없이 돌려줍니다. 실행 권한을 잡지 않고 노드도 모으지 않습니다. "

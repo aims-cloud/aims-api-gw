@@ -24,7 +24,7 @@ class GpuDashboardServiceTest {
 
     @BeforeEach
     void resetThresholds() {
-        service.updateThresholds(new UpdateGpuThresholdRequest(10.0, 60.0, 60.0));
+        service.updateThresholds(new UpdateGpuThresholdRequest(10.0, 60.0, 60.0, 10.0));
     }
 
     @Test
@@ -51,7 +51,7 @@ class GpuDashboardServiceTest {
 
     @Test
     void 임계치_변경은_요약_판정에_반영된다() {
-        service.updateThresholds(new UpdateGpuThresholdRequest(5.0, 80.0, 80.0));
+        service.updateThresholds(new UpdateGpuThresholdRequest(5.0, 80.0, 80.0, null));
 
         GpuSummaryResponse summary = service.getSummary(new GpuDashboardFilter(null, null, null, null));
 

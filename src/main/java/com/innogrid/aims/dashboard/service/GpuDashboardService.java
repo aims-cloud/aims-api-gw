@@ -1,5 +1,8 @@
 package com.innogrid.aims.dashboard.service;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -9,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -20,6 +23,7 @@ import com.innogrid.aims.dashboard.dto.GpuDistributionResponse;
 import com.innogrid.aims.dashboard.dto.GpuFilterOptionsResponse;
 import com.innogrid.aims.dashboard.dto.GpuFilterOptionsResponse.VmOption;
 import com.innogrid.aims.dashboard.dto.GpuMetric;
+import com.innogrid.aims.dashboard.dto.GpuNodeCoverageResponse;
 import com.innogrid.aims.dashboard.dto.GpuRankingResponse;
 import com.innogrid.aims.dashboard.dto.GpuSummaryResponse;
 import com.innogrid.aims.dashboard.dto.GpuThresholdResponse;
@@ -29,35 +33,55 @@ import com.innogrid.aims.dashboard.dto.UpdateGpuThresholdRequest;
 import com.innogrid.aims.dashboard.model.GpuDashboardThreshold;
 import com.innogrid.aims.dashboard.model.GpuDeviceMetrics;
 import com.innogrid.aims.dashboard.model.GpuMetricHistory;
+import com.innogrid.aims.dashboard.service.GpuNodeScopeService.GpuNode;
+import com.innogrid.aims.dashboard.service.GpuNodeScopeService.GpuNodeScope;
 import com.innogrid.aims.mock.MockDataProvider;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import org.springframework.stereotype.Service;
 
+/**
+ * GPU 대시보드 (Confluence 2320072739, 1단계 기반 2026-10-06).
+ *
+ * 실데이터 경로: 기준 목록은 DB — 토큰 역할 스코프 안의 DCGM 수집 대상({@link GpuNodeScopeService})이고, Thanos 의 DCGM 시계열은
+ * {@code instance} 가 그 목록에 있는 것만 값으로 쓴다. 역할·배포영역(MDC)은 exporter 라벨이 아니라 DB 에서 붙인다.
+ * Thanos 즉시 조회 결과는 짧게 캐시한다({@code aims.gpu-dashboard.cache-ttl-seconds}). 임계값은 DB 단일 행({@link GpuThresholdService}).
+ */
 @Service
 public class GpuDashboardService {
-
-    private static final GpuDashboardThreshold DEFAULT_THRESHOLDS = new GpuDashboardThreshold(10.0, 60.0, 60.0);
 
     // TODO:: 실제 Thanos 연동 시 Mock 플래그 의존성 제거
     private final GpuDashboardProperties properties;
     private final VictoriaMetricsClient metricsClient;
     // TODO:: 실제 Thanos 연동 시 MockDataProvider 의존성 제거
     private final MockDataProvider mockDataProvider;
-    private final AtomicReference<GpuDashboardThreshold> thresholds = new AtomicReference<>();
+    private final GpuThresholdService thresholdService;
+    private final GpuNodeScopeService scopeService;
+    private Clock clock = Clock.systemUTC();
+    private volatile LiveSnapshot cached;
 
     // TODO:: 실제 Thanos 연동 시 GpuDashboardProperties와 MockDataProvider 생성자 주입 제거
     public GpuDashboardService(GpuDashboardProperties properties,
                                VictoriaMetricsClient metricsClient,
-                               MockDataProvider mockDataProvider) {
+                               MockDataProvider mockDataProvider,
+                               GpuThresholdService thresholdService,
+                               GpuNodeScopeService scopeService) {
         this.properties = properties;
         this.metricsClient = metricsClient;
         this.mockDataProvider = mockDataProvider;
+        this.thresholdService = thresholdService;
+        this.scopeService = scopeService;
+    }
+
+    /** 테스트용 — 캐시 수명 판정 시계 */
+    void setClock(Clock clock) {
+        this.clock = clock;
     }
 
     // ── Controller 호출 메서드 ──────────────────────────────────
 
     public GpuDashboardResponse getDashboard(GpuDashboardFilter filter, OffsetDateTime from, OffsetDateTime to) {
-        List<GpuDeviceMetrics> gpuMetrics = filteredGpuMetrics(filter);
+        View view = view(filter);
+        List<GpuDeviceMetrics> gpuMetrics = view.gpus();
         return new GpuDashboardResponse(
                 summary(gpuMetrics),
                 distribution(gpuMetrics, true),
@@ -68,14 +92,26 @@ public class GpuDashboardService {
                 rankings(gpuMetrics, GpuMetric.VRAM_UTILIZATION, 5, false),
                 getThresholds(),
                 // TODO:: 실제 Thanos 연동 시 데이터 출처를 THANOS로 고정하거나 응답 필드 제거
-                properties.isMockEnabled() ? "MOCK" : "THANOS");
+                properties.isMockEnabled() ? "MOCK" : "THANOS",
+                view.coverage());
     }
 
     public GpuFilterOptionsResponse getFilterOptions() {
-        List<GpuDeviceMetrics> gpuMetrics = loadGpuMetrics();
+        // TODO:: 2단계 — deploymentIds 표시명, ?role= 로 배포영역 좁힘, allocationTypes 값 집합(PASSTHROUGH/MIG/VGPU)
+        List<GpuDeviceMetrics> gpuMetrics = view(new GpuDashboardFilter(null, null, null, null)).gpus();
         List<VmOption> vms = new ArrayList<>(gpuMetrics.stream().filter(s -> s.vmId() != null)
                 .collect(Collectors.toMap(GpuDeviceMetrics::vmId, s -> new VmOption(s.vmId(), s.vmName()),
                         (left, right) -> left, LinkedHashMap::new)).values());
+        if (!properties.isMockEnabled()) {
+            // 실데이터: 역할·배포영역은 시계열 유무와 상관없이 스코프(DB)에서 — GPU 가 아직 수집되지 않은 노드도 고를 수 있다
+            GpuNodeScope scope = scopeService.currentScope(null, null);
+            return new GpuFilterOptionsResponse(
+                    scope.roles().stream().sorted().toList(),
+                    List.copyOf(scope.mdcIds()),
+                    vms,
+                    distinct(gpuMetrics, GpuDeviceMetrics::gpuType),
+                    distinct(gpuMetrics, GpuDeviceMetrics::allocationType));
+        }
         return new GpuFilterOptionsResponse(
                 distinct(gpuMetrics, GpuDeviceMetrics::role),
                 distinct(gpuMetrics, GpuDeviceMetrics::deploymentId),
@@ -123,29 +159,74 @@ public class GpuDashboardService {
     }
 
     public GpuThresholdResponse getThresholds() {
-        GpuDashboardThreshold value = currentThresholds();
-        return new GpuThresholdResponse(value.idleGpuUtilization(), value.highGpuUtilization(),
-                value.highVramUtilization());
+        return toResponse(thresholdService.current());
     }
 
     public GpuThresholdResponse updateThresholds(UpdateGpuThresholdRequest request) {
-        if (request.idleGpuUtilization() > request.highGpuUtilization()) {
-            throw new IllegalArgumentException("유휴 GPU 임계치는 고활용 GPU 임계치보다 클 수 없습니다.");
-        }
-        thresholds.set(new GpuDashboardThreshold(request.idleGpuUtilization(), request.highGpuUtilization(),
-                request.highVramUtilization()));
-        return getThresholds();
+        return toResponse(thresholdService.update(request));
+    }
+
+    private static GpuThresholdResponse toResponse(GpuDashboardThreshold value) {
+        return new GpuThresholdResponse(value.idleGpuUtilization(), value.highGpuUtilization(),
+                value.highVramUtilization(), value.activeGpuUtilization());
     }
 
     // ── Service 내부 사용 메서드 ────────────────────────────────
 
     private List<GpuDeviceMetrics> filteredGpuMetrics(GpuDashboardFilter filter) {
-        return loadGpuMetrics().stream()
-                .filter(s -> matches(filter.roles(), s.role()))
-                .filter(s -> matches(filter.deploymentIds(), s.deploymentId()))
+        return view(filter).gpus();
+    }
+
+    /** 한 요청이 보는 GPU 행과 노드 수집 현황 */
+    private record View(List<GpuDeviceMetrics> gpus, GpuNodeCoverageResponse coverage) {}
+
+    private View view(GpuDashboardFilter filter) {
+        // TODO:: 실제 Thanos 연동 시 Mock 분기 제거
+        if (properties.isMockEnabled()) {
+            List<GpuDeviceMetrics> gpus = mockDataProvider.getGpuDashboardDataset().gpus().stream()
+                    .filter(s -> matches(filter.roles(), s.role()))
+                    .filter(s -> matches(filter.deploymentIds(), s.deploymentId()))
+                    .filter(s -> matches(filter.vmIds(), s.vmId()))
+                    .filter(s -> matches(filter.gpuTypes(), s.gpuType()))
+                    .toList();
+            return new View(gpus, mockCoverage(gpus));
+        }
+        GpuNodeScope scope = scopeService.currentScope(filter.roles(), filter.deploymentIds());
+        LiveSnapshot snapshot = liveSnapshot();
+        Map<String, GpuNode> nodes = scope.byInstance();
+        List<GpuDeviceMetrics> gpus = snapshot.gpus().stream()
+                .filter(g -> nodes.containsKey(g.instance()))
+                .map(g -> g.build(nodes.get(g.instance())))
                 .filter(s -> matches(filter.vmIds(), s.vmId()))
                 .filter(s -> matches(filter.gpuTypes(), s.gpuType()))
                 .toList();
+        return new View(gpus, liveCoverage(scope, snapshot));
+    }
+
+    /** 스코프 노드별 수집 여부 + ADMIN 이면 미등록 노드 수(Thanos 에 있으나 DCGM 수집 대상 원장에 없는 instance) */
+    private GpuNodeCoverageResponse liveCoverage(GpuNodeScope scope, LiveSnapshot snapshot) {
+        List<GpuNodeCoverageResponse.Node> rows = scope.nodes().stream()
+                .map(n -> new GpuNodeCoverageResponse.Node(n.assetId(), n.assetName(), n.mdcId(), n.instance(),
+                        snapshot.instances().contains(n.instance())))
+                .toList();
+        int collecting = (int) rows.stream().filter(GpuNodeCoverageResponse.Node::collecting).count();
+        Integer unregistered = null;
+        if (scope.admin()) {
+            Set<String> registered = scopeService.registeredInstances();
+            unregistered = (int) snapshot.instances().stream().filter(i -> !registered.contains(i)).count();
+        }
+        return new GpuNodeCoverageResponse(rows.size(), collecting, unregistered, rows);
+    }
+
+    private static GpuNodeCoverageResponse mockCoverage(List<GpuDeviceMetrics> gpus) {
+        Map<String, GpuNodeCoverageResponse.Node> byHost = new LinkedHashMap<>();
+        for (GpuDeviceMetrics gpu : gpus) {
+            if (gpu.hostname() != null) {
+                byHost.putIfAbsent(gpu.hostname(),
+                        new GpuNodeCoverageResponse.Node(null, gpu.hostname(), gpu.deploymentId(), null, true));
+            }
+        }
+        return new GpuNodeCoverageResponse(byHost.size(), byHost.size(), null, List.copyOf(byHost.values()));
     }
 
     private GpuSummaryResponse summary(List<GpuDeviceMetrics> gpuMetrics) {
@@ -209,24 +290,32 @@ public class GpuDashboardService {
         return new GpuTrendResponse(id, labels.getOrDefault(byVm ? "vm_name" : "UUID", id), points);
     }
 
-    private List<GpuDeviceMetrics> loadGpuMetrics() {
-        // TODO:: 실제 Thanos 연동 시 MockDataProvider 호출 분기 제거
-        if (properties.isMockEnabled()) return mockDataProvider.getGpuDashboardDataset().gpus();
-        return loadLiveGpuMetrics();
-    }
+    /** Thanos DCGM 현재값 묶음 — GPU 행 원천과, 시계열이 들어오는 instance 집합. 같은 시각에 함께 조회한 값이다 */
+    private record LiveSnapshot(List<GpuDeviceMetricsBuilder> gpus, Set<String> instances, Instant loadedAt) {}
 
-    private List<GpuDeviceMetrics> loadLiveGpuMetrics() {
+    /** 캐시 수명 안이면 마지막 조회 결과를 쓴다. 역할·필터와 무관한 전체 값이라 요청마다 스코프로 거른다 */
+    private LiveSnapshot liveSnapshot() {
+        LiveSnapshot current = cached;
+        Instant now = clock.instant();
+        long ttl = properties.getCacheTtlSeconds();
+        if (current != null && ttl > 0 && Duration.between(current.loadedAt(), now).getSeconds() < ttl) {
+            return current;
+        }
         Map<String, GpuDeviceMetricsBuilder> joined = new LinkedHashMap<>();
         // TODO:: 실제 Thanos 연동 시 운영 dcgm_exporter의 메트릭 이름과 수집 여부 확인
         mergeMetric(joined, "DCGM_FI_DEV_GPU_UTIL", GpuDeviceMetricsBuilder::gpuUtilization);
         mergeMetric(joined, "DCGM_FI_DEV_FB_USED", GpuDeviceMetricsBuilder::vramUsedMb);
         mergeMetric(joined, "DCGM_FI_DEV_FB_FREE", GpuDeviceMetricsBuilder::vramFreeMb);
-        return joined.values().stream().map(GpuDeviceMetricsBuilder::build).toList();
+        Set<String> instances = joined.values().stream().map(GpuDeviceMetricsBuilder::instance)
+                .filter(Objects::nonNull).collect(Collectors.toCollection(LinkedHashSet::new));
+        LiveSnapshot loaded = new LiveSnapshot(List.copyOf(joined.values()), Set.copyOf(instances), now);
+        cached = loaded;
+        return loaded;
     }
 
     @SuppressWarnings("unchecked")
     private void mergeMetric(Map<String, GpuDeviceMetricsBuilder> joined, String promQl,
-                             java.util.function.BiConsumer<GpuDeviceMetricsBuilder, Double> setter) {
+                             BiConsumer<GpuDeviceMetricsBuilder, Double> setter) {
         for (Map<String, Object> result : metricsClient.queryResults(promQl)) {
             Map<String, String> labels = (Map<String, String>) result.getOrDefault("metric", Map.of());
             List<Object> value = (List<Object>) result.get("value");
@@ -238,14 +327,7 @@ public class GpuDashboardService {
     }
 
     private GpuDashboardThreshold currentThresholds() {
-        GpuDashboardThreshold current = thresholds.get();
-        if (current != null) return current;
-        // TODO:: 실제 Thanos 연동 시 MockDataProvider 호출을 제거하고 임계치를 운영 DB 또는 설정 저장소에서 조회
-        GpuDashboardThreshold initial = properties.isMockEnabled()
-                ? mockDataProvider.getGpuDashboardDataset().thresholds()
-                : DEFAULT_THRESHOLDS;
-        thresholds.compareAndSet(null, initial == null ? DEFAULT_THRESHOLDS : initial);
-        return thresholds.get();
+        return thresholdService.current();
     }
 
     private static class GpuDeviceMetricsBuilder {
@@ -259,13 +341,15 @@ public class GpuDashboardService {
         void gpuUtilization(double value) { gpuUtilization = value; }
         void vramUsedMb(double value) { vramUsedMb = value; }
         void vramFreeMb(double value) { vramFreeMb = value; }
-        GpuDeviceMetrics build() {
-            // TODO:: 실제 Thanos 연동 시 VM/배포/역할/할당 유형 레이블을 자원 관리 DB 정보와 결합
-            return new GpuDeviceMetrics(id, labels.get("gpu"), labels.get("UUID"), labels.get("Hostname"),
-                    labels.get("role"), labels.get("deployment_id"), labels.get("vm_id"), labels.get("vm_name"),
-                    labels.get("project_name"), labels.get("credential_name"), labels.get("modelName"),
-                    labels.getOrDefault("allocation_type", "UNKNOWN"), gpuUtilization, vramUsedMb,
-                    vramUsedMb + vramFreeMb, vramUsedMb, List.of());
+        String instance() { return labels.get("instance"); }
+
+        /** 역할·배포영역은 DB 스코프 노드에서 붙인다(exporter 에 라벨을 추가하지 않는다, 설계 §2) */
+        GpuDeviceMetrics build(GpuNode node) {
+            // TODO:: 3단계 — VM·할당 유형은 gpu_allocations 원장에서(지금은 비어 있음)
+            String hostname = labels.getOrDefault("Hostname", node.assetName());
+            return new GpuDeviceMetrics(id, labels.get("gpu"), labels.get("UUID"), hostname,
+                    node.primaryRole(), node.mdcId(), null, null, null, null, labels.get("modelName"),
+                    "UNKNOWN", gpuUtilization, vramUsedMb, vramUsedMb + vramFreeMb, vramUsedMb, List.of());
         }
     }
 

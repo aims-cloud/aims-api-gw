@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.common.log.PortalLog;
 import com.innogrid.aims.dashboard.dto.GpuDashboardFilter;
 import com.innogrid.aims.dashboard.dto.GpuDashboardResponse;
 import com.innogrid.aims.dashboard.dto.GpuDistributionResponse;
@@ -49,7 +50,10 @@ public class GpuDashboardController {
         this.gpuDashboardService = gpuDashboardService;
     }
 
-    @Operation(summary = "GPU 대시보드 통합 조회", description = "대시보드 최초 로딩에 필요한 데이터를 통합 조회합니다.")
+    @Operation(summary = "GPU 대시보드 통합 조회", description = "대시보드 최초 로딩에 필요한 데이터를 통합 조회합니다. "
+            + "실데이터 모드에서는 토큰 역할 스코프 안의 DCGM 수집 대상(GPU 노드)만 보이며, role 은 토큰 역할 안에서만 좁히고 "
+            + "deploymentId 는 노드 자산의 MDC 입니다. nodeCoverage 는 등록 노드 수·수집 중 노드 수·노드별 수집 여부이고, "
+            + "unregisteredNodeCount(Thanos 에 있으나 수집 대상 원장에 없는 노드 수)는 ADMIN 토큰에만 값이 있습니다.")
     @GetMapping
     public ApiResponse<GpuDashboardResponse> getGpuDashboard(
             @RequestParam(required = false) List<String> role,
@@ -154,13 +158,19 @@ public class GpuDashboardController {
                 filter(role, deploymentId, vmId, gpuTypes), metric, limit, from, to, false));
     }
 
-    @Operation(summary = "GPU 판정 임계치 조회")
+    @Operation(summary = "GPU 판정 임계치 조회",
+            description = "전역 공용(DB 영속). 활성: 사용률 > active, 유휴: 사용률 < idle, 고활용: 사용률 ≥ high AND VRAM ≥ highVram.")
     @GetMapping("/thresholds")
     public ApiResponse<GpuThresholdResponse> getThresholds() {
         return ApiResponse.ok(gpuDashboardService.getThresholds());
     }
 
-    @Operation(summary = "GPU 판정 임계치 변경")
+    @Operation(summary = "GPU 판정 임계치 변경",
+            description = "임계값 팝업 3종(활성·유휴·고활용)의 적용. 모든 사용자에게 공용으로 반영됩니다. "
+                    + "activeGpuUtilization 을 생략하면 현재 값을 유지합니다. 유휴가 고활용 사용률보다 크면 400.")
+    @PortalLog(screen = "GPU 대시보드", action = "임계값 변경",
+            content = "'GPU 임계값 변경: 활성 ' + #request.activeGpuUtilization + ', 유휴 ' + #request.idleGpuUtilization"
+                    + " + ', 고활용 ' + #request.highGpuUtilization + '/' + #request.highVramUtilization")
     @PutMapping("/thresholds")
     public ApiResponse<GpuThresholdResponse> updateThresholds(@Valid @RequestBody UpdateGpuThresholdRequest request) {
         return ApiResponse.ok(gpuDashboardService.updateThresholds(request));

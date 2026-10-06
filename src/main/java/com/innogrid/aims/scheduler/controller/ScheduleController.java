@@ -8,6 +8,7 @@ import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
@@ -100,11 +101,17 @@ public class ScheduleController {
     }
 
     @Operation(summary = "스케줄 편집",
-            description = "스케줄 ID 는 업무 키라 변경할 수 없습니다. "
+            description = "부분 갱신 — 보낸 키만 바꾸고 없는 키는 유지합니다. 스케줄 ID 는 업무 키라 변경할 수 없습니다. "
+                    + "policyId·engine·maxPowerBudgetWatts·maxTemperatureCelsius·description 은 null 을 보내면 비웁니다"
+                    + "(정책·온도 상한은 상속으로, 전력 상한은 제약 없음으로 복귀). 이 다섯 칸은 JSON 타입도 검사해 "
+                    + "숫자 칸에 숫자 문자열, 정수 칸에 소수를 보내면 400 입니다. 나머지 칸의 null 은 유지이고 "
+                    + "resourceType·placementOrder 는 비울 수 없습니다(배치 순서를 기본으로 되돌리려면 age). "
+                    + "상세 조회 응답을 그대로 보내면 아무것도 바뀌지 않습니다. "
+                    + "본문이 없으면 400, 스케줄 ID 가 다르면 400, 칸 검증은 생성과 같은 규칙이며 한 칸이라도 400 이면 아무것도 바뀌지 않습니다. "
                     + "실행 주기나 사용 여부를 바꾸면 다음 실행 예정 시각이 현재 기준으로 다시 계산됩니다.")
     @PutMapping("/{id}")
     public ApiResponse<ScheduleResponse> updateSchedule(@PathVariable Long id,
-                                                        @RequestBody ScheduleRequest request) {
+                                                        @RequestBody(required = false) ScheduleUpdateRequest request) {
         return ApiResponse.ok(scheduleService.update(id, request));
     }
 

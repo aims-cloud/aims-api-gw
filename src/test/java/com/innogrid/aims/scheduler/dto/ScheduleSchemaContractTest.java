@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄 화면 DTO 의 <b>설명·예시·필수 표기가 코드와 갈리지 않는지</b> — 컨텍스트를 띄우지 않고 반사로만 본다.
  *
- * <p>이 아홉 record 는 프런트가 문자 그대로 읽는 계약이다. "설명이 있는지" 만 보는 검사는 한 단어로도
+ * <p>이 열 record 는 프런트가 문자 그대로 읽는 계약이다. "설명이 있는지" 만 보는 검사는 한 단어로도
  * 통과하므로, 무게는 예시·허용값·필수 표기를 <b>코드의 사실과 대조</b>하는 쪽에 둔다 — 스케줄 ID 예시는
  * 서버 정규식에 맞아야 하고, cron 예시는 서버 검증을 통과해야 하며, 상태 허용값은 전이표가 실제로 받는
  * 값과 같아야 한다. 어느 하나가 갈리면 문서가 서버보다 넓거나 좁아져 프런트는 400 을 만난다.</p>
@@ -36,9 +36,10 @@ class ScheduleSchemaContractTest {
             ScheduleRequest.class, ScheduleResponse.class, ScheduleRunResponse.class,
             ScheduleRunDetailResponse.class, ScheduleRunDetailResponse.ClusterSnapshot.class,
             ScheduleRunDetailResponse.Decision.class,
-            CronPreviewResponse.class, CronPreviewResponse.NextRun.class, StatusChangeRequest.class);
+            CronPreviewResponse.class, CronPreviewResponse.NextRun.class, StatusChangeRequest.class,
+            ScheduleUpdateRequest.class);
 
-    @DisplayName("아홉 record 의 모든 필드에 설명이 있고, 설명은 필드 이름의 반복이 아니다")
+    @DisplayName("열 record 의 모든 필드에 설명이 있고, 설명은 필드 이름의 반복이 아니다")
     @Test
     void every_component_carries_a_description_that_is_not_its_own_name() {
         int seen = 0;
@@ -55,10 +56,10 @@ class ScheduleSchemaContractTest {
                 seen++;
             }
         }
-        assertEquals(86, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
+        assertEquals(98, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
     }
 
-    @DisplayName("아홉 record 전부 클래스 레벨 설명이 있다")
+    @DisplayName("열 record 전부 클래스 레벨 설명이 있다")
     @Test
     void every_record_carries_a_type_level_description() {
         for (Class<?> type : TARGETS) {
@@ -97,9 +98,12 @@ class ScheduleSchemaContractTest {
         assertTrue(idExample.matches(Schedule.ID_PATTERN), "스케줄 ID 예시가 서버 정규식에 맞지 않는다: " + idExample);
         assertEquals(idExample, schemaOf(component(ScheduleResponse.class, "scheduleId")).example(),
                 "요청·응답의 스케줄 ID 예시가 다르다");
+        assertEquals(idExample, schemaOf(component(ScheduleUpdateRequest.class, "scheduleId")).example(),
+                "편집 요청의 스케줄 ID 예시가 생성과 다르다");
+        assertTrue(requiredNames(ScheduleUpdateRequest.class).isEmpty(), "편집 요청은 모든 칸이 선택이라 필수 표기가 없어야 한다");
 
         CronSupport cron = new CronSupport(new SchedulerProperties());
-        for (Class<?> type : List.of(ScheduleRequest.class, ScheduleResponse.class, CronPreviewResponse.class)) {
+        for (Class<?> type : List.of(ScheduleRequest.class, ScheduleUpdateRequest.class, ScheduleResponse.class, CronPreviewResponse.class)) {
             String example = schemaOf(component(type, "cronExpression")).example();
             assertDoesNotThrow(() -> cron.validate(example),
                     type.getSimpleName() + ": cron 예시가 서버 검증에서 400 이 된다: " + example);
@@ -113,11 +117,13 @@ class ScheduleSchemaContractTest {
     @DisplayName("배치 순서 허용값은 열거형 이름과 같고 예시는 그 안에 있다")
     @Test
     void placement_order_allowable_values_match_the_enum() {
-        Schema schema = schemaOf(component(ScheduleRequest.class, "placementOrder"));
-        Set<String> declared = Set.of(schema.allowableValues());
         Set<String> actual = Arrays.stream(Schedule.PlacementOrder.values()).map(Enum::name).collect(Collectors.toSet());
-        assertEquals(actual, declared, "배치 순서 허용값이 열거형과 갈렸다");
-        assertTrue(declared.contains(schema.example()), "배치 순서 예시가 허용값에 없다: " + schema.example());
+        for (Class<?> type : List.of(ScheduleRequest.class, ScheduleUpdateRequest.class)) {
+            Schema schema = schemaOf(component(type, "placementOrder"));
+            Set<String> declared = Set.of(schema.allowableValues());
+            assertEquals(actual, declared, type.getSimpleName() + ": 배치 순서 허용값이 열거형과 갈렸다");
+            assertTrue(declared.contains(schema.example()), type.getSimpleName() + ": 배치 순서 예시가 허용값에 없다: " + schema.example());
+        }
     }
 
     @DisplayName("상태 전이 허용값은 열거형 전부가 아니라 전이표가 실제로 받는 값과 같다")

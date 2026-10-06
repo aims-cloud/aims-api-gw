@@ -69,6 +69,17 @@ public class TumblebugClient {
                 .body(body).retrieve().body(MAP_TYPE);
     }
 
+    /**
+     * Infra 안 Node(VM) 한 대에만 원격 명령을 실행한다 — {@code POST /ns/{ns}/cmd/infra/{infra}?nodeId=}.
+     * 동기 호출이라 명령이 끝날 때까지(본문 timeoutMinutes 까지) 응답을 기다린다. 응답은 model.InfraSshCmdResultForAPI
+     * ({@code results[].nodeId·stdout·stderr·error}).
+     */
+    public Map<String, Object> sendNodeCommand(String nsId, String infraId, String nodeId, Map<String, Object> body) {
+        return rest.post().uri(b -> b.path("/ns/{ns}/cmd/infra/{id}").queryParam("nodeId", "{nodeId}")
+                        .build(nsId, infraId, nodeId))
+                .body(body).retrieve().body(MAP_TYPE);
+    }
+
     // ── 공통 리소스 (이미지, 스펙, VPC, 보안그룹, SSH키) ──────────
 
     public Map<String, Object> listImages(String nsId) {

@@ -19,7 +19,9 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectSer
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.CollectServiceValidationResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.service.DiscoveredServiceResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.VmAgentInstallResponse;
 import com.innogrid.aims.monitoring.service.resourceexplorer.vm.ResourceExplorerVmLogService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.vm.VmAgentInstallService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
@@ -48,9 +50,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ResourceExplorerVmLogController {
 
     private final ResourceExplorerVmLogService vmLogs;
+    private final VmAgentInstallService agentInstall;
 
-    public ResourceExplorerVmLogController(ResourceExplorerVmLogService vmLogs) {
+    public ResourceExplorerVmLogController(ResourceExplorerVmLogService vmLogs, VmAgentInstallService agentInstall) {
         this.vmLogs = vmLogs;
+        this.agentInstall = agentInstall;
     }
 
     // ── 수집 서비스 관리 ─────────────────────────────────────────
@@ -106,6 +110,34 @@ public class ResourceExplorerVmLogController {
             @RequestParam String infraId,
             @RequestParam String vmId) {
         return ApiResponse.ok(vmLogs.getAgentTargetsStatus(roleName, nsId, infraId, vmId));
+    }
+
+    @Operation(summary = "VM 수집 에이전트 설치",
+            description = "Tumblebug 원격 명령으로 이 VM 한 대에 node_exporter(:9100)와 Grafana Alloy(systemd aims-alloy)를 설치합니다. "
+                    + "수 분 걸려 바로 INSTALLING 을 돌려주고 백그라운드에서 진행하며, 결과는 GET /agent/install 로 봅니다. "
+                    + "다시 부르면 재설치(같은 결과)입니다. 404: 스코프 밖·없는 VM, 409: Running 이 아니거나 설치 진행 중, "
+                    + "503: 서버의 VM 설치 설정(Loki·목록 API 주소) 미구성. VM 은 github.com(내려받기), Loki 3100, 백엔드 8080 으로 나갈 수 있어야 합니다.")
+    @PortalLog(screen = "VM 수집 서비스", action = "에이전트 설치",
+            content = "'VM 수집 에이전트 설치: ' + #nsId + '/' + #infraId + '/' + #vmId")
+    @PostMapping("/agent/install")
+    public ApiResponse<VmAgentInstallResponse> installAgent(
+            @RequestParam(required = false) String roleName,
+            @RequestParam String nsId,
+            @RequestParam String infraId,
+            @RequestParam String vmId) {
+        return ApiResponse.ok(agentInstall.install(roleName, nsId, infraId, vmId));
+    }
+
+    @Operation(summary = "VM 수집 에이전트 설치 상태",
+            description = "NOT_INSTALLED(에이전트 행 없음), INSTALLING(installStep 진행 중), INSTALLED(installedAt·agentVersion), "
+                    + "FAILED(installStep 실패 단계, installError 사유). 화면은 진행 중이면 몇 초 간격으로 다시 부릅니다.")
+    @GetMapping("/agent/install")
+    public ApiResponse<VmAgentInstallResponse> getAgentInstallStatus(
+            @RequestParam(required = false) String roleName,
+            @RequestParam String nsId,
+            @RequestParam String infraId,
+            @RequestParam String vmId) {
+        return ApiResponse.ok(agentInstall.status(roleName, nsId, infraId, vmId));
     }
 
     @Operation(summary = "VM 수집 서비스 추가",

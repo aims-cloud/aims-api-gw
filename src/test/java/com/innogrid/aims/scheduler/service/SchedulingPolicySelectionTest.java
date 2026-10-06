@@ -179,6 +179,51 @@ class SchedulingPolicySelectionTest {
         assertEquals("common", r.policyName(), "실배치 응답에도 적용 정책");
     }
 
+    @DisplayName("종류를 비운 워크로드의 모의 배치는 VM 활성 정책을 쓴다")
+    @Test
+    void null_type_dry_run_uses_vm_policy() {
+        oneNode(10);
+        policyRepository.save(active("common", null));
+        policyRepository.save(active("vm-only", ResourceType.VM));
+        Workload w = workloadRepository.save(new Workload("prp-null", 1, 1024));
+
+        SchedulingResult r = schedulingService.dryRun(w.getId(), "weighted");
+        assertTrue(r.success(), r.reason());
+        assertEquals("vm-only", r.policyName(), "종류가 없으면 VM 으로 읽어 VM 활성 정책을 고른다");
+        assertNull(workloadRepository.findById(w.getId()).orElseThrow().getResourceType(), "저장값은 비운 채 유지");
+    }
+
+    @DisplayName("종류를 비운 워크로드의 단건 배치도 VM 활성 정책을 쓴다")
+    @Test
+    void null_type_single_placement_uses_vm_policy() {
+        oneNode(10);
+        policyRepository.save(active("common", null));
+        policyRepository.save(active("vm-only", ResourceType.VM));
+        Workload w = workloadRepository.save(new Workload("prp-null-single", 1, 1024));
+
+        SchedulingResult r = schedulingService.scheduleWorkload(w.getId(), "weighted");
+        assertTrue(r.success(), r.reason());
+        assertEquals("vm-only", r.policyName(), "단건 배치도 모의 배치와 같은 규칙");
+        assertNull(workloadRepository.findById(w.getId()).orElseThrow().getResourceType(), "저장값은 비운 채 유지");
+    }
+
+    @DisplayName("종류를 지정한 워크로드는 자기 종류의 정책을 그대로 쓴다")
+    @Test
+    void typed_workload_keeps_its_type_policy() {
+        oneNode(10);
+        policyRepository.save(active("common", null));
+        policyRepository.save(active("vm-only", ResourceType.VM));
+        SchedulingPolicy gpuOnly = policyRepository.save(active("gpu-only", ResourceType.GPU));
+        Workload gpu = new Workload("prp-gpu-typed", 1, 1024);
+        gpu.setResourceType(ResourceType.GPU);
+        gpu = workloadRepository.save(gpu);
+
+        assertEquals("gpu-only", schedulingService.dryRun(gpu.getId(), "weighted").policyName(), "GPU 는 GPU 정책");
+        gpuOnly.setActive(false);
+        policyRepository.save(gpuOnly);
+        assertEquals("common", schedulingService.dryRun(gpu.getId(), "weighted").policyName(), "GPU 정책이 꺼지면 공통으로 — VM 정책으로 새지 않는다");
+    }
+
     @DisplayName("활성 노드가 없어 후보 없이 실패해도 그 시점의 정책 이름이 있다")
     @Test
     void no_active_nodes_failure_keeps_policy_name() {

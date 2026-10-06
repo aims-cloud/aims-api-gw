@@ -14,6 +14,7 @@ import com.innogrid.aims.dashboard.dto.GpuRankingResponse;
 import com.innogrid.aims.dashboard.dto.GpuSummaryResponse;
 import com.innogrid.aims.dashboard.dto.GpuThresholdResponse;
 import com.innogrid.aims.dashboard.dto.GpuTrendResponse;
+import com.innogrid.aims.dashboard.dto.GpuUnitPointResponse;
 import com.innogrid.aims.dashboard.dto.UpdateGpuThresholdRequest;
 import com.innogrid.aims.dashboard.service.GpuDashboardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,22 +23,21 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 2026.08.28
- * TODO:: 세부 1의 GPU 메트릭 및 Thanos 연동 규격이 확정되지 않아 현재 MockDataProvider를 사용한다.
- *        연동 규격 확정 후 Mock 분기와 GPU Mock 데이터를 제거하고 Thanos 조회 경로로 전환한다.
+ * GPU 대시보드 API (Confluence 2320072739 — 피그마 Section 8·요구사항 기준).
  *
- * TODO:: 대시보드 상단 필터의 데이터 출처와 Thanos 레이블 매핑 정책을 확정해야 한다.
- *        역할, 배포 영역 및 가상머신 정보는 포탈의 자원 관리 데이터를 기준으로 조회하고,
- *        vmId 또는 vmName을 Thanos 레이블과 연결하여 메트릭을 필터링하는 방안을 검토한다.
- *        유형(PassThrough, MIG, vGPU)은 GPU 모델 필터(gpuTypes)와 구분하여 별도 파라미터로 제공할지 결정한다.
+ * 공통 조회 조건: role(토큰 역할 안에서 좁힘)·deploymentId(MDC)·vmId·gpuTypes(모델명, 계약 유지)·allocationTypes(할당 유형
+ * PASSTHROUGH·MIG·VGPU, 피그마 "유형")와 기간 from·to(ISO-8601, 기본 최근 1시간, 상한 30일 — 넘으면 400).
+ * 사용률·VRAM 은 기간 평균, Peak VRAM 은 기간 최대다. 실데이터 모드의 VM·PASSTHROUGH/VGPU 정보는 3단계 매핑 원장 이후 채워진다.
+ *
+ * TODO:: 실데이터 검증이 끝나면 aims.gpu-dashboard.mock-enabled 와 MockDataProvider 분기 제거
  */
 @Tag(name = "GPU 대시보드", description = "GPU 대시보드 현황 및 모니터링")
 @RestController
@@ -53,53 +53,85 @@ public class GpuDashboardController {
     @Operation(summary = "GPU 대시보드 통합 조회", description = "대시보드 최초 로딩에 필요한 데이터를 통합 조회합니다. "
             + "실데이터 모드에서는 토큰 역할 스코프 안의 DCGM 수집 대상(GPU 노드)만 보이며, role 은 토큰 역할 안에서만 좁히고 "
             + "deploymentId 는 노드 자산의 MDC 입니다. nodeCoverage 는 등록 노드 수·수집 중 노드 수·노드별 수집 여부이고, "
-            + "unregisteredNodeCount(Thanos 에 있으나 수집 대상 원장에 없는 노드 수)는 ADMIN 토큰에만 값이 있습니다.")
+            + "unregisteredNodeCount(Thanos 에 있으나 수집 대상 원장에 없는 노드 수)는 ADMIN 토큰에만 값이 있습니다. "
+            + "gpuDistribution 은 GPU 할당 단위 점(수집 끊긴 GPU 는 값 null), GPU Top5 는 사용률·VRAM 사용률·VRAM Used·Peak VRAM 4종입니다.")
     @GetMapping
     public ApiResponse<GpuDashboardResponse> getGpuDashboard(
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
             @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
-        // TODO:: 실제 Thanos 연동 시 from/to 미입력에 대한 기본 조회 기간 및 타임존 정책 적용
-        return ApiResponse.ok(gpuDashboardService.getDashboard(filter(role, deploymentId, vmId, gpuTypes), from, to));
+        return ApiResponse.ok(gpuDashboardService.getDashboard(
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), from, to));
     }
 
-    @Operation(summary = "GPU 대시보드 필터 목록 조회")
+    @Operation(summary = "GPU 대시보드 필터 목록 조회",
+            description = "roles 는 토큰 역할 전체, deploymentIds·deployments 는 role 을 주면 그 역할들이 가진 배포영역(MDC)으로 좁힙니다. "
+                    + "deployments 의 name 은 MDC 원장이 없어 mdcId 와 같습니다. allocationTypes 는 PASSTHROUGH·MIG·VGPU 입니다.")
     @GetMapping("/filter-options")
-    public ApiResponse<GpuFilterOptionsResponse> getFilterOptions() {
-        return ApiResponse.ok(gpuDashboardService.getFilterOptions());
+    public ApiResponse<GpuFilterOptionsResponse> getFilterOptions(@RequestParam(required = false) List<String> role) {
+        return ApiResponse.ok(gpuDashboardService.getFilterOptions(role));
     }
 
-    @Operation(summary = "GPU 대시보드 요약 조회", description = "할당·유휴·고활용 GPU와 VRAM 사용률 및 Peak VRAM을 조회합니다.")
+    @Operation(summary = "GPU 대시보드 요약 조회",
+            description = "활성·유휴·고활용·할당 GPU 수, VRAM 사용률·사용량, Peak VRAM 과 그 GPU·VM. 판정은 기간에 표본이 있는 GPU 만: "
+                    + "활성 사용률 > active, 유휴 < idle(같으면 어느 쪽도 아님), 고활용 사용률 ≥ high AND VRAM ≥ highVram.")
     @GetMapping("/summary")
     public ApiResponse<GpuSummaryResponse> getSummary(
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
-        return ApiResponse.ok(gpuDashboardService.getSummary(filter(role, deploymentId, vmId, gpuTypes)));
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ApiResponse.ok(gpuDashboardService.getSummary(filter(role, deploymentId, vmId, gpuTypes, allocationTypes), from, to));
     }
 
-    @Operation(summary = "VM 기준 GPU 사용률 분포 조회")
+    @Operation(summary = "VM 기준 GPU 사용률 분포 조회", description = "점 = VM, 값은 할당 GPU 평균(표본 없는 GPU 제외, gpuCount 에는 포함).")
     @GetMapping("/distributions/vms")
     public ApiResponse<List<GpuDistributionResponse>> getVmDistribution(
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
-        return ApiResponse.ok(gpuDashboardService.getDistribution(filter(role, deploymentId, vmId, gpuTypes), true));
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ApiResponse.ok(gpuDashboardService.getDistribution(
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), true, from, to));
     }
 
-    @Operation(summary = "GPU 유형별 사용률 분포 조회")
+    @Operation(summary = "GPU 모델명별 사용률 분포 조회", description = "점 = GPU 모델명 집계(계약 유지). 피그마의 GPU 할당 단위 분포는 /distributions/gpus.")
     @GetMapping("/distributions/types")
     public ApiResponse<List<GpuDistributionResponse>> getGpuTypeDistribution(
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
-        return ApiResponse.ok(gpuDashboardService.getDistribution(filter(role, deploymentId, vmId, gpuTypes), false));
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ApiResponse.ok(gpuDashboardService.getDistribution(
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), false, from, to));
+    }
+
+    @Operation(summary = "GPU 할당 단위 기준 분포 조회",
+            description = "점 = GPU 할당 단위(PassThrough·vGPU 는 물리 GPU, MIG 는 인스턴스). 수집 끊긴 GPU 는 사용률 null·collecting=false.")
+    @GetMapping("/distributions/gpus")
+    public ApiResponse<List<GpuUnitPointResponse>> getGpuUnitDistribution(
+            @RequestParam(required = false) List<String> role,
+            @RequestParam(required = false) List<String> deploymentId,
+            @RequestParam(required = false) List<String> vmId,
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ApiResponse.ok(gpuDashboardService.getGpuDistribution(
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), from, to));
     }
 
     @Operation(summary = "VM Top N 조회")
@@ -110,12 +142,15 @@ public class GpuDashboardController {
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
         return ApiResponse.ok(gpuDashboardService.getRankings(
-                filter(role, deploymentId, vmId, gpuTypes), metric, limit, true));
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), metric, limit, true, from, to));
     }
 
-    @Operation(summary = "GPU 할당 단위 Top N 조회")
+    @Operation(summary = "GPU 할당 단위 Top N 조회", description = "수집 끊긴 GPU 는 순위에서 빠집니다. 메타에 roleName·deploymentId 가 있습니다.")
     @GetMapping("/rankings/gpus")
     public ApiResponse<List<GpuRankingResponse>> getGpuRankings(
             @RequestParam GpuMetric metric,
@@ -123,39 +158,44 @@ public class GpuDashboardController {
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
         return ApiResponse.ok(gpuDashboardService.getRankings(
-                filter(role, deploymentId, vmId, gpuTypes), metric, limit, false));
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), metric, limit, false, from, to));
     }
 
-    @Operation(summary = "VM Top N 시계열 추이 조회")
+    @Operation(summary = "VM Top N 시계열 추이 조회", description = "순위와 같은 기간·같은 VM 집합. 간격은 기간/60(최소 15초, 최대 1시간).")
     @GetMapping("/trends/vms")
     public ApiResponse<List<GpuTrendResponse>> getVmTrends(
             @RequestParam GpuMetric metric,
             @RequestParam(defaultValue = "5") @Min(1) @Max(100) int limit,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes) {
         return ApiResponse.ok(gpuDashboardService.getTrends(
-                filter(role, deploymentId, vmId, gpuTypes), metric, limit, from, to, true));
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), metric, limit, from, to, true));
     }
 
-    @Operation(summary = "GPU 할당 단위 Top N 시계열 추이 조회")
+    @Operation(summary = "GPU 할당 단위 Top N 시계열 추이 조회", description = "순위와 같은 기간·같은 GPU 집합. 간격은 기간/60(최소 15초, 최대 1시간).")
     @GetMapping("/trends/gpus")
     public ApiResponse<List<GpuTrendResponse>> getGpuTrends(
             @RequestParam GpuMetric metric,
             @RequestParam(defaultValue = "5") @Min(1) @Max(100) int limit,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @RequestParam(required = false) List<String> role,
             @RequestParam(required = false) List<String> deploymentId,
             @RequestParam(required = false) List<String> vmId,
-            @RequestParam(required = false) List<String> gpuTypes) {
+            @RequestParam(required = false) List<String> gpuTypes,
+            @RequestParam(required = false) List<String> allocationTypes) {
         return ApiResponse.ok(gpuDashboardService.getTrends(
-                filter(role, deploymentId, vmId, gpuTypes), metric, limit, from, to, false));
+                filter(role, deploymentId, vmId, gpuTypes, allocationTypes), metric, limit, from, to, false));
     }
 
     @Operation(summary = "GPU 판정 임계치 조회",
@@ -176,9 +216,8 @@ public class GpuDashboardController {
         return ApiResponse.ok(gpuDashboardService.updateThresholds(request));
     }
 
-    private GpuDashboardFilter filter(List<String> roles, List<String> deploymentIds,
-                                      List<String> vmIds, List<String> gpuTypes) {
-        // TODO:: 실제 Thanos 연동 시 파라미터를 운영 Prometheus 레이블 및 자원 관리 DB 식별자와 매핑
-        return new GpuDashboardFilter(roles, deploymentIds, vmIds, gpuTypes);
+    private GpuDashboardFilter filter(List<String> roles, List<String> deploymentIds, List<String> vmIds,
+                                      List<String> gpuTypes, List<String> allocationTypes) {
+        return new GpuDashboardFilter(roles, deploymentIds, vmIds, gpuTypes, allocationTypes);
     }
 }

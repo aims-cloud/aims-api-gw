@@ -73,6 +73,25 @@ public class VictoriaMetricsClient {
     }
 
     /**
+     * 시점 지정 즉시 쿼리의 벡터 목록 — {@code *_over_time(...[창])} 을 창의 끝 시각에 평가할 때 쓴다.
+     * GET /api/v1/query?query={promQL}&time={epochSeconds}
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> queryResultsAt(String promQL, Instant time) {
+        Map<String, Object> response = observe(() -> restClient.get()
+                .uri("/api/v1/query?query={q}&time={t}", promQL, time.getEpochSecond())
+                .retrieve()
+                .body(MAP_TYPE));
+        if (response == null) return Collections.emptyList();
+
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        if (data == null) return Collections.emptyList();
+
+        List<Map<String, Object>> results = (List<Map<String, Object>>) data.get("result");
+        return results != null ? results : Collections.emptyList();
+    }
+
+    /**
      * 범위 쿼리 — 시간 범위의 시계열 데이터를 반환.
      * GET /api/v1/query_range?query={promQL}&start={start}&end={end}&step={step}
      */

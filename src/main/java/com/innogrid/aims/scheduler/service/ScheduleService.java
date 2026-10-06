@@ -285,6 +285,26 @@ public class ScheduleService {
         return new CronPreviewResponse(cronExpression.trim(), zone.getId(), runs);
     }
 
+    /**
+     * 저장하지 않는 초안 — 폼 값을 실행이 보는 형태의 {@link Schedule} 로 바꾼다(저장 전 미리보기용).
+     *
+     * <p>스케줄명·실행 주기는 보지 않는다 — 폼을 채우는 중에도 부를 수 있어야 하고, 실행 주기는
+     * {@code /cron/validate} 가 따로 맡는다. 검증은 생성과 같은 규칙으로 엔진 등록 여부·배치 순서·설명 길이만 본다
+     * (설명은 결과에 쓰이지 않지만 길이 상한은 {@code apply} 가 생성과 같이 건다). 편집과 달리 "키 없음" 은 기존 값이
+     * 아니라 기본값(종류 VM · 사용 중 · 정책 상속)이다. 어떤 행도 쓰지 않는다.</p>
+     *
+     * <p>스케줄명·실행 주기가 비어 있어 저장하면 안 된다 — 같은 패키지의 미리보기만 쓰도록 접근을 좁힌다.</p>
+     */
+    Schedule draft(ScheduleRequest request) {
+        if (request == null) throw badRequest("요청 본문이 필요합니다");
+        validateEngine(request.engine());
+        String scheduleId = request.scheduleId() == null || request.scheduleId().isBlank()
+                ? null : request.scheduleId().trim();
+        Schedule schedule = new Schedule(scheduleId, null, null);
+        apply(schedule, request);
+        return schedule;
+    }
+
     // ── 내부 ────────────────────────────────────────────────────
 
     /** 없으면 404. */

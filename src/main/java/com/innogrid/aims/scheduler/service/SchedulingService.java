@@ -112,7 +112,7 @@ public class SchedulingService {
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
 
-        PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
+        PlacementContext context = createContext(resolvePolicy(workload.resolveResourceType()));
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
@@ -253,7 +253,7 @@ public class SchedulingService {
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
 
-        PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
+        PlacementContext context = createContext(resolvePolicy(workload.resolveResourceType()));
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }

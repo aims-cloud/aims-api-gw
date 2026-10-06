@@ -153,6 +153,12 @@ aims:
       max-attempts: 3
       retry-backoff: 2s
       threads: 2
+  agent:
+    vm-install:
+      # Tumblebug VM 수집 에이전트 설치 (docs/11 §5.5) — VM 의 Alloy 가 직접 부르는 주소라 VM 에서 보이는 주소로 둔다.
+      # 둘 중 하나라도 비면 설치 API 는 503. 목록 API 는 인증이 없으므로 VM 대역에서만 백엔드에 닿게 방화벽을 둔다.
+      loki-push-url: ${AIMS_AGENT_VM_LOKI_PUSH_URL:}
+      targets-url: ${AIMS_AGENT_VM_TARGETS_URL:}
   portal-log:
     retention:
       # 포털 로그 보존 배치 (docs/08 §9) — 매일 03:30, 일반 1년 / SYSTEM 90일. 배치 단위로 별도 트랜잭션, 한 실행 최대 200배치

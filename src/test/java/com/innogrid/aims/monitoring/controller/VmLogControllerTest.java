@@ -7,7 +7,10 @@ import com.innogrid.aims.common.exception.GlobalExceptionHandler;
 import com.innogrid.aims.monitoring.controller.resourceexplorer.vm.ResourceExplorerVmLogController;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogLevel;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogListResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.VmAgentInstallResponse;
+import com.innogrid.aims.monitoring.entity.AgentInstallStatus;
 import com.innogrid.aims.monitoring.service.resourceexplorer.vm.ResourceExplorerVmLogService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.vm.VmAgentInstallService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -30,11 +33,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** VM 로그 탭 API — nsId·infraId·vmId 필수, 노드와 같은 시각 파싱(400), 서비스 위임 인자. */
 class VmLogControllerTest {
     ResourceExplorerVmLogService vmLogs = mock(ResourceExplorerVmLogService.class);
+    VmAgentInstallService agentInstall = mock(VmAgentInstallService.class);
     MockMvc mvc;
     String base = "/api/v1/monitoring/resource-explorer/vm/services";
 
     @BeforeEach void setup() {
-        mvc = MockMvcBuilders.standaloneSetup(new ResourceExplorerVmLogController(vmLogs))
+        mvc = MockMvcBuilders.standaloneSetup(new ResourceExplorerVmLogController(vmLogs, agentInstall))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 
@@ -71,5 +75,20 @@ class VmLogControllerTest {
         mvc.perform(delete(base + "/12").param("nsId", "ns-1").param("infraId", "infra-1").param("vmId", "vm-1"))
                 .andExpect(status().isOk());
         verify(vmLogs).deleteCollectService(null, "ns-1", "infra-1", "vm-1", "12");
+    }
+
+    @Test void agentInstallStartsAndReportsStatusWithVmKeys() throws Exception {
+        when(agentInstall.install("ADMIN", "ns-1", "infra-1", "vm-1")).thenReturn(
+                new VmAgentInstallResponse(AgentInstallStatus.INSTALLING, "SEND_COMMAND", null, null, null, null));
+        mvc.perform(post(base + "/agent/install").param("roleName", "ADMIN").param("nsId", "ns-1").param("infraId", "infra-1")
+                        .param("vmId", "vm-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.installStatus").value("INSTALLING"))
+                .andExpect(jsonPath("$.data.installStep").value("SEND_COMMAND"));
+        when(agentInstall.status(null, "ns-1", "infra-1", "vm-1")).thenReturn(VmAgentInstallResponse.notInstalled());
+        mvc.perform(get(base + "/agent/install").param("nsId", "ns-1").param("infraId", "infra-1").param("vmId", "vm-1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.installStatus").value("NOT_INSTALLED"));
+        mvc.perform(post(base + "/agent/install").param("nsId", "ns-1").param("infraId", "infra-1"))
+                .andExpect(status().isBadRequest());                             // vmId 누락
     }
 }

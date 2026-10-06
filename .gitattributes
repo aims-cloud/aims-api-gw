@@ -4,3 +4,4 @@
 src/main/resources/scheduler/*.yml text eol=lf
 *.java text eol=lf
 src/test/resources/** text eol=lf
+src/main/resources/agent/** text eol=lf

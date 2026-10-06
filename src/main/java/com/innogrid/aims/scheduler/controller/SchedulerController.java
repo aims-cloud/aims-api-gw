@@ -18,6 +18,7 @@ import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadReleaseResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
+import com.innogrid.aims.scheduler.dto.WorkloadUpdateRequest;
 import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -231,6 +232,21 @@ public class SchedulerController {
         return ApiResponse.ok(workloadRepository.findById(workloadId)
                 .map(WorkloadResponse::from)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다")));
+    }
+
+    @Operation(summary = "워크로드 편집",
+               description = "부분 갱신 — 보낸 키만 바꾸고 없는 키는 유지합니다. 검증과 사유 문구는 생성과 같습니다. "
+                       + "description·dataMdcId·preferredMdcId·maxPowerBudgetWatts·maxTemperatureCelsius·requiredBandwidthMbps 는 null 을 보내면 비웁니다. "
+                       + "이 여섯 칸은 JSON 타입도 검사해 문자열 칸에 숫자, 숫자 칸에 숫자 문자열을 보내면 400 입니다(생성은 받아 줌). "
+                       + "나머지 칸의 null 은 유지이고 resourceType 은 비울 수 없습니다. "
+                       + "상태·배정·재시도·시각 키는 무시하므로 상세 조회 응답을 그대로 보내면 아무것도 바뀌지 않습니다. "
+                       + "PENDING·FAILED 만 편집할 수 있고 SCHEDULED·RUNNING·COMPLETED 는 409 입니다(SCHEDULED 는 먼저 예약 취소). "
+                       + "재시도 횟수·사유·배정은 바뀌지 않습니다. 오류 순서는 404 → 409 → 400 이고, "
+                       + "깨진 JSON 처럼 본문을 읽지 못한 400 은 그보다 먼저 납니다.")
+    @PutMapping("/workloads/{workloadId}")
+    public ApiResponse<WorkloadResponse> updateWorkload(@PathVariable Long workloadId,
+                                                       @RequestBody(required = false) WorkloadUpdateRequest request) {
+        return ApiResponse.ok(WorkloadResponse.from(workloadService.update(workloadId, request)));
     }
 
     @Operation(summary = "워크로드 삭제",

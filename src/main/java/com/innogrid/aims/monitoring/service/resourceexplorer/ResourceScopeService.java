@@ -55,9 +55,18 @@ public class ResourceScopeService {
      * ipAddresses 는 이 자산에 연결된 exporter 타겟 주소 목록 — 각각 없으면 null / 빈 목록.
      */
     public record ScopedHost(String role, Long assetId, String name, String alias, String mdcId, ResourceStatus status,
-                             String instance, List<String> ipAddresses) {
+                             String instance, List<String> ipAddresses) implements LogScope {
         public ScopedHost {
             ipAddresses = ipAddresses == null ? List.of() : List.copyOf(ipAddresses);
+        }
+
+        /** 물리 노드 로그 선택 라벨 — node_exporter instance 와 MDC (docs/11 §3 라벨 계약) */
+        @Override
+        public Map<String, String> logLabels() {
+            Map<String, String> labels = new LinkedHashMap<>();
+            labels.put("instance", instance);
+            labels.put("mdc_id", mdcId);
+            return labels;
         }
     }
 

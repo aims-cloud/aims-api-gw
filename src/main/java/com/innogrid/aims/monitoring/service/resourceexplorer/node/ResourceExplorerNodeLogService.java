@@ -20,25 +20,43 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector
 import com.innogrid.aims.monitoring.service.agent.AgentTargetsService;
 import com.innogrid.aims.monitoring.service.agent.CollectServicesChangedEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import com.innogrid.aims.infra.entity.Asset;
+import com.innogrid.aims.monitoring.entity.CollectOwner;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import com.innogrid.aims.monitoring.log.PortalLogContextResolver;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
-import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
+import com.innogrid.aims.monitoring.service.resourceexplorer.LogScope;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 원장 CRUD와 역할 스코프 검증. 수집기에 설정을 적용하지 않는다. */
+/**
+ * 수집 서비스 원장 CRUD·후보 탐지·검증·로그 조회 (docs/11).
+ *
+ * 공통 로직은 조회 대상 {@link LogTarget}(원장 소유자 + Loki 라벨 + systemd 메트릭 선택자) 기준이며 "…Of" 메서드로 연다.
+ * 물리 노드 API 는 nodeId 로 스코프를 검증해 대상을 만든 뒤 위임하고, Tumblebug VM API(ResourceExplorerVmLogService)는
+ * nsId·infraId·vmId 로 검증해 같은 메서드를 부른다. 원장 변경은 커밋 뒤 그 소유자의 에이전트 목록 반영을 일으킨다.
+ */
 @Service
 @Transactional(readOnly = true)
 public class ResourceExplorerNodeLogService {
 
+    /**
+     * 로그 원장의 조회·저장 대상.
+     * @param owner 원장 소유자(자산 또는 VM)
+     * @param asset 물리 노드면 그 자산(원장 생성에 쓴다), VM 이면 null
+     * @param scope Loki 선택 라벨(노드 instance·mdc_id, VM tb_*)
+     * @param units systemd 유닛 후보를 읽을 메트릭 선택자. exporter 매핑이 없으면 null(후보에서 빠진다)
+     */
+    public record LogTarget(CollectOwner owner, Asset asset, LogScope scope, MetricSelector units) {}
+
     /** 목록 정렬에 허용하는 필드 */
     private static final Set<String> SORT_FIELDS = Set.of("serviceName", "description", "logStatus", "serviceId");
     private static final Set<String> SORT_DIRECTIONS = Set.of("asc", "desc");
-    private static final String UNIQUE_NAME_CONSTRAINT = "uk_collect_services_asset_name";
+    /** 자산·VM 각각의 이름 유일 제약(uk_collect_services_asset_name, uk_collect_services_vm_name)의 공통 접두 */
+    private static final String UNIQUE_NAME_CONSTRAINT = "uk_collect_services_";
     private static final int MAX_NAME_LENGTH = 200;
     private static final int MAX_DESCRIPTION_LENGTH = 500;
     private static final int MAX_PATH_LENGTH = 500;
@@ -79,24 +97,91 @@ public class ResourceExplorerNodeLogService {
         this.systemdExclude = exclude == null || exclude.isBlank() ? null : Pattern.compile(exclude);
     }
 
-    // ── 수집 서비스 관리 ────────────────────────────────────────
+    // ── 물리 노드 API (nodeId 스코프 검증 후 공통 로직에 위임) ──────────
 
     public PageResponse<CollectServiceResponse> getCollectServices(String nodeId, String keyword,
                                                                    int page, int size, String sort) {
+        return collectServicesOf(nodeTarget(nodeId), keyword, page, size, sort);
+    }
+
+    public List<DiscoveredServiceResponse> getDiscoveredServices(String nodeId) {
+        return discoveredServicesOf(nodeTarget(nodeId));
+    }
+
+    public CollectServiceValidationResponse validateCollectService(String nodeId, CollectServiceRequest request) {
+        return validateOf(nodeTarget(nodeId), request);
+    }
+
+    @Transactional
+    public CollectServiceResponse createCollectService(String nodeId, CollectServiceRequest request) {
+        return createOf(nodeTarget(nodeId), request);
+    }
+
+    @Transactional
+    public CollectServiceResponse updateCollectService(String nodeId, String serviceId,
+                                                        CollectServiceRequest request) {
+        return updateOf(nodeTarget(nodeId), serviceId, request);
+    }
+
+    @Transactional
+    public void deleteCollectService(String nodeId, String serviceId) {
+        deleteOf(nodeTarget(nodeId), serviceId);
+    }
+
+    /** 이 노드의 수집 에이전트에 원장 목록이 반영됐는지 — 스코프 검증 뒤 에이전트 원장 상태 */
+    public AgentTargetsStatusResponse getAgentTargetsStatus(String nodeId) {
+        return agentStatusOf(nodeTarget(nodeId));
+    }
+
+    public List<ServiceLogFileResponse> getLogFiles(String nodeId, String serviceId, Instant from, Instant to) {
+        return logFilesOf(nodeTarget(nodeId), serviceId, from, to);
+    }
+
+    public ServiceLogSummaryResponse getLogSummary(String nodeId, String serviceId, String file, Instant from, Instant to) {
+        return logSummaryOf(nodeTarget(nodeId), serviceId, file, from, to);
+    }
+
+    public ServiceLogTrendResponse getLogTrend(String nodeId, String serviceId, List<String> files,
+                                                Instant from, Instant to, String interval) {
+        return logTrendOf(nodeTarget(nodeId), serviceId, files, from, to, interval);
+    }
+
+    public ServiceLogListResponse searchLogs(String nodeId, String serviceId, List<String> files,
+                                              List<ServiceLogLevel> levels, String keyword,
+                                              Instant from, Instant to, int limit) {
+        return searchLogsOf(nodeTarget(nodeId), serviceId, files, levels, keyword, from, to, limit);
+    }
+
+    /** 범위 제외된 트레이스도 동일한 노드 스코프·서비스 소속 검증을 거친다. */
+    public void requireAccessibleService(String nodeId, String serviceId) {
+        context(nodeTarget(nodeId), serviceId);
+    }
+
+    /** 노드 스코프 검증(404) 뒤 대상 — instance 가 없으면 systemd 후보 원천이 빠진다 */
+    private LogTarget nodeTarget(String nodeId) {
         NodeAccessService.AccessibleNode node = access.require(nodeId);
+        String instance = node.host().instance();
+        MetricSelector units = instance == null || instance.isBlank() ? null : MetricSelector.instance(instance);
+        return new LogTarget(CollectOwner.asset(node.host().assetId()), node.asset(), node.host(), units);
+    }
+
+    // ── 수집 서비스 관리 (공통) ────────────────────────────────────
+
+    public PageResponse<CollectServiceResponse> collectServicesOf(LogTarget target, String keyword,
+                                                                  int page, int size, String sort) {
         if (page < 1 || size < 1 || size > MAX_PAGE_SIZE) {
             throw bad("page/size 범위가 잘못되었습니다.");
         }
         String[] order = parseSort(sort);
 
-        List<CollectService> services = findByKeyword(node.host().assetId(), keyword);
+        List<CollectService> services = findByKeyword(target.owner(), keyword);
         List<String> paths = services.stream()
                 .flatMap(service -> service.getLogPaths().stream())
                 .distinct()
                 .toList();
 
-        // 노드당 1회만 관측하고 서비스별로 나눠 담는다.
-        NodeLogQueries.Observation observed = queries.recent(node.host(), paths);
+        // 대상당 1회만 관측하고 서비스별로 나눠 담는다.
+        NodeLogQueries.Observation observed = queries.recent(target.scope(), paths);
         List<CollectServiceResponse> rows = services.stream()
                 .map(service -> response(service, observed.status(service.getLogPaths())))
                 .sorted(comparatorOf(order))
@@ -108,22 +193,21 @@ public class ResourceExplorerNodeLogService {
     /**
      * 후보 두 원천을 이름순 한 목록으로 합친다.
      * <ul>
-     *   <li>LOKI — 이 노드의 수집기가 최근 24시간 동안 Loki 로 보낸 job(수집 설정 묶음)과 그 파일. 라벨 매핑이 없는 노드는
+     *   <li>LOKI — 이 대상의 수집기가 최근 24시간 동안 Loki 로 보낸 job(수집 설정 묶음)과 그 파일. 라벨 매핑이 없는 대상은
      *       이 원천이 없고, Loki 조회 실패는 502 로 올린다(후보 없음과 구분).</li>
      *   <li>SYSTEMD — node_exporter systemd 콜렉터가 보고하는 활성 상태 {@code *.service} 유닛. 로그 경로는 모르므로 2단계 입력이
-     *       필요하다. exporter 타겟이 없거나 콜렉터가 꺼져 있거나 Thanos 장애면 이 원천만 조용히 빠진다(보조 원천).</li>
+     *       필요하다. exporter 매핑이 없거나 콜렉터가 꺼져 있거나 Thanos 장애면 이 원천만 조용히 빠진다(보조 원천).</li>
      * </ul>
      * 같은 이름이면 Loki 후보를 우선한다(이미 수집 중인 파일 정보가 더 유용). 호스트 프로세스를 보는 수단은 없으므로 PID·포트는 null,
      * capabilities 는 LOG 뿐이다. 이미 등록된 이름도 후보에 남긴다 — 편집 위저드가 같은 목록으로 현재 서비스를 표시하고, 중복은
      * 저장 시 409 로 막힌다.
      */
-    public List<DiscoveredServiceResponse> getDiscoveredServices(String nodeId) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
+    public List<DiscoveredServiceResponse> discoveredServicesOf(LogTarget target) {
         Map<String, DiscoveredServiceResponse> byName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
-        if (NodeLogQueries.configured(node.host())) {
+        if (NodeLogQueries.configured(target.scope())) {
             Map<String, List<NodeLogQueries.DiscoveredFile>> byJob = new TreeMap<>();
-            for (NodeLogQueries.DiscoveredFile file : queries.recentFiles(node.host(), OBSERVATION_LOOKBACK_SECONDS)) {
+            for (NodeLogQueries.DiscoveredFile file : queries.recentFiles(target.scope(), OBSERVATION_LOOKBACK_SECONDS)) {
                 String name = file.job() == null || file.job().isBlank() ? baseName(file.path()) : file.job();
                 byJob.computeIfAbsent(name, ignored -> new ArrayList<>()).add(file);
             }
@@ -135,9 +219,8 @@ public class ResourceExplorerNodeLogService {
             }
         }
 
-        String instance = node.host().instance();
-        if (instance != null && !instance.isBlank()) {
-            for (Unit unit : systemdUnits.units(MetricSelector.instance(instance))) {
+        if (target.units() != null) {
+            for (Unit unit : systemdUnits.units(target.units())) {
                 String serviceName = candidateNameOf(unit);
                 if (serviceName == null || byName.containsKey(serviceName)) {
                     continue;
@@ -183,26 +266,25 @@ public class ResourceExplorerNodeLogService {
      * 위저드 2단계 검증. 입력 규칙 위반만 valid=false 이고, 로그 경로별 최근 24시간 Loki 관측은 참고 정보로 함께 준다.
      * 이름 중복은 생성·편집 요청을 구분할 수 없어 여기서 검사하지 않는다(저장 시 409).
      */
-    public CollectServiceValidationResponse validateCollectService(String nodeId, CollectServiceRequest request) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
+    public CollectServiceValidationResponse validateOf(LogTarget target, CollectServiceRequest request) {
         List<Issue> issues = issues(request);
         if (!issues.isEmpty()) {
             return new CollectServiceValidationResponse(false, issues, List.of());
         }
-        return new CollectServiceValidationResponse(true, List.of(), observe(node.host(), request));
+        return new CollectServiceValidationResponse(true, List.of(), observe(target.scope(), request));
     }
 
-    private List<PathObservation> observe(ScopedHost host, CollectServiceRequest request) {
+    private List<PathObservation> observe(LogScope scope, CollectServiceRequest request) {
         List<String> paths = request.logCollection() == null ? List.of()
                 : request.logCollection().logPaths().stream().distinct().sorted().toList();
         if (paths.isEmpty()) {
             return List.of();
         }
         Map<String, Long> counts = null;
-        if (NodeLogQueries.configured(host)) {
+        if (NodeLogQueries.configured(scope)) {
             try {
                 Instant now = Instant.now();
-                counts = queries.fileCounts(host, paths,
+                counts = queries.fileCounts(scope, paths,
                         NodeLogQueries.window(now.minusSeconds(OBSERVATION_LOOKBACK_SECONDS), now));
             } catch (BusinessException e) {
                 // Loki 장애는 관측 불가(UNKNOWN)로 남기고 검증 자체는 통과시킨다.
@@ -221,8 +303,7 @@ public class ResourceExplorerNodeLogService {
     }
 
     @Transactional
-    public CollectServiceResponse createCollectService(String nodeId, CollectServiceRequest request) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
+    public CollectServiceResponse createOf(LogTarget target, CollectServiceRequest request) {
         validate(request);
 
         String user = users.resolve().userId();
@@ -230,48 +311,46 @@ public class ResourceExplorerNodeLogService {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, "사용자를 확인할 수 없습니다.");
         }
 
-        CollectService service = new CollectService(node.asset(), user);
-        save(service, node.host().assetId(), request);
-        events.publishEvent(new CollectServicesChangedEvent(node.host().assetId()));   // 커밋 뒤 노드 목록 반영
+        CollectService service = target.owner().isVm()
+                ? new CollectService(target.owner(), user)
+                : new CollectService(target.asset(), user);
+        save(service, target.owner(), request);
+        events.publishEvent(new CollectServicesChangedEvent(target.owner()));   // 커밋 뒤 에이전트 목록 반영
 
         // 쓰기는 Loki 가용성에 의존하지 않는다. 관측은 목록 재조회에서 수행한다.
-        return response(service, initialStatus(node.host(), service));
+        return response(service, initialStatus(target.scope(), service));
     }
 
     @Transactional
-    public CollectServiceResponse updateCollectService(String nodeId, String serviceId,
-                                                        CollectServiceRequest request) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
-        CollectService service = requireService(node.host().assetId(), serviceId);
+    public CollectServiceResponse updateOf(LogTarget target, String serviceId, CollectServiceRequest request) {
+        CollectService service = requireService(target.owner(), serviceId);
         validate(request);
-        save(service, node.host().assetId(), request);
-        events.publishEvent(new CollectServicesChangedEvent(node.host().assetId()));
+        save(service, target.owner(), request);
+        events.publishEvent(new CollectServicesChangedEvent(target.owner()));
 
-        return response(service, initialStatus(node.host(), service));
+        return response(service, initialStatus(target.scope(), service));
     }
 
     @Transactional
-    public void deleteCollectService(String nodeId, String serviceId) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
-        repository.delete(requireService(node.host().assetId(), serviceId));
-        events.publishEvent(new CollectServicesChangedEvent(node.host().assetId()));
+    public void deleteOf(LogTarget target, String serviceId) {
+        repository.delete(requireService(target.owner(), serviceId));
+        events.publishEvent(new CollectServicesChangedEvent(target.owner()));
     }
 
-    /** 이 노드의 수집 에이전트에 원장 목록이 반영됐는지 — 스코프 검증 뒤 에이전트 원장 상태 */
-    public AgentTargetsStatusResponse getAgentTargetsStatus(String nodeId) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
-        return agentTargets.status(node.host().assetId());
+    /** 대상 에이전트에 원장 목록이 반영됐는지 */
+    public AgentTargetsStatusResponse agentStatusOf(LogTarget target) {
+        CollectOwner owner = target.owner();
+        return owner.isVm() ? agentTargets.status(owner) : agentTargets.status(owner.assetId());
     }
 
-    // ── 서비스 로그 조회 ────────────────────────────────────────
+    // ── 서비스 로그 조회 (공통) ────────────────────────────────────
 
-    public List<ServiceLogFileResponse> getLogFiles(String nodeId, String serviceId,
-                                                     Instant from, Instant to) {
-        Context context = context(nodeId, serviceId);
+    public List<ServiceLogFileResponse> logFilesOf(LogTarget target, String serviceId, Instant from, Instant to) {
+        Context context = context(target, serviceId);
         NodeLogQueries.Window window = NodeLogQueries.window(from, to);
 
         List<String> paths = context.service().getLogPaths().stream().sorted().toList();
-        Map<String, Long> counts = queries.fileCounts(context.host(), paths, window);
+        Map<String, Long> counts = queries.fileCounts(context.scope(), paths, window);
 
         // 기간 내 로그가 없는 등록 파일도 0건으로 남긴다.
         return paths.stream()
@@ -279,17 +358,16 @@ public class ResourceExplorerNodeLogService {
                 .toList();
     }
 
-    public ServiceLogSummaryResponse getLogSummary(String nodeId, String serviceId, String file,
-                                                    Instant from, Instant to) {
-        Context context = context(nodeId, serviceId);
+    public ServiceLogSummaryResponse logSummaryOf(LogTarget target, String serviceId, String file, Instant from, Instant to) {
+        Context context = context(target, serviceId);
         NodeLogQueries.Window window = NodeLogQueries.window(from, to);
 
         List<String> paths = selectPaths(context.service(), file == null ? null : List.of(file));
-        Map<ServiceLogLevel, Long> counts = queries.levelCounts(context.host(), paths, window);
+        Map<ServiceLogLevel, Long> counts = queries.levelCounts(context.scope(), paths, window);
 
         // 건수는 file 필터를 따르지만 수집 상태는 항상 서비스 전체 경로로 판정한다.
         Set<String> allPaths = context.service().getLogPaths();
-        LogStatus status = queries.recent(context.host(), allPaths).status(allPaths);
+        LogStatus status = queries.recent(context.scope(), allPaths).status(allPaths);
 
         return new ServiceLogSummaryResponse(
                 status,
@@ -299,21 +377,21 @@ public class ResourceExplorerNodeLogService {
                 counts.getOrDefault(ServiceLogLevel.UNKNOWN, 0L));
     }
 
-    public ServiceLogTrendResponse getLogTrend(String nodeId, String serviceId, List<String> files,
-                                                Instant from, Instant to, String interval) {
-        Context context = context(nodeId, serviceId);
+    public ServiceLogTrendResponse logTrendOf(LogTarget target, String serviceId, List<String> files,
+                                              Instant from, Instant to, String interval) {
+        Context context = context(target, serviceId);
 
         return queries.trend(
-                context.host(),
+                context.scope(),
                 selectPaths(context.service(), files),
                 NodeLogQueries.window(from, to),
                 interval);
     }
 
-    public ServiceLogListResponse searchLogs(String nodeId, String serviceId, List<String> files,
-                                              List<ServiceLogLevel> levels, String keyword,
-                                              Instant from, Instant to, int limit) {
-        Context context = context(nodeId, serviceId);
+    public ServiceLogListResponse searchLogsOf(LogTarget target, String serviceId, List<String> files,
+                                               List<ServiceLogLevel> levels, String keyword,
+                                               Instant from, Instant to, int limit) {
+        Context context = context(target, serviceId);
         if (limit < 1 || limit > MAX_SEARCH_LIMIT) {
             throw bad("limit은 1~" + MAX_SEARCH_LIMIT + "입니다.");
         }
@@ -322,7 +400,7 @@ public class ResourceExplorerNodeLogService {
         }
 
         return queries.search(
-                context.host(),
+                context.scope(),
                 selectPaths(context.service(), files),
                 levels,
                 keyword,
@@ -330,30 +408,26 @@ public class ResourceExplorerNodeLogService {
                 limit);
     }
 
-    /** 미구현 트레이스도 동일한 노드 스코프·서비스 소속 검증을 거친다. */
-    public void requireAccessibleService(String nodeId, String serviceId) {
-        context(nodeId, serviceId);
-    }
-
     // ── 조회 대상 확인 ──────────────────────────────────────────
 
-    /** 스코프를 통과한 노드와 그 노드에 속한 수집 서비스 */
-    private record Context(ScopedHost host, CollectService service) {}
+    /** 스코프를 통과한 대상의 Loki 라벨과 그 대상에 속한 수집 서비스 */
+    private record Context(LogScope scope, CollectService service) {}
 
-    private Context context(String nodeId, String serviceId) {
-        NodeAccessService.AccessibleNode node = access.require(nodeId);
-        return new Context(node.host(), requireService(node.host().assetId(), serviceId));
+    private Context context(LogTarget target, String serviceId) {
+        return new Context(target.scope(), requireService(target.owner(), serviceId));
     }
 
-    private CollectService requireService(long assetId, String serviceId) {
+    private CollectService requireService(CollectOwner owner, String serviceId) {
         long id;
         try {
             id = Long.parseLong(serviceId);
         } catch (NumberFormatException e) {
             throw notFound();
         }
-        return repository.findByIdAndAsset_Id(id, assetId)
-                .orElseThrow(ResourceExplorerNodeLogService::notFound);
+        Optional<CollectService> found = owner.isVm()
+                ? repository.findByIdAndTbNsAndTbInfraAndTbNode(id, owner.tbNs(), owner.tbInfra(), owner.tbNode())
+                : repository.findByIdAndAsset_Id(id, owner.assetId());
+        return found.orElseThrow(ResourceExplorerNodeLogService::notFound);
     }
 
     /** 요청한 파일이 없으면 등록 경로 전체, 있으면 등록 경로 안의 것만 허용한다. */
@@ -369,12 +443,15 @@ public class ResourceExplorerNodeLogService {
 
     // ── 목록 조립 ──────────────────────────────────────────────
 
-    private List<CollectService> findByKeyword(long assetId, String keyword) {
+    private List<CollectService> findByKeyword(CollectOwner owner, String keyword) {
+        List<CollectService> all = owner.isVm()
+                ? repository.findByTbNsAndTbInfraAndTbNode(owner.tbNs(), owner.tbInfra(), owner.tbNode())
+                : repository.findByAsset_Id(owner.assetId());
         if (keyword == null || keyword.isBlank()) {
-            return repository.findByAsset_Id(assetId);
+            return all;
         }
         String needle = keyword.toLowerCase(Locale.ROOT);
-        return repository.findByAsset_Id(assetId).stream()
+        return all.stream()
                 .filter(service -> service.getServiceName().toLowerCase(Locale.ROOT).contains(needle))
                 .toList();
     }
@@ -415,9 +492,13 @@ public class ResourceExplorerNodeLogService {
 
     // ── 저장과 검증 ────────────────────────────────────────────
 
-    private void save(CollectService service, long assetId, CollectServiceRequest request) {
+    private void save(CollectService service, CollectOwner owner, CollectServiceRequest request) {
         long selfId = service.getId() == null ? -1L : service.getId();
-        if (repository.existsByAsset_IdAndServiceNameAndIdNot(assetId, request.serviceName().trim(), selfId)) {
+        String name = request.serviceName().trim();
+        boolean taken = owner.isVm()
+                ? repository.existsByTbNsAndTbInfraAndTbNodeAndServiceNameAndIdNot(owner.tbNs(), owner.tbInfra(), owner.tbNode(), name, selfId)
+                : repository.existsByAsset_IdAndServiceNameAndIdNot(owner.assetId(), name, selfId);
+        if (taken) {
             throw conflict();
         }
 
@@ -538,8 +619,8 @@ public class ResourceExplorerNodeLogService {
     }
 
     /** 쓰기 응답은 Loki 를 조회하지 않으므로 미관측(UNKNOWN) 또는 미설정만 나온다. */
-    private static LogStatus initialStatus(ScopedHost host, CollectService service) {
-        boolean unconfigured = service.getLogPaths().isEmpty() || !NodeLogQueries.configured(host);
+    private static LogStatus initialStatus(LogScope scope, CollectService service) {
+        boolean unconfigured = service.getLogPaths().isEmpty() || !NodeLogQueries.configured(scope);
         return unconfigured ? LogStatus.UNCONFIGURED : LogStatus.UNKNOWN;
     }
 

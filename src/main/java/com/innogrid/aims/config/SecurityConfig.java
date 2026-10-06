@@ -36,6 +36,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/ping", "/actuator/**").permitAll()
                         // 인증 API (로그인, 회원가입, 토큰 검증)
                         .requestMatchers("/api/v1/auth/**").permitAll()
+                        // 노드 Alloy 가 수집 대상 목록을 가져가는 API. 인증 없음 — 노드는 쿼리의 instance(node_exporter 주소)로
+                        // 식별하며, 백엔드가 사내 대역에서만 열려 있다는 전제다(AgentTargetsPullController).
+                        .requestMatchers("/api/v1/agent/targets").permitAll()
                         // H2 콘솔 (로컬 개발용). 경로 문자열로 여는 이유:
                         // PathRequest.toH2Console() 은 콘솔이 켜진 환경에서만 존재하는 H2ConsoleProperties 빈을
                         // 요청 시점에 찾는다. 콘솔이 꺼진 테스트·운영에서는 그 빈이 없어 모든 요청이 보안 필터에서

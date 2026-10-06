@@ -24,11 +24,11 @@ public class AgentTargetsReconcileJob {
 
     @Scheduled(fixedDelayString = "${aims.agent.reconcile-interval-seconds:60}", initialDelay = 30, timeUnit = TimeUnit.SECONDS)
     public void reconcile() {
-        for (Long assetId : candidates()) {
+        for (Long agentId : candidates()) {
             try {
-                targets.sync(assetId);            // 노드마다 자기 트랜잭션(REQUIRES_NEW). 한 노드 실패가 다른 노드를 막지 않는다
+                targets.sync(agentId);            // 에이전트마다 자기 트랜잭션(REQUIRES_NEW). 한 노드 실패가 다른 노드를 막지 않는다
             } catch (RuntimeException e) {
-                log.warn("수집 대상 목록 재적용 실패: asset={} — {}", assetId, e.getMessage());
+                log.warn("수집 대상 목록 재적용 실패: agent={} — {}", agentId, e.getMessage());
             }
         }
     }

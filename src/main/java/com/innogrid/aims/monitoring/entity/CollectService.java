@@ -10,18 +10,31 @@ import lombok.Getter;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
-/** 수집 희망 설정 원장. 저장/삭제는 수집기나 Loki 데이터를 변경하지 않는다. */
+/**
+ * 수집 희망 설정 원장. 저장/삭제는 수집기나 Loki 데이터를 변경하지 않는다.
+ * 소유자는 물리 자산(asset_id) 또는 Tumblebug VM(tb_ns·tb_infra·tb_node) 중 하나다({@link CollectOwner}, DB CHECK).
+ * 서비스 이름은 소유자 안에서 유일하다(자산·VM 각각의 유일 제약).
+ */
 @Entity
 @Getter
-@Table(name = "collect_services", uniqueConstraints =
-        @UniqueConstraint(name = "uk_collect_services_asset_name", columnNames = {"asset_id", "service_name"}))
+@Table(name = "collect_services", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_collect_services_asset_name", columnNames = {"asset_id", "service_name"}),
+        @UniqueConstraint(name = "uk_collect_services_vm_name", columnNames = {"tb_ns", "tb_infra", "tb_node", "service_name"})})
 public class CollectService {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "asset_id", nullable = false)
+    /** 물리 노드 소유일 때의 자산. VM 소유면 null */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "asset_id")
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Asset asset;
+    /** VM 소유일 때의 Tumblebug 키. 물리 노드 소유면 셋 다 null */
+    @Column(name = "tb_ns", length = 200)
+    private String tbNs;
+    @Column(name = "tb_infra", length = 200)
+    private String tbInfra;
+    @Column(name = "tb_node", length = 200)
+    private String tbNode;
     @Column(name = "service_name", nullable = false, length = 200)
     private String serviceName;
     @Column(length = 500)
@@ -55,6 +68,17 @@ public class CollectService {
 
     public CollectService(Asset asset, String createdBy) {
         this.asset = asset;
+        this.createdBy = createdBy;
+    }
+
+    /** Tumblebug VM 소유 원장 */
+    public CollectService(CollectOwner owner, String createdBy) {
+        if (!owner.isVm()) {
+            throw new IllegalArgumentException("자산 소유 원장은 Asset 생성자를 쓴다.");
+        }
+        this.tbNs = owner.tbNs();
+        this.tbInfra = owner.tbInfra();
+        this.tbNode = owner.tbNode();
         this.createdBy = createdBy;
     }
 

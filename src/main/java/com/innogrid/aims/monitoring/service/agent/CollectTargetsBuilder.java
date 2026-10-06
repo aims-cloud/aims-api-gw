@@ -12,6 +12,7 @@ import java.util.TreeMap;
 import java.util.regex.Pattern;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.innogrid.aims.monitoring.entity.AgentTransport;
 import com.innogrid.aims.monitoring.entity.CollectService;
 import org.springframework.stereotype.Component;
 
@@ -37,23 +38,39 @@ public class CollectTargetsBuilder {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final List<Pattern> staticPaths;
+    private final List<Pattern> remoteStaticPaths;
 
     public CollectTargetsBuilder(AgentProperties properties) {
-        List<Pattern> patterns = new ArrayList<>();
-        for (String glob : properties.getStaticLogPaths()) {
-            patterns.add(globToPattern(glob));
-        }
-        this.staticPaths = List.copyOf(patterns);
+        this.staticPaths = compile(properties.getStaticLogPaths());
+        this.remoteStaticPaths = compile(properties.getRemoteStaticLogPaths());
     }
 
+    private static List<Pattern> compile(List<String> globs) {
+        List<Pattern> patterns = new ArrayList<>();
+        for (String glob : globs) {
+            patterns.add(globToPattern(glob));
+        }
+        return List.copyOf(patterns);
+    }
+
+    /** LOCAL(k8s-cp) 정적 설정 기준의 목록 */
     public Targets build(List<CollectService> services) {
+        return build(services, AgentTransport.LOCAL);
+    }
+
+    /**
+     * 전송 방식에 맞는 정적 경로를 빼고 목록을 만든다. PULL 노드는 배포 패키지의 정적 설정을 쓰므로
+     * {@link AgentProperties#getRemoteStaticLogPaths()} 를 기준으로 뺀다.
+     */
+    public Targets build(List<CollectService> services, AgentTransport transport) {
+        List<Pattern> excluded = transport == AgentTransport.PULL ? remoteStaticPaths : staticPaths;
         TreeMap<String, Map<String, Object>> byPath = new TreeMap<>();
         for (CollectService service : services) {
             if (!service.isLogEnabled()) {
                 continue;
             }
             for (String path : service.getLogPaths()) {
-                if (isStatic(path) || byPath.containsKey(path)) {
+                if (matches(excluded, path) || byPath.containsKey(path)) {
                     continue;
                 }
                 Map<String, String> labels = new LinkedHashMap<>();
@@ -70,9 +87,13 @@ public class CollectTargetsBuilder {
         return new Targets(json, sha256(json), byPath.size());
     }
 
-    /** 정적 설정이 이미 읽는 경로인가 */
+    /** LOCAL(k8s-cp) 정적 설정이 이미 읽는 경로인가 */
     public boolean isStatic(String path) {
-        for (Pattern pattern : staticPaths) {
+        return matches(staticPaths, path);
+    }
+
+    private static boolean matches(List<Pattern> patterns, String path) {
+        for (Pattern pattern : patterns) {
             if (pattern.matcher(path).matches()) {
                 return true;
             }

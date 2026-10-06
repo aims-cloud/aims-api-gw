@@ -8,11 +8,14 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.LokiQueryClient;
 import com.innogrid.aims.monitoring.LokiQueryClient.Point;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.*;
-import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
+import com.innogrid.aims.monitoring.service.resourceexplorer.LogScope;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
-/** 등록한 노드/경로로만 LogQL을 생성한다. 원격 응답에 조회 권한 결정을 맡기지 않는다. */
+/**
+ * 등록한 대상/경로로만 LogQL을 생성한다. 원격 응답에 조회 권한 결정을 맡기지 않는다.
+ * 대상은 {@link LogScope} — 물리 노드는 instance·mdc_id, Tumblebug VM 은 tb_ns·tb_infra·tb_node 라벨로 고른다.
+ */
 @Component
 public class NodeLogQueries {
     private final LokiQueryClient loki;
@@ -33,11 +36,12 @@ public class NodeLogQueries {
             throw bad("조회 기간은 1초 이상 30일 이하여야 합니다.");
         return new Window(from, to);
     }
-    public static boolean configured(ScopedHost host) {
-        return host.instance() != null && !host.instance().isBlank() && host.mdcId() != null && !host.mdcId().isBlank();
+    /** 조회 대상(물리 노드 instance·mdc_id 또는 VM tb_* 라벨)의 라벨 매핑이 모두 있는가 */
+    public static boolean configured(LogScope host) {
+        return host.logConfigured();
     }
-    private static void requireConfigured(ScopedHost host) {
-        if (!configured(host)) throw new BusinessException(HttpStatus.CONFLICT, "노드의 Loki 라벨 매핑이 미설정입니다.");
+    private static void requireConfigured(LogScope host) {
+        if (!configured(host)) throw new BusinessException(HttpStatus.CONFLICT, "조회 대상의 Loki 라벨 매핑이 미설정입니다.");
     }
 
     public record Observation(boolean configured, boolean failed, Map<String, Long> counts) {
@@ -48,7 +52,7 @@ public class NodeLogQueries {
                     ? LogStatus.RECENT_LOGS : LogStatus.NO_RECENT_LOGS;
         }
     }
-    public Observation recent(ScopedHost host, Collection<String> paths) {
+    public Observation recent(LogScope host, Collection<String> paths) {
         if (!configured(host) || paths.isEmpty()) return new Observation(false, false, Map.of());
         try {
             // 노드별 1회. 원장 경로가 많아져도 URL 크기가 증가하지 않는다.
@@ -62,7 +66,7 @@ public class NodeLogQueries {
     /** 수집기가 최근 lookback 초 동안 이 노드에서 보낸 job·파일별 건수. job 라벨이 없는 스트림은 job=null. */
     public record DiscoveredFile(String job, String path, long count) {}
     /** 라벨 매핑이 없으면 빈 목록. Loki 실패는 목록 조회와 달리 감추지 않고 502 그대로 올린다(후보를 비운 것과 구분). */
-    public List<DiscoveredFile> recentFiles(ScopedHost host, long lookbackSeconds) {
+    public List<DiscoveredFile> recentFiles(LogScope host, long lookbackSeconds) {
         if (!configured(host)) return List.of();
         List<DiscoveredFile> rows = new ArrayList<>();
         for (Point point : loki.instant(count(nodeSelector(host), lookbackSeconds, "job, filename"), Instant.now())) {
@@ -71,18 +75,18 @@ public class NodeLogQueries {
         }
         return rows;
     }
-    public Map<String, Long> fileCounts(ScopedHost host, List<String> paths, Window window) {
+    public Map<String, Long> fileCounts(LogScope host, List<String> paths, Window window) {
         requireConfigured(host);
         if (paths.isEmpty()) return Map.of();
         return byFile(loki.instant(count(selector(host, paths, null), window.seconds(), "filename"), window.to()));
     }
-    public Map<ServiceLogLevel, Long> levelCounts(ScopedHost host, List<String> paths, Window window) {
+    public Map<ServiceLogLevel, Long> levelCounts(LogScope host, List<String> paths, Window window) {
         requireConfigured(host);
         if (paths.isEmpty()) return Map.of();
         return byLevel(loki.instant(count(selector(host, paths, null), window.seconds(), LEVEL_GROUP), window.to()));
     }
 
-    public ServiceLogTrendResponse trend(ScopedHost host, List<String> paths, Window window, String interval) {
+    public ServiceLogTrendResponse trend(LogScope host, List<String> paths, Window window, String interval) {
         Long step = INTERVALS.get(interval);
         if (step == null) throw bad("interval은 1m/5m/15m/1h/6h/1d입니다.");
         long bucketCount = (window.seconds() + step - 1) / step;
@@ -115,7 +119,7 @@ public class NodeLogQueries {
         return new ServiceLogTrendResponse(window.from().getEpochSecond(), window.to().getEpochSecond(), interval, buckets);
     }
 
-    public ServiceLogListResponse search(ScopedHost host, List<String> paths, List<ServiceLogLevel> levels,
+    public ServiceLogListResponse search(LogScope host, List<String> paths, List<ServiceLogLevel> levels,
                                          String keyword, Window window, int limit) {
         requireConfigured(host);
         if (paths.isEmpty()) return new ServiceLogListResponse(0, List.of());
@@ -158,7 +162,7 @@ public class NodeLogQueries {
      * 레벨 추출 파이프라인이 없는 파일(동적 수집, syslog)도 Loki 의 감지값으로 걸러지고, level 라벨이 있는 파일은 Loki 가 그 값을
      * detected_level 로 옮겨 주므로 결과가 같다. UNKNOWN 을 고르면 선택하지 않은 레벨을 제외하는 부정 매처라 감지값이 없는 줄도 남는다.
      */
-    static String selector(ScopedHost host, List<String> paths, List<ServiceLogLevel> levels) {
+    static String selector(LogScope host, List<String> paths, List<ServiceLogLevel> levels) {
         if (paths.isEmpty()) throw bad("조회 경로가 필요합니다.");
         String base = nodeSelector(host);
         StringBuilder result = new StringBuilder(base.substring(0, base.length() - 1));
@@ -177,9 +181,11 @@ public class NodeLogQueries {
         }
         return result.toString();
     }
-    private static String nodeSelector(ScopedHost host) {
+    private static String nodeSelector(LogScope host) {
         requireConfigured(host);
-        return "{instance=" + quote(host.instance()) + ", mdc_id=" + quote(host.mdcId()) + "}";
+        return host.logLabels().entrySet().stream()
+                .map(label -> label.getKey() + "=" + quote(label.getValue()))
+                .collect(Collectors.joining(", ", "{", "}"));
     }
     static String quote(String value) {
         StringBuilder result = new StringBuilder("\"");

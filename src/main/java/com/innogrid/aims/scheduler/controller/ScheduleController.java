@@ -7,6 +7,7 @@ import java.util.Map;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleDryRunResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
@@ -145,13 +146,26 @@ public class ScheduleController {
     @Operation(summary = "실행 미리보기",
             description = "이 스케줄을 지금 실행하면 적용될 배치 정책·엔진(과 고른 단계)과 대상·재시도 대기·재시도 소진 "
                     + "건수를 저장 없이 돌려줍니다. 실행 권한을 잡지 않고 노드도 모으지 않습니다. "
-                    + "대상 건수는 시도할 건수이며 성공할 건수가 아닙니다(성공 여부는 워크로드별 모의 배치로). "
+                    + "대상 건수는 시도할 건수이며 성공할 건수가 아닙니다(어떻게 배치될지는 모의 실행으로). "
                     + "대상이 0건이면 emptyReason·emptyMessage 에 실행이 남길 사유와 같은 문구가 실립니다. "
                     + "사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 200 입니다. 스케줄이 없거나 지정한 정책이 지워졌으면 404 입니다. "
                     + "화면 분기는 emptyReason 으로 하고 emptyMessage 는 표시용으로만 쓰십시오.")
     @GetMapping("/{id}/preview")
     public ApiResponse<ScheduleRunPreviewResponse> preview(@PathVariable Long id) {
         return ApiResponse.ok(executionService.preview(id));
+    }
+
+    @Operation(summary = "모의 실행",
+            description = "이 스케줄을 지금 실행하면 어떻게 배치될지를 저장 없이 돌려줍니다 — 실행과 같은 정책·엔진·대상·순서·"
+                    + "상한·전력 상한으로 노드 상태 하나 위에 대상을 차례로 놓아 봅니다(앞 건의 예약이 뒤 건에 보임). "
+                    + "실행 계층 전달은 하지 않으며(전부 받는다고 봄) 실행 권한을 잡지 않고 워크로드·배치 이력·전달·실행 이력·"
+                    + "default 정책 어느 행도 쓰지 않습니다. status·message 는 전부 받았을 때 실행이 남길 값과 같고, "
+                    + "targetCount 는 실행 1회 상한을 적용한 뒤 값입니다(미리보기와 다름). 대상이 0건이면 노드를 모으지 않습니다. "
+                    + "사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 200 이며 호출 시점 값입니다. "
+                    + "스케줄이 없거나 지정한 정책이 지워졌으면 404 입니다. 메트릭을 한 번 수집하므로 버튼 단위로 호출하십시오.")
+    @PostMapping("/{id}/dry-run")
+    public ApiResponse<ScheduleDryRunResponse> dryRun(@PathVariable Long id) {
+        return ApiResponse.ok(executionService.dryRun(id));
     }
 
     @Operation(summary = "즉시 실행",

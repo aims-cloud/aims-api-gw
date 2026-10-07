@@ -274,6 +274,15 @@ public class SchedulingService {
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
+        return evaluateIn(workload, engineId, context);
+    }
+
+    /**
+     * 주어진 컨텍스트 위에서 한 건을 저장 없이 평가한다 — 예약은 잡지 않는다(호출자가 성공 건을 {@link PlacementContext#reserve}
+     * 로 누적한다). 스케줄 모의 실행이 대상 여러 건을 한 컨텍스트에 차례로 놓아 볼 때 쓴다. 엔진 id 는 실행과 같이
+     * 등록되지 않은 값이면 기본 엔진으로 대체된다(400 이 아니다).
+     */
+    public SchedulingResult evaluateIn(Workload workload, String engineId, PlacementContext context) {
         SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context).withPolicyName(policyNameOf(context));
         // 모의 배치(dryRun)도 알린다 — 운영자가 실제 배치 전에 확인하는 경로다
         ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, properties.getDiskMountPoint());

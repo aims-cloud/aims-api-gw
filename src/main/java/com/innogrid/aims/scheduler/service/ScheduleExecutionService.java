@@ -16,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.ScheduleDryRunResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.Schedule;
@@ -219,13 +221,8 @@ public class ScheduleExecutionService {
             run.recordCounts(targets.size(), success, failed, truncated);
             recordSnapshotAfter(run, context);
 
-            if (success == 0) {
-                return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt,
-                        String.format("대상 %d건 전부 배치 실패 — %s", targets.size(), firstFailure));
-            }
-            String message = String.format("대상 %d건 / 성공 %d건 / 실패 %d건%s",
-                    targets.size(), success, failed, truncated ? " (상한 초과분은 다음 실행으로)" : "");
-            return finishRun(schedule, run, ScheduleRun.RunStatus.COMPLETED, startedAt, message);
+            return finishRun(schedule, run, success == 0 ? ScheduleRun.RunStatus.FAILED : ScheduleRun.RunStatus.COMPLETED,
+                    startedAt, resultMessage(targets.size(), success, truncated, firstFailure));
 
         } catch (BusinessException e) {
             failQuietly(schedule, run, startedAt, e.getMessage());
@@ -242,6 +239,110 @@ public class ScheduleExecutionService {
             failQuietly(schedule, run, startedAt, "실행 중단: " + e);
             throw e;
         }
+    }
+
+    /** 배치 루프가 끝난 실행이 남기는 문구 — 모의 실행도 같은 함수를 써서 글자 단위로 같다. */
+    static String resultMessage(int targets, int success, boolean truncated, String firstFailure) {
+        if (success == 0) {
+            return String.format("대상 %d건 전부 배치 실패 — %s", targets, firstFailure);
+        }
+        return String.format("대상 %d건 / 성공 %d건 / 실패 %d건%s",
+                targets, success, targets - success, truncated ? " (상한 초과분은 다음 실행으로)" : "");
+    }
+
+    // ── 모의 실행 ───────────────────────────────────────────────
+
+    /**
+     * 스케줄을 지금 실행하면 어떻게 배치될지를 <b>저장 없이</b> 돌려준다.
+     *
+     * <p>실행과 같은 코드로 정책·엔진·대상·순서·상한·전력 상한을 해석하고, 컨텍스트 하나 위에 대상을 차례로 놓아 본다 —
+     * 성공한 건의 요구량을 예약으로 누적하므로 앞 건이 뒤 건에 보인다(실행의 {@code place} 가 하는 것과 같은 입력).
+     * 실행 권한을 잡지 않고(실행 중·사용 안 함 스케줄도 200), 실행 계층에 전달하지 않으며(전부 받는다고 본다), 워크로드·
+     * 배치 이력·전달·실행 이력·{@code default} 정책 어느 행도 쓰지 않는다. 트랜잭션은 두지 않는다 — 메트릭 수집이 길다.</p>
+     *
+     * <p>평가 중 예외가 난 건은 그 건만 실패(사유 = 예외 문구)로 두고 계속한다 — 모의는 결과를 보려는 호출이라
+     * 한 건 때문에 전체를 잃지 않는다.</p>
+     */
+    public ScheduleDryRunResponse dryRun(Long id) {
+        return dryRunOf(scheduleService.require(id));
+    }
+
+    private ScheduleDryRunResponse dryRunOf(Schedule schedule) {
+        PolicyChoice policy = policyChoiceFor(schedule, false);
+        EngineChoice engine = engineChoiceFor(schedule, policy.policy());
+        Workload.ResourceType type = schedule.resolveResourceType();
+
+        List<Workload> targets = findTargets(schedule);
+        boolean truncated = targets.size() > properties.getMaxWorkloadsPerRun();
+        if (truncated) {
+            targets = targets.subList(0, properties.getMaxWorkloadsPerRun());
+        }
+        String knobs = clusterSnapshot.knobsDigest();
+
+        if (targets.isEmpty()) {
+            EmptyTargetOutcome outcome = emptyTargetOutcome(schedule);
+            return response(schedule, type, policy, engine, outcome.status(), outcome.message(), outcome.reason(),
+                    0, 0, false, emptySnapshot(ScheduleRun.SnapshotStatus.NO_TARGET, knobs), List.of());
+        }
+
+        PlacementContext context = schedulingService.createContext(policy.policy())
+                .withPowerBudget(schedule.getMaxPowerBudgetWatts());
+        if (context.isEmpty()) {
+            return response(schedule, type, policy, engine, ScheduleRun.RunStatus.FAILED,
+                    SchedulingService.noActiveNodesReason(context), null,
+                    targets.size(), 0, truncated, emptySnapshot(ScheduleRun.SnapshotStatus.NO_NODES, knobs), List.of());
+        }
+
+        RunClusterSnapshot.Fixed fixed = clusterSnapshot.fixedOf(context);
+        RunClusterSnapshot.Moving before = clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
+
+        List<ScheduleDryRunResponse.DryRunDecision> decisions = new ArrayList<>(targets.size());
+        int success = 0;
+        String firstFailure = null;
+        for (Workload workload : targets) {
+            SchedulingResult result;
+            try {
+                result = schedulingService.evaluateIn(workload, engine.engine(), context);
+            } catch (RuntimeException | LinkageError e) {
+                log.warn("모의 실행 평가 실패(계속한다): schedule={}, workload={}", schedule.getScheduleId(), workload.getId(), e);
+                result = SchedulingResult.failure("평가 중 오류: " + e.getMessage(), policy.policy().getName());
+            }
+            if (result.success()) {
+                context.reserve(result.selectedNodeId(), workload);
+                success++;
+            } else if (firstFailure == null) {
+                firstFailure = result.reason();
+            }
+            decisions.add(ScheduleDryRunResponse.DryRunDecision.of(workload, result, PlacementService.exclusionCodesOf(result)));
+        }
+
+        RunClusterSnapshot.Moving after = clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
+        ScheduleRunDetailResponse.ClusterSnapshot snapshot = new ScheduleRunDetailResponse.ClusterSnapshot(
+                ScheduleRun.SnapshotStatus.OK, knobs,
+                fixed.nodeCount(), fixed.excludedCount(), fixed.measuredNodes(), fixed.measuredPowerWatts(),
+                before.activeNodes(), after.activeNodes(),
+                before.reclaimableWatts(), after.reclaimableWatts(),
+                before.avgTemperatureCelsius(), after.avgTemperatureCelsius());
+        return response(schedule, type, policy, engine,
+                success == 0 ? ScheduleRun.RunStatus.FAILED : ScheduleRun.RunStatus.COMPLETED,
+                resultMessage(targets.size(), success, truncated, firstFailure), null,
+                targets.size(), success, truncated, snapshot, decisions);
+    }
+
+    private static ScheduleRunDetailResponse.ClusterSnapshot emptySnapshot(ScheduleRun.SnapshotStatus status, String knobs) {
+        return new ScheduleRunDetailResponse.ClusterSnapshot(status, knobs, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    private static ScheduleDryRunResponse response(Schedule schedule, Workload.ResourceType type, PolicyChoice policy,
+                                                   EngineChoice engine, ScheduleRun.RunStatus status, String message,
+                                                   ScheduleRunPreviewResponse.EmptyReason emptyReason, int targets, int success,
+                                                   boolean truncated, ScheduleRunDetailResponse.ClusterSnapshot snapshot,
+                                                   List<ScheduleDryRunResponse.DryRunDecision> decisions) {
+        return new ScheduleDryRunResponse(
+                schedule.getId(), schedule.getScheduleId(), schedule.isEnabled(), type,
+                policy.policy().getName(), policy.source(), engine.engine(), engine.source(),
+                status, ScheduleRun.trim(message), emptyReason,
+                targets, success, targets - success, truncated, snapshot, decisions);
     }
 
     /**

@@ -53,8 +53,8 @@ public record ScheduleRunDetailResponse(
             Double measuredPowerWatts,
             @Schema(description = "실행 전 가동 중이던 노드 수(실효 CPU 기준)")
             Integer activeNodesBefore,
-            @Schema(description = "이번 실행이 잡은 예약을 반영한 가동 노드 수. 배치 엔진이 고른 시점 기준이라, "
-                    + "실행 계층이 그 뒤에 배치를 되돌린 건도 여기에는 반영되어 있다")
+            @Schema(description = "이번 실행이 잡은 예약을 반영한 가동 노드 수. 실행 계층이 받지 않은 배치의 예약은 "
+                    + "같은 실행 안에서 되돌리므로 여기에 남지 않는다")
             Integer activeNodesAfter,
             @Schema(description = "실행 전 비어 있던 노드의 유휴 전력 합(W). 실측 노드가 없으면 null. "
                     + "계측 노드는 실측에서 역산하고 미계측 노드는 정격으로 어림하므로 둘이 섞인 판에서는 추정이 함께 더해진다")

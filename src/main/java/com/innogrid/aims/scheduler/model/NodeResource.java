@@ -220,6 +220,18 @@ public class NodeResource {
         this.reservedDiskGb += Math.max(0, diskGb);
     }
 
+    /**
+     * {@link #reserve(int, long, int, long)} 를 되돌린다 — 실행 계층이 받지 않은 배치의 예약을 같은 실행 안에서 푼다.
+     * 디스크는 reserve 와 같은 보정(음수 → 0)을 적용해 정확히 대칭이다. 하한은 두지 않는다 — 이중 호출 같은 결함이
+     * 0 에서 조용히 숨지 않도록.
+     */
+    public void unreserve(int cpu, long memoryMb, int gpu, long diskGb) {
+        this.reservedCpu -= cpu;
+        this.reservedMemoryMb -= memoryMb;
+        this.reservedGpu -= gpu;
+        this.reservedDiskGb -= Math.max(0, diskGb);
+    }
+
     /** 전력·온도 메트릭 수집 여부. */
     public enum PowerSource {
         /** IPMI 메트릭으로 실측한 값. */

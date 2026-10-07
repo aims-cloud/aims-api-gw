@@ -191,8 +191,13 @@ public class ScheduleExecutionService {
             String firstFailure = null;
             try {
                 for (Workload workload : targets) {
-                    SchedulingResult result = schedulingService.dispatch(workload,
-                            placementService.place(workload, context, engineId, run.getId()), run.getId());
+                    SchedulingResult placed = placementService.place(workload, context, engineId, run.getId());
+                    SchedulingResult result = schedulingService.dispatch(workload, placed, run.getId());
+                    if (placed.success() && !result.success()) {
+                        // 실행 계층이 받지 않은 배치 — DB 쪽은 디스패치가 이미 FAILED 로 돌렸지만, 이 실행의 컨텍스트에
+                        // 잡힌 예약은 여기서 되돌려야 같은 실행의 다음 워크로드와 실행 후 스냅샷이 없는 예약을 보지 않는다.
+                        context.unreserve(placed.selectedNodeId(), workload);
+                    }
                     attempted++;
                     if (result.success()) {
                         success++;

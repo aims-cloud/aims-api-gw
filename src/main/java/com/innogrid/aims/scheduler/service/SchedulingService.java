@@ -247,13 +247,30 @@ public class SchedulingService {
         Workload workload = workloadRepository.findById(workloadId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
                         "워크로드를 찾을 수 없습니다: " + workloadId));
+        requireKnownEngine(engineId);
+        // 저장된 워크로드의 모의 배치는 단건 배치와 같은 정책 경로 — default 가 없으면 만들어 저장한다
+        return evaluate(workload, engineId, resolvePolicy(workload.resolveResourceType()));
+    }
 
+    /**
+     * 저장하지 않은 워크로드 폼의 모의 배치. 초안은 id 가 없고 어떤 행도 쓰지 않는다 — 정책이 하나도 없어도
+     * {@code default} 를 저장하지 않는다(실행 미리보기와 같은 규칙). 종류를 비우면 VM 으로 읽는다.
+     */
+    public SchedulingResult dryRun(Workload draft, String engineId) {
+        requireKnownEngine(engineId);
+        return evaluate(draft, engineId, choosePolicy(draft.resolveResourceType()).policy());
+    }
+
+    private void requireKnownEngine(String engineId) {
         if (engineId != null && !engineRegistry.contains(engineId)) {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
+    }
 
-        PlacementContext context = createContext(resolvePolicy(workload.resolveResourceType()));
+    /** 제약 평가만 수행한다 — 정책은 호출자가 고른다(저장 여부가 거기서 갈린다). 워크로드 상태와 이력은 건드리지 않는다. */
+    private SchedulingResult evaluate(Workload workload, String engineId, SchedulingPolicy policy) {
+        PlacementContext context = createContext(policy);
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }

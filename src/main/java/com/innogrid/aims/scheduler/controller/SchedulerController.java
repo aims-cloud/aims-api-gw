@@ -22,6 +22,7 @@ import com.innogrid.aims.scheduler.dto.WorkloadUpdateRequest;
 import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 import com.innogrid.aims.scheduler.service.EnumSupport;
@@ -272,6 +273,17 @@ public class SchedulerController {
         return ApiResponse.ok(dryRun
                 ? schedulingService.dryRun(workloadId, engine)
                 : schedulingService.scheduleWorkload(workloadId, engine));
+    }
+
+    @Operation(summary = "저장 전 워크로드 모의 배치",
+               description = "워크로드 생성 폼 값으로 저장 없이 모의 배치 결과를 돌려줍니다 — 단건 배치 dryRun=true 와 같은 일곱 키. "
+                       + "검증·사유 문구는 생성과 같고, 종류를 비우면 VM 으로 읽어 정책을 고릅니다. "
+                       + "워크로드·배치 이력·정책을 만들지 않으며(정책이 하나도 없어도 default 를 저장하지 않음) "
+                       + "200 이 실제 배치 성공을 보장하지 않습니다(호출 시점 노드 상태). 호출마다 메트릭을 수집하므로 버튼 단위로 부릅니다.")
+    @PostMapping("/workloads/dry-run")
+    public ApiResponse<SchedulingResult> dryRunDraft(@RequestBody WorkloadRequest request,
+                                                     @RequestParam(defaultValue = "weighted") String engine) {
+        return ApiResponse.ok(schedulingService.dryRun(workloadService.draft(request), engine));
     }
 
     // ── 노드 자원 현황 ──────────────────────────────────────────

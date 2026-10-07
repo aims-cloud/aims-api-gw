@@ -46,6 +46,14 @@ public class WorkloadService {
 
     @Transactional
     public Workload create(WorkloadRequest request) {
+        return workloadRepository.save(draft(request));
+    }
+
+    /**
+     * 저장하지 않는 초안 — 생성과 같은 검증·사유 문구로 엔티티만 만든다. 어떤 행도 쓰지 않고 DB 를 읽지도 않는다
+     * (저장 전 모의 배치가 쓴다). 생성은 이 초안을 저장하는 것뿐이라 두 경로의 400 규칙이 갈릴 수 없다.
+     */
+    public Workload draft(WorkloadRequest request) {
         if (request == null) throw badRequest("요청 본문이 필요합니다");
 
         String name = requireText(request.name(), "워크로드 이름", NAME_MAX);
@@ -84,7 +92,7 @@ public class WorkloadService {
         if (request.requiredBandwidthMbps() != null) {
             workload.setRequiredBandwidthMbps(requirePositive(request.requiredBandwidthMbps(), "요구 대역폭(Mbps)"));
         }
-        return workloadRepository.save(workload);
+        return workload;
     }
 
     /**

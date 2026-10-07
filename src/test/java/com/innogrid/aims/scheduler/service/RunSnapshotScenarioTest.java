@@ -154,14 +154,13 @@ class RunSnapshotScenarioTest {
         assertNull(run.getSnapshotMeasuredPowerWatts());
     }
 
-    @DisplayName("실행 계층이 배치를 되돌려도 후 값은 예약이 잡힌 채로 남는다")
+    @DisplayName("실행 계층이 배치를 되돌리면 그 예약도 되돌아가 후 값이 전 값과 같다")
     @Test
-    void the_after_side_keeps_reservations_even_when_the_dispatch_layer_rejects() {
+    void the_after_side_drops_reservations_when_the_dispatch_layer_rejects() {
         givenIdleNodes();
         save("w1", 8);
-        // 실행 계층이 거부하면 워크로드는 되돌아가지만 맥락의 예약은 풀리지 않는다. 푸는 수단이 코드에
-        // 없어 이 브랜치 범위 밖이고, 알려진 한계라 값으로 붙잡아 둔다. 이 시험이 빨개지면 응답 설명과
-        // 계약 문서의 "예약은 엔진 선택 시점 기준" 문장도 함께 고쳐야 한다는 뜻이다.
+        // 실행 계층이 거부하면 워크로드가 되돌아가고, 실행 루프가 그 배치의 예약도 같은 맥락에서 되돌린다.
+        // 그래서 전부 무산된 실행의 후 값은 전 값과 같다(계약 문서 2장 실행 전후 클러스터 상태 설명).
         when(dispatcher.dispatch(any(PlacementDispatcher.Request.class)))
                 .thenReturn(PlacementDispatcher.Outcome.rejected("실행 계층이 거부"));
 
@@ -170,8 +169,8 @@ class RunSnapshotScenarioTest {
         assertEquals(0, run.getSuccessCount(), "거부되면 성공으로 세지 않는다");
         assertEquals(ScheduleRun.SnapshotStatus.OK, run.getSnapshotStatus());
         assertEquals(0, run.getSnapshotActiveNodesBefore());
-        assertEquals(1, run.getSnapshotActiveNodesAfter(),
-                "되돌려진 배치가 후 값에 남는다 — 알려진 한계이고 문서에 적혀 있다");
+        assertEquals(0, run.getSnapshotActiveNodesAfter(),
+                "되돌려진 배치의 예약은 후 값에 남지 않는다");
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

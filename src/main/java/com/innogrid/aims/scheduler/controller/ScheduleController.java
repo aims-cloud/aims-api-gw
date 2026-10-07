@@ -143,6 +143,16 @@ public class ScheduleController {
         return ApiResponse.ok(executionService.previewDraft(request));
     }
 
+    @Operation(summary = "저장 전 모의 실행",
+            description = "생성 폼 값으로 모의 실행과 같은 결과를 저장 없이 돌려줍니다 — 같은 열일곱 키이고 id 는 null, "
+                    + "scheduleId·enabled 는 보낸 값입니다. 검증은 저장 전 미리보기와 같고(본문 없음·엔진·배치 순서·설명 400, 없는 정책 id 404), "
+                    + "전력 상한은 폼 값을 적용합니다. 온도 상한 칸이 있으면 400 입니다 — 저장한 뒤 모의 실행으로 확인하십시오. "
+                    + "노드를 모으므로 버튼 단위로 호출하고, 어떤 행도 쓰지 않으며 200 이 저장 성공을 뜻하지는 않습니다.")
+    @PostMapping("/dry-run")
+    public ApiResponse<ScheduleDryRunResponse> dryRunDraft(@RequestBody(required = false) ScheduleRequest request) {
+        return ApiResponse.ok(executionService.dryRunDraft(request));
+    }
+
     @Operation(summary = "실행 미리보기",
             description = "이 스케줄을 지금 실행하면 적용될 배치 정책·엔진(과 고른 단계)과 대상·재시도 대기·재시도 소진 "
                     + "건수를 저장 없이 돌려줍니다. 실행 권한을 잡지 않고 노드도 모으지 않습니다. "

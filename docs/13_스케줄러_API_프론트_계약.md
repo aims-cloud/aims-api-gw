@@ -76,7 +76,17 @@
 | GET | `/optimization/power` | `ApiResponseObject` | `ApiResponsePowerOptimizationResponse` |
 | GET | `/optimization/consolidation` | `ApiResponseObject` | `ApiResponseConsolidationResponse` |
 
-중첩 스키마의 이름은 단순 이름이 겹치는 다섯만 응답 이름을 앞에 붙였습니다 — `PowerEfficiencyTrendPoint`, `ConsolidationCandidate`, `PowerEfficiencySummary`, `PowerOptimizationSummary`, `ConsolidationSummary`. 전부터 있던 `Point`(전력 최적화 추세 지점)와 `Candidate`(익스포터 인스턴스 후보)는 이름도 내용도 그대로입니다. 나머지 중첩(`NodeEfficiency`·`Mdc`·`Cluster`·`Finding`·`Move`)은 단순 이름 그대로 새로 공개됩니다.
+전력 효율·전력 효율 추세·전력 최적화·통합 진단 네 응답의 중첩 스키마 이름은 응답 이름에서 끝의 `Response` 를 뺀 것에 중첩 이름을 붙입니다 — `PowerEfficiencySummary`·`PowerEfficiencyNodeEfficiency`, `PowerEfficiencyTrendPoint`, `PowerOptimizationSummary`·`PowerOptimizationMdc`·`PowerOptimizationCluster`·`PowerOptimizationFinding`, `ConsolidationCandidate`·`ConsolidationSummary`·`ConsolidationMove`. 전부터 있던 `Point`(전력 최적화 추세 지점)와 `Candidate`(익스포터 인스턴스 후보)는 이름도 내용도 그대로입니다.
+
+처음 공개할 때 아래 다섯은 단순 이름이었으나, 다른 응답이 같은 이름을 공개하면 Swagger 에 한쪽 내용만 남기 때문에 이름을 바꿨습니다. 필드와 응답 JSON 은 같고, Swagger 로 타입을 생성해 쓰는 화면은 다시 생성하면 타입 이름만 바뀝니다. 옛 이름을 가져다 쓰던 코드는 아래 표대로 이름을 바꿔야 합니다.
+
+| 이전 | 이후 | 위치 |
+|---|---|---|
+| `NodeEfficiency` | `PowerEfficiencyNodeEfficiency` | 전력 효율 `nodes[]` |
+| `Mdc` | `PowerOptimizationMdc` | 전력 최적화 `mdcs[]` |
+| `Cluster` | `PowerOptimizationCluster` | 전력 최적화 `cluster` |
+| `Finding` | `PowerOptimizationFinding` | 전력 최적화 `findings[]` |
+| `Move` | `ConsolidationMove` | 통합 진단 `candidates[].moves[]` |
 
 ---
 
@@ -535,6 +545,7 @@
 | #111 | 2026-10-07 | 스케줄 실행 | **무산된 배치의 예약 되돌리기** — 실행 계층이 받지 않은 배치(`REJECTED`·`UNAVAILABLE`)의 예약을 같은 실행 안에서 되돌립니다. 전에는 그 예약이 실행이 끝날 때까지 남아, 같은 실행의 다음 워크로드가 없는 예약 때문에 자원 부족으로 실패하고 실행 후 스냅샷에도 그 예약이 들어갔습니다(2장 실행 전후 클러스터 상태 설명 정정). | 필드·형태·엔드포인트 불변. 거부·불가가 나오지 않는 record 모드 배포에서는 동작 차이 없음 |
 | #112 | 2026-10-07 | 스케줄 | **모의 실행 `POST /{id}/dry-run`** 신설(2장 주의 14) — 지금 실행하면 어떻게 배치될지를 실행과 같은 정책·엔진·대상·순서·상한·전력 상한·온도 상한으로 노드 상태 하나 위에 차례로 놓아 보고 저장 없이 돌려줍니다. 전에는 실행 미리보기가 시도할 건수만 주고 워크로드별 모의 배치는 스케줄이 지정한 정책·온도 상한·전력 상한과 앞 건의 예약을 반영하지 못해, 실행해 보기 전에는 결과를 알 수 없었습니다(주의 11 안내 정정). | 엔드포인트 +1(73 → 74) · 스키마 +3(`ApiResponseScheduleDryRunResponse`·`ScheduleDryRunResponse`·`DryRunDecision` · `ClusterSnapshot` 재사용). 기존 경로·응답·DDL 불변 · 실행 경로는 결과 문구 함수 추출만 |
 | #113 | 2026-10-07 | 스케줄 | **저장 전 모의 실행 `POST /dry-run`** 신설(2장 주의 15) — 생성 폼 값으로 주의 14 와 같은 모의 실행을 저장 없이 돌려줍니다. 전에는 폼 단계에서 시도할 건수(저장 전 미리보기)만 볼 수 있었고 노드 위에 놓아 본 결과는 저장한 뒤에만 볼 수 있었습니다. 온도 상한 칸이 있으면 400 입니다. | 엔드포인트 +1(74 → 75) · 요청은 생성 스키마, 응답은 모의 실행 스키마 재사용(스키마 +0) · 기존 경로·응답·DDL 불변 |
-| (이번) | 2026-10-08 | 워크로드 · 노드 · 배치 결정 · 전력 최적화 진단 | **응답 타입 명시**(1.4절) — 작업 10개의 200 응답 스키마가 임의 객체에서 실제 응답 타입으로 바뀌고, 리소스 종류·엔진·냉각 대기의 원소와 일괄 재개 `data` 의 키 순서가 선언 순서로 고정됩니다(1장 「키 순서」). 응답의 키 집합·값은 그대로입니다. | 엔드포인트·경로·응답 값 불변 · 스키마 +28(513 → 541) · 기존 스키마의 이름·내용 불변 · 작업 10개의 200 스키마 이전 → 이후는 1.4절 표 · DDL 없음 · 엔진·비교 판·설정 무접촉 |
+| #114 | 2026-10-08 | 워크로드 · 노드 · 배치 결정 · 전력 최적화 진단 | **응답 타입 명시**(1.4절) — 작업 10개의 200 응답 스키마가 임의 객체에서 실제 응답 타입으로 바뀌고, 리소스 종류·엔진·냉각 대기의 원소와 일괄 재개 `data` 의 키 순서가 선언 순서로 고정됩니다(1장 「키 순서」). 응답의 키 집합·값은 그대로입니다. | 엔드포인트·경로·응답 값 불변 · 스키마 +28(513 → 541) · 기존 스키마의 이름·내용 불변 · 작업 10개의 200 스키마 이전 → 이후는 1.4절 표 · DDL 없음 · 엔진·비교 판·설정 무접촉 |
+| (이번) | 2026-10-08 | 노드 · 전력 최적화 진단 | **중첩 스키마 이름 지정**(1.4절) — 전력 효율·전력 최적화·통합 진단 응답 안의 중첩 스키마 다섯이 응답 이름을 붙인 이름으로 바뀝니다(`NodeEfficiency` → `PowerEfficiencyNodeEfficiency` · `Mdc`·`Cluster`·`Finding` → `PowerOptimizationMdc`·`PowerOptimizationCluster`·`PowerOptimizationFinding` · `Move` → `ConsolidationMove`). 전에는 단순 이름이라 다른 응답이 같은 이름을 공개하면 Swagger 에 한쪽 내용만 남을 수 있었습니다. | 응답 JSON·엔드포인트·경로 불변 · 스키마 수 541 그대로(이름 5 교체 · 내용 동일) · 이 다섯을 가리키는 `PowerEfficiencyResponse`·`PowerOptimizationResponse`·`ConsolidationCandidate` 는 참조 이름만 바뀜 · Swagger 생성 타입은 다섯 타입 이름이 바뀜(필드 동일) · DDL 없음 · 엔진·비교 판·설정 무접촉 |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 PR 번호가 없던 변경이며, 병합된 뒤 다음 계약 변경 때 번호를 채웁니다.

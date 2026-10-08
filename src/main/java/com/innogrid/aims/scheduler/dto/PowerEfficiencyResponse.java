@@ -56,6 +56,7 @@ public record PowerEfficiencyResponse(
      * @param rank            PEI 내림차순 순위. 평가 불가 노드는 null
      * @param recommendation  운영 권고 한 줄. 해당 없으면 null
      */
+    @Schema(name = "PowerEfficiencyNodeEfficiency")
     public record NodeEfficiency(
             String mdcId,
             String nodeId,

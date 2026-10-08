@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.controller;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
@@ -26,6 +27,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
+import com.innogrid.aims.scheduler.dto.ConsolidationResponse;
+import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
+import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
+import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.service.NodeResourceCollector;
@@ -69,14 +74,15 @@ class SchedulerResponseTypeApiTest {
             Map.entry("get /optimization/power", "ApiResponsePowerOptimizationResponse"),
             Map.entry("get /optimization/consolidation", "ApiResponseConsolidationResponse"));
 
-    /** 타입을 명시하면서 처음 공개되는 스키마 28개. */
+    /** 타입을 명시하면서 공개한 스키마 28개(중첩은 응답 이름을 앞에 붙인 이름). */
     private static final Set<String> NEW_SCHEMAS = Set.of(
             "ApiResponseConsolidationResponse", "ApiResponseListConstraintDescriptionResponse", "ApiResponseListEngineResponse",
             "ApiResponseListResourceTypeOptionResponse", "ApiResponseListThermalCooldownResponse", "ApiResponsePowerEfficiencyResponse",
             "ApiResponsePowerEfficiencyTrendResponse", "ApiResponsePowerOptimizationResponse", "ApiResponseResumeExhaustedResponse",
-            "Cluster", "ConsolidationCandidate", "ConsolidationResponse", "ConsolidationSummary", "ConstraintDescriptionResponse",
-            "EngineResponse", "Finding", "Mdc", "Move", "NodeEfficiency", "PowerEfficiencyResponse", "PowerEfficiencySummary",
-            "PowerEfficiencyTrendPoint", "PowerEfficiencyTrendResponse", "PowerOptimizationResponse", "PowerOptimizationSummary",
+            "ConsolidationCandidate", "ConsolidationMove", "ConsolidationResponse", "ConsolidationSummary", "ConstraintDescriptionResponse",
+            "EngineResponse", "PowerEfficiencyNodeEfficiency", "PowerEfficiencyResponse", "PowerEfficiencySummary",
+            "PowerEfficiencyTrendPoint", "PowerEfficiencyTrendResponse", "PowerOptimizationCluster", "PowerOptimizationFinding",
+            "PowerOptimizationMdc", "PowerOptimizationResponse", "PowerOptimizationSummary",
             "ResourceTypeOptionResponse", "ResumeExhaustedResponse", "ThermalCooldownResponse");
 
     private static final Set<String> TEN = Set.of("getResourceTypes", "resumeExhaustedWorkloads", "scheduleWorkload",
@@ -150,11 +156,11 @@ class SchedulerResponseTypeApiTest {
         assertTrue(has(schemas, "PowerEfficiencySummary", "averagePeiRaw"));
         assertTrue(has(schemas, "PowerOptimizationSummary", "findingCount"));
         assertTrue(has(schemas, "ConsolidationSummary", "reclaimableNodes"));
-        assertTrue(has(schemas, "Cluster", "reclaimableIdleWatts"));
-        assertTrue(has(schemas, "Mdc", "effectivePowerWatts"));
-        assertTrue(has(schemas, "Finding", "estimatedSavingWatts"));
-        assertTrue(has(schemas, "Move", "marginalWatts"));
-        assertTrue(has(schemas, "NodeEfficiency", "peiNormalized"));
+        assertTrue(has(schemas, "PowerOptimizationCluster", "reclaimableIdleWatts"));
+        assertTrue(has(schemas, "PowerOptimizationMdc", "effectivePowerWatts"));
+        assertTrue(has(schemas, "PowerOptimizationFinding", "estimatedSavingWatts"));
+        assertTrue(has(schemas, "ConsolidationMove", "marginalWatts"));
+        assertTrue(has(schemas, "PowerEfficiencyNodeEfficiency", "peiNormalized"));
 
         assertEquals(REF + "PowerEfficiencyTrendPoint",
                 schemas.get("PowerEfficiencyTrendResponse").get("properties").get("points").get("items").get("$ref").asString());
@@ -162,6 +168,38 @@ class SchedulerResponseTypeApiTest {
                 schemas.get("ConsolidationResponse").get("properties").get("candidates").get("items").get("$ref").asString());
         assertEquals(REF + "ConsolidationSummary",
                 schemas.get("ConsolidationResponse").get("properties").get("summary").get("$ref").asString());
+    }
+
+    @DisplayName("전력 진단 응답의 중첩 스키마는 응답 이름을 앞에 붙여 공개하고 부모가 그 이름을 가리킨다")
+    @Test
+    void nested_schemas_use_response_prefix() throws Exception {
+        JsonNode schemas = apiDocs().get("components").get("schemas");
+        List<String> named = new ArrayList<>();
+        for (Class<?> outer : List.of(PowerEfficiencyResponse.class, PowerEfficiencyTrendResponse.class,
+                PowerOptimizationResponse.class, ConsolidationResponse.class)) {
+            String prefix = outer.getSimpleName().replaceFirst("Response$", "");
+            for (Class<?> nested : outer.getDeclaredClasses()) {
+                if (!nested.isRecord()) continue;
+                List<String> fields = Arrays.stream(nested.getRecordComponents()).map(RecordComponent::getName).toList();
+                String name = prefix + nested.getSimpleName();
+                assertNotNull(schemas.get(name), name);
+                assertEquals(fields, names(schemas.get(name).get("properties")), name + " 속성 = 레코드 성분 순서");
+                // 같은 단순 이름은 다른 응답이 쓸 수 있으므로 부재가 아니라 「우리 본문이 아님」만 본다
+                JsonNode plain = schemas.get(nested.getSimpleName());
+                assertTrue(plain == null || plain.get("properties") == null || !fields.equals(names(plain.get("properties"))),
+                        nested.getSimpleName() + " 는 단순 이름으로 공개하지 않는다");
+                named.add(name);
+            }
+        }
+        assertEquals(10, named.size(), named.toString());
+        JsonNode opt = schemas.get("PowerOptimizationResponse").get("properties");
+        assertEquals(REF + "PowerOptimizationCluster", opt.get("cluster").get("$ref").asString());
+        assertEquals(REF + "PowerOptimizationMdc", opt.get("mdcs").get("items").get("$ref").asString());
+        assertEquals(REF + "PowerOptimizationFinding", opt.get("findings").get("items").get("$ref").asString());
+        assertEquals(REF + "ConsolidationMove",
+                schemas.get("ConsolidationCandidate").get("properties").get("moves").get("items").get("$ref").asString());
+        assertEquals(REF + "PowerEfficiencyNodeEfficiency",
+                schemas.get("PowerEfficiencyResponse").get("properties").get("nodes").get("items").get("$ref").asString());
     }
 
     @DisplayName("스케줄러 컨트롤러의 응답 선언에 와일드카드·타입 변수·원시 제네릭이 없다")

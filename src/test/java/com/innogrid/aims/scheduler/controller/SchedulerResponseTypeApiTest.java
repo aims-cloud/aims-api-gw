@@ -69,14 +69,15 @@ class SchedulerResponseTypeApiTest {
             Map.entry("get /optimization/power", "ApiResponsePowerOptimizationResponse"),
             Map.entry("get /optimization/consolidation", "ApiResponseConsolidationResponse"));
 
-    /** 타입을 명시하면서 처음 공개되는 스키마 28개. */
+    /** 타입을 명시하면서 공개한 스키마 28개(중첩은 응답 이름을 앞에 붙인 이름). */
     private static final Set<String> NEW_SCHEMAS = Set.of(
             "ApiResponseConsolidationResponse", "ApiResponseListConstraintDescriptionResponse", "ApiResponseListEngineResponse",
             "ApiResponseListResourceTypeOptionResponse", "ApiResponseListThermalCooldownResponse", "ApiResponsePowerEfficiencyResponse",
             "ApiResponsePowerEfficiencyTrendResponse", "ApiResponsePowerOptimizationResponse", "ApiResponseResumeExhaustedResponse",
-            "Cluster", "ConsolidationCandidate", "ConsolidationResponse", "ConsolidationSummary", "ConstraintDescriptionResponse",
-            "EngineResponse", "Finding", "Mdc", "Move", "NodeEfficiency", "PowerEfficiencyResponse", "PowerEfficiencySummary",
-            "PowerEfficiencyTrendPoint", "PowerEfficiencyTrendResponse", "PowerOptimizationResponse", "PowerOptimizationSummary",
+            "ConsolidationCandidate", "ConsolidationMove", "ConsolidationResponse", "ConsolidationSummary", "ConstraintDescriptionResponse",
+            "EngineResponse", "PowerEfficiencyNodeEfficiency", "PowerEfficiencyResponse", "PowerEfficiencySummary",
+            "PowerEfficiencyTrendPoint", "PowerEfficiencyTrendResponse", "PowerOptimizationCluster", "PowerOptimizationFinding",
+            "PowerOptimizationMdc", "PowerOptimizationResponse", "PowerOptimizationSummary",
             "ResourceTypeOptionResponse", "ResumeExhaustedResponse", "ThermalCooldownResponse");
 
     private static final Set<String> TEN = Set.of("getResourceTypes", "resumeExhaustedWorkloads", "scheduleWorkload",
@@ -150,11 +151,11 @@ class SchedulerResponseTypeApiTest {
         assertTrue(has(schemas, "PowerEfficiencySummary", "averagePeiRaw"));
         assertTrue(has(schemas, "PowerOptimizationSummary", "findingCount"));
         assertTrue(has(schemas, "ConsolidationSummary", "reclaimableNodes"));
-        assertTrue(has(schemas, "Cluster", "reclaimableIdleWatts"));
-        assertTrue(has(schemas, "Mdc", "effectivePowerWatts"));
-        assertTrue(has(schemas, "Finding", "estimatedSavingWatts"));
-        assertTrue(has(schemas, "Move", "marginalWatts"));
-        assertTrue(has(schemas, "NodeEfficiency", "peiNormalized"));
+        assertTrue(has(schemas, "PowerOptimizationCluster", "reclaimableIdleWatts"));
+        assertTrue(has(schemas, "PowerOptimizationMdc", "effectivePowerWatts"));
+        assertTrue(has(schemas, "PowerOptimizationFinding", "estimatedSavingWatts"));
+        assertTrue(has(schemas, "ConsolidationMove", "marginalWatts"));
+        assertTrue(has(schemas, "PowerEfficiencyNodeEfficiency", "peiNormalized"));
 
         assertEquals(REF + "PowerEfficiencyTrendPoint",
                 schemas.get("PowerEfficiencyTrendResponse").get("properties").get("points").get("items").get("$ref").asString());

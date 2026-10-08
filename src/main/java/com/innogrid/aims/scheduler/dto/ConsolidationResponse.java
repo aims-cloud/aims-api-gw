@@ -86,6 +86,7 @@ public record ConsolidationResponse(
      *
      * @param marginalWatts 받는 노드에서 늘어나는 전력. 이 값들의 합이 옮기는 비용이다
      */
+    @Schema(name = "ConsolidationMove")
     public record Move(
             Long workloadId,
             String workloadName,

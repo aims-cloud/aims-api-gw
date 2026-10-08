@@ -3,18 +3,23 @@ package com.innogrid.aims.scheduler.controller;
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
+import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
+import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
+import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
+import com.innogrid.aims.scheduler.dto.ResourceTypeOptionResponse;
+import com.innogrid.aims.scheduler.dto.ResumeExhaustedResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
+import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadReleaseResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadResponse;
@@ -157,9 +162,9 @@ public class SchedulerController {
 
     @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
     @GetMapping("/workloads/resource-types")
-    public ApiResponse<?> getResourceTypes() {
+    public ApiResponse<List<ResourceTypeOptionResponse>> getResourceTypes() {
         return ApiResponse.ok(java.util.Arrays.stream(Workload.ResourceType.values())
-                .map(t -> Map.of("code", t.name(), "label", t.name()))
+                .map(ResourceTypeOptionResponse::of)
                 .toList());
     }
 
@@ -171,17 +176,14 @@ public class SchedulerController {
                        + "되살린 워크로드는 다음 실행에 한꺼번에 몰리므로, 대상이 한 실행 처리 상한을 넘으면 "
                        + "되살리지 않고 400 으로 조건을 좁히라고 답합니다. 기간은 마지막 실패 시각 기준입니다.")
     @PostMapping("/workloads/resume-exhausted")
-    public ApiResponse<?> resumeExhaustedWorkloads(
+    public ApiResponse<ResumeExhaustedResponse> resumeExhaustedWorkloads(
             @Parameter(description = "되살릴 리소스 종류. 비우면 종류를 가리지 않는다(기간 필수)")
             @RequestParam(required = false) Workload.ResourceType resourceType,
             @Parameter(description = "마지막 실패 시각의 시작 (ISO-8601)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @Parameter(description = "마지막 실패 시각의 끝 (ISO-8601)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
-        List<Workload> resumed = schedulingService.resumeExhausted(resourceType, from, to);
-        return ApiResponse.ok(Map.of(
-                "resumedCount", resumed.size(),
-                "workloads", resumed.stream().map(WorkloadResponse::from).toList()));
+        return ApiResponse.ok(ResumeExhaustedResponse.of(schedulingService.resumeExhausted(resourceType, from, to)));
     }
 
     @Operation(summary = "워크로드 실행 상태 전이",
@@ -267,9 +269,9 @@ public class SchedulerController {
                        + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다. "
                        + "응답의 policyName 은 이 결정에 적용된 배치 정책 이름이며 실패·모의 배치 결과에도 있습니다.")
     @PostMapping("/workloads/{workloadId}/schedule")
-    public ApiResponse<?> scheduleWorkload(@PathVariable Long workloadId,
-                                           @RequestParam(defaultValue = "weighted") String engine,
-                                           @RequestParam(defaultValue = "false") boolean dryRun) {
+    public ApiResponse<SchedulingResult> scheduleWorkload(@PathVariable Long workloadId,
+                                                          @RequestParam(defaultValue = "weighted") String engine,
+                                                          @RequestParam(defaultValue = "false") boolean dryRun) {
         return ApiResponse.ok(dryRun
                 ? schedulingService.dryRun(workloadId, engine)
                 : schedulingService.scheduleWorkload(workloadId, engine));
@@ -319,7 +321,7 @@ public class SchedulerController {
                        + "전력 메트릭이 없는 노드는 evaluable=false 이고 파생 지표가 null 입니다. "
                        + "상대 등급은 평가 가능한 노드가 4대 이상일 때만 매겨집니다.")
     @GetMapping("/nodes/power-efficiency")
-    public ApiResponse<?> getPowerEfficiency() {
+    public ApiResponse<PowerEfficiencyResponse> getPowerEfficiency() {
         return ApiResponse.ok(powerEfficiencyService.evaluateCurrent());
     }
 
@@ -328,7 +330,7 @@ public class SchedulerController {
                        + "from·to 를 비우면 최근 24시간, step 기본값은 5m 입니다(예: 30s, 5m, 1h, 1d). "
                        + "데이터가 없으면 빈 배열과 사유를 돌려줍니다.")
     @GetMapping("/nodes/{nodeId}/power-efficiency/trend")
-    public ApiResponse<?> getPowerEfficiencyTrend(
+    public ApiResponse<PowerEfficiencyTrendResponse> getPowerEfficiencyTrend(
             @PathVariable String nodeId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
@@ -342,7 +344,7 @@ public class SchedulerController {
                description = "배치 후보를 거를 때 어떤 제약이 어떤 순서로 적용되는지, "
                        + "각 임계값이 어디서 오는지 설명합니다.")
     @GetMapping("/constraints")
-    public ApiResponse<?> getConstraints() {
+    public ApiResponse<List<ConstraintDescriptionResponse>> getConstraints() {
         return ApiResponse.ok(ConstraintDescriptionResponse.all());
     }
 
@@ -350,7 +352,7 @@ public class SchedulerController {
                description = "임계 온도를 넘겨 일정 시간 배치 대상에서 제외된 노드와 남은 대기 시간입니다. "
                        + "냉각 대기는 메모리에만 두므로 앱을 다시 시작하면 초기화됩니다.")
     @GetMapping("/thermal/cooldowns")
-    public ApiResponse<?> getThermalCooldowns() {
+    public ApiResponse<List<ThermalCooldownResponse>> getThermalCooldowns() {
         return ApiResponse.ok(schedulingService.getCoolingDownNodes());
     }
 
@@ -358,7 +360,7 @@ public class SchedulerController {
 
     @Operation(summary = "사용 가능한 스케줄링 엔진 목록")
     @GetMapping("/engines")
-    public ApiResponse<?> getEngines() {
+    public ApiResponse<List<EngineResponse>> getEngines() {
         return ApiResponse.ok(schedulingService.getAvailableEngines());
     }
 

@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.controller;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
@@ -26,6 +27,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
+import com.innogrid.aims.scheduler.dto.ConsolidationResponse;
+import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
+import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
+import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.service.NodeResourceCollector;
@@ -163,6 +168,38 @@ class SchedulerResponseTypeApiTest {
                 schemas.get("ConsolidationResponse").get("properties").get("candidates").get("items").get("$ref").asString());
         assertEquals(REF + "ConsolidationSummary",
                 schemas.get("ConsolidationResponse").get("properties").get("summary").get("$ref").asString());
+    }
+
+    @DisplayName("전력 진단 응답의 중첩 스키마는 응답 이름을 앞에 붙여 공개하고 부모가 그 이름을 가리킨다")
+    @Test
+    void nested_schemas_use_response_prefix() throws Exception {
+        JsonNode schemas = apiDocs().get("components").get("schemas");
+        List<String> named = new ArrayList<>();
+        for (Class<?> outer : List.of(PowerEfficiencyResponse.class, PowerEfficiencyTrendResponse.class,
+                PowerOptimizationResponse.class, ConsolidationResponse.class)) {
+            String prefix = outer.getSimpleName().replaceFirst("Response$", "");
+            for (Class<?> nested : outer.getDeclaredClasses()) {
+                if (!nested.isRecord()) continue;
+                List<String> fields = Arrays.stream(nested.getRecordComponents()).map(RecordComponent::getName).toList();
+                String name = prefix + nested.getSimpleName();
+                assertNotNull(schemas.get(name), name);
+                assertEquals(fields, names(schemas.get(name).get("properties")), name + " 속성 = 레코드 성분 순서");
+                // 같은 단순 이름은 다른 응답이 쓸 수 있으므로 부재가 아니라 「우리 본문이 아님」만 본다
+                JsonNode plain = schemas.get(nested.getSimpleName());
+                assertTrue(plain == null || plain.get("properties") == null || !fields.equals(names(plain.get("properties"))),
+                        nested.getSimpleName() + " 는 단순 이름으로 공개하지 않는다");
+                named.add(name);
+            }
+        }
+        assertEquals(10, named.size(), named.toString());
+        JsonNode opt = schemas.get("PowerOptimizationResponse").get("properties");
+        assertEquals(REF + "PowerOptimizationCluster", opt.get("cluster").get("$ref").asString());
+        assertEquals(REF + "PowerOptimizationMdc", opt.get("mdcs").get("items").get("$ref").asString());
+        assertEquals(REF + "PowerOptimizationFinding", opt.get("findings").get("items").get("$ref").asString());
+        assertEquals(REF + "ConsolidationMove",
+                schemas.get("ConsolidationCandidate").get("properties").get("moves").get("items").get("$ref").asString());
+        assertEquals(REF + "PowerEfficiencyNodeEfficiency",
+                schemas.get("PowerEfficiencyResponse").get("properties").get("nodes").get("items").get("$ref").asString());
     }
 
     @DisplayName("스케줄러 컨트롤러의 응답 선언에 와일드카드·타입 변수·원시 제네릭이 없다")

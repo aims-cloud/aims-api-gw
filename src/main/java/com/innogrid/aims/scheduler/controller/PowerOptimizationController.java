@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.innogrid.aims.common.dto.ApiResponse;
+import com.innogrid.aims.scheduler.dto.ConsolidationResponse;
+import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationTrendResponse;
 import com.innogrid.aims.scheduler.service.ConsolidationService;
 import com.innogrid.aims.scheduler.service.PowerOptimizationService;
@@ -56,7 +58,7 @@ public class PowerOptimizationController {
                        + "메트릭에 잡히지 않은 부하다. remainingWatts·overBudget 은 실효 기준이라 진단과 실제 배치가 어긋나지 않는다. "
                        + "예산을 등록하지 않은 MDC 는 budgetWatts·remainingWatts 가 null 이다.")
     @GetMapping("/power")
-    public ApiResponse<?> getPowerOptimization() {
+    public ApiResponse<PowerOptimizationResponse> getPowerOptimization() {
         return ApiResponse.ok(optimizationService.diagnoseCurrent());
     }
 
@@ -83,7 +85,7 @@ public class PowerOptimizationController {
                        + "판정 기준은 순절감(반납하는 유휴 전력 − 옮기는 비용)이며, "
                        + "시도는 계산일 뿐 실제로 배치하지 않는다.")
     @GetMapping("/consolidation")
-    public ApiResponse<?> getConsolidation() {
+    public ApiResponse<ConsolidationResponse> getConsolidation() {
         return ApiResponse.ok(consolidationService.diagnose());
     }
 }

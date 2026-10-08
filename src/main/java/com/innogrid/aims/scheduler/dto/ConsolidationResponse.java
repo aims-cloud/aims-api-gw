@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 워크로드 통합 가능성 진단.
  *
@@ -46,6 +48,7 @@ public record ConsolidationResponse(
      *                            전력을 수집하지 못하면 null
      * @param blockedReason       옮길 수 없을 때의 사유
      */
+    @Schema(name = "ConsolidationCandidate")
     public record Candidate(
             String mdcId,
             String nodeId,
@@ -100,6 +103,7 @@ public record ConsolidationResponse(
      *                        못한 노드라 {@code candidateCount} 에 들어 있지 않다
      * @param excluded        뺀 노드와 사유
      */
+    @Schema(name = "ConsolidationSummary")
     public record Summary(
             int candidateCount,
             int reclaimableNodes,

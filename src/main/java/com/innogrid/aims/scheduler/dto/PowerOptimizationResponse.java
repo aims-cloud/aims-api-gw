@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 클러스터 전력 최적화 진단.
  *
@@ -114,6 +116,7 @@ public record PowerOptimizationResponse(
      *
      * @param savingPercent 절감 가능 비율(%). 총 전력이 0 이면 null
      */
+    @Schema(name = "PowerOptimizationSummary")
     public record Summary(
             int findingCount,
             double estimatedSavingWatts,

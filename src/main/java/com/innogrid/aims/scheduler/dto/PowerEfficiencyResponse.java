@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 서버별 전력 효율성 평가 결과.
  *
@@ -31,6 +33,7 @@ public record PowerEfficiencyResponse(
      * @param gradeAvailable         상대 등급을 매길 만큼 표본이 있는지
      * @param gradeUnavailableReason 매길 수 없을 때의 사유. 화면에 그대로 띄운다
      */
+    @Schema(name = "PowerEfficiencySummary")
     public record Summary(
             int totalNodes,
             int evaluableNodes,

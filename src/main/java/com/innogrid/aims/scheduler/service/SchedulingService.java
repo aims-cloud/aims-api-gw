@@ -3,7 +3,6 @@ package com.innogrid.aims.scheduler.service;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -16,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.EngineResponse;
+import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
@@ -224,16 +225,10 @@ public class SchedulingService {
      * 임계 온도를 넘겨 냉각 대기 중인 노드 목록.
      * 온도 제어(연구계획 B3)가 실제로 배치를 막고 있는지 밖에서 확인할 수단이다.
      */
-    public List<Map<String, Object>> getCoolingDownNodes() {
+    public List<ThermalCooldownResponse> getCoolingDownNodes() {
         return getNodeResources().stream()
                 .filter(n -> constraintEvaluator.isCoolingDown(n.getNodeId()))
-                .map(n -> Map.<String, Object>of(
-                        "mdcId", n.getMdcId(),
-                        "nodeId", n.getNodeId(),
-                        "temperatureCelsius", n.getTemperatureCelsius(),
-                        "thermalState", String.valueOf(n.getThermalState()),
-                        "remainingCooldownMinutes",
-                        constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
+                .map(n -> ThermalCooldownResponse.of(n, constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
                 .toList();
     }
 
@@ -297,8 +292,8 @@ public class SchedulingService {
     /**
      * 사용 가능한 스케줄링 엔진 목록.
      */
-    public List<Map<String, String>> getAvailableEngines() {
-        return engineRegistry.describe();
+    public List<EngineResponse> getAvailableEngines() {
+        return engineRegistry.describe().stream().map(EngineResponse::of).toList();
     }
 
     /** 활성 정책이 하나도 없을 때 쓰는 기본 정책의 이름. */

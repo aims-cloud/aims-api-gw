@@ -20,6 +20,7 @@
 | 배열 응답 | 페이징이 아닌 목록은 `data` 가 배열(노드·엔진·제약·이력 등) |
 | 정렬 | `sort={필드},{asc|desc}`. 허용 밖이면 400 이고 메시지에 가능한 값을 나열. 값이 같은 행은 `id` 로 한 번 더 정렬됩니다(1.1절 아래 **보조 정렬**) |
 | 열거형 | 전부 대문자 문자열. 요청 시 소문자를 받아 주는 자리가 일부 있으나 응답은 항상 대문자 |
+| 키 순서 | 스키마에 선언된 필드는 선언 순서로 나옵니다(`details`·`capacityByNode` 처럼 키가 값인 맵 필드는 각 절의 규칙을 따릅니다). 화면은 키 이름으로 읽으십시오 — 응답 타입 명시(1.4절) 전에는 리소스 종류·엔진·냉각 대기의 원소와 일괄 재개 `data` 의 키 순서가 서버를 띄울 때마다 달라질 수 있었습니다(키·값은 같음) |
 | 시각 | ISO-8601 offset 문자열(`2026-09-10T09:00:00+09:00`) |
 | 기간 `from`·`to` | API 마다 규칙이 다릅니다 — **1.3절** 표. 공통: 값은 오프셋까지 든 ISO-8601(쿼리의 `+` 는 `%2B`) |
 | 오류 | 400 검증 실패(사유 한국어), 404 대상 없음, 409 상태 충돌, 429 동시 실행 제한(배치 전략 비교 한 곳만 — 8장). **스케줄러 경로는 필수 파라미터가 빠져도 400 과 사유를 줍니다** |
@@ -57,6 +58,25 @@
 | 실행 이력 `/schedules/{id}/runs` | 시작 `startedAt` | `[from, to)` | 창 없음 | 비운 쪽 경계 없음 | 시작이 끝보다 뒤 |
 | 일괄 재개 `/workloads/resume-exhausted` | 마지막 실패 `lastFailedAt` | `[from, to]` 양끝 포함 | 리소스 종류 필수(종류도 없으면 400) | 비운 쪽 경계 없음(기간을 하나라도 주면 마지막 실패 시각이 없는 옛 행은 빠짐) | 시작이 끝보다 뒤 |
 | 노드 효율 추세 `/nodes/{nodeId}/power-efficiency/trend` · 전력 최적화 추세 `/optimization/power/trend` | 조회 구간 | `from` ~ `to`, `step` 간격 | `to` = 지금 · `from` = `to` − 24시간 | `to` 비움 = 지금 · `from` 비움 = `to` − 24시간 | **시작이 끝과 같아도 400** · 지점 수 상한(`aims.scheduler.power.trend-max-points`, 기본 2000) 초과 |
+
+### 1.4 응답 스키마 이름
+
+작업 10개의 200 응답이 Swagger 에서 임의 객체(`ApiResponseObject` — `data` 의 형태가 없음)로 보이던 것을 실제 응답 타입으로 고쳤습니다. 응답의 키 집합과 값은 그대로이고, 리소스 종류·엔진·냉각 대기의 원소와 일괄 재개 `data` 의 키 순서가 아래 스키마의 선언 순서로 고정됐습니다. Swagger 로 타입을 생성해 쓰는 화면은 다시 생성하면 `data` 가 구체 타입으로 좁혀지고, 기존 스키마의 이름과 내용은 바뀌지 않습니다. 생성 모델에는 새 타입 28개(아래 중첩 이름 포함)가 더해지며, 새 스키마에는 `required` 가 없어 생성된 필드는 모두 선택입니다.
+
+| 메서드 | 경로 | 이전 | 이후 |
+|---|---|---|---|
+| GET | `/workloads/resource-types` | `ApiResponseObject` | `ApiResponseListResourceTypeOptionResponse` — `[{code, label}]` |
+| POST | `/workloads/resume-exhausted` | `ApiResponseObject` | `ApiResponseResumeExhaustedResponse` — `{resumedCount, workloads}` |
+| POST | `/workloads/{id}/schedule` | `ApiResponseObject` | `ApiResponseSchedulingResult`(저장 전 모의 배치와 같은 스키마) |
+| GET | `/nodes/power-efficiency` | `ApiResponseObject` | `ApiResponsePowerEfficiencyResponse` |
+| GET | `/nodes/{nodeId}/power-efficiency/trend` | `ApiResponseObject` | `ApiResponsePowerEfficiencyTrendResponse` |
+| GET | `/constraints` | `ApiResponseObject` | `ApiResponseListConstraintDescriptionResponse` |
+| GET | `/thermal/cooldowns` | `ApiResponseObject` | `ApiResponseListThermalCooldownResponse` — `[{mdcId, nodeId, temperatureCelsius, thermalState, remainingCooldownMinutes}]` |
+| GET | `/engines` | `ApiResponseObject` | `ApiResponseListEngineResponse` — `[{id, name}]` |
+| GET | `/optimization/power` | `ApiResponseObject` | `ApiResponsePowerOptimizationResponse` |
+| GET | `/optimization/consolidation` | `ApiResponseObject` | `ApiResponseConsolidationResponse` |
+
+중첩 스키마의 이름은 단순 이름이 겹치는 다섯만 응답 이름을 앞에 붙였습니다 — `PowerEfficiencyTrendPoint`, `ConsolidationCandidate`, `PowerEfficiencySummary`, `PowerOptimizationSummary`, `ConsolidationSummary`. 전부터 있던 `Point`(전력 최적화 추세 지점)와 `Candidate`(익스포터 인스턴스 후보)는 이름도 내용도 그대로입니다. 나머지 중첩(`NodeEfficiency`·`Mdc`·`Cluster`·`Finding`·`Move`)은 단순 이름 그대로 새로 공개됩니다.
 
 ---
 
@@ -141,7 +161,7 @@
 | GET | `/workloads/page` | 목록 페이징. `status`, `priority`, `resourceType`, `keyword`, `assignedNodeId`, `retryExhausted` 필터(아래 주의 12) |
 | GET | `/workloads/retry-policy` | 재시도 정책 — 상한 `maxRetryCount`·간격 `retryBackoffMinutes`(아래 주의 6·7) |
 | GET / PUT / DELETE | `/workloads/{id}` | 상세 / 편집(부분 갱신 · 아래 주의 14) / 삭제 |
-| GET | `/workloads/resource-types` | 리소스 종류 목록 |
+| GET | `/workloads/resource-types` | 리소스 종류 목록 `[{code, label}]`(1.4절) |
 | PATCH | `/workloads/{id}/status` | 상태 변경 |
 | POST | `/workloads/{id}/release` | 배치 예약 취소 — SCHEDULED 를 대기로 되돌리고 배정을 풀며 전달 기록을 마감(아래 주의 13) |
 | POST | `/workloads/resume-exhausted` | 재시도 소진 워크로드 일괄 재개. `resourceType`, `from`, `to` |
@@ -152,7 +172,7 @@
 | GET | `/nodes/power-efficiency` | 노드별 전력 효율 지표 |
 | GET | `/nodes/{nodeId}/power-efficiency/trend` | 효율 추세. `from`, `to`, `step` |
 | GET | `/constraints` | 제약 조건 설명(C0~C6) |
-| GET | `/thermal/cooldowns` | 냉각 대기 중인 노드 |
+| GET | `/thermal/cooldowns` | 냉각 대기 중인 노드 `[{mdcId, nodeId, temperatureCelsius, thermalState, remainingCooldownMinutes}]`(1.4절) |
 | GET | `/engines` | 선택 가능한 엔진 `[{id, name}]` |
 | GET | `/history` | 배치 이력. 최신순 배열, **최근 1000건까지** |
 | GET | `/history/page` | 배치 이력 페이징. 상한 없음. `workloadId`, `success`, `engineName`, `scheduleRunId`, `exclusionCode`, `from`, `to` 필터(아래 주의 5) |
@@ -514,6 +534,7 @@
 | #110 | 2026-10-07 | 워크로드 · 배치 결정 | **저장 전 모의 배치 `POST /workloads/dry-run`** 신설(3장 주의 15) — 생성 폼 값으로 단건 모의 배치와 같은 일곱 키를 저장 없이 돌려줍니다. 전에는 저장된 워크로드만 모의 배치할 수 있어 폼 값을 확인하려면 만들고 보고 지워야 했고, 그 사이 대기 행이 목록과 스케줄 실행에 노출됐습니다. | 엔드포인트 +1(72 → 73) · 요청은 생성 스키마 그대로 · 응답은 단건 모의 배치와 같은 모델(스키마 목록에 결과·후보 점수 스키마가 새로 실림) · 기존 모의 배치·생성·편집 동작과 DDL 불변 · 엔진·판·설정 무접촉 · 옛 서버는 403 |
 | #111 | 2026-10-07 | 스케줄 실행 | **무산된 배치의 예약 되돌리기** — 실행 계층이 받지 않은 배치(`REJECTED`·`UNAVAILABLE`)의 예약을 같은 실행 안에서 되돌립니다. 전에는 그 예약이 실행이 끝날 때까지 남아, 같은 실행의 다음 워크로드가 없는 예약 때문에 자원 부족으로 실패하고 실행 후 스냅샷에도 그 예약이 들어갔습니다(2장 실행 전후 클러스터 상태 설명 정정). | 필드·형태·엔드포인트 불변. 거부·불가가 나오지 않는 record 모드 배포에서는 동작 차이 없음 |
 | #112 | 2026-10-07 | 스케줄 | **모의 실행 `POST /{id}/dry-run`** 신설(2장 주의 14) — 지금 실행하면 어떻게 배치될지를 실행과 같은 정책·엔진·대상·순서·상한·전력 상한·온도 상한으로 노드 상태 하나 위에 차례로 놓아 보고 저장 없이 돌려줍니다. 전에는 실행 미리보기가 시도할 건수만 주고 워크로드별 모의 배치는 스케줄이 지정한 정책·온도 상한·전력 상한과 앞 건의 예약을 반영하지 못해, 실행해 보기 전에는 결과를 알 수 없었습니다(주의 11 안내 정정). | 엔드포인트 +1(73 → 74) · 스키마 +3(`ApiResponseScheduleDryRunResponse`·`ScheduleDryRunResponse`·`DryRunDecision` · `ClusterSnapshot` 재사용). 기존 경로·응답·DDL 불변 · 실행 경로는 결과 문구 함수 추출만 |
-| (이번) | 2026-10-07 | 스케줄 | **저장 전 모의 실행 `POST /dry-run`** 신설(2장 주의 15) — 생성 폼 값으로 주의 14 와 같은 모의 실행을 저장 없이 돌려줍니다. 전에는 폼 단계에서 시도할 건수(저장 전 미리보기)만 볼 수 있었고 노드 위에 놓아 본 결과는 저장한 뒤에만 볼 수 있었습니다. 온도 상한 칸이 있으면 400 입니다. | 엔드포인트 +1(74 → 75) · 요청은 생성 스키마, 응답은 모의 실행 스키마 재사용(스키마 +0) · 기존 경로·응답·DDL 불변 |
+| #113 | 2026-10-07 | 스케줄 | **저장 전 모의 실행 `POST /dry-run`** 신설(2장 주의 15) — 생성 폼 값으로 주의 14 와 같은 모의 실행을 저장 없이 돌려줍니다. 전에는 폼 단계에서 시도할 건수(저장 전 미리보기)만 볼 수 있었고 노드 위에 놓아 본 결과는 저장한 뒤에만 볼 수 있었습니다. 온도 상한 칸이 있으면 400 입니다. | 엔드포인트 +1(74 → 75) · 요청은 생성 스키마, 응답은 모의 실행 스키마 재사용(스키마 +0) · 기존 경로·응답·DDL 불변 |
+| (이번) | 2026-10-08 | 워크로드 · 노드 · 배치 결정 · 전력 최적화 진단 | **응답 타입 명시**(1.4절) — 작업 10개의 200 응답 스키마가 임의 객체에서 실제 응답 타입으로 바뀌고, 리소스 종류·엔진·냉각 대기의 원소와 일괄 재개 `data` 의 키 순서가 선언 순서로 고정됩니다(1장 「키 순서」). 응답의 키 집합·값은 그대로입니다. | 엔드포인트·경로·응답 값 불변 · 스키마 +28(513 → 541) · 기존 스키마의 이름·내용 불변 · 작업 10개의 200 스키마 이전 → 이후는 1.4절 표 · DDL 없음 · 엔진·비교 판·설정 무접촉 |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 PR 번호가 없던 변경이며, 병합된 뒤 다음 계약 변경 때 번호를 채웁니다.

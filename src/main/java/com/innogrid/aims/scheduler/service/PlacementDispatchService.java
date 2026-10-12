@@ -36,7 +36,8 @@ import jakarta.persistence.criteria.Predicate;
  * 배치 결정을 실행 계층으로 넘기고(디스패치), 실행 계층의 결과를 되돌려 받는다.
  *
  * <p><b>호출 시점.</b> {@link PlacementService#place} 의 트랜잭션이 끝난 뒤 호출자가 부른다. 결정·예약·이력은 이미 커밋된
- * 상태라 여기서 무슨 일이 나도 결정은 되돌아가지 않는다 — 디스패처 예외는 UNAVAILABLE 로 기록하고 삼킨다.</p>
+ * 상태라 여기서 무슨 일이 나도 결정은 되돌아가지 않는다 — 디스패처 예외는 UNAVAILABLE 로 기록하고 삼킨다.
+ * 실행 컨텍스트에 잡힌 메모리 예약은 호출자인 스케줄 실행 루프가 되돌린다({@link com.innogrid.aims.scheduler.model.PlacementContext#unreserve}).</p>
  *
  * <p><b>거부·불가.</b> 실행 계층이 받지 않으면 워크로드를 FAILED 로 돌리고 배정을 해제한다({@link Workload#failDispatch}).
  * 그러면 다음 스케줄 실행이 재시도 상한 안에서 다시 대상으로 잡는다.</p>
@@ -131,7 +132,8 @@ public class PlacementDispatchService {
     public static SchedulingResult downgrade(SchedulingResult result, PlacementDispatch dispatch) {
         if (dispatch == null || result == null || !result.success()) return result;
         if (dispatch.getStatus() == DispatchStatus.REJECTED || dispatch.getStatus() == DispatchStatus.UNAVAILABLE) {
-            return SchedulingResult.failure("배치 결정은 " + dispatch.getNodeId() + " 이었으나 실행 계층이 받지 않음: " + dispatch.getMessage());
+            return SchedulingResult.failure("배치 결정은 " + dispatch.getNodeId() + " 이었으나 실행 계층이 받지 않음: " + dispatch.getMessage(),
+                    result.policyName());
         }
         return result;
     }
@@ -140,7 +142,10 @@ public class PlacementDispatchService {
         return new PlacementDispatcher.Request(d.getId(), d.getIdempotencyKey(),
                 w.getId(), w.getName(), w.resolveResourceType().name(),
                 w.getRequiredCpu(), w.getRequiredMemoryMb(), w.getRequiredGpu(), w.getRequiredDiskGb(),
-                d.getMdcId(), d.getNodeId(), r.finalScore(), r.reason(), d.getScheduleRunId());
+                d.getMdcId(), d.getNodeId(),
+                r != null ? r.finalScore() : w.getSchedulingScore(),
+                r != null ? r.reason() : w.getSchedulingReason(),
+                d.getScheduleRunId());
     }
 
     // ── 실행 계층 → 결과 ──────────────────────────────────────────
@@ -200,6 +205,45 @@ public class PlacementDispatchService {
             }
         });
         return repository.save(dispatch);
+    }
+
+    /**
+     * 예약 취소 — 워크로드의 <b>현재 결정</b>(멱등키가 같은 행)의 전달 기록을 마감한다.
+     *
+     * <pre>
+     * 행 없음(전달 기능 이전의 배정)        → null
+     * REQUESTED(전달 중) · RUNNING(실행 중) → 409
+     * ACCEPTED                             → 디스패처 취소 훅 → FAILED 로 마감(비고 "예약 취소 — …")
+     * 끝 상태(FAILED·REJECTED·…)           → 그대로
+     * </pre>
+     * 옛 결정의 행(멱등키가 다른 행)은 건드리지 않는다 — 같은 워크로드가 여러 번 배치될 수 있어서다.
+     * 호출자의 트랜잭션 안에서 부른다.
+     */
+    public PlacementDispatch cancelCurrent(Workload workload) {
+        PlacementDispatch current = repository.findByIdempotencyKey(PlacementDispatch.keyOf(workload)).orElse(null);
+        if (current == null) return null;
+        DispatchStatus status = current.getStatus();
+        if (status == DispatchStatus.REQUESTED || status == DispatchStatus.RUNNING) {
+            throw new BusinessException(HttpStatus.CONFLICT, String.format(
+                    "전달 기록 %d 가 %s 상태라 예약을 취소할 수 없습니다 — %s", current.getId(), status,
+                    status == DispatchStatus.REQUESTED ? "실행 계층에 전달 중입니다" : "실행 중인 워크로드는 실행 계층 결과로 끝내십시오"));
+        }
+        if (status.terminal()) return current;
+
+        String mode = "?";
+        String hookNote = null;
+        try {
+            PlacementDispatcher dispatcher = registry.current();
+            mode = dispatcher.getMode();
+            dispatcher.cancel(toRequest(current, workload, null));
+        } catch (RuntimeException e) {
+            log.warn("디스패처 취소 훅 예외(취소는 계속한다): dispatch={}, mode={}, {}", current.getId(), mode, e.toString());
+            hookNote = "취소 훅 예외: " + e.getClass().getSimpleName();
+        }
+        current.cancel("예약 취소 — 운영자 요청(" + actorResolver.current().email() + ")");
+        if (hookNote != null) current.note(hookNote);
+        log.info("예약 취소: dispatch={}, workload={}, node={} — 전달 기록 FAILED 마감", current.getId(), current.getWorkloadName(), current.getNodeId());
+        return repository.save(current);
     }
 
     // ── 조회 ────────────────────────────────────────────────────

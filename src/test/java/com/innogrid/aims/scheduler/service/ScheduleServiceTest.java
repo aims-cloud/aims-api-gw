@@ -16,6 +16,7 @@ import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -124,7 +125,8 @@ class ScheduleServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(BusinessException.class,
                 () -> scheduleService.update(created.id(),
-                        request(null, "가".repeat(Schedule.NAME_MAX + 1), null, null))).getStatus());
+                        new ScheduleUpdateRequest(null, "가".repeat(Schedule.NAME_MAX + 1), null, null,
+                                null, null, null, null, null, null, null, null))).getStatus());
     }
 
     private static ScheduleRequest request(String id, String name, String cron, String description) {
@@ -217,8 +219,8 @@ class ScheduleServiceTest {
     @Test
     void schedule_id_cannot_change() {
         Long id = scheduleService.create(request("origin", "0 0 2 * * ?")).id();
-        ScheduleRequest renamed = new ScheduleRequest("changed", "이름", null, null,
-                null, null, null, null, null, null, null);
+        ScheduleUpdateRequest renamed = new ScheduleUpdateRequest("changed", "이름", null, null,
+                null, null, null, null, null, null, null, null);
 
         assertThrows(BusinessException.class, () -> scheduleService.update(id, renamed));
     }
@@ -233,7 +235,7 @@ class ScheduleServiceTest {
         assertNull(scheduleRepository.findById(id).orElseThrow().getNextRunAt());
 
         ScheduleResponse enabled = scheduleService.update(id,
-                new ScheduleRequest(null, null, null, null, null, true, null, null, null, null, null));
+                new ScheduleUpdateRequest(null, null, null, null, null, true, null, null, null, null, null, null));
 
         assertNotNull(enabled.nextRunAt());
     }

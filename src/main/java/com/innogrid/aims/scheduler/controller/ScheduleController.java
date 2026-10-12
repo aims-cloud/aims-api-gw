@@ -7,9 +7,12 @@ import java.util.Map;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleDryRunResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -99,11 +102,17 @@ public class ScheduleController {
     }
 
     @Operation(summary = "스케줄 편집",
-            description = "스케줄 ID 는 업무 키라 변경할 수 없습니다. "
+            description = "부분 갱신 — 보낸 키만 바꾸고 없는 키는 유지합니다. 스케줄 ID 는 업무 키라 변경할 수 없습니다. "
+                    + "policyId·engine·maxPowerBudgetWatts·maxTemperatureCelsius·description 은 null 을 보내면 비웁니다"
+                    + "(정책·온도 상한은 상속으로, 전력 상한은 제약 없음으로 복귀). 이 다섯 칸은 JSON 타입도 검사해 "
+                    + "숫자 칸에 숫자 문자열, 정수 칸에 소수를 보내면 400 입니다. 나머지 칸의 null 은 유지이고 "
+                    + "resourceType·placementOrder 는 비울 수 없습니다(배치 순서를 기본으로 되돌리려면 age). "
+                    + "상세 조회 응답을 그대로 보내면 아무것도 바뀌지 않습니다. "
+                    + "본문이 없으면 400, 스케줄 ID 가 다르면 400, 칸 검증은 생성과 같은 규칙이며 한 칸이라도 400 이면 아무것도 바뀌지 않습니다. "
                     + "실행 주기나 사용 여부를 바꾸면 다음 실행 예정 시각이 현재 기준으로 다시 계산됩니다.")
     @PutMapping("/{id}")
     public ApiResponse<ScheduleResponse> updateSchedule(@PathVariable Long id,
-                                                        @RequestBody ScheduleRequest request) {
+                                                        @RequestBody(required = false) ScheduleUpdateRequest request) {
         return ApiResponse.ok(scheduleService.update(id, request));
     }
 
@@ -118,6 +127,56 @@ public class ScheduleController {
     }
 
     // ── 실행 ───────────────────────────────────────────────────
+
+    @Operation(summary = "저장 전 스케줄 미리보기",
+            description = "생성 폼의 값을 그대로 보내면 저장하지 않고 '이 값으로 지금 실행하면' 적용될 정책·엔진과 "
+                    + "대상·재시도 대기·재시도 소진 건수를 돌려줍니다. 응답은 실행 미리보기와 같은 열네 키이고 id 는 null 입니다. "
+                    + "결과를 바꾸는 칸은 resourceType·policyId·engine 셋이고, maxTemperatureCelsius·placementOrder 는 실행과 같은 해석에 "
+                    + "쓰이지만 응답 값에는 드러나지 않습니다. scheduleId·enabled 는 보낸 값을 그대로 돌려줍니다. "
+                    + "스케줄명·실행 주기·자동 실행·전력 상한은 보지 않고(전력 상한은 실행 때 노드 단위로 적용) 설명은 300자 상한만 검사합니다. "
+                    + "scheduleId 형식·중복과 실행 주기도 검사하지 않으므로 200 이 저장 성공을 뜻하지는 않습니다. "
+                    + "키를 빼면 기존 값이 아니라 기본값(VM · 사용 중 · 정책 상속)으로 해석하므로 편집 폼은 병합한 전체 값을 보내십시오. "
+                    + "본문이 없으면 400, 엔진·배치 순서·설명 형식 오류는 400, 없는 정책 id 는 404 입니다. "
+                    + "노드를 모으지 않고 실행 권한을 잡지 않으며 default 정책도 만들지 않습니다.")
+    @PostMapping("/preview")
+    public ApiResponse<ScheduleRunPreviewResponse> previewDraft(@RequestBody(required = false) ScheduleRequest request) {
+        return ApiResponse.ok(executionService.previewDraft(request));
+    }
+
+    @Operation(summary = "저장 전 모의 실행",
+            description = "생성 폼 값으로 모의 실행과 같은 결과를 저장 없이 돌려줍니다 — 같은 열일곱 키이고 id 는 null, "
+                    + "scheduleId·enabled 는 보낸 값입니다. 검증은 저장 전 미리보기와 같고(본문 없음·엔진·배치 순서·설명 400, 없는 정책 id 404), "
+                    + "전력 상한은 폼 값을 적용합니다. 온도 상한 칸이 있으면 400 입니다 — 저장한 뒤 모의 실행으로 확인하십시오. "
+                    + "노드를 모으므로 버튼 단위로 호출하고, 어떤 행도 쓰지 않으며 200 이 저장 성공을 뜻하지는 않습니다.")
+    @PostMapping("/dry-run")
+    public ApiResponse<ScheduleDryRunResponse> dryRunDraft(@RequestBody(required = false) ScheduleRequest request) {
+        return ApiResponse.ok(executionService.dryRunDraft(request));
+    }
+
+    @Operation(summary = "실행 미리보기",
+            description = "이 스케줄을 지금 실행하면 적용될 배치 정책·엔진(과 고른 단계)과 대상·재시도 대기·재시도 소진 "
+                    + "건수를 저장 없이 돌려줍니다. 실행 권한을 잡지 않고 노드도 모으지 않습니다. "
+                    + "대상 건수는 시도할 건수이며 성공할 건수가 아닙니다(어떻게 배치될지는 모의 실행으로). "
+                    + "대상이 0건이면 emptyReason·emptyMessage 에 실행이 남길 사유와 같은 문구가 실립니다. "
+                    + "사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 200 입니다. 스케줄이 없거나 지정한 정책이 지워졌으면 404 입니다. "
+                    + "화면 분기는 emptyReason 으로 하고 emptyMessage 는 표시용으로만 쓰십시오.")
+    @GetMapping("/{id}/preview")
+    public ApiResponse<ScheduleRunPreviewResponse> preview(@PathVariable Long id) {
+        return ApiResponse.ok(executionService.preview(id));
+    }
+
+    @Operation(summary = "모의 실행",
+            description = "이 스케줄을 지금 실행하면 어떻게 배치될지를 저장 없이 돌려줍니다 — 실행과 같은 정책·엔진·대상·순서·"
+                    + "상한·전력 상한으로 노드 상태 하나 위에 대상을 차례로 놓아 봅니다(앞 건의 예약이 뒤 건에 보임). "
+                    + "실행 계층 전달은 하지 않으며(전부 받는다고 봄) 실행 권한을 잡지 않고 워크로드·배치 이력·전달·실행 이력·"
+                    + "default 정책 어느 행도 쓰지 않습니다. status·message 는 전부 받았을 때 실행이 남길 값과 같고, "
+                    + "targetCount 는 실행 1회 상한을 적용한 뒤 값입니다(미리보기와 다름). 대상이 0건이면 노드를 모으지 않습니다. "
+                    + "사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 200 이며 호출 시점 값입니다. "
+                    + "스케줄이 없거나 지정한 정책이 지워졌으면 404 입니다. 메트릭을 한 번 수집하므로 버튼 단위로 호출하십시오.")
+    @PostMapping("/{id}/dry-run")
+    public ApiResponse<ScheduleDryRunResponse> dryRun(@PathVariable Long id) {
+        return ApiResponse.ok(executionService.dryRun(id));
+    }
 
     @Operation(summary = "즉시 실행",
             description = "선택한 스케줄을 지금 한 번 실행하고 완료된 실행 이력을 돌려줍니다(동기). "

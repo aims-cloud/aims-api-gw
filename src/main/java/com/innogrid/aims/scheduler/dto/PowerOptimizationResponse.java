@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 클러스터 전력 최적화 진단.
  *
@@ -51,6 +53,7 @@ public record PowerOptimizationResponse(
      * @param remainingWatts      예산 − <b>실효</b> 합. 예산이 없으면 null. 음수면 이미 넘긴 것이다
      * @param overBudget          실효 합이 예산을 넘었는지. 예산이 없으면 false
      */
+    @Schema(name = "PowerOptimizationMdc")
     public record Mdc(
             String mdcId,
             int nodeCount,
@@ -75,6 +78,7 @@ public record PowerOptimizationResponse(
      *                             클러스터가 실제로는 더 크다는 뜻이다
      * @param excluded             뺀 노드와 사유
      */
+    @Schema(name = "PowerOptimizationCluster")
     public record Cluster(
             int totalNodes,
             int activeNodes,
@@ -98,6 +102,7 @@ public record PowerOptimizationResponse(
      * @param severity             {@code HIGH} · {@code MEDIUM} · {@code LOW}
      * @param estimatedSavingWatts 이 항목을 해소하면 아낄 수 있는 전력. 해당 없으면 null
      */
+    @Schema(name = "PowerOptimizationFinding")
     public record Finding(
             String type,
             String severity,
@@ -114,6 +119,7 @@ public record PowerOptimizationResponse(
      *
      * @param savingPercent 절감 가능 비율(%). 총 전력이 0 이면 null
      */
+    @Schema(name = "PowerOptimizationSummary")
     public record Summary(
             int findingCount,
             double estimatedSavingWatts,

@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.config;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -319,13 +321,19 @@ public class SchedulerProperties {
     /** 온도 모델 설정. */
     public static class Thermal {
 
+        private static final Logger log = LoggerFactory.getLogger(SchedulerProperties.class);
+
         /**
          * 정책에 경고 온도가 지정되지 않았을 때 사용할 기본 경고 온도(℃).
          * 경고 구간에서는 배치를 막지 않고 점수만 낮춘다.
          */
         private double defaultWarningCelsius = 65.0;
 
-        /** 열관성 계수. ΔT = k × (요구 CPU / 전체 CPU) × 현재 온도 */
+        /**
+         * 열관성 계수. ΔT = k × (요구 CPU / 전체 CPU) × 현재 온도. 음수는 배치할수록 식는 예측이 되어 온도 게이트를
+         * 느슨하게 하므로 setter 가 0 으로 잘라 쓴다 — 바인딩은 setter 를 지나므로 설정값도 같은 규칙을 받는다.
+         * NaN·양의 무한대는 다루지 않는다(음의 무한대는 음수라 0 으로 잘린다 · 설정 검증 일반 과제).
+         */
         private double inertiaK = 0.15;
 
         /** 임계 온도를 넘긴 노드를 배치 대상에서 제외하는 시간(분). */
@@ -334,7 +342,10 @@ public class SchedulerProperties {
         public double getDefaultWarningCelsius() { return defaultWarningCelsius; }
         public void setDefaultWarningCelsius(double v) { this.defaultWarningCelsius = v; }
         public double getInertiaK() { return inertiaK; }
-        public void setInertiaK(double v) { this.inertiaK = v; }
+        public void setInertiaK(double v) {
+            if (v < 0) log.warn("aims.scheduler.thermal.inertia-k={} 는 음수라 0 으로 적용합니다", v);
+            this.inertiaK = Math.max(0, v);
+        }
         public int getCooldownMinutes() { return cooldownMinutes; }
         public void setCooldownMinutes(int v) { this.cooldownMinutes = v; }
     }

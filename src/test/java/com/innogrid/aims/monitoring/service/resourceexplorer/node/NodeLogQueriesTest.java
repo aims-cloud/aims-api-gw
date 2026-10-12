@@ -7,6 +7,7 @@ import com.innogrid.aims.monitoring.LokiQueryClient;
 import com.innogrid.aims.monitoring.LokiQueryClient.Point;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.*;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
+import com.innogrid.aims.monitoring.service.resourceexplorer.vm.VmLogScope;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import static org.assertj.core.api.Assertions.*;
@@ -24,6 +25,18 @@ class NodeLogQueriesTest {
         assertThat(selector).contains("instance=\"10.0.0.1:9100\"", "mdc_id=\"mdc-1\"", "a\\\\.log", "b\\\\|c\\\\.log");
         assertThat(NodeLogQueries.selector(host, List.of("/var/a\".log"), null)).contains("filename=\"/var/a\\\".log\"");
         assertThat(NodeLogQueries.quote("x\"\\\n")).isEqualTo("\"x\\\"\\\\\\n\"");
+    }
+
+    @Test void vmScopeSelectsByTumblebugLabelsAndNeedsAllThree() {
+        VmLogScope vm = new VmLogScope("ns-1", "infra-1", "vm-1");
+        assertThat(NodeLogQueries.selector(vm, List.of("/var/log/nginx/access.log"), null))
+                .isEqualTo("{tb_ns=\"ns-1\", tb_infra=\"infra-1\", tb_node=\"vm-1\", filename=\"/var/log/nginx/access.log\"}");
+        assertThat(NodeLogQueries.configured(vm)).isTrue();
+        VmLogScope partial = new VmLogScope("ns-1", null, "vm-1");
+        assertThat(NodeLogQueries.configured(partial)).isFalse();
+        assertThat(queries.recent(partial, List.of("/a")).status(List.of("/a"))).isEqualTo(LogStatus.UNCONFIGURED);
+        assertThat(queries.recentFiles(partial, 86_400L)).isEmpty();
+        verifyNoInteractions(loki);
     }
 
     @Test void missingLogsAreNotMissingConfigurationAndFailuresAreUnknown() {
@@ -49,7 +62,23 @@ class NodeLogQueriesTest {
         Map<ServiceLogLevel, Long> counts = queries.levelCounts(host, List.of("/a"), NodeLogQueries.window(start, start.plusSeconds(60)));
         assertThat(counts).containsEntry(ServiceLogLevel.WARNING, 5L).containsEntry(ServiceLogLevel.UNKNOWN, 8L);
         assertThat(NodeLogQueries.selector(host, List.of("/a"), List.of(ServiceLogLevel.UNKNOWN)))
-                .contains("level!~\"(?i:info|warn|warning|error|debug)\"");
+                .endsWith("} | detected_level!~\"(?i:info|warn|warning|error|critical|fatal|debug)\"");
+        assertThat(NodeLogQueries.selector(host, List.of("/a"), List.of(ServiceLogLevel.ERROR, ServiceLogLevel.WARNING)))
+                .endsWith("} | detected_level=~\"(?i:warn|warning|error|critical|fatal)\"")
+                .doesNotContain("level=~\"(?i:warn|warning|error|critical|fatal)\"}");
+        assertThat(NodeLogQueries.selector(host, List.of("/a"), null)).endsWith("}");
+    }
+
+    @Test void detectedLevelFillsInWhenPipelineLevelIsMissing() {
+        when(loki.instant(anyString(), any())).thenReturn(List.of(
+                new Point(Map.of("detected_level", "error"), start, 4),                       // 동적 수집: level 없음
+                new Point(Map.of("level", "WARN", "detected_level", "warn"), start, 2),       // 파이프라인 level 우선
+                new Point(Map.of("level", "", "detected_level", "critical"), start, 1),       // 빈 level 은 없는 것
+                new Point(Map.of("detected_level", "unknown"), start, 3)));
+        Map<ServiceLogLevel, Long> counts = queries.levelCounts(host, List.of("/a"), NodeLogQueries.window(start, start.plusSeconds(60)));
+        assertThat(counts).containsEntry(ServiceLogLevel.ERROR, 5L).containsEntry(ServiceLogLevel.WARNING, 2L)
+                .containsEntry(ServiceLogLevel.UNKNOWN, 3L);
+        verify(loki).instant(contains("sum by (level, detected_level)"), any());
     }
 
     @Test void trendUsesBucketWindowAndPartialTailAndZeroFills() {
@@ -71,12 +100,13 @@ class NodeLogQueriesTest {
         when(loki.instant(anyString(), any())).thenReturn(List.of(new Point(Map.of(), end, 100)));
         when(loki.logs(anyString(), any(), any(), anyInt())).thenReturn(List.of(
                 new LokiQueryClient.LogLine(Map.of("filename", "/a"), start.plusSeconds(1), "old"),
-                new LokiQueryClient.LogLine(Map.of("filename", "/a", "level", "warn"), start.plusSeconds(59), "new")));
+                new LokiQueryClient.LogLine(Map.of("filename", "/a", "detected_level", "warn"), start.plusSeconds(59), "new")));
         ServiceLogListResponse result = queries.search(host, List.of("/a"), List.of(ServiceLogLevel.WARNING), "\"oops", NodeLogQueries.window(start, end), 1);
         assertThat(result.totalCount()).isEqualTo(100);
         assertThat(result.entries()).hasSize(1);
         assertThat(result.entries().get(0).message()).isEqualTo("new");
-        verify(loki).logs(contains("|= \"\\\"oops\""), eq(start.plusNanos(1)), eq(end.plusNanos(1)), eq(1));
+        assertThat(result.entries().get(0).level()).isEqualTo(ServiceLogLevel.WARNING);      // detected_level 로 채움
+        verify(loki).logs(contains("} | detected_level=~\"(?i:warn|warning)\" |= \"\\\"oops\""), eq(start.plusNanos(1)), eq(end.plusNanos(1)), eq(1));
     }
 
     @Test void thirtyDayBoundaryMatchesLokiLimit() {

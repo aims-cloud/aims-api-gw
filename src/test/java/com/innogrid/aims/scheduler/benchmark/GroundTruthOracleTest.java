@@ -58,6 +58,18 @@ class GroundTruthOracleTest {
                 "코어 수가 한 종류면 이 시험이 식의 코어 의존을 보지 못한다");
     }
 
+    @DisplayName("음수·NaN 열관성 계수로는 열 상승 표를 만들 수 없다")
+    @Test
+    void a_negative_or_nan_inertia_fails_loudly() {
+        for (double k : new double[] {-0.15, Double.NaN}) {
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> oracle.thermalRiseScaleCheck(k), "k=" + k);
+            assertTrue(e.getMessage().contains("0 이상"), e.getMessage());
+        }
+        for (ThermalRiseScale r : oracle.thermalRiseScaleCheck(0)) {
+            assertEquals(0.0, r.engineRisePerCoreC(), 0.0, r.nodeId());
+        }
+    }
+
     /**
      * 엔진 상승 식은 온도 눈금의 <b>원점</b>에 의존한다 — 물리적으로 같은 상태를 ℃ 와 K 로 넣으면 다른 상승이 나온다.
      * 이것이 이 표가 정당하게 주장할 수 있는 유일한 문장이고, 생성식과 무관하게 엔진 식만으로 성립한다.

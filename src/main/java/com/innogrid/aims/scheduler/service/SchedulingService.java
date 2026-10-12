@@ -3,7 +3,6 @@ package com.innogrid.aims.scheduler.service;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -16,8 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.EngineResponse;
+import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -25,6 +27,7 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
@@ -110,12 +113,12 @@ public class SchedulingService {
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
 
-        PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
+        PlacementContext context = createContext(resolvePolicy(workload.resolveResourceType()));
         if (context.isEmpty()) {
-            return SchedulingResult.failure(noActiveNodesReason(context));
+            return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
 
-        SchedulingResult result = placementService.place(workload, context, engineId);
+        SchedulingResult result = placementService.place(workload, context, engineId).withPolicyName(policyNameOf(context));
         return dispatch(workload, result, null);
     }
 
@@ -222,16 +225,10 @@ public class SchedulingService {
      * 임계 온도를 넘겨 냉각 대기 중인 노드 목록.
      * 온도 제어(연구계획 B3)가 실제로 배치를 막고 있는지 밖에서 확인할 수단이다.
      */
-    public List<Map<String, Object>> getCoolingDownNodes() {
+    public List<ThermalCooldownResponse> getCoolingDownNodes() {
         return getNodeResources().stream()
                 .filter(n -> constraintEvaluator.isCoolingDown(n.getNodeId()))
-                .map(n -> Map.<String, Object>of(
-                        "mdcId", n.getMdcId(),
-                        "nodeId", n.getNodeId(),
-                        "temperatureCelsius", n.getTemperatureCelsius(),
-                        "thermalState", String.valueOf(n.getThermalState()),
-                        "remainingCooldownMinutes",
-                        constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
+                .map(n -> ThermalCooldownResponse.of(n, constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
                 .toList();
     }
 
@@ -245,27 +242,58 @@ public class SchedulingService {
         Workload workload = workloadRepository.findById(workloadId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
                         "워크로드를 찾을 수 없습니다: " + workloadId));
+        requireKnownEngine(engineId);
+        // 저장된 워크로드의 모의 배치는 단건 배치와 같은 정책 경로 — default 가 없으면 만들어 저장한다
+        return evaluate(workload, engineId, resolvePolicy(workload.resolveResourceType()));
+    }
 
+    /**
+     * 저장하지 않은 워크로드 폼의 모의 배치. 초안은 id 가 없고 어떤 행도 쓰지 않는다 — 정책이 하나도 없어도
+     * {@code default} 를 저장하지 않는다(실행 미리보기와 같은 규칙). 종류를 비우면 VM 으로 읽는다.
+     */
+    public SchedulingResult dryRun(Workload draft, String engineId) {
+        requireKnownEngine(engineId);
+        return evaluate(draft, engineId, choosePolicy(draft.resolveResourceType()).policy());
+    }
+
+    private void requireKnownEngine(String engineId) {
         if (engineId != null && !engineRegistry.contains(engineId)) {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
+    }
 
-        PlacementContext context = createContext(resolvePolicy(workload.getResourceType()));
+    /** 제약 평가만 수행한다 — 정책은 호출자가 고른다(저장 여부가 거기서 갈린다). 워크로드 상태와 이력은 건드리지 않는다. */
+    private SchedulingResult evaluate(Workload workload, String engineId, SchedulingPolicy policy) {
+        PlacementContext context = createContext(policy);
         if (context.isEmpty()) {
-            return SchedulingResult.failure(noActiveNodesReason(context));
+            return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
-        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context);
+        return evaluateIn(workload, engineId, context);
+    }
+
+    /**
+     * 주어진 컨텍스트 위에서 한 건을 저장 없이 평가한다 — 예약은 잡지 않는다(호출자가 성공 건을 {@link PlacementContext#reserve}
+     * 로 누적한다). 스케줄 모의 실행이 대상 여러 건을 한 컨텍스트에 차례로 놓아 볼 때 쓴다. 엔진 id 는 실행과 같이
+     * 등록되지 않은 값이면 기본 엔진으로 대체된다(400 이 아니다).
+     */
+    public SchedulingResult evaluateIn(Workload workload, String engineId, PlacementContext context) {
+        SchedulingResult result = engineRegistry.resolve(engineId).schedule(workload, context).withPolicyName(policyNameOf(context));
         // 모의 배치(dryRun)도 알린다 — 운영자가 실제 배치 전에 확인하는 경로다
         ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, properties.getDiskMountPoint());
         return result;
     }
 
+    /** 응답에 실을 적용 정책 이름 — 컨텍스트에 정책이 없으면 null. */
+    private static String policyNameOf(PlacementContext context) {
+        return context.policy() == null ? null : context.policy().getName();
+    }
+
     /**
      * 사용 가능한 스케줄링 엔진 목록.
      */
-    public List<Map<String, String>> getAvailableEngines() {
-        return engineRegistry.describe();
+    public List<EngineResponse> getAvailableEngines() {
+        return engineRegistry.describe().stream().map(EngineResponse::of).toList();
     }
 
     /** 활성 정책이 하나도 없을 때 쓰는 기본 정책의 이름. */
@@ -284,24 +312,43 @@ public class SchedulingService {
      * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 단계 13 점검). 없을 때만 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
+        return resolvePolicyChoice(resourceType).policy();
+    }
+
+    /**
+     * {@link #resolvePolicy(Workload.ResourceType)} 와 같은 선택에 <b>출처</b>를 붙인 것. ④ 단계에서 {@code default} 행이
+     * 없으면 여기서 만들어 저장한다(실행·배치 경로 — 이력이 정책 이름을 가리켜야 한다).
+     */
+    public PolicyChoice resolvePolicyChoice(Workload.ResourceType resourceType) {
+        PolicyChoice choice = choosePolicy(resourceType);
+        if (choice.persisted()) return choice;
+        return new PolicyChoice(policyRepository.save(choice.policy()), choice.source(), true);
+    }
+
+    /**
+     * 정책을 고르되 <b>아무것도 저장하지 않는다</b>. ④ 단계에서 {@code default} 행이 없으면 저장하지 않은 기본값 객체를
+     * {@code persisted = false} 로 돌려준다 — 미리보기처럼 읽기 요청이 행을 만들면 안 되는 호출자가 쓴다.
+     * 선택 규칙·WARN 은 {@link #resolvePolicy(Workload.ResourceType)} 와 같다.
+     */
+    public PolicyChoice choosePolicy(Workload.ResourceType resourceType) {
         if (resourceType != null) {
             Optional<SchedulingPolicy> byType =
                     pickOne(policyRepository.findByActiveTrueAndResourceTypeOrderByNameAsc(resourceType), resourceType.name())
                             .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
-            if (byType.isPresent()) return byType.get();
+            if (byType.isPresent()) return new PolicyChoice(byType.get(), PolicyChoice.Source.RESOURCE_TYPE, true);
         }
         // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
         // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
         Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
                 .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
-        if (common.isPresent()) return common.get();
+        if (common.isPresent()) return new PolicyChoice(common.get(), PolicyChoice.Source.COMMON, true);
 
         Optional<SchedulingPolicy> existing = policyRepository.findByName(DEFAULT_POLICY_NAME);
         if (existing.isPresent()) {
             log.warn("활성 배치 정책이 없어 비활성 상태의 '{}' 정책 값으로 배치합니다 (저장·상태 변경 없음)", DEFAULT_POLICY_NAME);
-            return existing.get();
+            return new PolicyChoice(existing.get(), PolicyChoice.Source.DEFAULT, true);
         }
-        return policyRepository.save(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"));
+        return new PolicyChoice(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"), PolicyChoice.Source.DEFAULT, false);
     }
 
     /** 활성 정책 목록에서 하나를 결정적으로 고른다(이름순 첫 번째). 둘 이상이면 WARN. */
@@ -386,6 +433,35 @@ public class SchedulingService {
         }
         return workloadRepository.save(workload);
     }
+
+    /**
+     * 배치 예약을 취소한다 — SCHEDULED 워크로드를 대기로 되돌리고 배정을 풀며, 현재 결정의 전달 기록을 마감한다.
+     *
+     * <p>상태 변경 API 의 SCHEDULED→FAILED→PENDING 조합과 다른 점: 배정 컬럼이 남지 않고, 재시도 회계를 지우지 않으며,
+     * 중간 FAILED 가 드러나지 않고, 전달 기록이 ACCEPTED 로 방치되지 않는다. 배치 이력은 연구 근거라 건드리지 않는다.
+     * 노드 예약은 워크로드 행에서 매번 다시 계산하므로 PENDING 이 되면 다음 컨텍스트부터 저절로 빠진다.</p>
+     *
+     * @return 취소 뒤 워크로드 · 풀린 배정 · 마감된(또는 없는) 전달 기록
+     */
+    @Transactional
+    public Release release(Long workloadId) {
+        Workload workload = workloadRepository.findById(workloadId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "워크로드를 찾을 수 없습니다: " + workloadId));
+        if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) {
+            throw new BusinessException(HttpStatus.CONFLICT, workload.getStatus() == Workload.WorkloadStatus.RUNNING
+                    ? "실행 중인 워크로드는 예약을 취소할 수 없습니다 — 실행 계층 결과로 끝내십시오"
+                    : String.format("취소할 예약이 없습니다 — 워크로드가 %s 상태입니다(SCHEDULED 만 가능)", workload.getStatus()));
+        }
+        String mdcId = workload.getAssignedMdcId();
+        String nodeId = workload.getAssignedNodeId();
+        PlacementDispatch dispatch = dispatchService == null ? null : dispatchService.cancelCurrent(workload);
+        workload.release("예약 취소 — 이전 배정 " + mdcId + "/" + nodeId);
+        return new Release(workloadRepository.save(workload), mdcId, nodeId, dispatch);
+    }
+
+    /** 예약 취소의 결과 묶음. */
+    public record Release(Workload workload, String releasedMdcId, String releasedNodeId, PlacementDispatch dispatch) {}
 
     /**
      * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.

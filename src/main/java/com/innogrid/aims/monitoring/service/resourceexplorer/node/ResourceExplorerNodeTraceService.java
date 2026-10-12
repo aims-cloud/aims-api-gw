@@ -16,9 +16,13 @@ import com.innogrid.aims.common.exception.BusinessException;
 
 /**
  * 자원 탐색기 노드 로그/트레이스 탭 — 서비스 트레이스 조회 서비스.
- * 트레이스 저장소(Tempo/Jaeger 등)와 계측 방식은 미확정 — 확정 후 연동 구현한다.
+ * 2026-09-30 범위 제외: 트레이스는 협약 계획서·요구사항 정의서·API 명세서·갭 분석 어디에도 없는 화면(피그마) 유래 기능이라
+ * 이번 연차 범위에서 뺐다. 접근 검증 후 501 을 유지하고, 재개 시 Confluence 설계 문서 §9(Beyla eBPF → Tempo)를 기준으로 구현한다.
  * 수집 서비스 관리·로그는 ResourceExplorerNodeLogService 가 담당한다.
+ *
+ * @deprecated 범위 제외(2026-09-30). 경로·DTO 계약은 프론트 호환을 위해 유지한다.
  */
+@Deprecated
 @Service
 public class ResourceExplorerNodeTraceService {
     private final ResourceExplorerNodeLogService services;
@@ -78,6 +82,6 @@ public class ResourceExplorerNodeTraceService {
         services.requireAccessibleService(nodeId, serviceId);
         return new BusinessException(
                 HttpStatus.NOT_IMPLEMENTED,
-                "트레이스 저장소·계측 방식 확정 전 — 자원 탐색기 트레이스 패널 매핑 구현 전입니다.");
+                "트레이스 기능은 이번 연차 범위에서 제외되었습니다(2026-09-30). 계획서·요구사항에 없는 기능으로 501 을 유지합니다.");
     }
 }

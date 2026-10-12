@@ -3,6 +3,8 @@ package com.innogrid.aims.scheduler.dto;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 노드 하나의 전력 효율 추세.
  *
@@ -37,6 +39,7 @@ public record PowerEfficiencyTrendResponse(
      * <p>전력과 CPU 는 서로 다른 시계열이라 한쪽만 값이 있는 지점이 생길 수 있다.
      * 그때 {@code peiRaw} 는 계산하지 않고 {@code null} 로 둔다.</p>
      */
+    @Schema(name = "PowerEfficiencyTrendPoint")
     public record Point(
             OffsetDateTime at,
             Double powerWatts,

@@ -138,6 +138,31 @@ class ThermalModelTest {
         assertEquals(62.25, model.effectiveTemperature(node), 1e-9);
     }
 
+    @DisplayName("음수 열관성 계수는 배치 후 예상 온도를 낮추지 않는다")
+    @Test
+    void negative_inertia_does_not_cool_on_placement() {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getThermal().setInertiaK(-0.15);
+        ThermalModel guarded = new ThermalModel(props);
+
+        // 가드가 없으면 k=-0.15, 8코어 중 4코어 → 60 x (1 - 0.075) = 55.5 로 배치할수록 식는다
+        assertEquals(60.0, guarded.predictedTemperature(node(60), 4), 1e-9);
+    }
+
+    @DisplayName("음수 열관성 계수는 예약 노드의 실효 온도를 낮추지 않는다")
+    @Test
+    void negative_inertia_does_not_cool_reserved_node() {
+        SchedulerProperties props = new SchedulerProperties();
+        props.getThermal().setInertiaK(-0.15);
+        ThermalModel guarded = new ThermalModel(props);
+        NodeResource node = node(60);
+
+        node.reserve(2, 0, 0);
+
+        // 가드가 없으면 예약 비율 0.25 → 60 x (1 - 0.0375) = 57.75
+        assertEquals(60.0, guarded.effectiveTemperature(node), 1e-9);
+    }
+
     @DisplayName("온도를 수집하지 못한 노드는 예약이 있어도 0을 유지한다")
     @Test
     void unmeasured_temp_stays_0() {

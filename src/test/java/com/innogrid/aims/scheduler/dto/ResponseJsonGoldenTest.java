@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.dto;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -12,50 +14,68 @@ import org.springframework.boot.test.context.SpringBootTest;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.NodeResource;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 엔티티를 그대로 직렬화하는 응답 3종의 JSON 계약을 고정한다 — 응답 DTO 로 바꾸기 <b>전에</b> 못 박는 기준선.
+ * 워크로드·배치 이력·배치 정책 응답의 JSON 계약을 고정한다.
  *
- * <p>{@code /scheduler/workloads}·{@code /scheduler/history}·{@code /scheduler/policies} 는 JPA 엔티티를
- * DTO 없이 응답으로 내보낸다. 프런트가 이미 쓰고 있을 수 있으므로 DTO 를 도입해도 <b>키 집합과 값이
+ * <p>{@code /scheduler/workloads}·{@code /scheduler/history}·{@code /scheduler/policies} 는 예전에 JPA 엔티티를
+ * 그대로 응답으로 내보냈고, 지금은 응답 DTO 가 같은 키와 값을 낸다. 프런트가 이미 쓰고 있으므로 <b>키 집합과 값이
  * 바이트 단위로 같아야</b> 한다. 이 테스트가 그 "같아야 할 것"의 원본이다.</p>
  *
  * <p>스프링이 구성한 Jackson 3({@code tools.jackson}) 매퍼를 주입받아 쓴다. HTTP 응답을 만드는 것이
- * 그 매퍼이며, {@code com.fasterxml} 쪽은 별개 인스턴스라 계약과 무관하다. 노드 응답(27필드)은
+ * 그 매퍼이며, {@code com.fasterxml} 쪽은 별개 인스턴스라 계약과 무관하다. 노드 응답(27필드)의 키 집합은
  * {@code NodeResourceSerializationTest} 가 같은 방식으로 고정하고 있다.</p>
+ *
+ * <p>키 <b>순서</b>는 {@code *_ORDER} 가 응답 DTO 의 선언 순서로 고정한다. 키 집합 상수 {@code *_FIELDS} 는 그 순서 목록에서
+ * 만들어 출처를 하나로 둔다. 응답은 record DTO 를 선언 순서로 직렬화하므로, 매퍼로 직렬화한 순서가 곧 HTTP 응답의 순서다.</p>
  */
 @SpringBootTest
 public class ResponseJsonGoldenTest {
 
-    /** 워크로드 응답 필드 23개. */
-    public static final Set<String> WORKLOAD_FIELDS = new TreeSet<>(Set.of(
+    /** 워크로드 응답 키 23개 — {@code WorkloadResponse} 선언 순서. */
+    public static final List<String> WORKLOAD_ORDER = List.of(
             "id", "name", "description",
             "requiredCpu", "requiredMemoryMb", "requiredGpu", "requiredDiskGb",
             "resourceType", "dataMdcId", "preferredMdcId",
             "maxPowerBudgetWatts", "maxTemperatureCelsius", "requiredBandwidthMbps", "priority",
             "assignedMdcId", "assignedNodeId", "status",
             "schedulingScore", "schedulingReason", "retryCount", "lastFailedAt",
-            "createdAt", "scheduledAt"));
+            "createdAt", "scheduledAt");
 
-    /** 배치 이력 응답 필드 23개. */
-    public static final Set<String> HISTORY_FIELDS = new TreeSet<>(Set.of(
+    /** 배치 이력 응답 키 23개 — {@code SchedulingHistoryResponse} 선언 순서. */
+    public static final List<String> HISTORY_ORDER = List.of(
             "id", "workloadId", "workloadName", "selectedMdcId", "selectedNodeId",
             "finalScore", "cpuScore", "memoryScore", "powerScore", "temperatureScore", "networkScore",
             "nodeCpuUsage", "nodeMemoryUsage", "nodePowerWatts", "nodeTemperature",
             "candidateCount", "reason", "engineName", "policyName",
-            "scheduleRunId", "success", "createdAt", "exclusionCodes"));
+            "scheduleRunId", "success", "createdAt", "exclusionCodes");
 
-    /** 배치 정책 응답 필드 20개. */
-    public static final Set<String> POLICY_FIELDS = new TreeSet<>(Set.of(
+    /** 배치 정책 응답 키 20개 — {@code SchedulingPolicyResponse} 선언 순서. */
+    public static final List<String> POLICY_ORDER = List.of(
             "id", "name", "description", "resourceType", "defaultEngine", "warningTemperatureCelsius",
             "cpuWeight", "memoryWeight", "powerWeight", "temperatureWeight", "networkWeight",
             "maxCpuUsagePercent", "maxMemoryUsagePercent", "maxTemperatureCelsius", "maxPowerUsagePercent",
-            "powerAwareEnabled", "temperatureAwareEnabled", "affinityEnabled", "active", "createdAt"));
+            "powerAwareEnabled", "temperatureAwareEnabled", "affinityEnabled", "active", "createdAt");
+
+    /** 노드 응답 키 27개 — {@code NodeResponse} 선언 순서(가용량 넷은 끝). */
+    public static final List<String> NODE_ORDER = List.of(
+            "mdcId", "nodeId", "totalCpu", "totalMemoryMb", "totalGpu", "diskCapacityGb",
+            "cpuUsagePercent", "memoryUsagePercent", "diskUsagePercent", "powerWatts", "powerCapacityWatts", "temperatureCelsius",
+            "networkRxBps", "networkTxBps", "gpuUsagePercent", "gpuTemperatureCelsius", "gpuPowerWatts",
+            "reservedCpu", "reservedMemoryMb", "reservedGpu", "reservedDiskGb", "thermalState", "powerSource",
+            "availableCpu", "availableMemoryMb", "availableGpu", "availableDiskGb");
+
+    /** 키 집합 — 순서 목록에서 만든다(중복이 있으면 크기가 달라 순서 시험에서 잡힌다). */
+    public static final Set<String> WORKLOAD_FIELDS = new TreeSet<>(WORKLOAD_ORDER);
+    public static final Set<String> HISTORY_FIELDS = new TreeSet<>(HISTORY_ORDER);
+    public static final Set<String> POLICY_FIELDS = new TreeSet<>(POLICY_ORDER);
 
     @Autowired
     ObjectMapper objectMapper;
@@ -144,9 +164,46 @@ public class ResponseJsonGoldenTest {
         assertNull(json.get("warningTemperatureCelsius"));
     }
 
+    @DisplayName("워크로드 응답 DTO 는 키를 선언 순서로 낸다")
+    @Test
+    void workload_response_keeps_declared_order() {
+        assertEquals(WORKLOAD_ORDER.size(), WORKLOAD_FIELDS.size(), "순서 목록에 중복 키 없음");
+        assertEquals(WORKLOAD_ORDER, names(WorkloadResponse.from(Samples.workload())));
+    }
+
+    @DisplayName("배치 이력 응답 DTO 는 키를 선언 순서로 낸다")
+    @Test
+    void history_response_keeps_declared_order() {
+        assertEquals(HISTORY_ORDER.size(), HISTORY_FIELDS.size());
+        assertEquals(HISTORY_ORDER, names(SchedulingHistoryResponse.from(Samples.history())));
+    }
+
+    @DisplayName("배치 정책 응답 DTO 는 키를 선언 순서로 낸다")
+    @Test
+    void policy_response_keeps_declared_order() {
+        assertEquals(POLICY_ORDER.size(), POLICY_FIELDS.size());
+        assertEquals(POLICY_ORDER, names(SchedulingPolicyResponse.from(Samples.policy())));
+    }
+
+    @DisplayName("노드 응답 DTO 는 키를 선언 순서로 낸다")
+    @Test
+    void node_response_keeps_declared_order() {
+        assertEquals(27, new TreeSet<>(NODE_ORDER).size());
+        NodeResource node = new NodeResource("mdc-01", "node-1:9100", 8, 65_536, 1, 10, 20, 5, 250, 500, 45, 1_000, 500);
+        assertEquals(NODE_ORDER, names(NodeResponse.from(node.withDiskCapacityGb(500))));
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(Object value) {
         return objectMapper.convertValue(value, Map.class);
+    }
+
+    /** 매퍼로 직렬화해 다시 읽은 키 목록 — 순서를 보존한다. */
+    private List<String> names(Object dto) {
+        JsonNode node = objectMapper.readTree(objectMapper.writeValueAsString(dto));
+        List<String> keys = new ArrayList<>();
+        node.propertyNames().forEach(keys::add);
+        return keys;
     }
 
     /** 세 엔티티의 대표 표본. DTO 동치 테스트도 같은 표본을 쓴다. */

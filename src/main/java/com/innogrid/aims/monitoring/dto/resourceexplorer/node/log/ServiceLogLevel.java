@@ -9,7 +9,7 @@ public enum ServiceLogLevel {
         return switch (value.toUpperCase(java.util.Locale.ROOT)) {
             case "INFO" -> INFO;
             case "WARN", "WARNING" -> WARNING;
-            case "ERROR" -> ERROR;
+            case "ERROR", "CRITICAL", "FATAL" -> ERROR;
             case "DEBUG" -> DEBUG;
             default -> UNKNOWN;
         };

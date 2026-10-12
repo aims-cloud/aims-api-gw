@@ -2,13 +2,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.1 |
+| 문서 버전 | v0.2 |
 | 작성일 | 2026-09-07 |
 | 작성자 | 양성훈 |
 | 상태 | 검증 완료 (테스트베드 1대) |
 
 | 버전 | 일자 | 변경 내용 |
 |------|------|-----------|
+| v0.2 | 2026-10-06 | §3.4 백엔드 설치 API(node_exporter + Alloy, VM 한 대 `?nodeId=`) 추가, §7 2단계 Node 단위 호출 확정 |
 | v0.1 | 2026-09-07 | Tumblebug 로 만든 OpenStack VM 1대에 node_exporter 를 설치하고 tb_* 라벨로 Thanos 까지 연결한 실측 절차 정리 |
 
 ---
@@ -106,6 +107,22 @@ openstack security group rule create --proto tcp --dst-port 9100 --remote-ip <pr
 Prometheus 서버의 실제 출발 IP 는 `ip route get <VM IP>` 의 `src` 값이다.
 
 ---
+
+### 3.4 백엔드 설치 API 로 설치 (2026-10-06, 로그 수집기 포함)
+
+§3.1 을 손으로 부르는 대신 백엔드가 같은 원격 명령 API 를 **VM 한 대에만**(`POST /ns/{ns}/cmd/infra/{infra}?nodeId={node}`) 보낸다.
+node_exporter(§3.1 과 같은 옵션) 와 로그 수집기 Grafana Alloy(systemd `aims-alloy`)를 함께 설치하며, 계약과 동작은 docs/11 §5.5.
+
+```bash
+curl -s -X POST -H "Authorization: Bearer <토큰>"   "http://localhost:8080/api/v1/monitoring/resource-explorer/vm/services/agent/install?nsId=openstack&infraId=openstack-infra-01&vmId=openstack-nodegroup-01-1"
+# 진행·결과
+curl -s -H "Authorization: Bearer <토큰>"   "http://localhost:8080/api/v1/monitoring/resource-explorer/vm/services/agent/install?nsId=openstack&infraId=openstack-infra-01&vmId=openstack-nodegroup-01-1"
+```
+
+- 백엔드 설정 `AIMS_AGENT_VM_LOKI_PUSH_URL`, `AIMS_AGENT_VM_TARGETS_URL` 은 VM 에서 보이는 주소여야 한다(비면 503).
+- §3.2 전제(Tumblebug 이 기록한 publicIP 로 SSH)는 그대로다. 실패하면 응답의 `installStep=SEND_COMMAND`, `installError` 에 Tumblebug 오류가 남는다.
+- 실측(2026-10-06, 위 VM): 약 1분 뒤 INSTALLED. 기설치 node_exporter 1.9.1 은 내려받지 않고 유닛만 다시 썼고 9100 수집은 이어졌다(docs/11 §8.3).
+- 스크랩 타겟 등록(§4)은 이 API 가 하지 않는다.
 
 ## 4. Prometheus 스크랩 타겟 등록 (라벨 부착)
 
@@ -226,7 +243,7 @@ VM 배포(Infra 생성) 기능은 아래를 **배포 후처리**로 수행해야
 | 단계 | 입력 | 호출 | 성공 판정 |
 |------|------|------|-----------|
 | 1. VM 준비 확인 | nsId, infraId | `GET /ns/{ns}/infra/{infra}?option=status` — Node `status == Running`, `publicIP` 존재 | 모든 Node Running |
-| 2. exporter 설치 | nsId, infraId | `POST /ns/{ns}/cmd/infra/{infra}` §3.1 명령 (Node 단위는 `.../infra/{infra}/node/{node}` 계열 확인) | `error == ""` 이고 마지막 명령 출력 > 0 |
+| 2. exporter 설치 | nsId, infraId, nodeId | 백엔드 설치 API(§3.4) — 내부적으로 `POST /ns/{ns}/cmd/infra/{infra}?nodeId={node}` | 설치 상태 INSTALLED |
 | 3. 스크랩 타겟 등록 | Node 별 `publicIP`(또는 내부망이면 `privateIP`), nsId, infraId, nodeId | Prometheus 에 타겟 추가 + 라벨 `tb_ns/tb_infra/tb_node` | `/api/v1/targets` 에서 `up` |
 | 4. Thanos 확인 | nsId, infraId, nodeId | `up{tb_ns=...,tb_infra=...,tb_node=...} == 1` | 값 1 |
 | 5. 백엔드 캐시 | — | 필요 시 `MonitoringCapabilityResolver.evict()`, `TumblebugTreeBuilder.evict()` 호출로 즉시 반영 | 트리 `monitoringStatus: COLLECTING` |

@@ -6,14 +6,20 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.ScheduleDryRunResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
@@ -21,6 +27,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
@@ -50,7 +57,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *
  * <p>트랜잭션을 이 클래스에 걸지 않는다. 노드 수집이 외부 메트릭 저장소를 호출해 오래
  * 걸리기 때문이다. DB 쓰기는 리포지토리와 {@link PlacementService} 의 짧은 트랜잭션에
- * 맡긴다.</p>
+ * 맡긴다. 예외는 노드를 모으지 않는 {@link #preview} 하나로, 쓰기를 막는 목적의 읽기 전용 트랜잭션을 건다.</p>
  */
 @Service
 public class ScheduleExecutionService {
@@ -145,8 +152,8 @@ public class ScheduleExecutionService {
 
         ScheduleRun run = null;
         try {
-            SchedulingPolicy policy = resolvePolicy(schedule);
-            String engineId = resolveEngine(schedule, policy);
+            SchedulingPolicy policy = policyChoiceFor(schedule, true).policy();
+            String engineId = engineChoiceFor(schedule, policy).engine();
             List<Workload> targets = findTargets(schedule);
             boolean truncated = targets.size() > properties.getMaxWorkloadsPerRun();
             if (truncated) {
@@ -186,8 +193,13 @@ public class ScheduleExecutionService {
             String firstFailure = null;
             try {
                 for (Workload workload : targets) {
-                    SchedulingResult result = schedulingService.dispatch(workload,
-                            placementService.place(workload, context, engineId, run.getId()), run.getId());
+                    SchedulingResult placed = placementService.place(workload, context, engineId, run.getId());
+                    SchedulingResult result = schedulingService.dispatch(workload, placed, run.getId());
+                    if (placed.success() && !result.success()) {
+                        // 실행 계층이 받지 않은 배치 — DB 쪽은 디스패치가 이미 FAILED 로 돌렸지만, 이 실행의 컨텍스트에
+                        // 잡힌 예약은 여기서 되돌려야 같은 실행의 다음 워크로드와 실행 후 스냅샷이 없는 예약을 보지 않는다.
+                        context.unreserve(placed.selectedNodeId(), workload);
+                    }
                     attempted++;
                     if (result.success()) {
                         success++;
@@ -209,13 +221,8 @@ public class ScheduleExecutionService {
             run.recordCounts(targets.size(), success, failed, truncated);
             recordSnapshotAfter(run, context);
 
-            if (success == 0) {
-                return finishRun(schedule, run, ScheduleRun.RunStatus.FAILED, startedAt,
-                        String.format("대상 %d건 전부 배치 실패 — %s", targets.size(), firstFailure));
-            }
-            String message = String.format("대상 %d건 / 성공 %d건 / 실패 %d건%s",
-                    targets.size(), success, failed, truncated ? " (상한 초과분은 다음 실행으로)" : "");
-            return finishRun(schedule, run, ScheduleRun.RunStatus.COMPLETED, startedAt, message);
+            return finishRun(schedule, run, success == 0 ? ScheduleRun.RunStatus.FAILED : ScheduleRun.RunStatus.COMPLETED,
+                    startedAt, resultMessage(targets.size(), success, truncated, firstFailure));
 
         } catch (BusinessException e) {
             failQuietly(schedule, run, startedAt, e.getMessage());
@@ -232,6 +239,125 @@ public class ScheduleExecutionService {
             failQuietly(schedule, run, startedAt, "실행 중단: " + e);
             throw e;
         }
+    }
+
+    /** 배치 루프가 끝난 실행이 남기는 문구 — 모의 실행도 같은 함수를 써서 글자 단위로 같다. */
+    static String resultMessage(int targets, int success, boolean truncated, String firstFailure) {
+        if (success == 0) {
+            return String.format("대상 %d건 전부 배치 실패 — %s", targets, firstFailure);
+        }
+        return String.format("대상 %d건 / 성공 %d건 / 실패 %d건%s",
+                targets, success, targets - success, truncated ? " (상한 초과분은 다음 실행으로)" : "");
+    }
+
+    // ── 모의 실행 ───────────────────────────────────────────────
+
+    /**
+     * 스케줄을 지금 실행하면 어떻게 배치될지를 <b>저장 없이</b> 돌려준다.
+     *
+     * <p>실행과 같은 코드로 정책·엔진·대상·순서·상한·전력 상한을 해석하고, 컨텍스트 하나 위에 대상을 차례로 놓아 본다 —
+     * 성공한 건의 요구량을 예약으로 누적하므로 앞 건이 뒤 건에 보인다(실행의 {@code place} 가 하는 것과 같은 입력).
+     * 실행 권한을 잡지 않고(실행 중·사용 안 함 스케줄도 200), 실행 계층에 전달하지 않으며(전부 받는다고 본다), 워크로드·
+     * 배치 이력·전달·실행 이력·{@code default} 정책 어느 행도 쓰지 않는다. 트랜잭션은 두지 않는다 — 메트릭 수집이 길다.</p>
+     *
+     * <p>평가 중 예외가 난 건은 그 건만 실패(사유 = 예외 문구)로 두고 계속한다 — 모의는 결과를 보려는 호출이라
+     * 한 건 때문에 전체를 잃지 않는다.</p>
+     */
+    public ScheduleDryRunResponse dryRun(Long id) {
+        return dryRunOf(scheduleService.require(id));
+    }
+
+    /**
+     * 저장하지 않은 생성 폼으로 같은 모의 실행 — 저장 전 미리보기와 같은 검증을 거친 초안을 그대로 놓아 본다.
+     *
+     * <p>온도 상한 칸은 받지 않는다(400). 폼의 온도 상한은 범위 검사가 없어 평가 중 남는 노드 단위 냉각 대기 표시를
+     * 임의 값으로 걸 수 있기 때문이다 — 저장된 스케줄의 모의 실행으로 확인한다. 전력 상한은 폼 값을 그대로 적용한다.</p>
+     */
+    public ScheduleDryRunResponse dryRunDraft(ScheduleRequest request) {
+        Schedule draft = scheduleService.draft(request);
+        if (draft.getMaxTemperatureCelsius() != null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST,
+                    "저장 전 모의 실행은 온도 상한을 받지 않습니다 — 저장한 뒤 모의 실행으로 확인하십시오");
+        }
+        return dryRunOf(draft);
+    }
+
+    private ScheduleDryRunResponse dryRunOf(Schedule schedule) {
+        PolicyChoice policy = policyChoiceFor(schedule, false);
+        EngineChoice engine = engineChoiceFor(schedule, policy.policy());
+        Workload.ResourceType type = schedule.resolveResourceType();
+
+        List<Workload> targets = findTargets(schedule);
+        boolean truncated = targets.size() > properties.getMaxWorkloadsPerRun();
+        if (truncated) {
+            targets = targets.subList(0, properties.getMaxWorkloadsPerRun());
+        }
+        String knobs = clusterSnapshot.knobsDigest();
+
+        if (targets.isEmpty()) {
+            EmptyTargetOutcome outcome = emptyTargetOutcome(schedule);
+            return response(schedule, type, policy, engine, outcome.status(), outcome.message(), outcome.reason(),
+                    0, 0, false, emptySnapshot(ScheduleRun.SnapshotStatus.NO_TARGET, knobs), List.of());
+        }
+
+        PlacementContext context = schedulingService.createContext(policy.policy())
+                .withPowerBudget(schedule.getMaxPowerBudgetWatts());
+        if (context.isEmpty()) {
+            return response(schedule, type, policy, engine, ScheduleRun.RunStatus.FAILED,
+                    SchedulingService.noActiveNodesReason(context), null,
+                    targets.size(), 0, truncated, emptySnapshot(ScheduleRun.SnapshotStatus.NO_NODES, knobs), List.of());
+        }
+
+        RunClusterSnapshot.Fixed fixed = clusterSnapshot.fixedOf(context);
+        RunClusterSnapshot.Moving before = clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
+
+        List<ScheduleDryRunResponse.DryRunDecision> decisions = new ArrayList<>(targets.size());
+        int success = 0;
+        String firstFailure = null;
+        for (Workload workload : targets) {
+            SchedulingResult result;
+            try {
+                result = schedulingService.evaluateIn(workload, engine.engine(), context);
+            } catch (RuntimeException | LinkageError e) {
+                log.warn("모의 실행 평가 실패(계속한다): schedule={}, workload={}", schedule.getScheduleId(), workload.getId(), e);
+                result = SchedulingResult.failure("평가 중 오류: " + e.getMessage(), policy.policy().getName());
+            }
+            if (result.success()) {
+                context.reserve(result.selectedNodeId(), workload);
+                success++;
+            } else if (firstFailure == null) {
+                firstFailure = result.reason();
+            }
+            decisions.add(ScheduleDryRunResponse.DryRunDecision.of(workload, result, PlacementService.exclusionCodesOf(result)));
+        }
+
+        RunClusterSnapshot.Moving after = clusterSnapshot.movingOf(context, properties.getPower().getActiveCpuPercent());
+        ScheduleRunDetailResponse.ClusterSnapshot snapshot = new ScheduleRunDetailResponse.ClusterSnapshot(
+                ScheduleRun.SnapshotStatus.OK, knobs,
+                fixed.nodeCount(), fixed.excludedCount(), fixed.measuredNodes(), fixed.measuredPowerWatts(),
+                before.activeNodes(), after.activeNodes(),
+                before.reclaimableWatts(), after.reclaimableWatts(),
+                before.avgTemperatureCelsius(), after.avgTemperatureCelsius());
+        return response(schedule, type, policy, engine,
+                success == 0 ? ScheduleRun.RunStatus.FAILED : ScheduleRun.RunStatus.COMPLETED,
+                resultMessage(targets.size(), success, truncated, firstFailure), null,
+                targets.size(), success, truncated, snapshot, decisions);
+    }
+
+    private static ScheduleRunDetailResponse.ClusterSnapshot emptySnapshot(ScheduleRun.SnapshotStatus status, String knobs) {
+        return new ScheduleRunDetailResponse.ClusterSnapshot(status, knobs, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    private static ScheduleDryRunResponse response(Schedule schedule, Workload.ResourceType type, PolicyChoice policy,
+                                                   EngineChoice engine, ScheduleRun.RunStatus status, String message,
+                                                   ScheduleRunPreviewResponse.EmptyReason emptyReason, int targets, int success,
+                                                   boolean truncated, ScheduleRunDetailResponse.ClusterSnapshot snapshot,
+                                                   List<ScheduleDryRunResponse.DryRunDecision> decisions) {
+        return new ScheduleDryRunResponse(
+                schedule.getId(), schedule.getScheduleId(), schedule.isEnabled(), type,
+                policy.policy().getName(), policy.source(), engine.engine(), engine.source(),
+                status, ScheduleRun.trim(message), emptyReason,
+                targets, success, targets - success, truncated, snapshot, decisions);
     }
 
     /**
@@ -300,6 +426,53 @@ public class ScheduleExecutionService {
     }
 
     /**
+     * 스케줄을 <b>지금 실행하면</b> 무엇이 적용되고 몇 건을 다루게 되는지를 저장 없이 계산한다.
+     *
+     * <p>실행({@link #execute})과 같은 메서드로 정책·엔진을 해석하고 같은 질의로 대상·대기·소진을 세어 두 응답이
+     * 어긋나지 않는다. 다만 실행 권한({@code acquireForRun})을 잡지 않고, 노드를 모으지 않으며(외부 메트릭 호출 0),
+     * {@code default} 정책이 없어도 만들지 않는다. 사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 읽기라 200 이다.</p>
+     *
+     * <p>대상 건수는 실행이 <b>시도할</b> 건수다 — 실제로 배치될 건수는 노드 상태에 달려 있어 여기서는 알 수 없다.
+     * 대기·소진 건수는 재시도 간격 경계를 지나며 바뀌므로 호출 시각의 값이다.</p>
+     */
+    @Transactional(readOnly = true)
+    public ScheduleRunPreviewResponse preview(Long id) {
+        return previewOf(scheduleService.require(id));
+    }
+
+    /**
+     * 저장 전 폼 값으로 보는 미리보기 — 저장된 스케줄의 미리보기와 같은 해석·같은 질의이고, 스케줄을 만들지 않는다.
+     *
+     * <p>응답 값을 바꾸는 칸은 셋이다 — 리소스 종류·정책·엔진. 온도 상한·배치 순서는 실행과 같은 해석에 쓰이지만
+     * 응답에는 드러나지 않는다(정책 이름은 사본이어도 같고, 정렬은 건수를 바꾸지 않는다). 전력 상한은 노드를 모은 뒤
+     * 노드 단위로 거는 제약이라 건수에 닿지 않고(저장된 미리보기도 같다), 스케줄명·실행 주기·자동 실행은
+     * 실행 해석과 무관하다. {@code id} 는 없으니 {@code null} 이다.</p>
+     */
+    @Transactional(readOnly = true)
+    public ScheduleRunPreviewResponse previewDraft(ScheduleRequest request) {
+        return previewOf(scheduleService.draft(request));
+    }
+
+    private ScheduleRunPreviewResponse previewOf(Schedule schedule) {
+        PolicyChoice policy = policyChoiceFor(schedule, false);
+        EngineChoice engine = engineChoiceFor(schedule, policy.policy());
+
+        Workload.ResourceType type = schedule.resolveResourceType();
+        long targets = findTargets(schedule).size();
+        long exhausted = countExhausted(type);
+        long waiting = countWaiting(type);
+        EmptyTargetOutcome empty = targets == 0 ? outcomeOf(exhausted, () -> waiting) : null;
+
+        return new ScheduleRunPreviewResponse(
+                schedule.getId(), schedule.getScheduleId(), schedule.isEnabled(), type,
+                policy.policy().getName(), policy.source(),
+                engine.engine(), engine.source(),
+                targets, properties.getMaxWorkloadsPerRun(), waiting, exhausted,
+                empty == null ? null : empty.reason(),
+                empty == null ? null : empty.message());
+    }
+
+    /**
      * 배치할 워크로드를 고른다.
      *
      * <p>정렬을 SQL 에 맡기지 않는다. 우선순위가 문자열로 저장돼 있어 {@code order by} 로는
@@ -335,21 +508,41 @@ public class ScheduleExecutionService {
      */
     private EmptyTargetOutcome emptyTargetOutcome(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
-        boolean matchNullType = type == Workload.ResourceType.VM;
-        long exhausted = workloadRepository.countRetryExhausted(
-                Workload.WorkloadStatus.FAILED, type, matchNullType, properties.getMaxRetryCount());
+        // 소진이 0 일 때만 대기를 센다 — 실행 경로의 조회 횟수를 예전과 같게 둔다.
+        return outcomeOf(countExhausted(type), () -> countWaiting(type));
+    }
+
+    /** 재시도 상한에 걸린 워크로드 수. 대상 선정({@link #findTargets})과 같은 종류 규칙(VM 은 종류 빈 행 포함). */
+    private long countExhausted(Workload.ResourceType type) {
+        return workloadRepository.countRetryExhausted(
+                Workload.WorkloadStatus.FAILED, type, type == Workload.ResourceType.VM, properties.getMaxRetryCount());
+    }
+
+    /** 재시도 간격이 아직 지나지 않은 워크로드 수. 대상 선정과 같은 종류·상태·간격 규칙. */
+    private long countWaiting(Workload.ResourceType type) {
+        return workloadRepository.countRetryWaiting(
+                TARGET_STATUSES, type, type == Workload.ResourceType.VM, properties.getMaxRetryCount(), retryableBefore());
+    }
+
+    /**
+     * 대상 0건의 사유와 문구를 건수만으로 정한다. 실행과 미리보기가 <b>이 한 곳</b>에서 문구를 얻으므로 미리보기가
+     * 보여 준 문장과 실행이 남기는 {@code lastRunMessage} 가 글자 단위로 같다.
+     */
+    EmptyTargetOutcome outcomeOf(long exhausted, LongSupplier waitingSupplier) {
         if (exhausted > 0) {
             return new EmptyTargetOutcome(ScheduleRun.RunStatus.FAILED, String.format(
-                    "대상 없음 (재시도 소진 %d건 — 일괄 재개가 필요합니다)", exhausted));
+                    "대상 없음 (재시도 소진 %d건 — 일괄 재개가 필요합니다)", exhausted),
+                    ScheduleRunPreviewResponse.EmptyReason.EXHAUSTED);
         }
-        long waiting = workloadRepository.countRetryWaiting(
-                TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount(), retryableBefore());
+        long waiting = waitingSupplier.getAsLong();
         if (waiting > 0) {
             return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, String.format(
                     "대상 없음 (재시도 대기 %d건 — %d분 뒤 다시 시도합니다)",
-                    waiting, properties.getRetryBackoffMinutes()));
+                    waiting, properties.getRetryBackoffMinutes()),
+                    ScheduleRunPreviewResponse.EmptyReason.WAITING);
         }
-        return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, "대상 없음");
+        return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, "대상 없음",
+                ScheduleRunPreviewResponse.EmptyReason.NONE);
     }
 
     /**
@@ -360,17 +553,26 @@ public class ScheduleExecutionService {
      * <b>재시도 대기</b>는 시간이 지나면 저절로 풀리므로 정상이고, 얼마 뒤에 다시 시도하는지 적는다.
      * <b>할 일 없음</b>은 그냥 정상이다. 실행 상태 값 집합은 늘리지 않는다(FAILED·COMPLETED 그대로).</p>
      */
-    private record EmptyTargetOutcome(ScheduleRun.RunStatus status, String message) {}
+    record EmptyTargetOutcome(ScheduleRun.RunStatus status, String message,
+                              ScheduleRunPreviewResponse.EmptyReason reason) {}
 
-    /** 스케줄이 지정한 정책, 없으면 리소스 종류별 활성 정책. */
-    private SchedulingPolicy resolvePolicy(Schedule schedule) {
+    /**
+     * 스케줄이 지정한 정책, 없으면 리소스 종류별 활성 정책 — 출처와 함께.
+     *
+     * @param persistDefault ④ 단계에서 {@code default} 행이 없을 때 만들어 저장할지. 실행은 true(이력이 정책 이름을
+     *                       가리켜야 한다), 미리보기는 false(읽기 요청이 행을 만들면 안 된다)
+     */
+    private PolicyChoice policyChoiceFor(Schedule schedule, boolean persistDefault) {
         if (schedule.getPolicyId() != null) {
             SchedulingPolicy policy = policyRepository.findById(schedule.getPolicyId())
                     .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
                             "스케줄에 지정된 배치 정책을 찾을 수 없습니다: " + schedule.getPolicyId()));
-            return applyOverrides(policy, schedule);
+            return new PolicyChoice(applyOverrides(policy, schedule), PolicyChoice.Source.SCHEDULE, true);
         }
-        return applyOverrides(schedulingService.resolvePolicy(schedule.resolveResourceType()), schedule);
+        Workload.ResourceType type = schedule.resolveResourceType();
+        PolicyChoice choice = persistDefault
+                ? schedulingService.resolvePolicyChoice(type) : schedulingService.choosePolicy(type);
+        return choice.withPolicy(applyOverrides(choice.policy(), schedule));
     }
 
     /**
@@ -406,15 +608,18 @@ public class ScheduleExecutionService {
         return copy;
     }
 
-    /** 스케줄이 지정한 엔진, 없으면 정책 기본 엔진, 그것도 없으면 기본값. */
-    private String resolveEngine(Schedule schedule, SchedulingPolicy policy) {
+    /** 엔진 선택의 결과 — 엔진 ID 와 고른 단계. */
+    record EngineChoice(String engine, ScheduleRunPreviewResponse.EngineSource source) {}
+
+    /** 스케줄이 지정한 엔진, 없으면 정책 기본 엔진(등록된 것일 때만), 그것도 없으면 서버 기본값. */
+    private EngineChoice engineChoiceFor(Schedule schedule, SchedulingPolicy policy) {
         if (schedule.getEngine() != null && !schedule.getEngine().isBlank()) {
-            return schedule.getEngine();
+            return new EngineChoice(schedule.getEngine(), ScheduleRunPreviewResponse.EngineSource.SCHEDULE);
         }
         if (policy.getDefaultEngine() != null && engineRegistry.contains(policy.getDefaultEngine())) {
-            return policy.getDefaultEngine();
+            return new EngineChoice(policy.getDefaultEngine(), ScheduleRunPreviewResponse.EngineSource.POLICY);
         }
-        return EngineRegistry.DEFAULT_ENGINE_ID;
+        return new EngineChoice(EngineRegistry.DEFAULT_ENGINE_ID, ScheduleRunPreviewResponse.EngineSource.DEFAULT);
     }
 
     private ScheduleRun startRun(Schedule schedule, ScheduleRun.TriggerType triggerType,

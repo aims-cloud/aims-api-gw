@@ -2,6 +2,8 @@ package com.innogrid.aims.scheduler.entity;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import com.innogrid.aims.scheduler.entity.Workload.ResourceType;
 import com.innogrid.aims.scheduler.entity.Workload.WorkloadStatus;
@@ -172,5 +174,72 @@ class WorkloadStatusTransitionTest {
         Workload workload = new Workload("job", 1, 1024);
         workload.assignTo("mdc-01", "node-1", 0.9, "배치됨");
         return workload;
+    }
+
+    // ── 예약 취소(별도 진입점) ──────────────────────────────────
+
+    @DisplayName("배치된 워크로드의 예약을 취소하면 대기로 돌아가고 배정은 풀리지만 재시도 회계와 배정 시각은 그대로다")
+    @Test
+    void release_returns_to_pending_and_clears_assignment() {
+        Workload workload = new Workload("job", 1, 1024);
+        workload.markFailed("한 번 실패");
+        workload.assignTo("mdc-01", "node-1", 0.9, "배치됨");
+        var scheduledAt = workload.getScheduledAt();
+
+        assertTrue(workload.release("예약 취소 — 이전 배정 mdc-01/node-1"));
+
+        assertEquals(WorkloadStatus.PENDING, workload.getStatus());
+        assertNull(workload.getAssignedMdcId());
+        assertNull(workload.getAssignedNodeId());
+        assertNull(workload.getSchedulingScore());
+        assertEquals(1, workload.resolveRetryCount(), "실패가 아니라 재시도 횟수 불변");
+        assertNotNull(workload.getLastFailedAt(), "마지막 실패 시각 불변");
+        assertEquals(scheduledAt, workload.getScheduledAt(), "추적용 배정 시각은 남긴다");
+        assertTrue(workload.getSchedulingReason().startsWith("예약 취소"));
+    }
+
+    @DisplayName("배치되지 않은 상태에서는 예약 취소가 아무것도 바꾸지 않는다")
+    @ParameterizedTest
+    @EnumSource(value = WorkloadStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "SCHEDULED")
+    void release_only_from_scheduled(WorkloadStatus start) {
+        Workload workload = inState(start);
+        assertEquals(start, workload.getStatus());
+        String nodeBefore = workload.getAssignedNodeId();
+
+        assertFalse(workload.release("x"), start + " 에서는 false");
+        assertEquals(start, workload.getStatus());
+        assertEquals(nodeBefore, workload.getAssignedNodeId(), "배정도 그대로");
+    }
+
+    /** 각 상태에 놓인 워크로드 — PENDING 은 새 객체, 나머지는 배정 뒤 전이로 만든다. */
+    private Workload inState(WorkloadStatus target) {
+        if (target == WorkloadStatus.PENDING) return new Workload("job", 1, 1024);
+        Workload workload = scheduled();
+        switch (target) {
+            case FAILED -> workload.markFailed("x");
+            case RUNNING -> workload.transitionTo(WorkloadStatus.RUNNING);
+            case COMPLETED -> { workload.transitionTo(WorkloadStatus.RUNNING); workload.transitionTo(WorkloadStatus.COMPLETED); }
+            default -> { }
+        }
+        return workload;
+    }
+
+    @DisplayName("전이표에는 SCHEDULED→PENDING 이 여전히 없다 — 되돌리기는 별도 진입점만")
+    @Test
+    void transition_table_still_rejects_scheduled_to_pending() {
+        assertFalse(WorkloadStatus.SCHEDULED.canTransitionTo(WorkloadStatus.PENDING));
+        Workload workload = scheduled();
+        assertFalse(workload.transitionTo(WorkloadStatus.PENDING));
+        assertEquals(WorkloadStatus.SCHEDULED, workload.getStatus());
+    }
+
+    @DisplayName("편집할 수 있는 상태는 대기와 실패뿐이다")
+    @Test
+    void editable_only_in_pending_and_failed() {
+        assertTrue(WorkloadStatus.PENDING.isEditable());
+        assertTrue(WorkloadStatus.FAILED.isEditable());
+        assertFalse(WorkloadStatus.SCHEDULED.isEditable(), "예약 장부 행");
+        assertFalse(WorkloadStatus.RUNNING.isEditable(), "예약 장부 행");
+        assertFalse(WorkloadStatus.COMPLETED.isEditable(), "실행 기록");
     }
 }

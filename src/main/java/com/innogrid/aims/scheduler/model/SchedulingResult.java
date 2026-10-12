@@ -7,6 +7,11 @@ import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 
 /**
  * 스케줄링 엔진의 결정 결과.
+ *
+ * <p>{@code policyName} 은 이 결정에 적용된 배치 정책의 이름이다. 엔진은 정책을 모르고 결과를 만들므로 6인자 생성자로 만든 결과는
+ * {@code null} 이고, 단건 배치·모의 배치 응답에서는 {@code SchedulingService} 가 {@link #withPolicyName} 으로 채운다 — 성공·실패·
+ * 실행 계층 거부 결과 모두에 남아, 단건 배치의 실패처럼 이력이 없는 결정에서도 어느 정책으로 판정했는지 알 수 있다.
+ * 스케줄 실행 경로의 결과는 채우지 않으며(응답으로 나가지 않음) 적용 정책은 배치 이력의 {@code policyName} 으로 남는다.</p>
  */
 public record SchedulingResult(
         boolean success,
@@ -14,8 +19,20 @@ public record SchedulingResult(
         String selectedNodeId,
         double finalScore,
         String reason,
-        List<NodeScore> candidateScores
+        List<NodeScore> candidateScores,
+        String policyName
 ) {
+    /** 정책 이름 없는 기존 형태 — 엔진과 비교 판이 쓴다. 정책은 단건 배치·모의 배치에서 {@code SchedulingService} 가 뒤에 채운다. */
+    public SchedulingResult(boolean success, String selectedMdcId, String selectedNodeId, double finalScore,
+                            String reason, List<NodeScore> candidateScores) {
+        this(success, selectedMdcId, selectedNodeId, finalScore, reason, candidateScores, null);
+    }
+
+    /** 다른 값은 그대로 두고 적용 정책 이름만 채운 사본. */
+    public SchedulingResult withPolicyName(String policyName) {
+        return new SchedulingResult(success, selectedMdcId, selectedNodeId, finalScore, reason, candidateScores, policyName);
+    }
+
     /**
      * 각 후보 노드의 개별 점수.
      *
@@ -65,5 +82,10 @@ public record SchedulingResult(
 
     public static SchedulingResult failure(String reason) {
         return new SchedulingResult(false, null, null, 0, reason, List.of());
+    }
+
+    /** 정책이 정해진 뒤의 실패 — 후보가 없거나 실행 계층이 거부한 경우에도 적용 정책을 남긴다. */
+    public static SchedulingResult failure(String reason, String policyName) {
+        return new SchedulingResult(false, null, null, 0, reason, List.of(), policyName);
     }
 }

@@ -1,0 +1,249 @@
+{
+  "success" : true,
+  "selectedMdcId" : "gld-mdc-2",
+  "selectedNodeId" : "gld-partial:9100",
+  "finalScore" : 0.835,
+  "reason" : "최고 점수 0.8350 (CPU:0.90 MEM:0.80 PWR:1.00 TEMP:0.40 NET:1.00) — 12개 후보 중 선택",
+  "candidateScores" : [ {
+    "mdcId" : "gld-mdc-2",
+    "nodeId" : "gld-partial:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 1.0,
+    "temperatureScore" : 0.4,
+    "networkScore" : 1.0,
+    "totalScore" : 0.835,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 1.0,
+      "온도여유" : 0.4,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-budget:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.65,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.775,
+    "eligible" : false,
+    "exclusionReason" : "워크로드 전력 제약 초과 (350.0W > 300.0W)",
+    "exclusionCode" : "WORKLOAD_POWER_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.65,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-ok:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.765,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.6,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-disk:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.765,
+    "eligible" : false,
+    "exclusionReason" : "디스크 부족 (필요 50GB, 가용 40GB / 총량 40GB)",
+    "exclusionCode" : "INSUFFICIENT_DISK",
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.6,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 1.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-surge:9100",
+    "cpuScore" : 0.99,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.3333,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.7342,
+    "eligible" : false,
+    "exclusionReason" : "배치 후 예상 전력 366W > 용량 360W",
+    "exclusionCode" : "PREDICTED_POWER_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.99,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.3333,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-rise:9100",
+    "cpuScore" : 0.99,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.04,
+    "networkScore" : 1.0,
+    "totalScore" : 0.7235,
+    "eligible" : false,
+    "exclusionReason" : "배치 후 예상 온도 77.4°C > 임계치 75.0°C",
+    "exclusionCode" : "PREDICTED_TEMPERATURE_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.99,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.6,
+      "온도여유" : 0.04,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-bare:9100",
+    "cpuScore" : 0.875,
+    "memoryScore" : 0.7,
+    "powerScore" : 0.5,
+    "temperatureScore" : 0.5,
+    "networkScore" : 1.0,
+    "totalScore" : 0.7188,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "cpu여유" : 0.875,
+      "메모리여유" : 0.7,
+      "전력여유" : 0.5,
+      "온도여유" : 0.5,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-warm:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.0067,
+    "networkScore" : 1.0,
+    "totalScore" : 0.696,
+    "eligible" : false,
+    "exclusionReason" : "워크로드 온도 제약 초과 (74.5°C > 74.0°C)",
+    "exclusionCode" : "WORKLOAD_TEMPERATURE_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.6,
+      "온도여유" : 0.0067,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-hot:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.0,
+    "networkScore" : 1.0,
+    "totalScore" : 0.695,
+    "eligible" : false,
+    "exclusionReason" : "온도 초과 (80.0°C > 75.0°C)",
+    "exclusionCode" : "TEMPERATURE_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.6,
+      "온도여유" : 0.0,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-pwr:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.08,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.661,
+    "eligible" : false,
+    "exclusionReason" : "전력 여유 부족 (여유 8.0%)",
+    "exclusionCode" : "POWER_HEADROOM_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.08,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-mem:9100",
+    "cpuScore" : 0.9,
+    "memoryScore" : 0.1,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.59,
+    "eligible" : false,
+    "exclusionReason" : "메모리 사용률 초과 (90.0% > 85.0%)",
+    "exclusionCode" : "MEMORY_USAGE_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.9,
+      "메모리여유" : 0.1,
+      "전력여유" : 0.6,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-cpu:9100",
+    "cpuScore" : 0.15,
+    "memoryScore" : 0.8,
+    "powerScore" : 0.6,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 1.0,
+    "totalScore" : 0.5775,
+    "eligible" : false,
+    "exclusionReason" : "CPU 사용률 초과 (85.0% > 80.0%)",
+    "exclusionCode" : "CPU_USAGE_EXCEEDED",
+    "details" : {
+      "cpu여유" : 0.15,
+      "메모리여유" : 0.8,
+      "전력여유" : 0.6,
+      "온도여유" : 0.4667,
+      "네트워크한산도" : 1.0,
+      "디스크검사" : 0.0
+    }
+  } ],
+  "policyName" : "golden"
+}

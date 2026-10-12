@@ -12,7 +12,7 @@ public record AgentTargetsStatusResponse(
         TargetsStatus targetsStatus,
         OffsetDateTime appliedAt,        // 마지막 반영 시각. 없으면 null
         int targetCount,                 // 원장에서 계산한 동적 수집 파일 수(정적 4개 제외)
-        String message                   // FAILED 사유. 그 외 null
+        String message                   // FAILED 사유. PULL 노드의 Alloy 가 아직 한 번도 가져가지 않았을 때의 안내. 그 외 null
 ) {
     public enum TargetsStatus { NO_AGENT, APPLIED, PENDING, FAILED }
 }

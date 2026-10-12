@@ -249,4 +249,16 @@ public class PlacementContext {
                 workload.getRequiredGpu(),
                 workload.getRequiredDiskGb()));
     }
+
+    /**
+     * {@link #reserve(String, Workload)} 를 되돌린다 — 실행 계층이 받지 않은 배치의 예약을 같은 실행 안에서 푼다.
+     * 없는 노드는 무시한다.
+     */
+    public void unreserve(String nodeId, Workload workload) {
+        node(nodeId).ifPresent(n -> n.unreserve(
+                workload.getRequiredCpu(),
+                workload.getRequiredMemoryMb(),
+                workload.getRequiredGpu(),
+                workload.getRequiredDiskGb()));
+    }
 }

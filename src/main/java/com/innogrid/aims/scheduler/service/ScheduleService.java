@@ -18,11 +18,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import tools.jackson.databind.JsonNode;
+
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.util.SortSupport;
 import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
@@ -188,33 +191,103 @@ public class ScheduleService {
     }
 
     /**
-     * 편집. 스케줄 ID 는 업무 키라 바꿀 수 없다.
+     * 편집(부분 갱신). 보낸 키만 바꾸고 없는 키는 유지한다. 스케줄 ID 는 업무 키라 바꿀 수 없다.
      * cron 이나 사용 여부가 바뀌면 다음 실행 시각을 반드시 다시 계산한다 —
      * 그러지 않으면 예전 주기로 한 번 더 실행된다.
+     *
+     * <pre>
+     * 없음                       → 404
+     * 본문 없음 · 스케줄 ID 불일치 → 400
+     * 칸 검증 실패                → 400 (생성과 같은 규칙 · 비울 수 있는 다섯 칸은 JSON 타입도 검사)
+     * </pre>
+     *
+     * <p>지정 정책·엔진·전력 상한·온도 상한·설명은 명시적 null 로 비운다(정책·온도는 상속으로, 전력은 제약 없음으로 복귀).
+     * <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400 이면 엔티티는 전혀 바뀌지 않는다.
+     * 깨진 JSON 이나 리소스 종류·불리언 타입 오류처럼 본문을 읽지 못한 400 은 이 메서드에 오기 전에 프레임워크가 낸다.</p>
      */
     @Transactional
-    public ScheduleResponse update(Long id, ScheduleRequest request) {
+    public ScheduleResponse update(Long id, ScheduleUpdateRequest request) {
         Schedule schedule = require(id);
-
+        if (request == null) throw badRequest("요청 본문이 필요합니다");
         if (request.scheduleId() != null && !request.scheduleId().equals(schedule.getScheduleId())) {
             throw badRequest("스케줄 ID 는 변경할 수 없습니다");
         }
-        if (request.name() != null) {
-            schedule.setName(requireText(request.name(), "스케줄명", Schedule.NAME_MAX));
-        }
+
+        // 먼저 전부 검증해 지역 값에 담는다
+        String name = request.name() == null ? null : requireText(request.name(), "스케줄명", Schedule.NAME_MAX);
+        String cron = null;
         if (request.cronExpression() != null) {
-            String cron = requireText(request.cronExpression(), "실행 주기", Schedule.CRON_MAX);
+            cron = requireText(request.cronExpression(), "실행 주기", Schedule.CRON_MAX);
             cronSupport.validate(cron);
-            schedule.setCronExpression(cron);
         }
-        validateEngine(request.engine());
-        apply(schedule, request);
+        Schedule.PlacementOrder order = request.placementOrder() == null ? null : parsePlacementOrder(request.placementOrder());
+        Clearable<String> description = clearableText(request.description(), "설명", Schedule.DESCRIPTION_MAX);
+        Clearable<String> engine = clearableEngine(request.engine());
+        Clearable<Long> policyId = clearableLong(request.policyId(), "배치 정책 id");
+        Clearable<Double> power = clearableNumber(request.maxPowerBudgetWatts(), "노드 전력 상한(W)");
+        Clearable<Double> temperature = clearableNumber(request.maxTemperatureCelsius(), "온도 상한(℃)");
+
+        // 그다음 한꺼번에 반영한다
+        if (name != null) schedule.setName(name);
+        if (cron != null) schedule.setCronExpression(cron);
+        if (request.resourceType() != null) schedule.setResourceType(request.resourceType());
+        if (order != null) schedule.setPlacementOrder(order);
+        if (request.autoRun() != null) schedule.setAutoRun(request.autoRun());
+        if (request.enabled() != null) schedule.setEnabled(request.enabled());
+        if (description.sent()) schedule.setDescription(description.value());
+        if (engine.sent()) schedule.setEngine(engine.value());
+        if (policyId.sent()) schedule.setPolicyId(policyId.value());
+        if (power.sent()) schedule.setMaxPowerBudgetWatts(power.value());
+        if (temperature.sent()) schedule.setMaxTemperatureCelsius(temperature.value());
 
         ScheduleActorResolver.Actor actor = actorResolver.current();
         schedule.setUpdatedBy(actor.email(), actor.name());
 
         refreshNextRunAt(schedule);
         return ScheduleResponse.from(scheduleRepository.save(schedule));
+    }
+
+    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null 이면 {@code null}). */
+    private record Clearable<T>(boolean sent, T value) {
+        static <T> Clearable<T> keep() { return new Clearable<>(false, null); }
+        static <T> Clearable<T> set(T value) { return new Clearable<>(true, value); }
+    }
+
+    /** 키 없음 → 유지, 명시적 null → 비움, 문자열 → 생성과 같은 규칙(앞뒤 공백 제거 · 빈 값은 비움 · 길이), 그 외 → 400. */
+    private Clearable<String> clearableText(JsonNode node, String label, int max) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isString()) throw badRequest(label + "은(는) 문자열이어야 합니다");
+        return Clearable.set(optionalText(node.asString(), label, max));
+    }
+
+    /** 키 없음 → 유지, 명시적 null·공백 → 비움(정책 기본 엔진 → 서버 기본), 등록된 엔진 → 값, 그 외 → 400. */
+    private Clearable<String> clearableEngine(JsonNode node) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isString()) throw badRequest("엔진은(는) 문자열이어야 합니다");
+        validateEngine(node.asString());
+        return Clearable.set(optionalText(node.asString(), "엔진", Schedule.ENGINE_MAX));
+    }
+
+    /** 키 없음 → 유지, 명시적 null → 비움, long 범위 정수 → 값, 그 외(숫자 문자열 · 소수 · 범위 초과) → 400. */
+    private Clearable<Long> clearableLong(JsonNode node, String label) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isIntegralNumber() || !node.canConvertToLong()) throw badRequest(label + "은(는) 정수여야 합니다");
+        return Clearable.set(node.asLong());
+    }
+
+    /**
+     * 키 없음 → 유지, 명시적 null → 비움, JSON 숫자 → 값, 그 외(숫자 문자열 포함) → 400.
+     * 값은 {@code numberValue().doubleValue()} 로 꺼낸다 — {@code asDouble()} 은 double 범위를 넘는 큰 정수에서 예외를 던진다.
+     * 값의 범위는 생성과 같이 검사하지 않는다.
+     */
+    private Clearable<Double> clearableNumber(JsonNode node, String label) {
+        if (node == null) return Clearable.keep();
+        if (node.isNull()) return Clearable.set(null);
+        if (!node.isNumber()) throw badRequest(label + "은(는) 숫자여야 합니다");
+        return Clearable.set(node.numberValue().doubleValue());
     }
 
     /**
@@ -283,6 +356,26 @@ public class ScheduleService {
                     local.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.KOREAN)));
         }
         return new CronPreviewResponse(cronExpression.trim(), zone.getId(), runs);
+    }
+
+    /**
+     * 저장하지 않는 초안 — 폼 값을 실행이 보는 형태의 {@link Schedule} 로 바꾼다(저장 전 미리보기용).
+     *
+     * <p>스케줄명·실행 주기는 보지 않는다 — 폼을 채우는 중에도 부를 수 있어야 하고, 실행 주기는
+     * {@code /cron/validate} 가 따로 맡는다. 검증은 생성과 같은 규칙으로 엔진 등록 여부·배치 순서·설명 길이만 본다
+     * (설명은 결과에 쓰이지 않지만 길이 상한은 {@code apply} 가 생성과 같이 건다). 편집과 달리 "키 없음" 은 기존 값이
+     * 아니라 기본값(종류 VM · 사용 중 · 정책 상속)이다. 어떤 행도 쓰지 않는다.</p>
+     *
+     * <p>스케줄명·실행 주기가 비어 있어 저장하면 안 된다 — 같은 패키지의 미리보기만 쓰도록 접근을 좁힌다.</p>
+     */
+    Schedule draft(ScheduleRequest request) {
+        if (request == null) throw badRequest("요청 본문이 필요합니다");
+        validateEngine(request.engine());
+        String scheduleId = request.scheduleId() == null || request.scheduleId().isBlank()
+                ? null : request.scheduleId().trim();
+        Schedule schedule = new Schedule(scheduleId, null, null);
+        apply(schedule, request);
+        return schedule;
     }
 
     // ── 내부 ────────────────────────────────────────────────────

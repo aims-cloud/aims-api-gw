@@ -1,0 +1,37 @@
+{
+  "success" : true,
+  "selectedMdcId" : "gld-mdc-1",
+  "selectedNodeId" : "gld-bare:9100",
+  "finalScore" : 0.5288,
+  "reason" : "[전력최적화] 점수 0.5288 — 전력 메트릭이 없어 전력·열을 중립으로 두고 자원 여유로 선택 (1개 후보)",
+  "candidateScores" : [ {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-bare:9100",
+    "cpuScore" : 0.875,
+    "memoryScore" : 0.7,
+    "powerScore" : 0.5,
+    "temperatureScore" : 0.5,
+    "networkScore" : 1.0,
+    "totalScore" : 0.5288,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "전력계측" : 0.0,
+      "온도계측" : 0.0,
+      "PEI" : null,
+      "비낭비" : null,
+      "실질한계전력점수" : 0.5,
+      "전력점수" : 0.5,
+      "열점수" : 0.5,
+      "cpu여유" : 0.875,
+      "메모리여유" : 0.7,
+      "네트워크한산도" : 1.0,
+      "실질한계전력W" : 0.0,
+      "배치후예상전력W" : null,
+      "배치후예상온도C" : null,
+      "가동중" : 1.0
+    }
+  } ],
+  "policyName" : "golden"
+}

@@ -7,11 +7,14 @@ import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -41,8 +44,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.when;
@@ -54,6 +57,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 스케줄러 응답 타입 명시의 계약 — 레코드로 바꾼 네 응답의 키 순서, 작업 10개의 응답 스키마 참조와 새 이름,
  * 기존 Point·Candidate 스키마 본문 보존, 스케줄러 컨트롤러 응답 선언에 와일드카드·원시 타입이 없음.
  * 진단 응답 넷과 그 안에 실리는 레코드는 값이 비어도 선언한 키를 모두 순서대로 내야 한다 — 판단 근거가 없다는 사실도 정보다.
+ * 스케줄러 경로의 모든 작업은 성공 응답 data 로 이름 있는 스키마나 기본 타입을 돌려주고, 스케줄러 작업이 닿는 스키마 이름은
+ * 공용 래퍼 말고는 다른 작업이 닿는 이름과 겹치지 않아야 한다(겹치면 springdoc 이 한쪽 본문을 버린다).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -64,6 +69,9 @@ class SchedulerResponseTypeApiTest {
     private static final String PREFIX = "rst-";
     private static final String NODE = PREFIX + "node:9100";
     private static final String REF = "#/components/schemas/";
+    private static final Set<String> METHODS = Set.of("get", "post", "put", "patch", "delete");
+    /** 양쪽이 함께 써도 되는 라이브러리 스키마. 공용 타입을 일부러 함께 쓰게 되면 여기에 더한다. */
+    private static final Set<String> LIBRARY = Set.of("JsonNode");
 
     /** 작업 10개와 그 200 응답 스키마 이름. */
     private static final Map<String, String> OPERATIONS = Map.ofEntries(
@@ -174,12 +182,11 @@ class SchedulerResponseTypeApiTest {
         }
     }
 
-    @DisplayName("새 스키마 28개가 있고 Summary 는 없으며 기존 Point·Candidate 본문은 그대로다")
+    @DisplayName("새 스키마 28개가 있고 기존 Point·Candidate 본문은 그대로다")
     @Test
     void schema_names_keep_existing_bodies() throws Exception {
         JsonNode schemas = apiDocs().get("components").get("schemas");
         for (String name : NEW_SCHEMAS) assertNotNull(schemas.get(name), name);
-        assertNull(schemas.get("Summary"), "이름 없는 Summary 는 공개하지 않는다");
 
         assertTrue(has(schemas, "Point", "totalNodes") && !has(schemas, "Point", "peiRaw"), "기존 Point = 전력 최적화 추세 지점");
         assertTrue(has(schemas, "PowerEfficiencyTrendPoint", "peiRaw") && has(schemas, "PowerEfficiencyTrendPoint", "cpuUsagePercent"));
@@ -275,6 +282,129 @@ class SchedulerResponseTypeApiTest {
             args[i] = ZERO.get(params[i]);
         }
         return type.getDeclaredConstructor(params).newInstance(args);
+    }
+
+    @DisplayName("스케줄러 경로의 모든 작업은 성공 응답 data 로 이름 있는 스키마나 기본 타입을 돌려준다")
+    @Test
+    void scheduler_operations_return_typed_data() throws Exception {
+        JsonNode doc = apiDocs();
+        JsonNode schemas = doc.get("components").get("schemas");
+        int checked = 0;
+        List<String> loose = new ArrayList<>();
+        for (Entry<String, JsonNode> path : doc.get("paths").properties()) {
+            if (!scheduler(path.getKey())) continue;
+            for (Entry<String, JsonNode> op : path.getValue().properties()) {
+                if (!METHODS.contains(op.getKey())) continue;
+                checked++;
+                JsonNode content = op.getValue().path("responses").path("200").path("content");
+                JsonNode ref = content.size() > 0 ? content.properties().iterator().next().getValue().path("schema").get("$ref") : null;
+                String name = ref == null ? null : ref.asString().substring(REF.length());
+                if ("ApiResponseVoid".equals(name)) continue;   // 본문 없는 작업의 래퍼
+                JsonNode data = name == null ? null : schemas.path(name).path("properties").get("data");
+                if (data == null || !typed(data)) loose.add(op.getKey() + " " + path.getKey() + " → " + name);
+            }
+        }
+        assertTrue(checked >= 75, "스케줄러 작업을 모두 훑었다: " + checked + " — 작업을 일부러 줄였으면 하한을 고친다");
+        assertEquals(List.of(), loose, "data 가 정체 없는 object 다 — 반환형을 레코드·기본 타입으로 명시한다");
+    }
+
+    @DisplayName("스케줄러 작업과 다른 작업은 공용 래퍼 말고는 같은 스키마 이름에 닿지 않고 스케줄러는 이름 없는 Summary 를 쓰지 않는다")
+    @Test
+    void scheduler_schemas_stay_apart_from_other_operations() throws Exception {
+        JsonNode doc = apiDocs();
+        JsonNode schemas = doc.get("components").get("schemas");
+        Set<String> ours = new TreeSet<>();
+        Set<String> theirs = new TreeSet<>();
+        for (Entry<String, JsonNode> path : doc.get("paths").properties()) seeds(path.getValue(), scheduler(path.getKey()) ? ours : theirs);
+        reach(schemas, ours);
+        reach(schemas, theirs);
+        assertTrue(ours.size() >= 100 && theirs.size() >= 100, "양쪽 도달 집합이 비지 않았다: " + ours.size() + " / " + theirs.size());
+        assertFalse(ours.contains("Summary"), "스케줄러 작업이 이름 없는 Summary 에 닿는다 — 중첩 Summary 에 @Schema(name) 을 붙인다");
+
+        Set<String> shared = new TreeSet<>(ours);
+        shared.retainAll(theirs);
+        shared.removeIf(n -> LIBRARY.contains(n) || (n.startsWith("ApiResponse") && wrapsLibraryOrNothing(schemas.path(n))));
+        if (!shared.isEmpty()) {
+            StringBuilder why = new StringBuilder("스케줄러와 다른 API 가 같은 스키마 이름을 씁니다.");
+            for (String n : shared) {
+                why.append("\n- ").append(n).append(" ← 스케줄러 ").append(users(doc, schemas, n, true))
+                        .append(" / 다른 작업 ").append(users(doc, schemas, n, false));
+            }
+            why.append("\n해소: 이름이 우연히 같으면 새로 만든 쪽 레코드에 @Schema(name = \"<영역 접두사><이름>\") 을 붙입니다.")
+                    .append("\n같은 타입을 일부러 함께 쓰는 것이면(라이브러리·공용 타입) SchedulerResponseTypeApiTest.LIBRARY 에 이름을 더합니다.");
+            fail(why.toString());
+        }
+    }
+
+    /** data 가 없거나 이름 없는 object 이거나 라이브러리 스키마를 가리키는 래퍼 — 양쪽이 함께 써도 겹침이 아니다. */
+    private static boolean wrapsLibraryOrNothing(JsonNode wrapper) {
+        JsonNode ref = wrapper.path("properties").path("data").get("$ref");
+        return ref == null || LIBRARY.contains(ref.asString().substring(REF.length()));
+    }
+
+    private static boolean scheduler(String path) {
+        return path.startsWith(BASE + "/");
+    }
+
+    /** data 가 이름 있는 스키마·기본 타입·그 배열·값 타입이 정해진 맵이면 true. 정체 없는 object 는 false. */
+    private static boolean typed(JsonNode data) {
+        if (data.has("$ref")) return true;
+        String type = data.path("type").asString();
+        if (Set.of("string", "integer", "number", "boolean").contains(type)) return true;
+        if ("array".equals(type)) return typed(data.path("items"));
+        return "object".equals(type) && data.has("additionalProperties") && typed(data.get("additionalProperties"));
+    }
+
+    /** 경로 항목의 요청·매개변수·성공 응답이 가리키는 스키마. 오류 응답의 공용 본문은 겹침으로 세지 않는다. */
+    private static void seeds(JsonNode pathItem, Set<String> out) {
+        for (Entry<String, JsonNode> op : pathItem.properties()) {
+            if (METHODS.contains(op.getKey())) seedsOf(op.getValue(), out); else refs(op.getValue(), out);
+        }
+    }
+
+    /** 작업 하나의 요청·매개변수·2xx 응답이 가리키는 스키마. */
+    private static void seedsOf(JsonNode operation, Set<String> out) {
+        for (Entry<String, JsonNode> part : operation.properties()) {
+            if (!part.getKey().equals("responses")) { refs(part.getValue(), out); continue; }
+            for (Entry<String, JsonNode> r : part.getValue().properties()) if (r.getKey().startsWith("2")) refs(r.getValue(), out);
+        }
+    }
+
+    /** 노드 아래의 모든 $ref 스키마 이름. */
+    private static void refs(JsonNode node, Set<String> out) {
+        if (node.isObject()) {
+            JsonNode ref = node.get("$ref");
+            if (ref != null && ref.asString().startsWith(REF)) out.add(ref.asString().substring(REF.length()));
+            node.properties().forEach(e -> refs(e.getValue(), out));
+        } else if (node.isArray()) {
+            node.forEach(n -> refs(n, out));
+        }
+    }
+
+    /** 씨앗에서 스키마 참조를 따라 닿는 이름을 모두 더한다. */
+    private static void reach(JsonNode schemas, Set<String> set) {
+        Deque<String> todo = new ArrayDeque<>(set);
+        while (!todo.isEmpty()) {
+            Set<String> next = new TreeSet<>();
+            refs(schemas.path(todo.pop()), next);
+            for (String n : next) if (set.add(n)) todo.push(n);
+        }
+    }
+
+    /** 이름 n 에 닿는 작업(최대 3개) — 실패 메시지용. */
+    private static List<String> users(JsonNode doc, JsonNode schemas, String n, boolean ours) {
+        List<String> found = new ArrayList<>();
+        for (Entry<String, JsonNode> path : doc.get("paths").properties()) {
+            if (scheduler(path.getKey()) != ours) continue;
+            for (Entry<String, JsonNode> op : path.getValue().properties()) {
+                if (!METHODS.contains(op.getKey()) || found.size() >= 3) continue;
+                Set<String> set = new TreeSet<>();
+                seedsOf(op.getValue(), set);
+                reach(schemas, set);
+                if (set.contains(n)) found.add(op.getKey() + " " + path.getKey());
+            }
+        }
+        return found;
     }
 
     @DisplayName("스케줄러 컨트롤러의 응답 선언에 와일드카드·타입 변수·원시 제네릭이 없다")

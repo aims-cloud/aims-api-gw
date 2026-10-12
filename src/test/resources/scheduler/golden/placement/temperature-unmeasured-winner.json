@@ -1,0 +1,72 @@
+{
+  "success" : true,
+  "selectedMdcId" : "gld-mdc-1",
+  "selectedNodeId" : "gld-bare:9100",
+  "finalScore" : 0.5719,
+  "reason" : "[온도최적화] 점수 0.5719 — 선택 노드는 온도 미계측이라 열 점수를 중립으로 뒀다 (자원:0.79, 계측 2/3대, 계측 노드 평균온도:80.0°C)",
+  "candidateScores" : [ {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-bare:9100",
+    "cpuScore" : 0.7875,
+    "memoryScore" : 0.7875,
+    "powerScore" : 0.5,
+    "temperatureScore" : 0.5,
+    "networkScore" : 0.5,
+    "totalScore" : 0.5719,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "온도계측" : 0.0,
+      "열적여유" : 0.5,
+      "열적균형" : 0.5,
+      "냉각점수" : 0.5,
+      "자원여유" : 0.7875,
+      "배치후예상온도C" : null,
+      "클러스터평균온도C" : 80.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-hot:9100",
+    "cpuScore" : 0.85,
+    "memoryScore" : 0.85,
+    "powerScore" : -0.1378,
+    "temperatureScore" : 0.0,
+    "networkScore" : 0.5,
+    "totalScore" : 0.3099,
+    "eligible" : false,
+    "exclusionReason" : "온도 초과 (80.0°C > 75.0°C)",
+    "exclusionCode" : "TEMPERATURE_EXCEEDED",
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.0,
+      "열적균형" : 0.5,
+      "냉각점수" : -0.1378,
+      "자원여유" : 0.85,
+      "배치후예상온도C" : 83.0,
+      "클러스터평균온도C" : 80.0
+    }
+  }, {
+    "mdcId" : "gld-mdc-2",
+    "nodeId" : "gld-hot-partial:9100",
+    "cpuScore" : 0.85,
+    "memoryScore" : 0.85,
+    "powerScore" : -0.1378,
+    "temperatureScore" : 0.0,
+    "networkScore" : 0.5,
+    "totalScore" : 0.3099,
+    "eligible" : false,
+    "exclusionReason" : "온도 초과 (80.0°C > 75.0°C)",
+    "exclusionCode" : "TEMPERATURE_EXCEEDED",
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.0,
+      "열적균형" : 0.5,
+      "냉각점수" : -0.1378,
+      "자원여유" : 0.85,
+      "배치후예상온도C" : 83.0,
+      "클러스터평균온도C" : 80.0
+    }
+  } ],
+  "policyName" : "golden"
+}

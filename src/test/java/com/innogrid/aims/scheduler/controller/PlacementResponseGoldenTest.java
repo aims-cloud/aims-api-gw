@@ -5,12 +5,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
@@ -57,7 +60,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p><b>값 층</b> — 엔진 3종을 고정 입력(노드·워크로드·정책)으로 직접 불러 결정 결과 전체(키 순서·타입·값)를
  * {@code src/test/resources/scheduler/golden/placement/<시나리오>.json} 과 문자열로 비교한다. 같은 매퍼로 들여쓰기
- * 출력한 문자열을 비교하므로 키 순서가 바뀌면 실패한다(트리 비교는 순서를 보지 않아 쓰지 않는다).</p>
+ * 출력한 문자열을 비교하므로 키 순서가 바뀌면 실패한다(트리 비교는 순서를 보지 않아 쓰지 않는다). 엔진 채점 골격을
+ * 공통화할 때 바뀌기 쉬운 지점도 고정한다 — 가중치 엔진 전용 입력(우선순위 HIGH · 선호 MDC · 데이터 MDC)을 켠 경우, 정책의
+ * 전력·온도 반영을 끈 가중치 엔진, 제외 사유가 하나씩 다른 노드와 계측 방식이 다른 노드(전력은 있고 정격 0 · 미계측)를 섞은
+ * 혼합 노드(엔진마다), 계측 노드가 모두 제외돼 미계측 노드가 선택될 때의 선택 사유(전력·온도 엔진).</p>
  *
  * <p><b>HTTP 층</b> — 단건 배치·모의 배치·저장 전 모의 배치 응답의 키 순서(일곱 키 · 후보 열두 키 · 엔진별 상세 키)를
  * 고정한다. 공유 H2 상태(정책·예약)가 점수를 흔들 수 있어 점수 값은 보지 않는다. 실패·노드 없음 응답의 선택 칸 null · 제외 코드 ·
@@ -71,6 +77,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 한다. 값은 설정 기본값·정책 기본값·엔진 상수로 계산하므로 이 중 하나가 바뀌어 값이 움직이면 그 원인(설정 다이제스트 변화
  * 포함)을 함께 적는다. 동작이 바뀌지 않아야 하는 리팩터링은 기준 파일과 시나리오 입력·추가 확인을 그대로 둔 채 통과해야
  * 한다(엔진을 만드는 방식은 고쳐도 된다).</p>
+ *
+ * <p><b>현재 동작 기록</b> — 다음 값은 지금 출력을 그대로 기록한 것이고, 동작을 바꿀지는 따로 정한다. 동작을 바꾸는 변경은
+ * 별도 PR 로 하고 같은 커밋에서 해당 기준 파일을 갱신한다. 리팩터링에서 이 값이 바뀌면 리팩터링 쪽을 고친다: 가중치 엔진이
+ * 전력은 있고 정격이 0 인 노드에 주는 전력 여유 1.0(weighted-mixed-nodes) · 전력 엔진이 미계측 선택 노드의 사유에 적는
+ * 전력·열 중립값 숫자(power-unmeasured-winner) · 온도 엔진의 음수 냉각 점수(temperature-mixed-nodes ·
+ * temperature-unmeasured-winner). 또 weighted-mixed-nodes 의 미계측 노드 총점은 반올림 전 0.71875 라 0.7188 이지만 항을
+ * 더하는 순서만 바꿔도 0.7187 이 된다 — 리팩터링은 점수 합산식을 항 순서까지 그대로 옮긴다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -129,6 +142,54 @@ class PlacementResponseGoldenTest {
 
     private static SchedulingPolicy policy() { return new SchedulingPolicy("golden", "기준 파일 시험"); }
     private static SchedulingPolicy linkPolicy() { SchedulingPolicy p = policy(); p.setAffinityEnabled(true); return p; }
+
+    /** 가중치 엔진만 쓰는 입력(우선순위·선호 MDC·데이터 MDC)을 모두 켠 워크로드. */
+    private static Workload boosted() {
+        Workload w = small(); w.setPriority(Workload.WorkloadPriority.HIGH); w.setPreferredMdcId("gld-mdc-1"); w.setDataMdcId("gld-mdc-1"); return w;
+    }
+    /** {@link #boosted()} 의 대조군 — 데이터 MDC 만 둔다. */
+    private static Workload linked() { Workload w = small(); w.setDataMdcId("gld-mdc-1"); return w; }
+    /** 링크 정책에서 전력·온도 반영만 끈다. */
+    private static SchedulingPolicy flagsOff() { SchedulingPolicy p = linkPolicy(); p.setPowerAwareEnabled(false); p.setTemperatureAwareEnabled(false); return p; }
+
+    /** 혼합 노드용 워크로드 — 디스크 50GB · 워크로드 최고 온도 74°C · 워크로드 전력 예산 300W. */
+    private static Workload mix() {
+        Workload w = new Workload("gld-mix", 2, 1024); w.setRequiredDiskGb(50); w.setMaxTemperatureCelsius(74.0); w.setMaxPowerBudgetWatts(300.0); return w;
+    }
+    private static NodeResource mixNode(String mdc, String id, int cpu, double cpuPct, double memPct, double watts, double capWatts, double celsius) {
+        return new NodeResource(mdc, "gld-" + id + ":9100", cpu, 16_384, 0, cpuPct, memPct, 0, watts, capWatts, celsius, 0, 0);
+    }
+    /** 혼합 노드 12대 — 적격 셋(정상 · 전력은 있고 정격 0 · 미계측)과 제외 사유가 하나씩 다른 아홉. */
+    private static List<NodeResource> mixed() {
+        return List.of(
+                mixNode("gld-mdc-1", "ok", 8, 10, 20, 200, 500, 40),
+                mixNode("gld-mdc-1", "disk", 8, 10, 20, 200, 500, 40).withDiskCapacityGb(40),
+                mixNode("gld-mdc-1", "cpu", 16, 85, 20, 200, 500, 40),
+                mixNode("gld-mdc-1", "mem", 8, 10, 90, 200, 500, 40),
+                mixNode("gld-mdc-1", "hot", 8, 10, 20, 200, 500, 80),
+                mixNode("gld-mdc-1", "warm", 8, 10, 20, 200, 500, 74.5),
+                mixNode("gld-mdc-1", "rise", 4, 1, 20, 200, 500, 72),
+                mixNode("gld-mdc-1", "pwr", 8, 10, 20, 460, 500, 40),
+                mixNode("gld-mdc-1", "budget", 8, 10, 20, 350, 1_000, 40),
+                mixNode("gld-mdc-1", "surge", 4, 1, 20, 240, 360, 40),
+                mixNode("gld-mdc-2", "partial", 8, 10, 20, 200, 0, 45),
+                bare());
+    }
+    private static final Map<String, ExclusionReason> MIXED_EXCLUDED = Map.of(
+            "gld-disk:9100", ExclusionReason.INSUFFICIENT_DISK,
+            "gld-cpu:9100", ExclusionReason.CPU_USAGE_EXCEEDED,
+            "gld-mem:9100", ExclusionReason.MEMORY_USAGE_EXCEEDED,
+            "gld-hot:9100", ExclusionReason.TEMPERATURE_EXCEEDED,
+            "gld-warm:9100", ExclusionReason.WORKLOAD_TEMPERATURE_EXCEEDED,
+            "gld-rise:9100", ExclusionReason.PREDICTED_TEMPERATURE_EXCEEDED,
+            "gld-pwr:9100", ExclusionReason.POWER_HEADROOM_EXCEEDED,
+            "gld-budget:9100", ExclusionReason.WORKLOAD_POWER_EXCEEDED,
+            "gld-surge:9100", ExclusionReason.PREDICTED_POWER_EXCEEDED);
+
+    /** 계측 노드 둘(전력·온도 계측 · 전력은 있고 정격 0)이 모두 온도로 제외되고 미계측 노드만 남는 구성. */
+    private static List<NodeResource> hotAndBare() {
+        return List.of(mixNode("gld-mdc-1", "hot", 8, 10, 20, 200, 500, 80), mixNode("gld-mdc-2", "hot-partial", 8, 10, 20, 200, 0, 80), bare());
+    }
 
     private static SchedulingEngine engine(String id) {
         return switch (id) {
@@ -191,7 +252,54 @@ class PlacementResponseGoldenTest {
                 }),
                 new Scenario("temperature-insufficient", "temperature", PlacementResponseGoldenTest::three, PlacementResponseGoldenTest::big, PlacementResponseGoldenTest::policy, r -> {
                     assertFalse(r.success());
+                }),
+                new Scenario("weighted-priority-preferred", "weighted", PlacementResponseGoldenTest::three, PlacementResponseGoldenTest::boosted, PlacementResponseGoldenTest::linkPolicy, r -> {
+                    // 같은 노드를 데이터 MDC 만 둔 대조군으로 돌린 총점 대비 — 우선순위 ×1.1, 선호 MDC 노드는 다시 ×1.1
+                    Map<String, Double> base = totals(engine("weighted").schedule(linked(), three(), linkPolicy()));
+                    r.candidateScores().forEach(c -> {
+                        assertEquals("gld-mdc-1".equals(c.mdcId()) ? 1.21 : 1.10, c.totalScore() / base.get(c.nodeId()), 1e-3, c.nodeId());
+                        assertEquals(7, c.details().size(), c.nodeId());
+                    });
+                }),
+                new Scenario("weighted-mixed-nodes", "weighted", PlacementResponseGoldenTest::mixed, PlacementResponseGoldenTest::mix, PlacementResponseGoldenTest::policy, r -> assertMixed(r, 6)),
+                new Scenario("power-mixed-nodes", "power", PlacementResponseGoldenTest::mixed, PlacementResponseGoldenTest::mix, PlacementResponseGoldenTest::policy, r -> {
+                    assertMixed(r, 15);
+                    assertEquals(0.0, r.candidateScores().stream().filter(c -> c.nodeId().equals("gld-partial:9100")).findFirst().orElseThrow()
+                            .details().get("전력계측"), "정격 0 노드는 전력 엔진에서 계측으로 보지 않는다");
+                }),
+                new Scenario("temperature-mixed-nodes", "temperature", PlacementResponseGoldenTest::mixed, PlacementResponseGoldenTest::mix, PlacementResponseGoldenTest::policy, r -> assertMixed(r, 8)),
+                new Scenario("weighted-flags-off", "weighted", PlacementResponseGoldenTest::three, PlacementResponseGoldenTest::small, PlacementResponseGoldenTest::flagsOff, r -> {
+                    // 정책이 전력·온도 반영을 끄면 계측 노드도 중립 0.5 — 엔진끼리 계측 판정을 합칠 때 정책 조건이 빠지기 쉽다
+                    r.candidateScores().forEach(c -> {
+                        assertEquals(0.5, c.powerScore(), c.nodeId());
+                        assertEquals(0.5, c.temperatureScore(), c.nodeId());
+                    });
+                }),
+                new Scenario("power-unmeasured-winner", "power", PlacementResponseGoldenTest::hotAndBare, PlacementResponseGoldenTest::small, PlacementResponseGoldenTest::policy, r -> {
+                    // 선택 사유 문구는 바꿀지 따로 정할 현재 동작이라 기준 파일에만 기록한다(클래스 설명의 현재 동작 기록)
+                    assertEquals("gld-bare:9100", r.selectedNodeId());
+                }),
+                new Scenario("temperature-unmeasured-winner", "temperature", PlacementResponseGoldenTest::hotAndBare, PlacementResponseGoldenTest::small, PlacementResponseGoldenTest::policy, r -> {
+                    assertEquals("gld-bare:9100", r.selectedNodeId());
+                    assertTrue(r.reason().contains("계측 2/3대"), "선택 노드가 미계측이면 열 점수 대신 계측 대수를 적는다");
                 }));
+    }
+
+    /** 혼합 노드: 부적격 아홉의 제외 코드 · 적격 셋 · 엔진별 상세 키 수. */
+    private static void assertMixed(SchedulingResult r, int detailKeys) {
+        Map<String, ExclusionReason> codes = new TreeMap<>();
+        r.candidateScores().stream().filter(c -> !c.eligible()).forEach(c -> codes.put(c.nodeId(), c.exclusionCode()));
+        assertEquals(new TreeMap<>(MIXED_EXCLUDED), codes);
+        assertEquals(Set.of("gld-ok:9100", "gld-partial:9100", "gld-bare:9100"),
+                r.candidateScores().stream().filter(SchedulingResult.NodeScore::eligible).map(SchedulingResult.NodeScore::nodeId)
+                        .collect(Collectors.toSet()));
+        r.candidateScores().forEach(c -> assertEquals(detailKeys, c.details().size(), c.nodeId()));
+    }
+
+    private static Map<String, Double> totals(SchedulingResult r) {
+        Map<String, Double> m = new HashMap<>();
+        r.candidateScores().forEach(c -> m.put(c.nodeId(), c.totalScore()));
+        return m;
     }
 
     @DisplayName("엔진 결정 결과가 기준 파일과 키 순서·타입·값까지 같다")

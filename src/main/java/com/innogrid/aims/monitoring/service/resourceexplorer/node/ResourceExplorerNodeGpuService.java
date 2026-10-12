@@ -1,11 +1,21 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
 
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectState;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse.GpuCollectStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceCollectStatusResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceCollectStatusResponse.MetricCollectStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
@@ -13,8 +23,16 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuGroupSummar
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse.Series;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuXidErrorsResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget;
+import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSample;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,17 +40,50 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * 자원 탐색기 노드 GPU 카테고리 패널 조회 서비스.
  * 그룹(GPU 전체 집계)과 개별 GPU 의 개요(KPI·상태 요약·목록/정보)·모니터링 탭 데이터를 함께 제공한다.
+ *
+ * nodeId 는 assets.id 이며 역할 스코프 밖이면 404({@link NodeAccessService}).
+ * 지표는 노드에 등록된 dcgm_exporter 수집 대상(monitoring_target)의 {@code instance} 라벨로 좁혀 읽는다({@link HostGpuMetricsQueryService}).
+ * dcgm_exporter 가 등록되지 않은 노드는 Thanos 를 조회하지 않고 미수집(0·빈 목록·빈 시리즈)으로 내린다.
+ * 개별 GPU 는 gpuId(장치 UUID)로 식별하며, 최근 24시간 안에 수집된 적 없는 GPU 의 개요·정보·수집 상태는 404 다.
+ * 수집 상태는 기대 지표가 전부 수집되면 HEALTHY, 하나라도 빠지면(전부 끊긴 경우 포함) FAILED 다.
  * 노드 상세 패널은 ResourceExplorerNodeService 가 담당한다.
  */
 @Service
 public class ResourceExplorerNodeGpuService {
 
+    private static final double MB_PER_GB = 1024.0;
+
+    private final NodeAccessService nodeAccess;
+    private final MonitoringTargetRepository monitoringTargetRepository;
+    private final HostGpuMetricsQueryService metrics;
+
+    public ResourceExplorerNodeGpuService(NodeAccessService nodeAccess,
+                                          MonitoringTargetRepository monitoringTargetRepository,
+                                          HostGpuMetricsQueryService metrics) {
+        this.nodeAccess = nodeAccess;
+        this.monitoringTargetRepository = monitoringTargetRepository;
+        this.metrics = metrics;
+    }
+
     // ── 그룹 (트리에서 GPU 카테고리 선택) ───────────────────────
 
-    /** 그룹 개요 KPI 카드 4종 — 총 GPU 수 / VRAM Util(사용·전체) / Power(합산·Peak) / 최대 온도 */
+    /** 그룹 개요 KPI 카드 4종 — 총 GPU 수 / VRAM Util(사용·전체) / Power(합산·Peak) / 최대 온도. 수집 중인 GPU 가 없으면 값은 null */
     public GpuGroupSummaryResponse getGroupSummary(String nodeId) {
-        // TODO:: Thanos(dcgm_exporter DCGM_FI_DEV_*) GPU 전체 집계로 카드 구성
-        throw dataSourceNotImplemented();
+        List<GpuSample> gpus = devices(dcgmSelector(nodeId));
+        List<GpuSample> collecting = gpus.stream().filter(GpuSample::collecting).toList();
+        // VRAM 은 사용·여유가 둘 다 있는 GPU 만 — 한쪽만 있으면 사용률 분자·분모가 어긋난다
+        List<GpuSample> withVram = collecting.stream().filter(g -> g.fbTotalMb() != null).toList();
+        Double usedMb = sum(withVram, GpuSample::fbUsedMb);
+        Double totalMb = sum(withVram, GpuSample::fbTotalMb);
+        Double vramPercent = usedMb == null || totalMb == null || totalMb <= 0 ? null : usedMb / totalMb * 100;
+        return new GpuGroupSummaryResponse(
+                gpus.size(),
+                round1(vramPercent),
+                gb(usedMb),
+                gb(totalMb),
+                round1(sum(collecting, GpuSample::powerWatts)),
+                round1(max(collecting, GpuSample::powerWatts)),
+                round1(max(collecting, GpuSample::temperatureC)));
     }
 
     /** 그룹 상태 요약 — 이상 감지 배너 + 수집 상태/ECC DBE/PCIe Replay/Clocks Event 카드 */
@@ -42,26 +93,36 @@ public class ResourceExplorerNodeGpuService {
         throw dataSourceNotImplemented();
     }
 
-    /** 그룹 개요 GPU 목록 — 현재/평균 Util, VRAM, 온도, 전력, 최근 알람 수. 페이징(1부터)·컬럼 정렬 */
+    /** 그룹 개요 GPU 목록 — 현재/최근 1시간 평균 Util, VRAM, 온도, 전력. 페이징(1부터)·컬럼 정렬 */
     public PageResponse<GpuDeviceListItemResponse> getDevices(String nodeId,
                                                               int page, int size, String sort) {
-        // TODO:: DCGM 지표(현재값 + avg_over_time)와 AlarmHistory(최근 알람 수)를 병합해 목록 구성
-        throw dataSourceNotImplemented();
+        Comparator<GpuDeviceListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        List<GpuDeviceListItemResponse> rows = devices(dcgmSelector(nodeId)).stream()
+                .map(ResourceExplorerNodeGpuService::row)
+                .sorted(comparator)
+                .toList();
+        return PageResponse.of(rows, page, size);
     }
 
     /** 그룹 모니터링 차트 — GPU 별 분해 시계열 */
     public GpuMetricTrendResponse getGroupMetricTrend(String nodeId, GpuMetric metric,
                                                       Instant from, Instant to, String step) {
-        // TODO:: 모니터링 탭 화면 설계 확정 후 지표 세트 조정, Thanos range 쿼리 구현
-        throw dataSourceNotImplemented();
+        return trend(nodeId, null, metric, from, to, step);
     }
 
     // ── 개별 GPU (트리에서 GPU 장치 선택) ───────────────────────
 
-    /** 개별 GPU 개요 KPI 카드 6종 — Util / VRAM Util / VRAM 사용·전체 / Power / 온도 / Fan */
+    /** 개별 GPU 개요 KPI 카드 6종 — Util / VRAM Util / VRAM 사용·전체 / Power / 온도 / Fan. 지금 수집되지 않는 값은 null */
     public GpuDeviceSummaryResponse getDeviceSummary(String nodeId, String gpuId) {
-        // TODO:: DCGM 지표(UUID 필터)로 카드 구성
-        throw dataSourceNotImplemented();
+        GpuSample gpu = requireDevice(nodeId, gpuId);
+        return new GpuDeviceSummaryResponse(
+                round1(gpu.utilization()),
+                round1(gpu.vramPercent()),
+                gb(gpu.fbUsedMb()),
+                gb(gpu.fbTotalMb()),
+                round1(gpu.powerWatts()),
+                round1(gpu.temperatureC()),
+                round1(gpu.fanSpeedPercent()));
     }
 
     /** 개별 GPU 상태 요약 — 그룹과 동일 구조, 해당 GPU 1장 기준 */
@@ -70,32 +131,54 @@ public class ResourceExplorerNodeGpuService {
         throw dataSourceNotImplemented();
     }
 
-    /** 개별 GPU 정보 표 — 모델/UUID/PCI/CUDA/드라이버/NVML/VBIOS/P-State/수집 상태/마지막 수집 */
+    /** 개별 GPU 정보 표 — 모델/UUID/PCI/드라이버/수집 상태/마지막 수집. CUDA·NVML·VBIOS·P-State 는 수집 항목에 없어 null */
     public GpuDeviceInfoResponse getDeviceInfo(String nodeId, String gpuId) {
-        // TODO:: DCGM 레이블·필드와 수집 메타를 병합해 구성
-        throw dataSourceNotImplemented();
+        GpuSample gpu = requireDevice(nodeId, gpuId);
+        return new GpuDeviceInfoResponse(
+                gpu.model(),
+                gpu.uuid(),
+                gpu.pciBusId(),
+                null,
+                gpu.driverVersion(),
+                null,
+                null,
+                null,
+                (gpu.collecting() ? MonitoringStatus.COLLECTING : MonitoringStatus.UNAVAILABLE).name(),
+                toOffsetDateTime(gpu.lastCollectedAt()));
     }
 
     /** 개별 GPU 모니터링 차트 — 해당 GPU 시계열 */
     public GpuMetricTrendResponse getDeviceMetricTrend(String nodeId, String gpuId, GpuMetric metric,
                                                        Instant from, Instant to, String step) {
-        // TODO:: 모니터링 탭 화면 설계 확정 후 지표 세트 조정, UUID 레이블 필터로 구현
-        throw dataSourceNotImplemented();
+        return trend(nodeId, gpuId, metric, from, to, step);
     }
 
     // ── 상태 요약 카드 상세 패널 ────────────────────────────────
 
-    /** 수집 상태 상세 (그룹) — 요약 표 + GPU별 수집 상태 카드 (HEALTHY/FAILED/NO_DATA) */
+    /** 수집 상태 상세 (그룹) — 요약 표 + GPU별 수집 상태 카드 (HEALTHY/FAILED) */
     public GpuCollectStatusResponse getCollectStatus(String nodeId) {
-        // TODO:: 수집 파이프라인 메타(에이전트 보고 또는 Thanos 지표 존재 여부)로 GPU별 상태 구성
-        // TODO:: 수집 지표 수의 분모(기대 지표 세트) 정의 확정 필요
-        throw dataSourceNotImplemented();
+        List<GpuSample> gpus = devices(dcgmSelector(nodeId));
+        int total = HostGpuMetricsQueryService.EXPECTED_METRICS.size();
+        List<GpuCollectStatus> cards = gpus.stream()
+                .map(g -> new GpuCollectStatus(g.uuid(), g.displayName(), g.model(), state(g),
+                        toOffsetDateTime(g.lastCollectedAt()), collectedCount(g), total))
+                .toList();
+        int healthy = (int) cards.stream().filter(c -> c.state() == GpuCollectState.HEALTHY).count();
+        Instant last = gpus.stream().map(GpuSample::lastCollectedAt).filter(Objects::nonNull)
+                .max(Comparator.naturalOrder()).orElse(null);
+        return new GpuCollectStatusResponse(gpus.size(), healthy, gpus.size() - healthy, toOffsetDateTime(last),
+                HostGpuMetricsQueryService.COLLECT_INTERVAL_SECONDS, cards);
     }
 
-    /** 수집 상태 상세 (개별 GPU) — 요약 표 + 수집 지표 상세 체크리스트 */
+    /** 수집 상태 상세 (개별 GPU) — 요약 표 + 기대 지표별 지금 수집 여부 체크리스트 */
     public GpuDeviceCollectStatusResponse getDeviceCollectStatus(String nodeId, String gpuId) {
-        // TODO:: 지표별 수집 성공 여부 판정 (Thanos 존재 여부 근사 vs 에이전트 메타 정밀) 방식 확정
-        throw dataSourceNotImplemented();
+        GpuSample gpu = requireDevice(nodeId, gpuId);
+        List<MetricCollectStatus> checklist = HostGpuMetricsQueryService.EXPECTED_METRICS.stream()
+                .map(name -> new MetricCollectStatus(name, gpu.collectedMetrics().contains(name)))
+                .toList();
+        return new GpuDeviceCollectStatusResponse(gpu.uuid(), gpu.displayName(), gpu.model(), state(gpu),
+                toOffsetDateTime(gpu.lastCollectedAt()), HostGpuMetricsQueryService.COLLECT_INTERVAL_SECONDS,
+                collectedCount(gpu), checklist.size(), checklist);
     }
 
     /** XID Errors 상세 — 발생 이벤트 + 컨텍스트 + XID 지식 베이스 해석. gpuId 미지정 시 그룹 전체 */
@@ -115,6 +198,137 @@ public class ResourceExplorerNodeGpuService {
     public GpuClocksEventsResponse getClocksEvents(String nodeId, String gpuId) {
         // TODO:: DCGM_FI_DEV_CLOCKS_EVENT_REASONS 비트마스크를 ClocksEventReason 목록으로 해석
         throw dataSourceNotImplemented();
+    }
+
+    // ── 조회 대상 ───────────────────────────────────────────────
+
+    /** 스코프 검증(404) 뒤 노드 dcgm_exporter 선택자. 등록된 수집 대상이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
+    private MetricSelector dcgmSelector(String nodeId) {
+        long assetId = nodeAccess.require(nodeId).host().assetId();
+        return monitoringTargetRepository.findByAsset_IdIn(List.of(assetId)).stream()
+                .filter(t -> t.getExporterType() == ExporterType.DCGM_EXPORTER)
+                .map(MonitoringTarget::getScrapeEndpoint)
+                .findFirst()
+                .map(MetricSelector::instance)
+                .orElse(null);
+    }
+
+    private List<GpuSample> devices(MetricSelector selector) {
+        return selector == null ? List.of() : metrics.devices(selector);
+    }
+
+    /** 최근 24시간 안에 수집된 GPU 만 개별 패널을 연다 — dcgm_exporter 가 없거나 해당 UUID 가 없으면 404 */
+    private GpuSample requireDevice(String nodeId, String gpuId) {
+        return devices(dcgmSelector(nodeId)).stream()
+                .filter(g -> g.uuid().equals(gpuId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "GPU 를 찾을 수 없습니다: " + gpuId));
+    }
+
+    private GpuMetricTrendResponse trend(String nodeId, String gpuId, GpuMetric metric,
+                                         Instant from, Instant to, String step) {
+        if (!from.isBefore(to)) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "조회 시작 시각은 종료 시각보다 앞서야 합니다.");
+        }
+        MetricSelector selector = dcgmSelector(nodeId);
+        List<Series> series = selector == null ? List.of() : metrics.trend(metric, selector, gpuId, from, to, step).stream()
+                .map(s -> new Series("GPU " + (s.index() == null ? s.uuid() : s.index()), s.points()))
+                .toList();
+        return new GpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step, series);
+    }
+
+    // ── 행·정렬 ─────────────────────────────────────────────────
+
+    static GpuDeviceListItemResponse row(GpuSample g) {
+        return new GpuDeviceListItemResponse(
+                g.uuid(),
+                g.displayName(),
+                g.model(),
+                round1(g.utilization()),
+                round1(g.utilizationAvg()),
+                round1(g.vramPercent()),
+                round1(g.vramPercentAvg()),
+                gb(g.fbUsedMb()),
+                gb(g.fbTotalMb()),
+                round1(g.temperatureC()),
+                round1(g.powerWatts()),
+                null);
+    }
+
+    /**
+     * sort 파라미터("{필드},{asc|desc}") — gpuName(인덱스 숫자순)|gpuId|model|gpuUtilCurrentPercent|gpuUtilAvgPercent|
+     * vramUtilCurrentPercent|vramUtilAvgPercent|vramUsedGb|vramTotalGb|temperatureCelsius|powerWatts|recentAlarmCount.
+     * 값 없음은 방향과 무관하게 마지막, 동률은 GPU 이름순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
+     */
+    static Comparator<GpuDeviceListItemResponse> comparator(String sort) {
+        String[] parts = sort.split(",", 2);
+        String field = parts[0].trim();
+        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
+
+        Comparator<GpuDeviceListItemResponse> byName = Comparator.comparing(
+                GpuDeviceListItemResponse::gpuName, ResourceExplorerNodeGpuService::compareGpuName);
+        Comparator<GpuDeviceListItemResponse> comparator = switch (field) {
+            case "gpuName" -> byName;
+            case "gpuId" -> Comparator.comparing(GpuDeviceListItemResponse::gpuId);
+            case "model" -> nullsLast(GpuDeviceListItemResponse::model, desc);
+            case "gpuUtilCurrentPercent" -> nullsLast(GpuDeviceListItemResponse::gpuUtilCurrentPercent, desc);
+            case "gpuUtilAvgPercent" -> nullsLast(GpuDeviceListItemResponse::gpuUtilAvgPercent, desc);
+            case "vramUtilCurrentPercent" -> nullsLast(GpuDeviceListItemResponse::vramUtilCurrentPercent, desc);
+            case "vramUtilAvgPercent" -> nullsLast(GpuDeviceListItemResponse::vramUtilAvgPercent, desc);
+            case "vramUsedGb" -> nullsLast(GpuDeviceListItemResponse::vramUsedGb, desc);
+            case "vramTotalGb" -> nullsLast(GpuDeviceListItemResponse::vramTotalGb, desc);
+            case "temperatureCelsius" -> nullsLast(GpuDeviceListItemResponse::temperatureCelsius, desc);
+            case "powerWatts" -> nullsLast(GpuDeviceListItemResponse::powerWatts, desc);
+            case "recentAlarmCount" -> nullsLast(GpuDeviceListItemResponse::recentAlarmCount, desc);
+            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+        };
+        Comparator<GpuDeviceListItemResponse> stable = comparator.thenComparing(byName);
+        return desc ? stable.reversed() : stable;
+    }
+
+    /** "GPU {n}" 이름을 인덱스 숫자순으로 — "GPU 2" < "GPU 10". 인덱스가 없는 이름("GPU {UUID}")은 뒤에 문자열순 */
+    private static int compareGpuName(String a, String b) {
+        return HostGpuMetricsQueryService.compareIndex(a.substring("GPU ".length()), b.substring("GPU ".length()));
+    }
+
+    /** 값 없음(null)이 오름/내림 어느 방향에서도 마지막에 오는 비교자 — desc 는 바깥에서 reversed() 되므로 미리 뒤집어 상쇄한다 */
+    private static <R, T extends Comparable<T>> Comparator<R> nullsLast(Function<R, T> extractor, boolean desc) {
+        Comparator<T> nullHandling = desc
+                ? Comparator.nullsFirst(Comparator.naturalOrder())
+                : Comparator.nullsLast(Comparator.naturalOrder());
+        return Comparator.comparing(extractor, nullHandling);
+    }
+
+    // ── 판정·단위 ───────────────────────────────────────────────
+
+    private static GpuCollectState state(GpuSample g) {
+        return collectedCount(g) == HostGpuMetricsQueryService.EXPECTED_METRICS.size()
+                ? GpuCollectState.HEALTHY : GpuCollectState.FAILED;
+    }
+
+    private static int collectedCount(GpuSample g) {
+        return (int) HostGpuMetricsQueryService.EXPECTED_METRICS.stream().filter(g.collectedMetrics()::contains).count();
+    }
+
+    private static Double sum(List<GpuSample> gpus, Function<GpuSample, Double> value) {
+        List<Double> values = gpus.stream().map(value).filter(Objects::nonNull).toList();
+        return values.isEmpty() ? null : values.stream().mapToDouble(Double::doubleValue).sum();
+    }
+
+    private static Double max(List<GpuSample> gpus, Function<GpuSample, Double> value) {
+        return gpus.stream().map(value).filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null);
+    }
+
+    private static Double gb(Double mb) {
+        return mb == null ? null : round1(mb / MB_PER_GB);
+    }
+
+    private static Double round1(Double value) {
+        return value == null ? null : Math.round(value * 10) / 10.0;
+    }
+
+    private static OffsetDateTime toOffsetDateTime(Instant instant) {
+        return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
     private ResponseStatusException dataSourceNotImplemented() {

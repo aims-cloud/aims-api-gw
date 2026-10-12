@@ -12,8 +12,8 @@ public record GpuCollectStatusResponse(
         int collectIntervalSeconds,
         List<GpuCollectStatus> gpus
 ) {
-    /** GPU 1장의 수집 상태 카드 — NO_DATA 면 lastCollectedAt·지표 수는 null */
-    public record GpuCollectStatus(String gpuId, String model, GpuCollectState state,
+    /** GPU 1장의 수집 상태 카드 — gpuName 은 트리와 같은 표시 이름. NO_DATA 면 lastCollectedAt·지표 수는 null */
+    public record GpuCollectStatus(String gpuId, String gpuName, String model, GpuCollectState state,
                                    OffsetDateTime lastCollectedAt,
                                    Integer collectedMetricCount, Integer totalMetricCount) {}
 

@@ -73,11 +73,6 @@ public class NetworkModel {
         this.network = properties.getNetwork();
     }
 
-    /** 스프링 컨텍스트 없이 쓰는 기본 생성자 (단위 테스트). 설정 기본값을 사용한다. */
-    public NetworkModel() {
-        this(new SchedulerProperties());
-    }
-
     /**
      * 노드의 현재 트래픽 부하 점수 (0~1).
      * 기존 WeightedScoreScheduler 의 수식을 그대로 옮겼다.

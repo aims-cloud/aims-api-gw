@@ -72,7 +72,7 @@ public class WeightedScoreScheduler implements SchedulingEngine {
     }
 
     private WeightedScoreScheduler(SchedulerProperties props) {
-        this(new PowerModel(props), new ThermalModel(props), new NetworkModel());
+        this(new PowerModel(props), new ThermalModel(props), new NetworkModel(props));
     }
 
     @Override

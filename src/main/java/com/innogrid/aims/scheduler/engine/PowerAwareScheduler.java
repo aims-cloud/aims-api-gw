@@ -78,7 +78,8 @@ public class PowerAwareScheduler implements SchedulingEngine {
 
     /** 설정을 직접 넣어 만드는 형태. 가중치·볼록 지수를 바꿔 보는 테스트에서 쓴다. */
     PowerAwareScheduler(SchedulerProperties properties) {
-        this(new PowerModel(properties), new ThermalModel(properties), new NetworkModel(), properties);
+        // 네트워크 모델은 넘겨받은 설정이 아니라 기본 설정으로 만든다 — 기본 생성자가 하던 동작 그대로(바꾸면 결과가 달라질 수 있다)
+        this(new PowerModel(properties), new ThermalModel(properties), new NetworkModel(new SchedulerProperties()), properties);
     }
 
     @Override

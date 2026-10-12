@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class NetworkModelLinkTest {
 
     private static final double EPS = 1e-3;
-    private final NetworkModel model = new NetworkModel();
+    private final NetworkModel model = new NetworkModel(new SchedulerProperties());
 
     @DisplayName("링크 점수 표")
     @Test

@@ -137,8 +137,8 @@ class PlacementBenchmarkServiceTest {
         PowerModel power = new PowerModel(props);
         ThermalModel thermal = new ThermalModel(props);
         return new PlacementBenchmarkService(
-                new EngineRegistry(List.of(new WeightedScoreScheduler(power, thermal, new NetworkModel()),
-                        new PowerAwareScheduler(power, thermal, new NetworkModel(), props),
+                new EngineRegistry(List.of(new WeightedScoreScheduler(power, thermal, new NetworkModel(new SchedulerProperties())),
+                        new PowerAwareScheduler(power, thermal, new NetworkModel(new SchedulerProperties()), props),
                         new TemperatureAwareScheduler(thermal))),
                 props, new BenchmarkClusters(), power, thermal);
     }

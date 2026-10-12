@@ -5,10 +5,11 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
-import java.util.function.Function;
+import java.util.Map;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemGroupSummaryResponse;
@@ -29,6 +30,21 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostFileSystem
  * 노드와 VM 이 같은 응답 DTO 를 쓰므로 프론트는 패널 컴포넌트를 공유할 수 있다.
  */
 public final class FileSystemPanelAssembler {
+
+    /**
+     * sort 파라미터("{필드},{asc|desc}") — mountPath|fsType|totalGb|usedPercent|usedGb|freeGb|inodeUsagePercent,
+     * 동률·값 없음은 경로순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
+     */
+    public static final ListSort.Spec<FileSystemMountListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("mountPath", ListSort.by(FileSystemMountListItemResponse::mountPath)),
+                    Map.entry("fsType", ListSort.byNullsAsLargest(FileSystemMountListItemResponse::fsType, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("totalGb", ListSort.by(FileSystemMountListItemResponse::totalGb)),
+                    Map.entry("usedPercent", ListSort.by(FileSystemMountListItemResponse::usedPercent)),
+                    Map.entry("usedGb", ListSort.by(FileSystemMountListItemResponse::usedGb)),
+                    Map.entry("freeGb", ListSort.by(FileSystemMountListItemResponse::freeGb)),
+                    Map.entry("inodeUsagePercent", ListSort.by(FileSystemMountListItemResponse::inodeUsagePercent))),
+            Comparator.comparing(FileSystemMountListItemResponse::mountPath));
 
     /** Near Full 판정 — 마운트 사용률이 이 값 이상이면 임박으로 센다 */
     public static final double NEAR_FULL_PERCENT = 90.0;
@@ -143,38 +159,6 @@ public final class FileSystemPanelAssembler {
                 gb(mount.usedBytes()),
                 gb(mount.availBytes()),
                 round1(mount.inodeUsagePercent()));
-    }
-
-    /**
-     * sort 파라미터("{필드},{asc|desc}") — mountPath|fsType|totalGb|usedPercent|usedGb|freeGb|inodeUsagePercent,
-     * 동률·값 없음은 경로순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
-     */
-    public static Comparator<FileSystemMountListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<FileSystemMountListItemResponse> comparator = switch (field) {
-            case "mountPath" -> Comparator.comparing(FileSystemMountListItemResponse::mountPath);
-            case "fsType" -> Comparator.comparing(FileSystemMountListItemResponse::fsType,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "totalGb" -> Comparator.comparingDouble(FileSystemMountListItemResponse::totalGb);
-            case "usedPercent" -> Comparator.comparingDouble(FileSystemMountListItemResponse::usedPercent);
-            case "usedGb" -> Comparator.comparingDouble(FileSystemMountListItemResponse::usedGb);
-            case "freeGb" -> Comparator.comparingDouble(FileSystemMountListItemResponse::freeGb);
-            case "inodeUsagePercent" -> nullsLast(FileSystemMountListItemResponse::inodeUsagePercent, desc);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<FileSystemMountListItemResponse> stable = comparator.thenComparing(FileSystemMountListItemResponse::mountPath);
-        return desc ? stable.reversed() : stable;
-    }
-
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 마지막에 오는 비교자 — desc 는 바깥에서 reversed() 되므로 미리 뒤집어 상쇄한다 */
-    private static <R, T extends Comparable<T>> Comparator<R> nullsLast(Function<R, T> extractor, boolean desc) {
-        Comparator<T> nullHandling = desc
-                ? Comparator.nullsFirst(Comparator.naturalOrder())
-                : Comparator.nullsLast(Comparator.naturalOrder());
-        return Comparator.comparing(extractor, nullHandling);
     }
 
     // ── 단위 ────────────────────────────────────────────────────

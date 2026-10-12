@@ -2,10 +2,11 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.namespace.InfraListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.namespace.NamespaceSummaryResponse;
@@ -25,6 +26,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerNamespaceService {
+
+    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 동률은 이름순으로 고정. */
+    private static final ListSort.Spec<InfraListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(InfraListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("tumblebugStatus", ListSort.byNullsAsLargest(InfraListItemResponse::tumblebugStatus, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("vmCount", ListSort.by(InfraListItemResponse::vmCount))),
+            Comparator.comparing(InfraListItemResponse::name, String.CASE_INSENSITIVE_ORDER));
 
     private final TumblebugPanelSupport support;
 
@@ -53,7 +62,7 @@ public class ResourceExplorerNamespaceService {
     /** Infra 목록 — 이름 키워드 검색, 컬럼 정렬(name|tumblebugStatus|vmCount), 페이징(1부터) */
     public PageResponse<InfraListItemResponse> getNamespaceInfras(String roleName, String nsId, String keyword,
                                                                   int page, int size, String sort) {
-        Comparator<InfraListItemResponse> comparator = comparator(sort);      // 미지원 필드는 조회 전에 400
+        Comparator<InfraListItemResponse> comparator = SORT.comparator(sort);      // 미지원 필드는 조회 전에 400
         TbSnapshot tb = support.accessibleNamespace(roleName, nsId);
         List<InfraListItemResponse> rows = tb.infrasByNamespace().getOrDefault(nsId, List.of()).stream()
                 .map(ResourceExplorerNamespaceService::row)
@@ -78,20 +87,4 @@ public class ResourceExplorerNamespaceService {
                 || row.infraId().toLowerCase(Locale.ROOT).contains(lower);
     }
 
-    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 동률은 이름순으로 고정. */
-    private static Comparator<InfraListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<InfraListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(InfraListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "tumblebugStatus" -> Comparator.comparing(InfraListItemResponse::tumblebugStatus,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "vmCount" -> Comparator.comparingLong(InfraListItemResponse::vmCount);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<InfraListItemResponse> stable = comparator.thenComparing(InfraListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-        return desc ? stable.reversed() : stable;
-    }
 }

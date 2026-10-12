@@ -46,7 +46,7 @@ public class ResourceExplorerVmFileSystemService {
     /** 그룹 개요 File System 목록 — 마운트별 용량·사용률, 페이징(1부터)·컬럼 정렬 */
     public PageResponse<FileSystemMountListItemResponse> getMounts(String roleName, String nsId, String infraId, String vmId,
                                                                    int page, int size, String sort) {
-        Comparator<FileSystemMountListItemResponse> comparator = FileSystemPanelAssembler.comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<FileSystemMountListItemResponse> comparator = FileSystemPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         return FileSystemPanelAssembler.mountPage(metrics.mounts(selector(roleName, nsId, infraId, vmId)), comparator, page, size);
     }
 

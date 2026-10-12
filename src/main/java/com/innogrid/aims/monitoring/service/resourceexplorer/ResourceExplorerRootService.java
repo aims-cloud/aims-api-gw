@@ -3,12 +3,13 @@ package com.innogrid.aims.monitoring.service.resourceexplorer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.TreeSet;
 
 import com.innogrid.aims.auth.repository.UserRepository;
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse.StatusCount;
@@ -31,6 +32,17 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerRootService {
+
+    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400. */
+    private static final ListSort.Spec<RoleListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(RoleListItemResponse::name)),
+                    Map.entry("managerName", ListSort.byNullsAsLargest(RoleListItemResponse::managerName)),
+                    Map.entry("memberCount", ListSort.by(RoleListItemResponse::memberCount)),
+                    Map.entry("mdcCount", ListSort.by(RoleListItemResponse::mdcCount)),
+                    Map.entry("nodeCount", ListSort.by(RoleListItemResponse::nodeCount)),
+                    Map.entry("vmCount", ListSort.by(RoleListItemResponse::vmCount))),
+            null);
 
     private final ResourceScopeService scopeService;
     private final UserRepository userRepository;
@@ -79,7 +91,7 @@ public class ResourceExplorerRootService {
 
     /** 역할 테이블 — 관리자/멤버·MDC·노드·VM 수/상태 스택바, 키워드 검색·컬럼 정렬·페이징(1부터) */
     public PageResponse<RoleListItemResponse> getRoles(String keyword, int page, int size, String sort) {
-        Comparator<RoleListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<RoleListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         Scope scope = scopeService.currentUserScope();
 
         List<RoleListItemResponse> rows = scope.roles().stream()
@@ -147,22 +159,4 @@ public class ResourceExplorerRootService {
                 || (row.managerName() != null && row.managerName().toLowerCase(Locale.ROOT).contains(lower));
     }
 
-    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400. */
-    private static Comparator<RoleListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<RoleListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(RoleListItemResponse::name);
-            case "managerName" -> Comparator.comparing(RoleListItemResponse::managerName,
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-            case "memberCount" -> Comparator.comparingLong(RoleListItemResponse::memberCount);
-            case "mdcCount" -> Comparator.comparingLong(RoleListItemResponse::mdcCount);
-            case "nodeCount" -> Comparator.comparingLong(RoleListItemResponse::nodeCount);
-            case "vmCount" -> Comparator.comparingLong(RoleListItemResponse::vmCount);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        return desc ? comparator.reversed() : comparator;
-    }
 }

@@ -3,9 +3,10 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
@@ -30,6 +31,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class ResourceExplorerVmCpuService {
 
+    /** sort 파라미터("{필드},{asc|desc}") — socket|vendor|model|coreCount|threadCount, 동률은 소켓순 */
+    private static final ListSort.Spec<VmCpuListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("socket", ListSort.by(VmCpuListItemResponse::socket)),
+                    Map.entry("vendor", ListSort.byNullsAsLargest(VmCpuListItemResponse::vendor, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("model", ListSort.byNullsAsLargest(VmCpuListItemResponse::model, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("coreCount", ListSort.by(VmCpuListItemResponse::coreCount)),
+                    Map.entry("threadCount", ListSort.by(VmCpuListItemResponse::threadCount))),
+            Comparator.comparingInt(VmCpuListItemResponse::socket));
+
     private final TumblebugPanelSupport support;
     private final HostCategoryMetricsQueryService metrics;
 
@@ -49,7 +60,7 @@ public class ResourceExplorerVmCpuService {
      */
     public PageResponse<VmCpuListItemResponse> getCpuDevices(String roleName, String nsId, String infraId, String vmId,
                                                              int page, int size, String sort) {
-        Comparator<VmCpuListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<VmCpuListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         List<VmCpuListItemResponse> rows = metrics.cpuDevices(selector(roleName, nsId, infraId, vmId)).stream()
                 .map(ResourceExplorerVmCpuService::row)
                 .sorted(comparator)
@@ -79,21 +90,4 @@ public class ResourceExplorerVmCpuService {
                 MonitoringStatus.COLLECTING.name());
     }
 
-    /** sort 파라미터("{필드},{asc|desc}") — socket|vendor|model|coreCount|threadCount, 동률은 소켓순 */
-    private static Comparator<VmCpuListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<VmCpuListItemResponse> comparator = switch (field) {
-            case "socket" -> Comparator.comparingInt(VmCpuListItemResponse::socket);
-            case "vendor" -> Comparator.comparing(VmCpuListItemResponse::vendor, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "model" -> Comparator.comparing(VmCpuListItemResponse::model, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "coreCount" -> Comparator.comparingInt(VmCpuListItemResponse::coreCount);
-            case "threadCount" -> Comparator.comparingInt(VmCpuListItemResponse::threadCount);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<VmCpuListItemResponse> stable = comparator.thenComparingInt(VmCpuListItemResponse::socket);
-        return desc ? stable.reversed() : stable;
-    }
 }

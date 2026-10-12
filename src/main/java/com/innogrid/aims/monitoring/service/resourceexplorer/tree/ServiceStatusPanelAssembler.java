@@ -3,10 +3,11 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.tree;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceStatusMetric;
@@ -24,6 +25,17 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceSta
  * 자원 식별(노드 assets.id / VM nsId·infraId·vmId)과 스코프 검증은 각 패널 서비스가 맡는다.
  */
 public final class ServiceStatusPanelAssembler {
+
+    /**
+     * sort 파라미터("{필드},{asc|desc}") — name|type|state, 동률·값 없음은 유닛명순.
+     * 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
+     */
+    public static final ListSort.Spec<ServiceUnitListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(ServiceUnitListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("type", ListSort.byNullsAsLargest(ServiceUnitListItemResponse::type, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("state", ListSort.by(ServiceUnitListItemResponse::state))),
+            Comparator.comparing(ServiceUnitListItemResponse::name, String.CASE_INSENSITIVE_ORDER));
 
     private ServiceStatusPanelAssembler() {
     }
@@ -70,25 +82,6 @@ public final class ServiceStatusPanelAssembler {
         List<DataPoint> points = query.points(from, to, step);
         return new ServiceStatusMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("service_status", points)));
-    }
-
-    /**
-     * sort 파라미터("{필드},{asc|desc}") — name|type|state, 동률·값 없음은 유닛명순.
-     * 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
-     */
-    public static Comparator<ServiceUnitListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<ServiceUnitListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(ServiceUnitListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "type" -> Comparator.comparing(ServiceUnitListItemResponse::type, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "state" -> Comparator.comparing(ServiceUnitListItemResponse::state);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<ServiceUnitListItemResponse> stable = comparator.thenComparing(ServiceUnitListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-        return desc ? stable.reversed() : stable;
     }
 
     private static int count(List<Unit> units, ServiceUnitState state) {

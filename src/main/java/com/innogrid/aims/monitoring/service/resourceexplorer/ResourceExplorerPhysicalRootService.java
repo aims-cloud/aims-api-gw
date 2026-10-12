@@ -10,6 +10,7 @@ import java.util.TreeMap;
 import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse.StatusCount;
@@ -31,6 +32,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerPhysicalRootService {
+
+    /** sort 파라미터("{필드},{asc|desc}") — name|nodeCount|vmCount, 동률은 이름순. 미지원 필드는 400 */
+    private static final ListSort.Spec<PhysicalRootMdcListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(PhysicalRootMdcListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("nodeCount", ListSort.by(PhysicalRootMdcListItemResponse::nodeCount)),
+                    Map.entry("vmCount", ListSort.by(PhysicalRootMdcListItemResponse::vmCount))),
+            Comparator.comparing(PhysicalRootMdcListItemResponse::name, String.CASE_INSENSITIVE_ORDER));
 
     private final ResourceScopeService scopeService;
     private final AuthService authService;
@@ -69,7 +78,7 @@ public class ResourceExplorerPhysicalRootService {
 
     /** MDC 목록 — MDC 별 호스트 수·상태, 1세부 가상자원 수·상태. 이름 키워드·컬럼 정렬(name|nodeCount|vmCount)·페이징(1부터) */
     public PageResponse<PhysicalRootMdcListItemResponse> getMdcs(String roleName, String keyword, int page, int size, String sort) {
-        Comparator<PhysicalRootMdcListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<PhysicalRootMdcListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         Scope scope = accessibleScope(roleName);
 
         Map<String, List<ResourceStatus>> hostStatuses = new TreeMap<>();
@@ -116,19 +125,4 @@ public class ResourceExplorerPhysicalRootService {
         return row.name().toLowerCase(Locale.ROOT).contains(keyword.trim().toLowerCase(Locale.ROOT));
     }
 
-    /** sort 파라미터("{필드},{asc|desc}") — name|nodeCount|vmCount, 동률은 이름순. 미지원 필드는 400 */
-    private static Comparator<PhysicalRootMdcListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<PhysicalRootMdcListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(PhysicalRootMdcListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "nodeCount" -> Comparator.comparingLong(PhysicalRootMdcListItemResponse::nodeCount);
-            case "vmCount" -> Comparator.comparingLong(PhysicalRootMdcListItemResponse::vmCount);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<PhysicalRootMdcListItemResponse> stable = comparator.thenComparing(PhysicalRootMdcListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-        return desc ? stable.reversed() : stable;
-    }
 }

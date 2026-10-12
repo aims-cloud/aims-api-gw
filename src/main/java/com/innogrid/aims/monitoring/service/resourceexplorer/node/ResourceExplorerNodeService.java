@@ -8,10 +8,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Function;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
@@ -52,6 +51,28 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerNodeService {
+
+    /** 자원 사용 현황 sort 해석 — 미지원 필드는 400, 미수집(null)은 마지막 */
+    private static final ListSort.Spec<NodeDailyUsageResponse> USAGE_SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("date", ListSort.by(NodeDailyUsageResponse::date)),
+                    Map.entry("maxCpuUtilization", ListSort.by(NodeDailyUsageResponse::maxCpuUtilization)),
+                    Map.entry("maxMemoryUtilization", ListSort.by(NodeDailyUsageResponse::maxMemoryUtilization)),
+                    Map.entry("maxFileSystemUtilization", ListSort.by(NodeDailyUsageResponse::maxFileSystemUtilization)),
+                    Map.entry("maxVmCount", ListSort.by(NodeDailyUsageResponse::maxVmCount))),
+            null);
+
+    /** 가상머신 탭 sort 해석 — 미지원 필드는 400, 미수집(null)은 마지막 */
+    private static final ListSort.Spec<NodeVmListItemResponse> VM_SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(NodeVmListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("alias", ListSort.by(NodeVmListItemResponse::alias)),
+                    Map.entry("status", ListSort.by(row -> row.status().name())),
+                    Map.entry("ipAddress", ListSort.by(row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0))),
+                    Map.entry("cpuUtilization", ListSort.by(NodeVmListItemResponse::cpuUtilization)),
+                    Map.entry("memoryUtilization", ListSort.by(NodeVmListItemResponse::memoryUtilization)),
+                    Map.entry("diskUtilization", ListSort.by(NodeVmListItemResponse::diskUtilization))),
+            null);
 
     /** 가상머신 탭 사용률의 집계 윈도우 */
     static final NodeMetricInterval VM_LIST_INTERVAL = NodeMetricInterval.LAST_10M;
@@ -137,7 +158,7 @@ public class ResourceExplorerNodeService {
      *  사용률은 VM 내부 node_exporter 의 최근 10분 평균, exporter 가 없으면 미수집(null). */
     public PageResponse<NodeVmListItemResponse> getNodeVms(String nodeId, NodeStatus status,
                                                            String keyword, int page, int size, String sort) {
-        Comparator<NodeVmListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<NodeVmListItemResponse> comparator = VM_SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         NodeContext ctx = accessibleNode(nodeId);
         List<VirtualResource> vms = virtualResourceProvider.findByHost(ctx.asset());
         Map<String, HostUtilization> utilization = vms.stream().anyMatch(v -> v.instance() != null)
@@ -159,7 +180,7 @@ public class ResourceExplorerNodeService {
     // TODO:: 1세부 VM 배치 이력(일간 최대 VM 수)이 제공되면 과거 일자의 maxVmCount 채우기
     public PageResponse<NodeDailyUsageResponse> getNodeUsage(String nodeId, NodeMetricInterval interval,
                                                              int page, int size, String sort) {
-        Comparator<NodeDailyUsageResponse> comparator = usageComparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<NodeDailyUsageResponse> comparator = USAGE_SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         NodeContext ctx = accessibleNode(nodeId);
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
         LocalDate from = today.minusDays(Math.max(0, interval.window().toDays()));
@@ -245,48 +266,4 @@ public class ResourceExplorerNodeService {
                 || (row.alias() != null && row.alias().toLowerCase(Locale.ROOT).contains(lower));
     }
 
-    /** 가상머신 탭 sort 해석 — 미지원 필드는 400, 미수집(null)은 마지막 */
-    private static Comparator<NodeVmListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<NodeVmListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(NodeVmListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "alias" -> nullsLast(NodeVmListItemResponse::alias, desc);
-            case "status" -> Comparator.comparing(row -> row.status().name());
-            case "ipAddress" -> nullsLast(row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0), desc);
-            case "cpuUtilization" -> nullsLast(NodeVmListItemResponse::cpuUtilization, desc);
-            case "memoryUtilization" -> nullsLast(NodeVmListItemResponse::memoryUtilization, desc);
-            case "diskUtilization" -> nullsLast(NodeVmListItemResponse::diskUtilization, desc);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        return desc ? comparator.reversed() : comparator;
-    }
-
-    /** 자원 사용 현황 sort 해석 — 미지원 필드는 400, 미수집(null)은 마지막 */
-    private static Comparator<NodeDailyUsageResponse> usageComparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<NodeDailyUsageResponse> comparator = switch (field) {
-            case "date" -> Comparator.comparing(NodeDailyUsageResponse::date);
-            case "maxCpuUtilization" -> nullsLast(NodeDailyUsageResponse::maxCpuUtilization, desc);
-            case "maxMemoryUtilization" -> nullsLast(NodeDailyUsageResponse::maxMemoryUtilization, desc);
-            case "maxFileSystemUtilization" -> nullsLast(NodeDailyUsageResponse::maxFileSystemUtilization, desc);
-            case "maxVmCount" -> nullsLast(NodeDailyUsageResponse::maxVmCount, desc);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        return desc ? comparator.reversed() : comparator;
-    }
-
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (목록 공통 규칙).
-     *  desc 면 바깥에서 reversed() 되어 null 위치도 뒤집히므로, 미리 nullsFirst 로 두어 상쇄한다. */
-    private static <R, T extends Comparable<T>> Comparator<R> nullsLast(Function<R, T> extractor, boolean desc) {
-        Comparator<T> nullHandling = desc
-                ? Comparator.nullsFirst(Comparator.naturalOrder())
-                : Comparator.nullsLast(Comparator.naturalOrder());
-        return Comparator.comparing(extractor, nullHandling);
-    }
 }

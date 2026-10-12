@@ -3,10 +3,11 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.tree;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoDeviceListItemResponse;
@@ -23,6 +24,22 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDiskIoMetr
  * 자원 식별(노드 assets.id / VM nsId·infraId·vmId)과 스코프 검증은 각 패널 서비스가 맡는다.
  */
 public final class DiskIoPanelAssembler {
+
+    /**
+     * sort 파라미터("{필드},{asc|desc}") — device|readBytesPerSec|writeBytesPerSec|readIops|writeIops|readLatencyMs|writeLatencyMs|utilizationPercent,
+     * 동률·값 없음은 장치명순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
+     */
+    public static final ListSort.Spec<DiskIoDeviceListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("device", ListSort.by(DiskIoDeviceListItemResponse::device)),
+                    Map.entry("readBytesPerSec", ListSort.by(DiskIoDeviceListItemResponse::readBytesPerSec)),
+                    Map.entry("writeBytesPerSec", ListSort.by(DiskIoDeviceListItemResponse::writeBytesPerSec)),
+                    Map.entry("readIops", ListSort.by(DiskIoDeviceListItemResponse::readIops)),
+                    Map.entry("writeIops", ListSort.by(DiskIoDeviceListItemResponse::writeIops)),
+                    Map.entry("readLatencyMs", ListSort.by(DiskIoDeviceListItemResponse::readLatencyMs)),
+                    Map.entry("writeLatencyMs", ListSort.by(DiskIoDeviceListItemResponse::writeLatencyMs)),
+                    Map.entry("utilizationPercent", ListSort.by(DiskIoDeviceListItemResponse::utilizationPercent))),
+            Comparator.comparing(DiskIoDeviceListItemResponse::device));
 
     private DiskIoPanelAssembler() {
     }
@@ -73,30 +90,6 @@ public final class DiskIoPanelAssembler {
                 round2(d.readIops()), round2(d.writeIops()),
                 round2(d.readLatencyMs()), round2(d.writeLatencyMs()),
                 round2(d.utilizationPercent()));
-    }
-
-    /**
-     * sort 파라미터("{필드},{asc|desc}") — device|readBytesPerSec|writeBytesPerSec|readIops|writeIops|readLatencyMs|writeLatencyMs|utilizationPercent,
-     * 동률·값 없음은 장치명순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
-     */
-    public static Comparator<DiskIoDeviceListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<DiskIoDeviceListItemResponse> comparator = switch (field) {
-            case "device" -> Comparator.comparing(DiskIoDeviceListItemResponse::device);
-            case "readBytesPerSec" -> nullsLast(DiskIoDeviceListItemResponse::readBytesPerSec, desc);
-            case "writeBytesPerSec" -> nullsLast(DiskIoDeviceListItemResponse::writeBytesPerSec, desc);
-            case "readIops" -> nullsLast(DiskIoDeviceListItemResponse::readIops, desc);
-            case "writeIops" -> nullsLast(DiskIoDeviceListItemResponse::writeIops, desc);
-            case "readLatencyMs" -> nullsLast(DiskIoDeviceListItemResponse::readLatencyMs, desc);
-            case "writeLatencyMs" -> nullsLast(DiskIoDeviceListItemResponse::writeLatencyMs, desc);
-            case "utilizationPercent" -> nullsLast(DiskIoDeviceListItemResponse::utilizationPercent, desc);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<DiskIoDeviceListItemResponse> stable = comparator.thenComparing(DiskIoDeviceListItemResponse::device);
-        return desc ? stable.reversed() : stable;
     }
 
     // ── 시계열 ──────────────────────────────────────────────────
@@ -168,13 +161,5 @@ public final class DiskIoPanelAssembler {
 
     private static Double round2(Double value) {
         return value == null ? null : Math.round(value * 100) / 100.0;
-    }
-
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 마지막에 오는 비교자 — desc 는 바깥에서 reversed() 되므로 미리 뒤집어 상쇄한다 */
-    private static <R, T extends Comparable<T>> Comparator<R> nullsLast(Function<R, T> extractor, boolean desc) {
-        Comparator<T> nullHandling = desc
-                ? Comparator.nullsFirst(Comparator.naturalOrder())
-                : Comparator.nullsLast(Comparator.naturalOrder());
-        return Comparator.comparing(extractor, nullHandling);
     }
 }

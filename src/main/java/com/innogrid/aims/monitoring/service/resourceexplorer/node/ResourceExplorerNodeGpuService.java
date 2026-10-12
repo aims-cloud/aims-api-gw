@@ -14,6 +14,7 @@ import java.util.function.Function;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.ClocksEventReason;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse.GpuClocksEvents;
@@ -62,6 +63,27 @@ import org.springframework.stereotype.Service;
 @Service
 public class ResourceExplorerNodeGpuService {
 
+    /**
+     * sort 파라미터("{필드},{asc|desc}") — gpuName(인덱스 숫자순)|gpuId|model|gpuUtilCurrentPercent|gpuUtilAvgPercent|
+     * vramUtilCurrentPercent|vramUtilAvgPercent|vramUsedGb|vramTotalGb|temperatureCelsius|powerWatts|recentAlarmCount.
+     * 값 없음은 방향과 무관하게 마지막, 동률은 GPU 이름순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
+     */
+    private static final ListSort.Spec<GpuDeviceListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("gpuName", ListSort.by(GpuDeviceListItemResponse::gpuName, ResourceExplorerNodeGpuService::compareGpuName)),
+                    Map.entry("gpuId", ListSort.by(GpuDeviceListItemResponse::gpuId)),
+                    Map.entry("model", ListSort.by(GpuDeviceListItemResponse::model)),
+                    Map.entry("gpuUtilCurrentPercent", ListSort.by(GpuDeviceListItemResponse::gpuUtilCurrentPercent)),
+                    Map.entry("gpuUtilAvgPercent", ListSort.by(GpuDeviceListItemResponse::gpuUtilAvgPercent)),
+                    Map.entry("vramUtilCurrentPercent", ListSort.by(GpuDeviceListItemResponse::vramUtilCurrentPercent)),
+                    Map.entry("vramUtilAvgPercent", ListSort.by(GpuDeviceListItemResponse::vramUtilAvgPercent)),
+                    Map.entry("vramUsedGb", ListSort.by(GpuDeviceListItemResponse::vramUsedGb)),
+                    Map.entry("vramTotalGb", ListSort.by(GpuDeviceListItemResponse::vramTotalGb)),
+                    Map.entry("temperatureCelsius", ListSort.by(GpuDeviceListItemResponse::temperatureCelsius)),
+                    Map.entry("powerWatts", ListSort.by(GpuDeviceListItemResponse::powerWatts)),
+                    Map.entry("recentAlarmCount", ListSort.by(GpuDeviceListItemResponse::recentAlarmCount))),
+            Comparator.comparing(GpuDeviceListItemResponse::gpuName, ResourceExplorerNodeGpuService::compareGpuName));
+
     private static final double MB_PER_GB = 1024.0;
     private static final Duration PCIE_TREND_WINDOW = Duration.ofHours(24);
 
@@ -108,7 +130,7 @@ public class ResourceExplorerNodeGpuService {
     /** 그룹 개요 GPU 목록 — 현재/최근 1시간 평균 Util, VRAM, 온도, 전력. 페이징(1부터)·컬럼 정렬 */
     public PageResponse<GpuDeviceListItemResponse> getDevices(String nodeId,
                                                               int page, int size, String sort) {
-        Comparator<GpuDeviceListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<GpuDeviceListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         List<GpuDeviceListItemResponse> rows = devices(dcgmSelector(nodeId)).stream()
                 .map(ResourceExplorerNodeGpuService::row)
                 .sorted(comparator)
@@ -307,48 +329,9 @@ public class ResourceExplorerNodeGpuService {
                 null);
     }
 
-    /**
-     * sort 파라미터("{필드},{asc|desc}") — gpuName(인덱스 숫자순)|gpuId|model|gpuUtilCurrentPercent|gpuUtilAvgPercent|
-     * vramUtilCurrentPercent|vramUtilAvgPercent|vramUsedGb|vramTotalGb|temperatureCelsius|powerWatts|recentAlarmCount.
-     * 값 없음은 방향과 무관하게 마지막, 동률은 GPU 이름순. 미지원 필드는 400 — 호출 측은 Thanos 조회 전에 먼저 부른다.
-     */
-    static Comparator<GpuDeviceListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<GpuDeviceListItemResponse> byName = Comparator.comparing(
-                GpuDeviceListItemResponse::gpuName, ResourceExplorerNodeGpuService::compareGpuName);
-        Comparator<GpuDeviceListItemResponse> comparator = switch (field) {
-            case "gpuName" -> byName;
-            case "gpuId" -> Comparator.comparing(GpuDeviceListItemResponse::gpuId);
-            case "model" -> nullsLast(GpuDeviceListItemResponse::model, desc);
-            case "gpuUtilCurrentPercent" -> nullsLast(GpuDeviceListItemResponse::gpuUtilCurrentPercent, desc);
-            case "gpuUtilAvgPercent" -> nullsLast(GpuDeviceListItemResponse::gpuUtilAvgPercent, desc);
-            case "vramUtilCurrentPercent" -> nullsLast(GpuDeviceListItemResponse::vramUtilCurrentPercent, desc);
-            case "vramUtilAvgPercent" -> nullsLast(GpuDeviceListItemResponse::vramUtilAvgPercent, desc);
-            case "vramUsedGb" -> nullsLast(GpuDeviceListItemResponse::vramUsedGb, desc);
-            case "vramTotalGb" -> nullsLast(GpuDeviceListItemResponse::vramTotalGb, desc);
-            case "temperatureCelsius" -> nullsLast(GpuDeviceListItemResponse::temperatureCelsius, desc);
-            case "powerWatts" -> nullsLast(GpuDeviceListItemResponse::powerWatts, desc);
-            case "recentAlarmCount" -> nullsLast(GpuDeviceListItemResponse::recentAlarmCount, desc);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<GpuDeviceListItemResponse> stable = comparator.thenComparing(byName);
-        return desc ? stable.reversed() : stable;
-    }
-
     /** "GPU {n}" 이름을 인덱스 숫자순으로 — "GPU 2" < "GPU 10". 인덱스가 없는 이름("GPU {UUID}")은 뒤에 문자열순 */
     private static int compareGpuName(String a, String b) {
         return HostGpuMetricsQueryService.compareIndex(a.substring("GPU ".length()), b.substring("GPU ".length()));
-    }
-
-    /** 값 없음(null)이 오름/내림 어느 방향에서도 마지막에 오는 비교자 — desc 는 바깥에서 reversed() 되므로 미리 뒤집어 상쇄한다 */
-    private static <R, T extends Comparable<T>> Comparator<R> nullsLast(Function<R, T> extractor, boolean desc) {
-        Comparator<T> nullHandling = desc
-                ? Comparator.nullsFirst(Comparator.naturalOrder())
-                : Comparator.nullsLast(Comparator.naturalOrder());
-        return Comparator.comparing(extractor, nullHandling);
     }
 
     // ── 상태 요약 판정 ──────────────────────────────────────────

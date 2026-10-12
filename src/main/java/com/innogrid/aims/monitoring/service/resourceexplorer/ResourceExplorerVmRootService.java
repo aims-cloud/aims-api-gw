@@ -3,10 +3,11 @@ package com.innogrid.aims.monitoring.service.resourceexplorer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse.StatusCount;
@@ -29,6 +30,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerVmRootService {
+
+    /** sort 파라미터("{필드},{asc|desc}") — name|infraCount|vmCount, 동률은 이름순. 미지원 필드는 400 */
+    private static final ListSort.Spec<VmRootNamespaceListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(VmRootNamespaceListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("infraCount", ListSort.by(VmRootNamespaceListItemResponse::infraCount)),
+                    Map.entry("vmCount", ListSort.by(VmRootNamespaceListItemResponse::vmCount))),
+            Comparator.comparing(VmRootNamespaceListItemResponse::name, String.CASE_INSENSITIVE_ORDER));
 
     private final TumblebugPanelSupport support;
 
@@ -75,7 +84,7 @@ public class ResourceExplorerVmRootService {
 
     /** Namespace 목록 — Infra 수·VM 수·VM 상태·조회 실패 여부. 이름/nsId 키워드·컬럼 정렬(name|infraCount|vmCount)·페이징(1부터) */
     public PageResponse<VmRootNamespaceListItemResponse> getNamespaces(String roleName, String keyword, int page, int size, String sort) {
-        Comparator<VmRootNamespaceListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<VmRootNamespaceListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         RoleNamespaces role = support.accessibleRoleNamespaces(roleName);
         TbSnapshot tb = role.snapshot();
 
@@ -112,19 +121,4 @@ public class ResourceExplorerVmRootService {
         return row.name().toLowerCase(Locale.ROOT).contains(lower) || row.nsId().toLowerCase(Locale.ROOT).contains(lower);
     }
 
-    /** sort 파라미터("{필드},{asc|desc}") — name|infraCount|vmCount, 동률은 이름순. 미지원 필드는 400 */
-    private static Comparator<VmRootNamespaceListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<VmRootNamespaceListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(VmRootNamespaceListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "infraCount" -> Comparator.comparingLong(VmRootNamespaceListItemResponse::infraCount);
-            case "vmCount" -> Comparator.comparingLong(VmRootNamespaceListItemResponse::vmCount);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<VmRootNamespaceListItemResponse> stable = comparator.thenComparing(VmRootNamespaceListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-        return desc ? stable.reversed() : stable;
-    }
 }

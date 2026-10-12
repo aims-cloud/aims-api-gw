@@ -11,7 +11,7 @@ import java.util.function.Function;
 
 import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.infra.entity.RoleNamespace;
 import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetric;
@@ -45,6 +45,19 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerNodeGroupService {
+
+    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400, 미수집(null)은 마지막. */
+    private static final ListSort.Spec<VmListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(VmListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("status", ListSort.by(row -> row.status().name())),
+                    Map.entry("tumblebugStatus", ListSort.by(VmListItemResponse::tumblebugStatus)),
+                    Map.entry("provider", ListSort.by(VmListItemResponse::provider)),
+                    Map.entry("ipAddress", ListSort.by(row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0))),
+                    Map.entry("cpuUtilization", ListSort.by(VmListItemResponse::cpuUtilization)),
+                    Map.entry("memoryUtilization", ListSort.by(VmListItemResponse::memoryUtilization)),
+                    Map.entry("fileSystemUtilization", ListSort.by(VmListItemResponse::fileSystemUtilization))),
+            Comparator.comparing(VmListItemResponse::name, String.CASE_INSENSITIVE_ORDER));
 
     /** VM 목록의 "현재" 사용률 집계 윈도우 */
     static final NodeMetricInterval LIST_INTERVAL = NodeMetricInterval.LAST_10M;
@@ -100,7 +113,7 @@ public class ResourceExplorerNodeGroupService {
     public PageResponse<VmListItemResponse> getNodeGroupVms(String roleName, String nsId, String infraId, String nodeGroupId,
                                                             NodeStatus status, NodeSearchField searchField, String keyword,
                                                             int page, int size, String sort) {
-        Comparator<VmListItemResponse> comparator = comparator(sort);       // 미지원 필드는 조회 전에 400
+        Comparator<VmListItemResponse> comparator = SORT.comparator(sort);       // 미지원 필드는 조회 전에 400
         List<ScopedTbNode> nodes = scopedNodes(roleName, nsId, infraId, nodeGroupId).stream()
                 .filter(n -> status == null || n.status() == status)
                 .toList();
@@ -208,28 +221,6 @@ public class ResourceExplorerNodeGroupService {
             case ALIAS -> false;
             case IP -> row.ipAddresses().stream().anyMatch(ip -> ip.contains(lower));
         };
-    }
-
-    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400, 미수집(null)은 마지막. */
-    private static Comparator<VmListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<VmListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(VmListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "status" -> Comparator.comparing(row -> row.status().name());
-            case "tumblebugStatus" -> nullsLast(VmListItemResponse::tumblebugStatus, desc);
-            case "provider" -> nullsLast(VmListItemResponse::provider, desc);
-            case "ipAddress" -> nullsLast(row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0), desc);
-            case "cpuUtilization" -> nullsLast(VmListItemResponse::cpuUtilization, desc);
-            case "memoryUtilization" -> nullsLast(VmListItemResponse::memoryUtilization, desc);
-            case "fileSystemUtilization" -> nullsLast(VmListItemResponse::fileSystemUtilization, desc);
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        // 동률이면 이름순으로 고정해 Tumblebug 응답 순서에 따라 결과가 흔들리지 않게 한다
-        Comparator<VmListItemResponse> stable = comparator.thenComparing(VmListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-        return desc ? stable.reversed() : stable;
     }
 
     /** 값 없음(null)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자 (목록 공통 규칙) */

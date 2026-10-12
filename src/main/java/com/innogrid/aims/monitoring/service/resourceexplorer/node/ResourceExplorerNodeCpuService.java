@@ -5,11 +5,12 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuDeviceListItemResponse;
@@ -35,6 +36,18 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerNodeCpuService {
+
+    /** sort 파라미터("{필드},{asc|desc}") — cpuId|socket|vendor|model|coreCount|threadCount|baseClockGhz, 동률·값 없음은 소켓순 */
+    private static final ListSort.Spec<CpuDeviceListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("cpuId", ListSort.by(CpuDeviceListItemResponse::socket)),
+                    Map.entry("socket", ListSort.by(CpuDeviceListItemResponse::socket)),
+                    Map.entry("vendor", ListSort.byNullsAsLargest(CpuDeviceListItemResponse::vendor, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("model", ListSort.byNullsAsLargest(CpuDeviceListItemResponse::model, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("coreCount", ListSort.by(CpuDeviceListItemResponse::coreCount)),
+                    Map.entry("threadCount", ListSort.by(CpuDeviceListItemResponse::threadCount)),
+                    Map.entry("baseClockGhz", ListSort.byNullsAsLargest(CpuDeviceListItemResponse::baseClockGhz))),
+            Comparator.comparingInt(CpuDeviceListItemResponse::socket));
 
     /** node_cpu_info 의 model_name 표기 "Intel(R) Xeon(R) Gold 6338 CPU @ 2.00GHz" 에서 기본 클럭을 뽑는다 */
     private static final Pattern BASE_CLOCK = Pattern.compile("@\\s*(\\d+(?:\\.\\d+)?)\\s*GHz", Pattern.CASE_INSENSITIVE);
@@ -63,7 +76,7 @@ public class ResourceExplorerNodeCpuService {
      * 수집 상태는 목록을 만들 표본이 Thanos 에 있으면 COLLECTING 이고, 없으면 목록 자체가 빈다.
      */
     public PageResponse<CpuDeviceListItemResponse> getCpuDevices(String nodeId, int page, int size, String sort) {
-        Comparator<CpuDeviceListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<CpuDeviceListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         MetricSelector selector = selector(nodeId);
         if (selector == null) {
             return PageResponse.of(List.of(), page, size);
@@ -126,25 +139,4 @@ public class ResourceExplorerNodeCpuService {
         return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
-    /** sort 파라미터("{필드},{asc|desc}") — cpuId|socket|vendor|model|coreCount|threadCount|baseClockGhz, 동률·값 없음은 소켓순 */
-    private static Comparator<CpuDeviceListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<CpuDeviceListItemResponse> comparator = switch (field) {
-            case "cpuId", "socket" -> Comparator.comparingInt(CpuDeviceListItemResponse::socket);
-            case "vendor" -> Comparator.comparing(CpuDeviceListItemResponse::vendor,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "model" -> Comparator.comparing(CpuDeviceListItemResponse::model,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-            case "coreCount" -> Comparator.comparingInt(CpuDeviceListItemResponse::coreCount);
-            case "threadCount" -> Comparator.comparingInt(CpuDeviceListItemResponse::threadCount);
-            case "baseClockGhz" -> Comparator.comparing(CpuDeviceListItemResponse::baseClockGhz,
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
-        };
-        Comparator<CpuDeviceListItemResponse> stable = comparator.thenComparingInt(CpuDeviceListItemResponse::socket);
-        return desc ? stable.reversed() : stable;
-    }
 }

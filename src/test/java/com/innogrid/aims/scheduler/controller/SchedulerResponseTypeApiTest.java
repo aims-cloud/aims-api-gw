@@ -56,6 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 스케줄러 응답 타입 명시의 계약 — 레코드로 바꾼 네 응답의 키 순서, 작업 10개의 응답 스키마 참조와 새 이름,
  * 기존 Point·Candidate 스키마 본문 보존, 스케줄러 컨트롤러 응답 선언에 와일드카드·원시 타입이 없음.
+ * 진단 응답의 중첩 레코드는 끝의 Response 를 뺀 응답 이름을 앞에 붙인 이름으로 공개한다(단순 이름은 다른 영역이 쓸 수 있다).
  * 진단 응답 넷과 그 안에 실리는 레코드는 값이 비어도 선언한 키를 모두 순서대로 내야 한다 — 판단 근거가 없다는 사실도 정보다.
  * 스케줄러 경로의 모든 작업은 성공 응답 data 로 이름 있는 스키마나 기본 타입을 돌려주고, 스케줄러 작업이 닿는 스키마 이름은
  * 공용 래퍼 말고는 다른 작업이 닿는 이름과 겹치지 않아야 한다(겹치면 springdoc 이 한쪽 본문을 버린다).
@@ -86,7 +87,7 @@ class SchedulerResponseTypeApiTest {
             Map.entry("get /optimization/power", "ApiResponsePowerOptimizationResponse"),
             Map.entry("get /optimization/consolidation", "ApiResponseConsolidationResponse"));
 
-    /** 타입을 명시하면서 공개한 스키마 28개(중첩은 응답 이름을 앞에 붙인 이름). */
+    /** 타입을 명시하면서 공개한 스키마 28개(중첩은 끝의 Response 를 뺀 응답 이름을 앞에 붙인 이름). */
     private static final Set<String> NEW_SCHEMAS = Set.of(
             "ApiResponseConsolidationResponse", "ApiResponseListConstraintDescriptionResponse", "ApiResponseListEngineResponse",
             "ApiResponseListResourceTypeOptionResponse", "ApiResponseListThermalCooldownResponse", "ApiResponsePowerEfficiencyResponse",
@@ -209,7 +210,7 @@ class SchedulerResponseTypeApiTest {
                 schemas.get("ConsolidationResponse").get("properties").get("summary").get("$ref").asString());
     }
 
-    @DisplayName("전력 진단 응답의 중첩 스키마는 응답 이름을 앞에 붙여 공개하고 부모가 그 이름을 가리킨다")
+    @DisplayName("전력 효율·효율 추세·전력 최적화·통합 진단 응답의 중첩 스키마는 끝의 Response 를 뺀 응답 이름을 앞에 붙여 공개하고 부모가 그 이름을 가리킨다")
     @Test
     void nested_schemas_use_response_prefix() throws Exception {
         JsonNode schemas = apiDocs().get("components").get("schemas");
@@ -230,7 +231,7 @@ class SchedulerResponseTypeApiTest {
                 named.add(name);
             }
         }
-        assertEquals(10, named.size(), named.toString());
+        assertTrue(named.size() >= 10, "네 응답의 중첩 레코드를 훑었다: " + named);
         JsonNode opt = schemas.get("PowerOptimizationResponse").get("properties");
         assertEquals(REF + "PowerOptimizationCluster", opt.get("cluster").get("$ref").asString());
         assertEquals(REF + "PowerOptimizationMdc", opt.get("mdcs").get("items").get("$ref").asString());

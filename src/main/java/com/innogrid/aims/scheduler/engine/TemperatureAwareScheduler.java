@@ -1,23 +1,17 @@
 package com.innogrid.aims.scheduler.engine;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
-import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
-import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 /**
@@ -73,7 +67,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 평균 수준" 과 구분되지 않고, 그 문장이 {@code scheduling_history} 에 그대로 저장된다.</p>
  */
 @Component
-public class TemperatureAwareScheduler implements SchedulingEngine {
+public class TemperatureAwareScheduler extends AbstractScoringEngine<TemperatureAwareScheduler.TempRun> {
 
     private static final double BALANCE_WEIGHT = 0.25;
     private static final double HEADROOM_WEIGHT = 0.30;
@@ -102,130 +96,122 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
         return "TemperatureAwareScheduler";
     }
 
-    @Override
-    public SchedulingResult schedule(Workload workload, PlacementContext context) {
-        List<NodeResource> candidates = context.nodes();
-        if (candidates.isEmpty()) {
-            return SchedulingResult.failure("후보 노드가 없습니다");
+    /**
+     * 호출 한 번의 누적값 — 후보 전체 평균 온도·계측 대수와, 승자가 온도를 잰 노드인지.
+     * 사유의 주어는 후보 집합이 아니라 <b>승자</b>다. 집합 기준으로 분기하면 계측 노드가 뜨거워
+     * 미계측 노드가 이겼을 때 "여유:0.50 균형:0.50 냉각:0.50" 을 계측값처럼 적게 된다.
+     */
+    static final class TempRun extends Run {
+        final double avgTemperature;
+        final long measuredCount;
+        boolean bestHasThermal;
+
+        TempRun(double avgTemperature, long measuredCount) {
+            this.avgTemperature = avgTemperature;
+            this.measuredCount = measuredCount;
         }
 
-        SchedulingPolicy policy = context.policy();
-        double maxTemp = policy.getMaxTemperatureCelsius();
+        @Override
+        protected void bestChanged(NodeResource node, NodeScore best) {
+            bestHasThermal = Measured.thermal(node);   // 승자와 함께 갱신한다 — 집합이 아니라 승자의 성질이다
+        }
+    }
 
+    @Override
+    protected TempRun newRun(Workload workload, PlacementContext context) {
         // 전체 노드 평균 온도 (열적 균형용) — 노드 온도와 같은 기준(실효)으로 맞춘다
         double avgTemperature = context.averageTemperature(thermalModel);
-
         // 클러스터에 계측 노드가 몇 대인가. 평균 온도 표기와 선택 사유가 함께 쓴다.
-        long measuredCount = candidates.stream().filter(Measured::thermal).count();
+        long measuredCount = context.nodes().stream().filter(Measured::thermal).count();
+        return new TempRun(avgTemperature, measuredCount);
+    }
 
-        List<NodeScore> scores = new ArrayList<>();
-        NodeScore bestScore = null;
-        // 사유의 주어는 후보 집합이 아니라 <b>승자</b>다. 집합 기준으로 분기하면 계측 노드가 뜨거워
-        // 미계측 노드가 이겼을 때 "여유:0.50 균형:0.50 냉각:0.50" 을 계측값처럼 적게 된다.
-        boolean bestHasThermal = false;
+    @Override
+    protected NodeScore scoreNode(Workload workload, PlacementContext context, NodeResource node, Exclusion exclusion, TempRun run) {
+        double maxTemp = context.policy().getMaxTemperatureCelsius();
 
-        for (NodeResource node : candidates) {
-            // ── 하드 제약 (배치 후 예상 온도 포함) ─────────────────
-            Exclusion exclusion = context.exclusion(workload, node);
-            boolean eligible = (exclusion == null);
+        // 온도를 수집하지 못한 노드(0°C)는 판단 근거가 없다. 0 을 그대로 계산하면 열적 여유·냉각이
+        // 만점, 균형도 상한이 되어 가중치 0.75 를 통째로 가져간다 — 다른 두 엔진과 같이 중립 0.5 를 준다.
+        // 계측 여부는 실측의 성질이라 실효 온도가 아니라 실측 온도로 판정한다(power 엔진과 같은 철자).
+        // 부등호를 써야 한다 — headroomScore 에는 상한 클램프가 없어 음수 온도가 1.0 을 넘긴다.
+        //
+        // 임계 척도(maxTemp)의 부재를 여기에 섞지 않는다. headroomScore·coolingScore 는 ThermalModel 이
+        // maxTemperature<=0 에 이미 중립을 돌려주고, balanceScore 는 maxTemp 를 아예 쓰지 않는다 —
+        // 섞으면 임계가 0 인 정책에서 계측된 노드까지 "온도를 못 쟀다" 로 취급되어 균형 항이 죽는다.
+        boolean hasThermal = Measured.thermal(node);
 
-            // 온도를 수집하지 못한 노드(0°C)는 판단 근거가 없다. 0 을 그대로 계산하면 열적 여유·냉각이
-            // 만점, 균형도 상한이 되어 가중치 0.75 를 통째로 가져간다 — 다른 두 엔진과 같이 중립 0.5 를 준다.
-            // 계측 여부는 실측의 성질이라 실효 온도가 아니라 실측 온도로 판정한다(power 엔진과 같은 철자).
-            // 부등호를 써야 한다 — headroomScore 에는 상한 클램프가 없어 음수 온도가 1.0 을 넘긴다.
-            //
-            // 임계 척도(maxTemp)의 부재를 여기에 섞지 않는다. headroomScore·coolingScore 는 ThermalModel 이
-            // maxTemperature<=0 에 이미 중립을 돌려주고, balanceScore 는 maxTemp 를 아예 쓰지 않는다 —
-            // 섞으면 임계가 0 인 정책에서 계측된 노드까지 "온도를 못 쟀다" 로 취급되어 균형 항이 죽는다.
-            boolean hasThermal = Measured.thermal(node);
+        // 예약분까지 반영한 온도. 실측만 보면 다건 배치가 한 노드로 몰린다.
+        double temperature = thermalModel.effectiveTemperature(node);
 
-            // 예약분까지 반영한 온도. 실측만 보면 다건 배치가 한 노드로 몰린다.
-            double temperature = thermalModel.effectiveTemperature(node);
+        // ── 1. 열적 여유 스코어 ─────────────────────────────
+        double headroomScore = hasThermal ? thermalModel.headroomScore(temperature, maxTemp) : 0.5;
 
-            // ── 1. 열적 여유 스코어 ─────────────────────────────
-            double headroomScore = hasThermal ? thermalModel.headroomScore(temperature, maxTemp) : 0.5;
+        // ── 2. 열적 균형 스코어 ─────────────────────────────
+        double balanceScore = hasThermal ? thermalModel.balanceScore(temperature, run.avgTemperature) : 0.5;
 
-            // ── 2. 열적 균형 스코어 ─────────────────────────────
-            double balanceScore = hasThermal ? thermalModel.balanceScore(temperature, avgTemperature) : 0.5;
+        // ── 3. 냉각 비용 스코어 (제곱 비용 모델) ─────────────
+        double coolingScore = hasThermal ? thermalModel.coolingScore(temperature, maxTemp) : 0.5;
 
-            // ── 3. 냉각 비용 스코어 (제곱 비용 모델) ─────────────
-            double coolingScore = hasThermal ? thermalModel.coolingScore(temperature, maxTemp) : 0.5;
+        // ── 4. 자원 여유 스코어 (예약분 반영) ─────────────────
+        double resourceScore = ((100 - node.effectiveCpuUsagePercent()) / 100.0 * 0.5)
+                + ((100 - node.effectiveMemoryUsagePercent()) / 100.0 * 0.5);
 
-            // ── 4. 자원 여유 스코어 (예약분 반영) ─────────────────
-            double resourceScore = ((100 - node.effectiveCpuUsagePercent()) / 100.0 * 0.5)
-                    + ((100 - node.effectiveMemoryUsagePercent()) / 100.0 * 0.5);
+        // ── 가중합 ── 항을 더하는 순서를 바꾸지 않는다
+        double totalScore = headroomScore * HEADROOM_WEIGHT
+                + balanceScore * BALANCE_WEIGHT
+                + coolingScore * COOLING_COST_WEIGHT
+                + resourceScore * RESOURCE_WEIGHT;
 
-            // ── 가중합 ─────────────────────────────────────────
-            double totalScore = headroomScore * HEADROOM_WEIGHT
-                    + balanceScore * BALANCE_WEIGHT
-                    + coolingScore * COOLING_COST_WEIGHT
-                    + resourceScore * RESOURCE_WEIGHT;
+        totalScore = Scores.round(totalScore);
 
-            totalScore = Scores.round(totalScore);
+        Map<String, Double> details = new LinkedHashMap<>();
+        // 중립 0.5 가 "재 봤더니 0.5" 로 읽히지 않게 계측 여부를 함께 낸다(power 엔진과 같은 관례).
+        details.put("온도계측", hasThermal ? 1.0 : 0.0);
+        details.put("열적여유", Scores.round(headroomScore));
+        details.put("열적균형", Scores.round(balanceScore));
+        details.put("냉각점수", Scores.round(coolingScore));
+        details.put("자원여유", Scores.round(resourceScore));
+        putDiskCheck(details, workload, node);
+        // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다 — 0 을 넣으면
+        // "재 봤더니 0°C" 로 읽혀 판단 근거가 없다는 사실이 가려진다(power 엔진과 같은 관례).
+        details.put("배치후예상온도C",
+                Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
+        details.put("클러스터평균온도C", Measured.valueOrNull(run.measuredCount > 0, run.avgTemperature));
 
-            Map<String, Double> details = new LinkedHashMap<>();
-            // 중립 0.5 가 "재 봤더니 0.5" 로 읽히지 않게 계측 여부를 함께 낸다(power 엔진과 같은 관례).
-            details.put("온도계측", hasThermal ? 1.0 : 0.0);
-            details.put("열적여유", Scores.round(headroomScore));
-            details.put("열적균형", Scores.round(balanceScore));
-            details.put("냉각점수", Scores.round(coolingScore));
-            details.put("자원여유", Scores.round(resourceScore));
-            if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
-                details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
-            }
-            // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다 — 0 을 넣으면
-            // "재 봤더니 0°C" 로 읽혀 판단 근거가 없다는 사실이 가려진다(power 엔진과 같은 관례).
-            details.put("배치후예상온도C",
-                    Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
-            details.put("클러스터평균온도C", Measured.valueOrNull(measuredCount > 0, avgTemperature));
+        return nodeScore(node, Scores.round(resourceScore), Scores.round(resourceScore),
+                Scores.round(coolingScore), Scores.round(headroomScore), Scores.round(balanceScore),
+                totalScore, exclusion, details);
+    }
 
-            NodeScore ns = new NodeScore(
-                    node.getMdcId(), node.getNodeId(),
-                    Scores.round(resourceScore), Scores.round(resourceScore),
-                    Scores.round(coolingScore), Scores.round(headroomScore),
-                    Scores.round(balanceScore),
-                    totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
-            );
-            scores.add(ns);
+    @Override
+    protected String noEligibleReason() {
+        return "온도 제약을 충족하는 노드가 없습니다";
+    }
 
-            if (eligible && (bestScore == null || totalScore > bestScore.totalScore())) {
-                bestScore = ns;
-                bestHasThermal = hasThermal;   // 승자와 함께 갱신한다 — 집합이 아니라 승자의 성질이다
-            }
-        }
-
-        scores.sort(Comparator.comparingDouble(NodeScore::totalScore).reversed());
-
-        if (bestScore == null) {
-            return new SchedulingResult(false, null, null, 0,
-                    "온도 제약을 충족하는 노드가 없습니다", scores);
-        }
-
-        // 사유는 "왜 이 노드를 골랐는가" 를 설명하는 문장이므로 주어가 승자여야 한다. 승자가 미계측이면
-        // 열 점수 세 개는 잰 값이 아니라 중립값이므로 <b>숫자로 늘어놓지 않는다</b> — 늘어놓으면
-        // "재 봤더니 전부 평균 수준" 과 글자 그대로 구분되지 않는다(power 엔진과 같은 관례).
-        String reason;
-        if (bestHasThermal) {
-            reason = String.format(
+    /**
+     * 사유는 "왜 이 노드를 골랐는가" 를 설명하는 문장이므로 주어가 승자여야 한다. 승자가 미계측이면
+     * 열 점수 세 개는 잰 값이 아니라 중립값이므로 <b>숫자로 늘어놓지 않는다</b> — 늘어놓으면
+     * "재 봤더니 전부 평균 수준" 과 글자 그대로 구분되지 않는다(power 엔진과 같은 관례).
+     */
+    @Override
+    protected String reason(NodeScore best, PlacementContext context, int candidateCount, TempRun run) {
+        if (run.bestHasThermal) {
+            return String.format(
                     "[온도최적화] 점수 %.4f (여유:%.2f 균형:%.2f 냉각:%.2f 자원:%.2f) 평균온도:%.1f°C — %d개 후보",
-                    bestScore.totalScore(), bestScore.temperatureScore(), bestScore.networkScore(),
-                    bestScore.powerScore(), bestScore.cpuScore(), avgTemperature, candidates.size());
-        } else if (measuredCount > 0) {
+                    best.totalScore(), best.temperatureScore(), best.networkScore(),
+                    best.powerScore(), best.cpuScore(), run.avgTemperature, candidateCount);
+        } else if (run.measuredCount > 0) {
             // "자원 여유로 선택" 이라고 쓰지 않는다 — 승자가 이긴 이유는 열 3항이 중립 바닥(0.375)으로
             // 고정됐기 때문이지 자원이 더 낫기 때문이 아니다. 실제로 자원이 <b>더 적은</b> 미계측 노드가
             // 뜨거운 계측 노드를 이기는 구성이 존재한다. 사유는 일어난 일만 적는다.
-            reason = String.format(
+            return String.format(
                     "[온도최적화] 점수 %.4f — 선택 노드는 온도 미계측이라 열 점수를 중립으로 뒀다 "
                             + "(자원:%.2f, 계측 %d/%d대, 계측 노드 평균온도:%.1f°C)",
-                    bestScore.totalScore(), bestScore.cpuScore(),
-                    measuredCount, candidates.size(), avgTemperature);
-        } else {
-            reason = String.format(
-                    "[온도최적화] 점수 %.4f — 온도 메트릭이 없어 열 점수를 중립으로 두고 자원 여유로 선택 (%d개 후보)",
-                    bestScore.totalScore(), candidates.size());
+                    best.totalScore(), best.cpuScore(),
+                    run.measuredCount, candidateCount, run.avgTemperature);
         }
-
-        return new SchedulingResult(true, bestScore.mdcId(), bestScore.nodeId(),
-                bestScore.totalScore(), reason, scores);
+        return String.format(
+                "[온도최적화] 점수 %.4f — 온도 메트릭이 없어 열 점수를 중립으로 두고 자원 여유로 선택 (%d개 후보)",
+                best.totalScore(), candidateCount);
     }
 }

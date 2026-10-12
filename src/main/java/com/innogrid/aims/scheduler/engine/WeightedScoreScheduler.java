@@ -1,16 +1,12 @@
 package com.innogrid.aims.scheduler.engine;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
@@ -19,7 +15,6 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
-import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 /**
@@ -53,7 +48,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 섞인 클러스터에서 계측된 노드보다 체계적으로 유리해진다. {@code power} 엔진과 같은 원칙이다.</p>
  */
 @Component
-public class WeightedScoreScheduler implements SchedulingEngine {
+public class WeightedScoreScheduler extends AbstractScoringEngine<AbstractScoringEngine.Run> {
 
     private final PowerModel powerModel;
     private final ThermalModel thermalModel;
@@ -86,111 +81,89 @@ public class WeightedScoreScheduler implements SchedulingEngine {
     }
 
     @Override
-    public SchedulingResult schedule(Workload workload, PlacementContext context) {
-        List<NodeResource> candidates = context.nodes();
-        if (candidates.isEmpty()) {
-            return SchedulingResult.failure("후보 노드가 없습니다");
-        }
+    protected Run newRun(Workload workload, PlacementContext context) {
+        return new Run();
+    }
 
+    @Override
+    protected NodeScore scoreNode(Workload workload, PlacementContext context, NodeResource node, Exclusion exclusion, Run run) {
         SchedulingPolicy policy = context.policy();
-        List<NodeScore> scores = new ArrayList<>();
-        NodeScore bestScore = null;
 
-        for (NodeResource node : candidates) {
-            // ── 1단계: 하드 제약 조건 필터링 ──────────────────────
-            Exclusion exclusion = context.exclusion(workload, node);
-            boolean eligible = (exclusion == null);
-
-            // ── 2단계: 소프트 스코어링 (5차원, 예약분 반영 실효값) ──
-            double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
-            double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
-            // 전력·온도를 수집하지 못한 노드(0W·0°C)는 판단 근거가 없으므로 중립 0.5.
-            // 실측 0 을 그대로 계산하면 여유 100% 로 읽혀 미계측 노드가 만점을 받는다.
-            double powerScore = Measured.weightedPowerNeutral(policy, node)
-                    ? 0.5
-                    : powerModel.effectiveHeadroomPercent(node) / 100.0;
-            double tempScore = Measured.weightedThermalNeutral(policy, node)
-                    ? 0.5
-                    : thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
-                                                 policy.getMaxTemperatureCelsius());
-            double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
-            // 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜졌을 때만 데이터 MDC ↔ 노드 MDC 링크 품질을 섞는다.
-            // 같은 MDC 는 1.0, 미등록 원격은 설정값(기본 0.5)이라 등록된 양호 링크 아래로 간다. DOWN 은 C5 가 이미 제외했다.
-            Double linkScore = null;
-            Double linkRegistered = null;
-            if (context.linkAware(workload)) {
-                String dataMdc = workload.getDataMdcId();
-                linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix(),
-                                                   workload.getRequiredBandwidthMbps());
-                netScore = networkModel.blend(netScore, linkScore);
-                // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC 는 링크를 타지
-                // 않으므로 "등록됨" 과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.
-                boolean sameMdc = dataMdc.equals(node.getMdcId());
-                linkRegistered = sameMdc || networkModel.isRegistered(dataMdc, node.getMdcId(), context.linkMatrix())
-                        ? 1.0 : 0.0;
-            }
-
-            // ── 3단계: 가중합 ────────────────────────────────────
-            double totalScore = cpuScore * policy.getCpuWeight()
-                    + memScore * policy.getMemoryWeight()
-                    + powerScore * policy.getPowerWeight()
-                    + tempScore * policy.getTemperatureWeight()
-                    + netScore * policy.getNetworkWeight();
-
-            // ── 4단계: 선호도 보너스 ─────────────────────────────
-            if (workload.getPreferredMdcId() != null
-                    && workload.getPreferredMdcId().equals(node.getMdcId())) {
-                totalScore *= 1.10; // +10% 보너스
-            }
-
-            // 우선순위 보너스
-            totalScore *= getPriorityMultiplier(workload.getPriority());
-
-            totalScore = Scores.round(totalScore);
-
-            Map<String, Double> details = new LinkedHashMap<>();
-            details.put("cpu여유", Scores.round(cpuScore));
-            details.put("메모리여유", Scores.round(memScore));
-            details.put("전력여유", Scores.round(powerScore));
-            details.put("온도여유", Scores.round(tempScore));
-            details.put("네트워크한산도", Scores.round(netScore));
-            if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
-                details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
-            }
-            if (linkScore != null) {   // 게이트 on 일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
-                details.put("링크품질", Scores.round(linkScore));
-                details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)
-            }
-
-            NodeScore ns = new NodeScore(
-                    node.getMdcId(), node.getNodeId(),
-                    Scores.round(cpuScore), Scores.round(memScore), Scores.round(powerScore),
-                    Scores.round(tempScore), Scores.round(netScore), totalScore,
-                    eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
-            );
-            scores.add(ns);
-
-            if (eligible && (bestScore == null || totalScore > bestScore.totalScore())) {
-                bestScore = ns;
-            }
+        // ── 소프트 스코어링 (5차원, 예약분 반영 실효값) ──
+        double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
+        double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
+        // 전력·온도를 수집하지 못한 노드(0W·0°C)는 판단 근거가 없으므로 중립 0.5.
+        // 실측 0 을 그대로 계산하면 여유 100% 로 읽혀 미계측 노드가 만점을 받는다.
+        double powerScore = Measured.weightedPowerNeutral(policy, node)
+                ? 0.5
+                : powerModel.effectiveHeadroomPercent(node) / 100.0;
+        double tempScore = Measured.weightedThermalNeutral(policy, node)
+                ? 0.5
+                : thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
+                                             policy.getMaxTemperatureCelsius());
+        double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
+        // 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜졌을 때만 데이터 MDC ↔ 노드 MDC 링크 품질을 섞는다.
+        // 같은 MDC 는 1.0, 미등록 원격은 설정값(기본 0.5)이라 등록된 양호 링크 아래로 간다. DOWN 은 C5 가 이미 제외했다.
+        Double linkScore = null;
+        Double linkRegistered = null;
+        if (context.linkAware(workload)) {
+            String dataMdc = workload.getDataMdcId();
+            linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix(),
+                                               workload.getRequiredBandwidthMbps());
+            netScore = networkModel.blend(netScore, linkScore);
+            // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC 는 링크를 타지
+            // 않으므로 "등록됨" 과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.
+            boolean sameMdc = dataMdc.equals(node.getMdcId());
+            linkRegistered = sameMdc || networkModel.isRegistered(dataMdc, node.getMdcId(), context.linkMatrix())
+                    ? 1.0 : 0.0;
         }
 
-        // 점수 내림차순 정렬
-        scores.sort(Comparator.comparingDouble(NodeScore::totalScore).reversed());
+        // ── 가중합 ── 항을 더하는 순서를 바꾸지 않는다 — 반올림 경계에 걸린 값이 있어 순서만 바꿔도 넷째 자리가 움직인다
+        double totalScore = cpuScore * policy.getCpuWeight()
+                + memScore * policy.getMemoryWeight()
+                + powerScore * policy.getPowerWeight()
+                + tempScore * policy.getTemperatureWeight()
+                + netScore * policy.getNetworkWeight();
 
-        if (bestScore == null) {
-            return new SchedulingResult(false, null, null, 0,
-                    "모든 후보 노드가 제약 조건을 충족하지 못합니다", scores);
+        // ── 선호도 보너스 ── 반올림 전에 곱한다
+        if (workload.getPreferredMdcId() != null
+                && workload.getPreferredMdcId().equals(node.getMdcId())) {
+            totalScore *= 1.10; // +10% 보너스
         }
 
-        String reason = String.format(
+        // 우선순위 보너스
+        totalScore *= getPriorityMultiplier(workload.getPriority());
+
+        totalScore = Scores.round(totalScore);
+
+        Map<String, Double> details = new LinkedHashMap<>();
+        details.put("cpu여유", Scores.round(cpuScore));
+        details.put("메모리여유", Scores.round(memScore));
+        details.put("전력여유", Scores.round(powerScore));
+        details.put("온도여유", Scores.round(tempScore));
+        details.put("네트워크한산도", Scores.round(netScore));
+        putDiskCheck(details, workload, node);
+        if (linkScore != null) {   // 게이트 on 일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
+            details.put("링크품질", Scores.round(linkScore));
+            details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)
+        }
+
+        return nodeScore(node, Scores.round(cpuScore), Scores.round(memScore), Scores.round(powerScore),
+                Scores.round(tempScore), Scores.round(netScore), totalScore, exclusion, details);
+    }
+
+    @Override
+    protected String noEligibleReason() {
+        return "모든 후보 노드가 제약 조건을 충족하지 못합니다";
+    }
+
+    @Override
+    protected String reason(NodeScore best, PlacementContext context, int candidateCount, Run run) {
+        return String.format(
                 "최고 점수 %.4f (CPU:%.2f MEM:%.2f PWR:%.2f TEMP:%.2f NET:%.2f) — %d개 후보 중 선택",
-                bestScore.totalScore(), bestScore.cpuScore(), bestScore.memoryScore(),
-                bestScore.powerScore(), bestScore.temperatureScore(), bestScore.networkScore(),
-                candidates.size());
-
-        return new SchedulingResult(true, bestScore.mdcId(), bestScore.nodeId(),
-                bestScore.totalScore(), reason, scores);
+                best.totalScore(), best.cpuScore(), best.memoryScore(),
+                best.powerScore(), best.temperatureScore(), best.networkScore(),
+                candidateCount);
     }
 
     private double getPriorityMultiplier(Workload.WorkloadPriority priority) {

@@ -1,7 +1,5 @@
 package com.innogrid.aims.scheduler.engine;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
@@ -19,7 +16,6 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
-import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 /**
@@ -55,7 +51,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 깨우기 벌점이 유휴비가 아니라 절대 W 로 총점에 들어간다.</p>
  */
 @Component
-public class PowerAwareScheduler implements SchedulingEngine {
+public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareScheduler.PowerRun> {
 
     private final PowerModel powerModel;
     private final ThermalModel thermalModel;
@@ -78,7 +74,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
 
     /** 설정을 직접 넣어 만드는 형태. 가중치·볼록 지수를 바꿔 보는 테스트에서 쓴다. */
     PowerAwareScheduler(SchedulerProperties properties) {
-        // 네트워크 모델은 넘겨받은 설정이 아니라 기본 설정으로 만든다 — 기본 생성자가 하던 동작 그대로(바꾸면 결과가 달라질 수 있다)
+        // 네트워크 모델은 예전 기본 생성자처럼 기본 설정으로 만든다 — 넘겨받은 설정을 쓰지 않던 동작 그대로
         this(new PowerModel(properties), new ThermalModel(properties), new NetworkModel(new SchedulerProperties()), properties);
     }
 
@@ -92,103 +88,108 @@ public class PowerAwareScheduler implements SchedulingEngine {
         return "PowerAwareScheduler";
     }
 
+    /** 호출 한 번의 누적값 — 후보 중 전력을 잰 노드가 하나라도 있는가(제외된 후보도 센다 · 현재 동작). */
+    static final class PowerRun extends Run {
+        boolean anyPowerMetric;
+    }
+
     @Override
-    public SchedulingResult schedule(Workload workload, PlacementContext context) {
-        List<NodeResource> candidates = context.nodes();
-        if (candidates.isEmpty()) {
-            return SchedulingResult.failure("후보 노드가 없습니다");
-        }
+    protected PowerRun newRun(Workload workload, PlacementContext context) {
+        return new PowerRun();
+    }
 
+    @Override
+    protected NodeScore scoreNode(Workload workload, PlacementContext context, NodeResource node, Exclusion exclusion, PowerRun run) {
         SchedulingPolicy policy = context.policy();
-        List<NodeScore> scores = new ArrayList<>();
-        NodeScore bestScore = null;
-        boolean anyPowerMetric = false;
 
-        for (NodeResource node : candidates) {
-            Exclusion exclusion = context.exclusion(workload, node);
-            boolean eligible = (exclusion == null);
+        boolean hasPower = Measured.powerEnginePower(node);
+        boolean hasThermal = Measured.thermal(node);
+        run.anyPowerMetric |= hasPower;
 
-            boolean hasPower = Measured.powerEnginePower(node);
-            boolean hasThermal = Measured.thermal(node);
-            anyPowerMetric |= hasPower;
+        // ── 전력 복합 점수 ──────────────────────────────────
+        // PEI·비낭비도 실효 기저 — 한계 전력·가동 판정·자원 여유와 같은 입력(예약 반영)을 본다
+        double pei = powerModel.placementPei(node);
+        double waste = powerModel.placementWasteScore(node);
+        double marginal = powerModel.marginalScore(node, workload.getRequiredCpu());
+        double powerScore = hasPower
+                ? props.getPeiWeight() * pei
+                    + props.getWasteWeight() * waste
+                    + props.getMarginalWeight() * marginal
+                : 0.5;
 
-            // ── 전력 복합 점수 ──────────────────────────────────
-            // PEI·비낭비도 실효 기저 — 한계 전력·가동 판정·자원 여유와 같은 입력(예약 반영)을 본다
-            double pei = powerModel.placementPei(node);
-            double waste = powerModel.placementWasteScore(node);
-            double marginal = powerModel.marginalScore(node, workload.getRequiredCpu());
-            double powerScore = hasPower
-                    ? props.getPeiWeight() * pei
-                        + props.getWasteWeight() * waste
-                        + props.getMarginalWeight() * marginal
-                    : 0.5;
+        // ── 열 점수 ────────────────────────────────────────
+        double thermalScore = hasThermal ? thermalScore(node, policy) : 0.5;
 
-            // ── 열 점수 ────────────────────────────────────────
-            double thermalScore = hasThermal ? thermalScore(node, policy) : 0.5;
+        // ── 자원 여유 ──────────────────────────────────────
+        // 예약분을 반영한다. 실측만 보면 한 번의 실행에서 워크로드를 잇달아 배치할 때
+        // 점수가 고정되어 같은 노드가 계속 뽑히고, 제약이 막을 때까지 한쪽으로 몰린다.
+        double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
+        double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
 
-            // ── 자원 여유 ──────────────────────────────────────
-            // 예약분을 반영한다. 실측만 보면 한 번의 실행에서 워크로드를 잇달아 배치할 때
-            // 점수가 고정되어 같은 노드가 계속 뽑히고, 제약이 막을 때까지 한쪽으로 몰린다.
-            double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
-            double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
+        double totalScore = Scores.round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
 
-            double totalScore = Scores.round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
+        // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0 을 넣으면 "포화" 로
+        // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
+        double netScore = networkModel.localTrafficScore(node);
 
-            // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0 을 넣으면 "포화" 로
-            // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
-            double netScore = networkModel.localTrafficScore(node);
+        // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다. 0 이나 0.5 를
+        // 넣으면 "측정했더니 그 값" 으로 읽혀, 판단 근거가 없다는 사실이 가려진다.
+        // 전력 효율 평가 API 도 같은 방식을 쓴다(PowerEfficiencyResponse 주석).
+        //
+        // 실질 한계 전력은 가동 노드에서는 용량과 CPU 사용률로 동적 증가분을 계산하지만,
+        // 유휴 노드의 깨우기 비용은 설정에 따라 실측 전력에서 유휴 전력을 역산할 수 있다.
+        // 반대로 배치 후 예상 전력은 실측값을 기준으로 더하는 절대값이라 기준을 모르면 의미가 없다.
+        Map<String, Double> details = new LinkedHashMap<>();
+        details.put("전력계측", hasPower ? 1.0 : 0.0);
+        details.put("온도계측", hasThermal ? 1.0 : 0.0);
+        details.put("PEI", Measured.valueOrNull(hasPower, pei));
+        details.put("비낭비", Measured.valueOrNull(hasPower, waste));
+        details.put("실질한계전력점수", Scores.round(marginal));
+        details.put("전력점수", Scores.round(powerScore));
+        details.put("열점수", Scores.round(thermalScore));
+        details.put("cpu여유", Scores.round(cpuScore));
+        details.put("메모리여유", Scores.round(memScore));
+        details.put("네트워크한산도", Scores.round(netScore));
+        putDiskCheck(details, workload, node);
+        details.put("실질한계전력W", Scores.round(powerModel.realMarginalPower(node, workload.getRequiredCpu())));
+        details.put("배치후예상전력W",
+                Measured.valueOrNull(hasPower, powerModel.predictedPower(node, workload.getRequiredCpu())));
+        details.put("배치후예상온도C",
+                Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
+        details.put("가동중", powerModel.isActive(node) ? 1.0 : 0.0);
 
-            // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다. 0 이나 0.5 를
-            // 넣으면 "측정했더니 그 값" 으로 읽혀, 판단 근거가 없다는 사실이 가려진다.
-            // 전력 효율 평가 API 도 같은 방식을 쓴다(PowerEfficiencyResponse 주석).
-            //
-            // 실질 한계 전력은 가동 노드에서는 용량과 CPU 사용률로 동적 증가분을 계산하지만,
-            // 유휴 노드의 깨우기 비용은 설정에 따라 실측 전력에서 유휴 전력을 역산할 수 있다.
-            // 반대로 배치 후 예상 전력은 실측값을 기준으로 더하는 절대값이라 기준을 모르면 의미가 없다.
-            Map<String, Double> details = new LinkedHashMap<>();
-            details.put("전력계측", hasPower ? 1.0 : 0.0);
-            details.put("온도계측", hasThermal ? 1.0 : 0.0);
-            details.put("PEI", Measured.valueOrNull(hasPower, pei));
-            details.put("비낭비", Measured.valueOrNull(hasPower, waste));
-            details.put("실질한계전력점수", Scores.round(marginal));
-            details.put("전력점수", Scores.round(powerScore));
-            details.put("열점수", Scores.round(thermalScore));
-            details.put("cpu여유", Scores.round(cpuScore));
-            details.put("메모리여유", Scores.round(memScore));
-            details.put("네트워크한산도", Scores.round(netScore));
-            if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
-                details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
-            }
-            details.put("실질한계전력W", Scores.round(powerModel.realMarginalPower(node, workload.getRequiredCpu())));
-            details.put("배치후예상전력W",
-                    Measured.valueOrNull(hasPower, powerModel.predictedPower(node, workload.getRequiredCpu())));
-            details.put("배치후예상온도C",
-                    Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
-            details.put("가동중", powerModel.isActive(node) ? 1.0 : 0.0);
+        return nodeScore(node, Scores.round(cpuScore), Scores.round(memScore),
+                Scores.round(powerScore), Scores.round(thermalScore), Scores.round(netScore),
+                totalScore, exclusion, details);
+    }
 
-            NodeScore ns = new NodeScore(
-                    node.getMdcId(), node.getNodeId(),
-                    Scores.round(cpuScore), Scores.round(memScore),
-                    Scores.round(powerScore), Scores.round(thermalScore), Scores.round(netScore),
-                    totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
-            );
-            scores.add(ns);
+    @Override
+    protected void afterRanking(List<NodeScore> ranked) {
+        annotateConsolidationMargin(ranked);
+    }
 
-            if (eligible && (bestScore == null || totalScore > bestScore.totalScore())) {
-                bestScore = ns;
-            }
+    @Override
+    protected String noEligibleReason() {
+        return "전력 제약을 충족하는 노드가 없습니다";
+    }
+
+    /**
+     * 선택 근거 한 줄.
+     * 전력 메트릭이 하나도 없으면 그 사실을 밝힌다 — 그러지 않으면 전력으로 고른 것처럼 보인다.
+     */
+    @Override
+    protected String reason(NodeScore best, PlacementContext context, int candidateCount, PowerRun run) {
+        if (!run.anyPowerMetric) {
+            return String.format(
+                    "[전력최적화] 점수 %.4f — 전력 메트릭이 없어 전력·열을 중립으로 두고 자원 여유로 선택 (%d개 후보)",
+                    best.totalScore(), candidateCount);
         }
-
-        scores.sort(Comparator.comparingDouble(NodeScore::totalScore).reversed());
-        annotateConsolidationMargin(scores);
-
-        if (bestScore == null) {
-            return new SchedulingResult(false, null, null, 0,
-                    "전력 제약을 충족하는 노드가 없습니다", scores);
-        }
-
-        return new SchedulingResult(true, bestScore.mdcId(), bestScore.nodeId(),
-                bestScore.totalScore(), reason(bestScore, context, candidates.size(), anyPowerMetric), scores);
+        return String.format(
+                "[전력최적화] 점수 %.4f (전력:%.2f 열:%.2f) — %d개 후보, 클러스터 %.0fW / 가동 %d대 / 반납가능 %.0fW",
+                best.totalScore(), best.powerScore(), best.temperatureScore(), candidateCount,
+                context.totalPowerWatts(),
+                context.activeNodeCount(props.getActiveCpuPercent()),
+                context.reclaimableIdleWatts(props.getActiveCpuPercent(), powerModel));
     }
 
     /**
@@ -236,24 +237,6 @@ public class PowerAwareScheduler implements SchedulingEngine {
         double penalty = thermalModel.warningPenalty(temperature, warnTemp, maxTemp);
 
         return cooling * (1.0 - penalty);
-    }
-
-    /**
-     * 선택 근거 한 줄.
-     * 전력 메트릭이 하나도 없으면 그 사실을 밝힌다 — 그러지 않으면 전력으로 고른 것처럼 보인다.
-     */
-    private String reason(NodeScore best, PlacementContext context, int candidateCount, boolean anyPowerMetric) {
-        if (!anyPowerMetric) {
-            return String.format(
-                    "[전력최적화] 점수 %.4f — 전력 메트릭이 없어 전력·열을 중립으로 두고 자원 여유로 선택 (%d개 후보)",
-                    best.totalScore(), candidateCount);
-        }
-        return String.format(
-                "[전력최적화] 점수 %.4f (전력:%.2f 열:%.2f) — %d개 후보, 클러스터 %.0fW / 가동 %d대 / 반납가능 %.0fW",
-                best.totalScore(), best.powerScore(), best.temperatureScore(), candidateCount,
-                context.totalPowerWatts(),
-                context.activeNodeCount(props.getActiveCpuPercent()),
-                context.reclaimableIdleWatts(props.getActiveCpuPercent(), powerModel));
     }
 
     private double clamp01(double v) {

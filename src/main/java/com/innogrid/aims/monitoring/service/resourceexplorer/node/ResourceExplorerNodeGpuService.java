@@ -1,16 +1,22 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.ClocksEventReason;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse.GpuClocksEvents;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectState;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse.GpuCollectStatus;
@@ -20,17 +26,22 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceInfoR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuGroupSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthLevel;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthSummaryResponse.HealthCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse.Series;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.GpuCounter;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.TrendSeries;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuXidErrorsResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuHealth;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSample;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import org.springframework.http.HttpStatus;
@@ -46,12 +57,15 @@ import org.springframework.web.server.ResponseStatusException;
  * dcgm_exporter 가 등록되지 않은 노드는 Thanos 를 조회하지 않고 미수집(0·빈 목록·빈 시리즈)으로 내린다.
  * 개별 GPU 는 gpuId(장치 UUID)로 식별하며, 최근 24시간 안에 수집된 적 없는 GPU 의 개요·정보·수집 상태는 404 다.
  * 수집 상태는 기대 지표가 전부 수집되면 HEALTHY, 하나라도 빠지면(전부 끊긴 경우 포함) FAILED 다.
+ * 상태 요약은 GPU 1장마다 수집·ECC DBE·PCIe Replay·Clock 이벤트 단계를 구하고 그룹은 가장 나쁜 단계를 쓴다(GpuHealthSummaryResponse 참고).
+ * XID 오류 상세는 오류 번호별 해석 자료와 발생 이력 적재가 필요해 아직 501 이다.
  * 노드 상세 패널은 ResourceExplorerNodeService 가 담당한다.
  */
 @Service
 public class ResourceExplorerNodeGpuService {
 
     private static final double MB_PER_GB = 1024.0;
+    private static final Duration PCIE_TREND_WINDOW = Duration.ofHours(24);
 
     private final NodeAccessService nodeAccess;
     private final MonitoringTargetRepository monitoringTargetRepository;
@@ -88,9 +102,9 @@ public class ResourceExplorerNodeGpuService {
 
     /** 그룹 상태 요약 — 이상 감지 배너 + 수집 상태/ECC DBE/PCIe Replay/Clocks Event 카드 */
     public GpuHealthSummaryResponse getGroupHealth(String nodeId) {
-        // TODO:: DCGM ECC_DBE_VOL_TOTAL·PCIE_REPLAY_COUNTER·CLOCKS_EVENT_REASONS 집계
-        // TODO:: 이상 감지 판정 기준(WARNING/CRITICAL 경계) 확정 필요
-        throw dataSourceNotImplemented();
+        MetricSelector selector = dcgmSelector(nodeId);
+        Map<String, GpuHealth> health = health(selector);
+        return healthSummary(devices(selector).stream().map(g -> judge(g, health.get(g.uuid()))).toList(), false);
     }
 
     /** 그룹 개요 GPU 목록 — 현재/최근 1시간 평균 Util, VRAM, 온도, 전력. 페이징(1부터)·컬럼 정렬 */
@@ -127,8 +141,9 @@ public class ResourceExplorerNodeGpuService {
 
     /** 개별 GPU 상태 요약 — 그룹과 동일 구조, 해당 GPU 1장 기준 */
     public GpuHealthSummaryResponse getDeviceHealth(String nodeId, String gpuId) {
-        // TODO:: 그룹 상태 요약과 판정 로직 공유, gpuId 필터만 추가
-        throw dataSourceNotImplemented();
+        MetricSelector selector = dcgmSelector(nodeId);
+        GpuSample gpu = requireDevice(selector, gpuId);
+        return healthSummary(List.of(judge(gpu, health(selector).get(gpu.uuid()))), true);
     }
 
     /** 개별 GPU 정보 표 — 모델/UUID/PCI/드라이버/수집 상태/마지막 수집. CUDA·NVML·VBIOS·P-State 는 수집 항목에 없어 null */
@@ -188,16 +203,42 @@ public class ResourceExplorerNodeGpuService {
         throw dataSourceNotImplemented();
     }
 
-    /** PCIe Replay Counter 상세 — GPU별 누적/1h/24h 증가와 24시간 증가 추이(회/h) */
+    /** PCIe Replay Counter 상세 — GPU별 누적/1h/24h 증가와 최근 24시간 증가 추이(회/h). gpuId 미지정 시 그룹 전체 */
     public GpuPcieReplayResponse getPcieReplay(String nodeId, String gpuId) {
-        // TODO:: DCGM_FI_DEV_PCIE_REPLAY_COUNTER 누적값 + increase() 로 구간 증가·추이 계산
-        throw dataSourceNotImplemented();
+        MetricSelector selector = dcgmSelector(nodeId);
+        List<GpuSample> gpus = targets(selector, gpuId);
+        Map<String, GpuHealth> health = health(selector);
+        List<GpuCounter> counters = gpus.stream().map(g -> {
+            GpuHealth h = health.get(g.uuid());
+            return h == null
+                    ? new GpuCounter(g.uuid(), g.displayName(), null, null, null)
+                    : new GpuCounter(g.uuid(), g.displayName(),
+                            count(h.pcieReplayTotal()), count(h.pcieReplay1h()), count(h.pcieReplay24h()));
+        }).toList();
+
+        Instant to = Instant.now();
+        List<TrendSeries> trend = selector == null || gpus.isEmpty() ? List.of()
+                : metrics.pcieReplayTrend(selector, blankToNull(gpuId), to.minus(PCIE_TREND_WINDOW), to).stream()
+                        .map(t -> new TrendSeries(t.uuid(), gpuName(t.index(), t.uuid()), t.points()))
+                        .toList();
+        return new GpuPcieReplayResponse(counters, trend);
     }
 
-    /** Clocks Event Reasons 상세 — GPU별 활성 이벤트와 안내 텍스트. gpuId 미지정 시 그룹 전체 */
+    /** Clocks Event Reasons 상세 — GPU별 활성 이벤트와 안내 텍스트. gpuId 미지정 시 그룹 전체, 지표가 없으면 activeReasons null */
     public GpuClocksEventsResponse getClocksEvents(String nodeId, String gpuId) {
-        // TODO:: DCGM_FI_DEV_CLOCKS_EVENT_REASONS 비트마스크를 ClocksEventReason 목록으로 해석
-        throw dataSourceNotImplemented();
+        MetricSelector selector = dcgmSelector(nodeId);
+        List<GpuSample> gpus = targets(selector, gpuId);
+        Map<String, GpuHealth> health = health(selector);
+        return new GpuClocksEventsResponse(gpus.stream().map(g -> {
+            GpuHealth h = health.get(g.uuid());
+            if (h == null || h.clocksMask() == null) {
+                return new GpuClocksEvents(g.uuid(), g.displayName(), g.model(), null, null,
+                        "Clock 이벤트 지표(DCGM_FI_DEV_CLOCKS_EVENT_REASONS)가 수집되지 않습니다.");
+            }
+            List<ClocksEventReason> reasons = ClocksEventReason.fromMask(h.clocksMask());
+            return new GpuClocksEvents(g.uuid(), g.displayName(), g.model(), clocksLevel(reasons), reasons,
+                    clocksGuide(reasons));
+        }).toList());
     }
 
     // ── 조회 대상 ───────────────────────────────────────────────
@@ -217,9 +258,22 @@ public class ResourceExplorerNodeGpuService {
         return selector == null ? List.of() : metrics.devices(selector);
     }
 
-    /** 최근 24시간 안에 수집된 GPU 만 개별 패널을 연다 — dcgm_exporter 가 없거나 해당 UUID 가 없으면 404 */
+    private Map<String, GpuHealth> health(MetricSelector selector) {
+        return selector == null ? Map.of() : metrics.health(selector);
+    }
+
+    /** 상세 패널 대상 — gpuId 가 없으면 노드의 GPU 전체, 있으면 그 GPU 1장(없으면 404) */
+    private List<GpuSample> targets(MetricSelector selector, String gpuId) {
+        return blankToNull(gpuId) == null ? devices(selector) : List.of(requireDevice(selector, gpuId));
+    }
+
     private GpuSample requireDevice(String nodeId, String gpuId) {
-        return devices(dcgmSelector(nodeId)).stream()
+        return requireDevice(dcgmSelector(nodeId), gpuId);
+    }
+
+    /** 최근 24시간 안에 수집된 GPU 만 개별 패널을 연다 — dcgm_exporter 가 없거나 해당 UUID 가 없으면 404 */
+    private GpuSample requireDevice(MetricSelector selector, String gpuId) {
+        return devices(selector).stream()
                 .filter(g -> g.uuid().equals(gpuId))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "GPU 를 찾을 수 없습니다: " + gpuId));
@@ -232,7 +286,7 @@ public class ResourceExplorerNodeGpuService {
         }
         MetricSelector selector = dcgmSelector(nodeId);
         List<Series> series = selector == null ? List.of() : metrics.trend(metric, selector, gpuId, from, to, step).stream()
-                .map(s -> new Series("GPU " + (s.index() == null ? s.uuid() : s.index()), s.points()))
+                .map(s -> new Series(gpuName(s.index(), s.uuid()), s.points()))
                 .toList();
         return new GpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step, series);
     }
@@ -299,7 +353,121 @@ public class ResourceExplorerNodeGpuService {
         return Comparator.comparing(extractor, nullHandling);
     }
 
+    // ── 상태 요약 판정 ──────────────────────────────────────────
+
+    /** GPU 1장의 카드별 단계 — 지표가 수집되지 않는 카드는 null */
+    record Judgement(GpuSample gpu, GpuHealth health, GpuHealthLevel collect, GpuHealthLevel ecc,
+                     GpuHealthLevel pcie, GpuHealthLevel clocks) {
+        GpuHealthLevel worst() {
+            return ResourceExplorerNodeGpuService.worst(Arrays.asList(collect, ecc, pcie, clocks));
+        }
+    }
+
+    /** 수집: 7종 전부 NORMAL·일부 WARNING·전부 끊김 CRITICAL / ECC DBE 1건 이상 CRITICAL / PCIe 1시간 증가 WARNING / Clock 이벤트는 사유별 단계 */
+    static Judgement judge(GpuSample g, GpuHealth h) {
+        int collected = collectedCount(g);
+        GpuHealthLevel collect = collected == HostGpuMetricsQueryService.EXPECTED_METRICS.size() ? GpuHealthLevel.NORMAL
+                : collected == 0 ? GpuHealthLevel.CRITICAL : GpuHealthLevel.WARNING;
+        GpuHealthLevel ecc = h == null || h.eccDbe() == null ? null
+                : count(h.eccDbe()) > 0 ? GpuHealthLevel.CRITICAL : GpuHealthLevel.NORMAL;
+        GpuHealthLevel pcie = h == null || h.pcieReplay1h() == null ? null
+                : count(h.pcieReplay1h()) > 0 ? GpuHealthLevel.WARNING : GpuHealthLevel.NORMAL;
+        GpuHealthLevel clocks = h == null || h.clocksMask() == null ? null
+                : clocksLevel(ClocksEventReason.fromMask(h.clocksMask()));
+        return new Judgement(g, h, collect, ecc, pcie, clocks);
+    }
+
+    /** 카드·배너 조립 — 그룹은 GPU 별 단계 중 가장 나쁜 것, 개별은 그 GPU 1장 */
+    private static GpuHealthSummaryResponse healthSummary(List<Judgement> judgements, boolean single) {
+        List<Judgement> anomalies = judgements.stream().filter(j -> j.worst() != GpuHealthLevel.NORMAL).toList();
+        GpuHealthLevel anomalyLevel = worst(judgements.stream().map(Judgement::worst).toList());
+
+        HealthCard collectCard;
+        if (judgements.isEmpty()) {
+            collectCard = new HealthCard(null, null);
+        } else if (judgements.stream().allMatch(j -> j.collect() == GpuHealthLevel.CRITICAL)) {
+            collectCard = new HealthCard(GpuHealthLevel.CRITICAL, null);
+        } else if (judgements.stream().allMatch(j -> j.collect() == GpuHealthLevel.NORMAL)) {
+            collectCard = new HealthCard(GpuHealthLevel.NORMAL, null);
+        } else {
+            collectCard = new HealthCard(GpuHealthLevel.WARNING, null);
+        }
+        HealthCard eccCard = card(judgements, Judgement::ecc, j -> count(j.health().eccDbe()));
+        HealthCard pcieCard = card(judgements, Judgement::pcie, j -> count(j.health().pcieReplay1h()));
+        HealthCard clocksCard = card(judgements, Judgement::clocks, j -> j.clocks() == GpuHealthLevel.NORMAL ? 0L : 1L);
+
+        return new GpuHealthSummaryResponse(anomalyLevel, anomalies.size(),
+                anomalies.isEmpty() ? null : anomalyMessage(anomalies, single),
+                collectCard, eccCard, pcieCard, clocksCard);
+    }
+
+    /** 지표가 수집되는 GPU 만으로 카드 1개 — 하나도 없으면 미수집(level·count null) */
+    private static HealthCard card(List<Judgement> judgements, Function<Judgement, GpuHealthLevel> level,
+                                   Function<Judgement, Long> count) {
+        List<Judgement> measured = judgements.stream().filter(j -> level.apply(j) != null).toList();
+        if (measured.isEmpty()) {
+            return new HealthCard(null, null);
+        }
+        long total = measured.stream().mapToLong(count::apply).sum();
+        return new HealthCard(worst(measured.stream().map(level).toList()), (int) Math.min(total, Integer.MAX_VALUE));
+    }
+
+    /** 배너 문구 — 그룹 "GPU 2장에서 이상 징후 감지 — ECC DBE 오류 1장, PCIe Replay 증가 1장", 개별은 사유만 */
+    private static String anomalyMessage(List<Judgement> anomalies, boolean single) {
+        List<String> parts = new ArrayList<>();
+        addPart(parts, anomalies, Judgement::collect, "수집 끊김", single);
+        addPart(parts, anomalies, Judgement::ecc, "ECC DBE 오류", single);
+        addPart(parts, anomalies, Judgement::pcie, "PCIe Replay 증가", single);
+        addPart(parts, anomalies, Judgement::clocks, "Clock 제한", single);
+        String head = single ? "이상 징후 감지" : "GPU " + anomalies.size() + "장에서 이상 징후 감지";
+        return head + " — " + String.join(", ", parts);
+    }
+
+    private static void addPart(List<String> parts, List<Judgement> anomalies,
+                                Function<Judgement, GpuHealthLevel> level, String label, boolean single) {
+        long n = anomalies.stream().map(level).filter(l -> l != null && l != GpuHealthLevel.NORMAL).count();
+        if (n > 0) {
+            parts.add(single ? label : label + " " + n + "장");
+        }
+    }
+
+    /** 활성 사유 중 가장 나쁜 단계 — 사유가 없으면 NORMAL */
+    private static GpuHealthLevel clocksLevel(List<ClocksEventReason> reasons) {
+        return worst(reasons.stream().map(ClocksEventReason::level).toList());
+    }
+
+    /** 주의·위험 사유의 안내를 줄바꿈으로 — 그런 사유가 없으면 상태 한 줄 */
+    private static String clocksGuide(List<ClocksEventReason> reasons) {
+        List<String> guides = reasons.stream().filter(r -> r.level() != GpuHealthLevel.NORMAL)
+                .map(ClocksEventReason::guide).toList();
+        if (!guides.isEmpty()) {
+            return String.join("\n", guides);
+        }
+        return reasons.isEmpty() ? "활성 Clock 이벤트가 없습니다." : "정상 범위의 Clock 이벤트만 있습니다.";
+    }
+
+    /** null 은 건너뛰고 CRITICAL > WARNING > NORMAL 중 가장 나쁜 단계(GpuHealthLevel 선언 순서). 전부 null 이면 NORMAL */
+    static GpuHealthLevel worst(List<GpuHealthLevel> levels) {
+        return levels.stream().filter(Objects::nonNull)
+                .max(Comparator.comparingInt(GpuHealthLevel::ordinal))
+                .orElse(GpuHealthLevel.NORMAL);
+    }
+
     // ── 판정·단위 ───────────────────────────────────────────────
+
+    /** 누적·증가 카운터 값을 건수로 — increase() 의 외삽 소수는 반올림. null 은 null */
+    private static Long count(Double value) {
+        return value == null ? null : Math.max(0L, Math.round(value));
+    }
+
+    /** 트리와 같은 표시 이름 — "GPU {인덱스}", 인덱스가 없으면 UUID */
+    private static String gpuName(String index, String uuid) {
+        return "GPU " + (index == null ? uuid : index);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
 
     private static GpuCollectState state(GpuSample g) {
         return collectedCount(g) == HostGpuMetricsQueryService.EXPECTED_METRICS.size()

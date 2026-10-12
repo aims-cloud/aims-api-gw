@@ -27,6 +27,8 @@ import org.springframework.stereotype.Component;
  *   <li>물리 GPU 단위만 다룬다 — MIG 인스턴스 시계열({@code GPU_I_ID} 라벨)은 {@link #PHYSICAL} 매처로 뺀다.</li>
  *   <li>현재값은 즉시 쿼리(기본 조회 창 5분), 평균은 최근 1시간 {@code avg_over_time}. VRAM 은 MB 로 읽는다.</li>
  *   <li>dcgm_exporter 기본 수집 항목에 없는 값(팬 속도 등)은 시계열이 없으면 null 이다.</li>
+ *   <li>상태 요약용 지표: ECC DBE(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL)·Clock 이벤트(DCGM_FI_DEV_CLOCKS_EVENT_REASONS)는 기본 수집 항목이 아니고,
+ *       PCIe Replay(DCGM_FI_DEV_PCIE_REPLAY_COUNTER)는 기본 수집 항목이다. 누적 카운터는 {@code increase()} 로 구간 증가를 구한다.</li>
  * </ul>
  * 자원은 {@link MetricSelector}(dcgm_exporter instance)로 가리키고, Thanos 장애는 빈 목록(미수집)으로 돌려준다.
  */
@@ -95,6 +97,13 @@ public class HostGpuMetricsQueryService {
     /** GPU 1장의 시계열 */
     public record GpuSeries(String uuid, String index, List<DataPoint> points) {}
 
+    /**
+     * GPU 1장의 상태 요약 값. 시계열이 없으면 null(미수집).
+     * eccDbe 는 드라이버 적재 이후 누적(volatile), PCIe Replay 는 누적값과 최근 1시간·24시간 증가, clocksMask 는 활성 이벤트 비트마스크.
+     */
+    public record GpuHealth(Double eccDbe, Double pcieReplayTotal, Double pcieReplay1h, Double pcieReplay24h,
+                            Long clocksMask) {}
+
     // ── PromQL ──────────────────────────────────────────────────
 
     static String expectedMetricMatcher() {
@@ -146,6 +155,21 @@ public class HostGpuMetricsQueryService {
             case GPU_TEMPERATURE -> by + "(DCGM_FI_DEV_GPU_TEMP" + s.braces(matchers) + ")";
             case FAN_SPEED -> by + "(DCGM_FI_DEV_FAN_SPEED" + s.braces(matchers) + ")";
         };
+    }
+
+    static String increaseQuery(String metric, MetricSelector s, String window) {
+        return "max by (UUID) (increase(" + metric + s.braces(PHYSICAL) + "[" + window + "]))";
+    }
+
+    /** Clock 이벤트 비트마스크 — DCGM 3.3 에서 이름이 CLOCK_THROTTLE_REASONS → CLOCKS_EVENT_REASONS 로 바뀌어 둘 다 읽는다 */
+    static String clocksQuery(MetricSelector s) {
+        return currentQuery("DCGM_FI_DEV_CLOCKS_EVENT_REASONS", s) + " or " + currentQuery("DCGM_FI_DEV_CLOCK_THROTTLE_REASONS", s);
+    }
+
+    /** PCIe Replay 시간당 증가 시계열 — GPU(UUID, gpu)별. uuid 가 있으면 그 GPU 1장만 */
+    static String pcieReplayTrendQuery(MetricSelector s, String uuid) {
+        String matchers = uuid == null ? PHYSICAL : PHYSICAL + "," + MetricSelector.label("UUID", uuid);
+        return "max by (UUID, gpu) (increase(DCGM_FI_DEV_PCIE_REPLAY_COUNTER" + s.braces(matchers) + "[1h]))";
     }
 
     // ── 조회 ────────────────────────────────────────────────────
@@ -201,11 +225,44 @@ public class HostGpuMetricsQueryService {
         }
     }
 
+    /** 상태 요약 값 — UUID 별. 지표가 없는 GPU 는 맵에 없거나 해당 값이 null 이다. 장애면 빈 맵 */
+    public Map<String, GpuHealth> health(MetricSelector s) {
+        try {
+            Map<String, Double> ecc = byUuid(currentQuery("DCGM_FI_DEV_ECC_DBE_VOL_TOTAL", s));
+            Map<String, Double> pcieTotal = byUuid(currentQuery("DCGM_FI_DEV_PCIE_REPLAY_COUNTER", s));
+            Map<String, Double> pcie1h = byUuid(increaseQuery("DCGM_FI_DEV_PCIE_REPLAY_COUNTER", s, "1h"));
+            Map<String, Double> pcie24h = byUuid(increaseQuery("DCGM_FI_DEV_PCIE_REPLAY_COUNTER", s, "24h"));
+            Map<String, Double> clocks = byUuid(clocksQuery(s));
+
+            Set<String> uuids = new LinkedHashSet<>();
+            List.of(ecc, pcieTotal, pcie1h, pcie24h, clocks).forEach(m -> uuids.addAll(m.keySet()));
+            Map<String, GpuHealth> out = new LinkedHashMap<>();
+            for (String uuid : uuids) {
+                Double mask = clocks.get(uuid);
+                out.put(uuid, new GpuHealth(ecc.get(uuid), pcieTotal.get(uuid), pcie1h.get(uuid), pcie24h.get(uuid),
+                        mask == null ? null : Math.round(mask)));
+            }
+            return out;
+        } catch (RuntimeException e) {
+            log.warn("Thanos GPU 상태 지표 조회 실패 — 상태 카드를 미수집으로 표시합니다: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
     /** 지표별 시계열 — GPU 별 1개, 인덱스순. 값은 소수 1자리, 미수집·장애는 빈 목록 */
     public List<GpuSeries> trend(GpuMetric metric, MetricSelector s, String uuid, Instant from, Instant to, String step) {
+        return series(trendQuery(metric, s, uuid), from, to, step);
+    }
+
+    /** PCIe Replay 시간당 증가(회/h) 시계열 — GPU 별 1개, 인덱스순. 미수집·장애는 빈 목록 */
+    public List<GpuSeries> pcieReplayTrend(MetricSelector s, String uuid, Instant from, Instant to) {
+        return series(pcieReplayTrendQuery(s, uuid), from, to, "1h");
+    }
+
+    private List<GpuSeries> series(String query, Instant from, Instant to, String step) {
         try {
             List<GpuSeries> out = new ArrayList<>();
-            for (Map<String, Object> result : client.queryRangeResults(trendQuery(metric, s, uuid), from, to, step)) {
+            for (Map<String, Object> result : client.queryRangeResults(query, from, to, step)) {
                 Map<String, String> labels = labels(result);
                 List<DataPoint> points = new ArrayList<>();
                 for (Object[] pair : HostDetailMetricsQueryService.values(result)) {
@@ -248,6 +305,19 @@ public class HostGpuMetricsQueryService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /** 즉시 쿼리 결과를 UUID → 값으로. 값이 없거나 비수치인 행은 뺀다 */
+    private Map<String, Double> byUuid(String query) {
+        Map<String, Double> out = new HashMap<>();
+        for (Map<String, Object> row : client.queryResults(query)) {
+            String uuid = labels(row).get("UUID");
+            Double v = value(row);
+            if (uuid != null && v != null) {
+                out.putIfAbsent(uuid, v);
+            }
+        }
+        return out;
     }
 
     private void merge(Map<String, Builder> gpus, String query, BiConsumer<Builder, Double> setter) {

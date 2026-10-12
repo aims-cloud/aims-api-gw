@@ -65,7 +65,11 @@ public class ResourceExplorerNodeGpuController {
 
     @Operation(summary = "GPU 그룹 상태 요약",
             description = "그룹 개요 탭 상태 요약 — 이상 감지 배너(단계·대상 GPU 수·문구)와 "
-                    + "수집 상태 / ECC DBE Errors / PCIe Replay Counter / Clocks Event Reasons 카드를 조회합니다.")
+                    + "수집 상태 / ECC DBE Errors / PCIe Replay Counter / Clocks Event Reasons 카드를 조회합니다. "
+                    + "GPU 1장마다 단계를 구해 그룹은 가장 나쁜 단계를 씁니다 — 수집: 기대 지표 7종 일부 빠짐 WARNING·전부 끊김 CRITICAL, "
+                    + "ECC DBE: 1건 이상 CRITICAL(count=누적 건수 합), PCIe Replay: 최근 1시간 증가 시 WARNING(count=1시간 증가 합), "
+                    + "Clock 이벤트: 하드웨어 보호 CRITICAL·드라이버 제한 WARNING(count=이벤트가 걸린 GPU 수). "
+                    + "지표가 수집되지 않는 카드는 level·count 가 null 입니다(ECC DBE·Clock 이벤트는 기본 수집 항목이 아님).")
     @GetMapping("/health")
     public ApiResponse<GpuHealthSummaryResponse> getGroupHealth(@PathVariable String nodeId) {
         return ApiResponse.ok(resourceExplorerNodeGpuService.getGroupHealth(nodeId));
@@ -119,7 +123,8 @@ public class ResourceExplorerNodeGpuController {
     }
 
     @Operation(summary = "GPU 장치 상태 요약",
-            description = "개별 GPU 상태 요약 — 그룹과 동일 구조를 해당 GPU 1장 기준으로 조회합니다.")
+            description = "개별 GPU 상태 요약 — 그룹과 동일 구조·판정을 해당 GPU 1장 기준으로 조회합니다. "
+                    + "최근 24시간 안에 수집된 적 없는 GPU 는 404 입니다.")
     @GetMapping("/devices/{gpuId}/health")
     public ApiResponse<GpuHealthSummaryResponse> getDeviceHealth(
             @PathVariable String nodeId,
@@ -183,7 +188,7 @@ public class ResourceExplorerNodeGpuController {
     @Operation(summary = "XID Errors 상세",
             description = "ECC DBE Errors 카드의 상세 — 총 발생 건수·최근 발생과 XID 오류별 "
                     + "발생 컨텍스트(재발 빈도 24h, 발생 시점 워크로드), 해석 후보(원인 태그·조치 안내)를 조회합니다. "
-                    + "gpuId 미지정 시 그룹 전체입니다.")
+                    + "gpuId 미지정 시 그룹 전체입니다. (구현 전 — 501: XID 해석 자료와 발생 이력 적재 필요)")
     @GetMapping("/health/xid-errors")
     public ApiResponse<GpuXidErrorsResponse> getXidErrors(
             @PathVariable String nodeId,
@@ -192,8 +197,9 @@ public class ResourceExplorerNodeGpuController {
     }
 
     @Operation(summary = "PCIe Replay Counter 상세",
-            description = "GPU별 누적값/최근 1시간/최근 24시간 증가와 최근 24시간 증가 추이(회/h)를 한 응답으로 조회합니다. "
-                    + "gpuId 미지정 시 그룹 전체입니다.")
+            description = "GPU별 누적값/최근 1시간/최근 24시간 증가와 최근 24시간 증가 추이(회/h, 1시간 간격)를 한 응답으로 조회합니다. "
+                    + "gpuId 미지정 시 그룹 전체이며, 지정한 GPU 가 최근 24시간 안에 수집된 적 없으면 404 입니다. "
+                    + "지표가 수집되지 않는 GPU 의 값은 null 입니다.")
     @GetMapping("/health/pcie-replay")
     public ApiResponse<GpuPcieReplayResponse> getPcieReplay(
             @PathVariable String nodeId,
@@ -204,7 +210,10 @@ public class ResourceExplorerNodeGpuController {
     @Operation(summary = "Clocks Event Reasons 상세",
             description = "GPU별 활성 이벤트(DISPLAY_CLK|HW_PWR_BRAKE|HW_THERMAL|SW_THERMAL|SYNC_BOOST|"
                     + "HW_SLOWDOWN|SW_POWER_CAP|APP_CLOCKS|GPU_IDLE)와 안내 텍스트를 조회합니다. "
-                    + "활성 이벤트 매트릭스는 프론트가 activeReasons 로 렌더링합니다. gpuId 미지정 시 그룹 전체입니다.")
+                    + "활성 이벤트 매트릭스는 프론트가 activeReasons 로 렌더링합니다. gpuId 미지정 시 그룹 전체입니다. "
+                    + "level 은 활성 사유 중 가장 나쁜 단계(하드웨어 보호 CRITICAL, 드라이버 제한 WARNING, 유휴·설정 NORMAL)이고, "
+                    + "guide 는 주의·위험 사유의 안내를 줄바꿈으로 잇습니다. DCGM_FI_DEV_CLOCKS_EVENT_REASONS 는 dcgm_exporter "
+                    + "기본 수집 항목이 아니어서 수집되지 않으면 activeReasons·level 이 null 입니다.")
     @GetMapping("/health/clocks-events")
     public ApiResponse<GpuClocksEventsResponse> getClocksEvents(
             @PathVariable String nodeId,

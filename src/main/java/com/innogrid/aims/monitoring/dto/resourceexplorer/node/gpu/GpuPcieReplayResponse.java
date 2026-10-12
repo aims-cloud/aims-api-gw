@@ -12,11 +12,11 @@ public record GpuPcieReplayResponse(
         List<GpuCounter> counters,
         List<TrendSeries> trend24h
 ) {
-    /** GPU 1장의 현황 — 누적값 / 최근 1시간 증가 / 최근 24시간 증가 */
-    public record GpuCounter(String gpuId, long cumulative, long delta1h, long delta24h) {}
+    /** GPU 1장의 현황 — 누적값 / 최근 1시간 증가 / 최근 24시간 증가. 수집되지 않으면 null. gpuName 은 트리와 같은 표시 이름 */
+    public record GpuCounter(String gpuId, String gpuName, Long cumulative, Long delta1h, Long delta24h) {}
 
-    /** 증가 추이 시리즈 — 값 단위: 회/h */
-    public record TrendSeries(String gpuId, List<MetricTrendResponse.DataPoint> dataPoints) {}
+    /** 증가 추이 시리즈 — 값 단위: 회/h (1시간 간격 increase) */
+    public record TrendSeries(String gpuId, String gpuName, List<MetricTrendResponse.DataPoint> dataPoints) {}
 
     public GpuPcieReplayResponse {
         counters = counters == null ? List.of() : List.copyOf(counters);

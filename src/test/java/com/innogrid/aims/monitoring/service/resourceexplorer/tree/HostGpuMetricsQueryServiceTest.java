@@ -9,7 +9,9 @@ import java.util.Map;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.ClocksEventReason;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuHealth;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSample;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSeries;
 import org.junit.jupiter.api.Test;
@@ -139,6 +141,66 @@ class HostGpuMetricsQueryServiceTest {
 
         assertThat(service.devices(SEL)).isEmpty();
         assertThat(service.trend(GpuMetric.GPU_POWER, SEL, "GPU-a", Instant.EPOCH, Instant.EPOCH.plusSeconds(60), "15s")).isEmpty();
+    }
+
+    @Test
+    void 상태_지표_PromQL은_누적_카운터를_increase로_보고_Clock_이벤트는_옛_이름도_읽는다() {
+        assertThat(HostGpuMetricsQueryService.increaseQuery("DCGM_FI_DEV_PCIE_REPLAY_COUNTER", SEL, "1h"))
+                .isEqualTo("max by (UUID) (increase(DCGM_FI_DEV_PCIE_REPLAY_COUNTER" + PHYS + "[1h]))");
+        assertThat(HostGpuMetricsQueryService.clocksQuery(SEL))
+                .isEqualTo("max by (UUID) (DCGM_FI_DEV_CLOCKS_EVENT_REASONS" + PHYS + ") or "
+                        + "max by (UUID) (DCGM_FI_DEV_CLOCK_THROTTLE_REASONS" + PHYS + ")");
+        assertThat(HostGpuMetricsQueryService.pcieReplayTrendQuery(SEL, "GPU-a"))
+                .isEqualTo("max by (UUID, gpu) (increase(DCGM_FI_DEV_PCIE_REPLAY_COUNTER"
+                        + "{GPU_I_ID=\"\",UUID=\"GPU-a\",instance=\"10.0.0.1:9400\"}[1h]))");
+    }
+
+    @Test
+    void 상태_지표는_UUID별로_묶고_없는_값은_null이며_비트마스크는_정수다() {
+        when(client.queryResults(anyString())).thenAnswer(inv -> {
+            String q = inv.getArgument(0);
+            if (q.equals(HostGpuMetricsQueryService.currentQuery("DCGM_FI_DEV_ECC_DBE_VOL_TOTAL", SEL))) {
+                return List.of(byUuid("GPU-a", "2"));
+            }
+            if (q.equals(HostGpuMetricsQueryService.currentQuery("DCGM_FI_DEV_PCIE_REPLAY_COUNTER", SEL))) {
+                return List.of(byUuid("GPU-a", "12"), byUuid("GPU-b", "4"));
+            }
+            if (q.equals(HostGpuMetricsQueryService.increaseQuery("DCGM_FI_DEV_PCIE_REPLAY_COUNTER", SEL, "1h"))) {
+                return List.of(byUuid("GPU-a", "0.98"));
+            }
+            if (q.equals(HostGpuMetricsQueryService.clocksQuery(SEL))) {
+                return List.of(byUuid("GPU-a", "68"));
+            }
+            return List.of();
+        });
+
+        Map<String, GpuHealth> health = service.health(SEL);
+
+        assertThat(health.get("GPU-a")).isEqualTo(new GpuHealth(2.0, 12.0, 0.98, null, 68L));
+        assertThat(health.get("GPU-b")).isEqualTo(new GpuHealth(null, 4.0, null, null, null));
+        assertThat(ClocksEventReason.fromMask(health.get("GPU-a").clocksMask()))
+                .containsExactly(ClocksEventReason.HW_THERMAL, ClocksEventReason.SW_POWER_CAP);   // 0x40 + 0x4
+    }
+
+    @Test
+    void PCIe_추이는_1시간_간격이고_상태_지표_장애는_빈_맵이다() {
+        Instant from = Instant.ofEpochSecond(NOW - 86_400);
+        Instant to = Instant.ofEpochSecond(NOW);
+        when(client.queryRangeResults(anyString(), any(), any(), anyString()))
+                .thenReturn(List.of(series("GPU-a", "0", List.of(List.of(NOW, "2.04")))));
+
+        assertThat(service.pcieReplayTrend(SEL, null, from, to)).hasSize(1);
+        verify(client).queryRangeResults(HostGpuMetricsQueryService.pcieReplayTrendQuery(SEL, null), from, to, "1h");
+
+        when(client.queryResults(anyString())).thenThrow(new RuntimeException("connection refused"));
+        assertThat(service.health(SEL)).isEmpty();
+    }
+
+    @Test
+    void Clock_이벤트_비트마스크는_선언_순서로_풀고_모르는_비트는_무시한다() {
+        assertThat(ClocksEventReason.fromMask(0L)).isEmpty();
+        assertThat(ClocksEventReason.fromMask(0x1FFL)).containsExactly(ClocksEventReason.values());
+        assertThat(ClocksEventReason.fromMask(0x200L | 0x1L)).containsExactly(ClocksEventReason.GPU_IDLE);
     }
 
     @Test

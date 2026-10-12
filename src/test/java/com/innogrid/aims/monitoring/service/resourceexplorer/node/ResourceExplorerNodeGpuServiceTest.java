@@ -1,8 +1,10 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -12,6 +14,9 @@ import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.ClocksEventReason;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse.GpuClocksEvents;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectState;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceCollectStatusResponse;
@@ -19,8 +24,13 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceInfoR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuGroupSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthLevel;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuHealthSummaryResponse.HealthCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.GpuCounter;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
@@ -28,11 +38,13 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuHealth;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSample;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSeries;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -50,7 +62,8 @@ import static org.mockito.Mockito.when;
 /**
  * 노드 GPU 카테고리 패널 1단계 테스트 — 스코프 접근 검증(404), dcgm_exporter 미등록 노드의 미수집 처리,
  * 그룹 KPI 집계(수집 중 GPU 기준·VRAM 짝 맞춤), 목록 행·정렬(인덱스 숫자순·null 마지막)·400, 개별 KPI·정보·404,
- * 수집 상태(HEALTHY/FAILED·체크리스트), 차트(시리즈 이름·UUID 전달·기간 400).
+ * 수집 상태(HEALTHY/FAILED·체크리스트), 차트(시리즈 이름·UUID 전달·기간 400),
+ * 2단계 상태 요약(카드·배너 판정, 미수집 카드 null), PCIe Replay 상세(카운터·24시간 추이), Clock 이벤트 상세(비트마스크 해석·안내).
  *
  * 대역: node-01(assets.id 11, dcgm_exporter 10.0.0.1:9400) — ADMIN 스코프
  *       node-02(assets.id 12, node_exporter 만) — ADMIN 스코프
@@ -58,6 +71,8 @@ import static org.mockito.Mockito.when;
  *       GPU 0(GPU-a) 수집 중·지표 7종, 20/80GB, 250.5W, 55°C
  *       GPU 2(GPU-b) 30분 전 끊김, 1시간 평균만 남음
  *       GPU 10(GPU-c) 수집 중·지표 2종, VRAM 사용만 보고, 100W, 61°C
+ *       상태 지표: GPU-a ECC 0·PCIe 누적 12(1h 0, 24h 3)·Clock GPU_IDLE / GPU-b 없음
+ *                 GPU-c ECC 2·PCIe 누적 5(1h 1.2, 24h 1.4)·Clock HW_THERMAL+SW_POWER_CAP(0x44)
  */
 class ResourceExplorerNodeGpuServiceTest {
 
@@ -103,6 +118,9 @@ class ResourceExplorerNodeGpuServiceTest {
                 new MonitoringTarget("mdc-01", "node-02", "10.0.0.2", 9100, ExporterType.NODE_EXPORTER)));
 
         when(metrics.devices(DCGM_SEL)).thenReturn(List.of(A, B, C));
+        when(metrics.health(DCGM_SEL)).thenReturn(Map.of(
+                "GPU-a", new GpuHealth(0.0, 12.0, 0.0, 3.0, 0x1L),
+                "GPU-c", new GpuHealth(2.0, 5.0, 1.2, 1.4, 0x44L)));
     }
 
     // ── 접근 검증·미수집 ────────────────────────────────────────
@@ -267,5 +285,125 @@ class ResourceExplorerNodeGpuServiceTest {
         assertThat(status.metrics()).filteredOn(GpuDeviceCollectStatusResponse.MetricCollectStatus::collected)
                 .extracting(GpuDeviceCollectStatusResponse.MetricCollectStatus::metricName)
                 .containsExactly("DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_DEV_FB_USED");
+    }
+
+    // ── 상태 요약 (2단계) ───────────────────────────────────────
+
+    @Test
+    void 그룹_상태_요약은_GPU별_단계의_최악을_쓰고_카드는_수집되는_GPU만_센다() {
+        GpuHealthSummaryResponse health = service.getGroupHealth("11");
+
+        assertThat(health.anomalyLevel()).isEqualTo(GpuHealthLevel.CRITICAL);
+        assertThat(health.anomalyGpuCount()).isEqualTo(2);                     // GPU-b(수집 끊김)·GPU-c
+        assertThat(health.anomalyMessage())
+                .isEqualTo("GPU 2장에서 이상 징후 감지 — 수집 끊김 2장, ECC DBE 오류 1장, PCIe Replay 증가 1장, Clock 제한 1장");
+        assertThat(health.collectStatus()).isEqualTo(new HealthCard(GpuHealthLevel.WARNING, null));
+        assertThat(health.eccDbeErrors()).isEqualTo(new HealthCard(GpuHealthLevel.CRITICAL, 2));
+        assertThat(health.pcieReplayCounter()).isEqualTo(new HealthCard(GpuHealthLevel.WARNING, 1));   // 1.2 → 1건
+        assertThat(health.clocksEventReasons()).isEqualTo(new HealthCard(GpuHealthLevel.CRITICAL, 1)); // GPU_IDLE 은 정상
+    }
+
+    @Test
+    void 개별_상태_요약은_그_GPU_1장_기준이고_정상이면_배너_문구가_없다() {
+        GpuHealthSummaryResponse a = service.getDeviceHealth("11", "GPU-a");
+        assertThat(a).isEqualTo(new GpuHealthSummaryResponse(GpuHealthLevel.NORMAL, 0, null,
+                new HealthCard(GpuHealthLevel.NORMAL, null), new HealthCard(GpuHealthLevel.NORMAL, 0),
+                new HealthCard(GpuHealthLevel.NORMAL, 0), new HealthCard(GpuHealthLevel.NORMAL, 0)));
+
+        GpuHealthSummaryResponse c = service.getDeviceHealth("11", "GPU-c");
+        assertThat(c.anomalyLevel()).isEqualTo(GpuHealthLevel.CRITICAL);
+        assertThat(c.anomalyGpuCount()).isEqualTo(1);
+        assertThat(c.anomalyMessage()).isEqualTo("이상 징후 감지 — 수집 끊김, ECC DBE 오류, PCIe Replay 증가, Clock 제한");
+        assertThat(c.collectStatus()).isEqualTo(new HealthCard(GpuHealthLevel.WARNING, null));    // 7종 중 2종
+    }
+
+    @Test
+    void 상태_지표가_없는_GPU는_수집_카드만_판정하고_나머지_카드는_미수집_null이다() {
+        GpuHealthSummaryResponse b = service.getDeviceHealth("11", "GPU-b");
+
+        assertThat(b.anomalyLevel()).isEqualTo(GpuHealthLevel.CRITICAL);
+        assertThat(b.anomalyMessage()).isEqualTo("이상 징후 감지 — 수집 끊김");
+        assertThat(b.collectStatus()).isEqualTo(new HealthCard(GpuHealthLevel.CRITICAL, null));
+        assertThat(b.eccDbeErrors()).isEqualTo(new HealthCard(null, null));
+        assertThat(b.pcieReplayCounter()).isEqualTo(new HealthCard(null, null));
+        assertThat(b.clocksEventReasons()).isEqualTo(new HealthCard(null, null));
+    }
+
+    @Test
+    void dcgm_exporter가_없는_노드의_상태_요약은_정상_0장에_카드가_전부_미수집이다() {
+        HealthCard none = new HealthCard(null, null);
+        assertThat(service.getGroupHealth("12"))
+                .isEqualTo(new GpuHealthSummaryResponse(GpuHealthLevel.NORMAL, 0, null, none, none, none, none));
+        assertThat(service.getPcieReplay("12", null)).isEqualTo(new GpuPcieReplayResponse(List.of(), List.of()));
+        assertThat(service.getClocksEvents("12", null).gpus()).isEmpty();
+        verify(metrics, never()).health(any());
+        verify(metrics, never()).pcieReplayTrend(any(), any(), any(), any());
+    }
+
+    // ── PCIe Replay·Clock 이벤트 상세 (2단계) ───────────────────
+
+    @Test
+    void PCIe_Replay는_GPU별_누적_1h_24h를_건수로_내리고_최근_24시간_추이를_GPU_이름으로_붙인다() {
+        when(metrics.pcieReplayTrend(eq(DCGM_SEL), isNull(), any(), any())).thenReturn(List.of(
+                new GpuSeries("GPU-c", "10", List.of(new DataPoint(NOW.getEpochSecond(), 1.2)))));
+
+        GpuPcieReplayResponse pcie = service.getPcieReplay("11", null);
+
+        assertThat(pcie.counters()).containsExactly(
+                new GpuCounter("GPU-a", "GPU 0", 12L, 0L, 3L),
+                new GpuCounter("GPU-b", "GPU 2", null, null, null),
+                new GpuCounter("GPU-c", "GPU 10", 5L, 1L, 1L));
+        assertThat(pcie.trend24h()).hasSize(1);
+        assertThat(pcie.trend24h().get(0).gpuName()).isEqualTo("GPU 10");
+
+        ArgumentCaptor<Instant> from = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Instant> to = ArgumentCaptor.forClass(Instant.class);
+        verify(metrics).pcieReplayTrend(eq(DCGM_SEL), isNull(), from.capture(), to.capture());
+        assertThat(Duration.between(from.getValue(), to.getValue())).isEqualTo(Duration.ofHours(24));
+    }
+
+    @Test
+    void PCIe_Replay에_gpuId를_주면_그_GPU만이고_없는_GPU는_404다() {
+        when(metrics.pcieReplayTrend(eq(DCGM_SEL), eq("GPU-c"), any(), any())).thenReturn(List.of());
+
+        assertThat(service.getPcieReplay("11", "GPU-c").counters())
+                .containsExactly(new GpuCounter("GPU-c", "GPU 10", 5L, 1L, 1L));
+        verify(metrics).pcieReplayTrend(eq(DCGM_SEL), eq("GPU-c"), any(), any());
+        assertThatThrownBy(() -> service.getPcieReplay("11", "GPU-zzz"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void Clock_이벤트는_비트마스크를_사유로_풀고_주의_위험_사유만_안내하며_미수집은_null이다() {
+        GpuClocksEventsResponse clocks = service.getClocksEvents("11", null);
+
+        assertThat(clocks.gpus()).extracting(GpuClocksEvents::gpuName).containsExactly("GPU 0", "GPU 2", "GPU 10");
+
+        GpuClocksEvents a = clocks.gpus().get(0);
+        assertThat(a.level()).isEqualTo(GpuHealthLevel.NORMAL);
+        assertThat(a.activeReasons()).containsExactly(ClocksEventReason.GPU_IDLE);
+        assertThat(a.guide()).isEqualTo("정상 범위의 Clock 이벤트만 있습니다.");
+
+        GpuClocksEvents b = clocks.gpus().get(1);
+        assertThat(b.level()).isNull();
+        assertThat(b.activeReasons()).isNull();
+        assertThat(b.guide()).contains("수집되지 않습니다");
+
+        GpuClocksEvents c = clocks.gpus().get(2);
+        assertThat(c.level()).isEqualTo(GpuHealthLevel.CRITICAL);
+        assertThat(c.activeReasons()).containsExactly(ClocksEventReason.HW_THERMAL, ClocksEventReason.SW_POWER_CAP);
+        assertThat(c.guide()).isEqualTo(ClocksEventReason.HW_THERMAL.guide() + "\n" + ClocksEventReason.SW_POWER_CAP.guide());
+    }
+
+    @Test
+    void 활성_사유가_없으면_정상에_빈_목록이다() {
+        when(metrics.health(DCGM_SEL)).thenReturn(Map.of("GPU-a", new GpuHealth(0.0, 0.0, 0.0, 0.0, 0L)));
+
+        GpuClocksEvents a = service.getClocksEvents("11", "GPU-a").gpus().get(0);
+
+        assertThat(a.level()).isEqualTo(GpuHealthLevel.NORMAL);
+        assertThat(a.activeReasons()).isEmpty();
+        assertThat(a.guide()).isEqualTo("활성 Clock 이벤트가 없습니다.");
     }
 }

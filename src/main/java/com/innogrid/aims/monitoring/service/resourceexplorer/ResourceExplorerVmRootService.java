@@ -17,7 +17,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeB
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
 import com.innogrid.aims.monitoring.service.resourceexplorer.vm.TumblebugPanelSupport;
 import com.innogrid.aims.monitoring.service.resourceexplorer.vm.TumblebugPanelSupport.RoleNamespaces;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -123,7 +122,7 @@ public class ResourceExplorerVmRootService {
             case "name" -> Comparator.comparing(VmRootNamespaceListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
             case "infraCount" -> Comparator.comparingLong(VmRootNamespaceListItemResponse::infraCount);
             case "vmCount" -> Comparator.comparingLong(VmRootNamespaceListItemResponse::vmCount);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<VmRootNamespaceListItemResponse> stable = comparator.thenComparing(VmRootNamespaceListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
         return desc ? stable.reversed() : stable;

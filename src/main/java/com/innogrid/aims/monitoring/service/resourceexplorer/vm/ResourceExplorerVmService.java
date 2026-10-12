@@ -106,7 +106,7 @@ public class ResourceExplorerVmService {
             throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "Tumblebug 에서 VM 정보를 조회할 수 없습니다: " + vmId);
         }
         if (node == null || str(node, "id") == null) {
-            throw notFound(vmId);
+            throw BusinessException.notFound("가상머신을 찾을 수 없습니다: " + vmId);
         }
         Map<String, Object> spec = nested(node, "spec");
         Map<String, Object> image = nested(node, "image");
@@ -148,10 +148,6 @@ public class ResourceExplorerVmService {
     private VmContext accessibleVm(String roleName, String nsId, String infraId, String vmId) {
         TbNode node = support.accessibleNode(roleName, nsId, infraId, vmId);
         return new VmContext(nsId, infraId, node, MetricSelector.tumblebugNode(nsId, infraId, vmId));
-    }
-
-    private static BusinessException notFound(String vmId) {
-        return new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + vmId);
     }
 
     // ── 카드 구성 ───────────────────────────────────────────────

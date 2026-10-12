@@ -44,9 +44,7 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetrics
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuHealth;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSample;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 자원 탐색기 노드 GPU 카테고리 패널 조회 서비스.
@@ -276,13 +274,13 @@ public class ResourceExplorerNodeGpuService {
         return devices(selector).stream()
                 .filter(g -> g.uuid().equals(gpuId))
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "GPU 를 찾을 수 없습니다: " + gpuId));
+                .orElseThrow(() -> BusinessException.notFound("GPU 를 찾을 수 없습니다: " + gpuId));
     }
 
     private GpuMetricTrendResponse trend(String nodeId, String gpuId, GpuMetric metric,
                                          Instant from, Instant to, String step) {
         if (!from.isBefore(to)) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "조회 시작 시각은 종료 시각보다 앞서야 합니다.");
+            throw BusinessException.badRequest("조회 시작 시각은 종료 시각보다 앞서야 합니다.");
         }
         MetricSelector selector = dcgmSelector(nodeId);
         List<Series> series = selector == null ? List.of() : metrics.trend(metric, selector, gpuId, from, to, step).stream()
@@ -334,7 +332,7 @@ public class ResourceExplorerNodeGpuService {
             case "temperatureCelsius" -> nullsLast(GpuDeviceListItemResponse::temperatureCelsius, desc);
             case "powerWatts" -> nullsLast(GpuDeviceListItemResponse::powerWatts, desc);
             case "recentAlarmCount" -> nullsLast(GpuDeviceListItemResponse::recentAlarmCount, desc);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<GpuDeviceListItemResponse> stable = comparator.thenComparing(byName);
         return desc ? stable.reversed() : stable;
@@ -499,9 +497,7 @@ public class ResourceExplorerNodeGpuService {
         return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
-    private ResponseStatusException dataSourceNotImplemented() {
-        return new ResponseStatusException(
-                HttpStatus.NOT_IMPLEMENTED,
-                "GPU 지표 데이터와 자원 탐색기 GPU 패널의 매핑 구현 전입니다.");
+    private static BusinessException dataSourceNotImplemented() {
+        return BusinessException.notImplemented("GPU 지표 데이터와 자원 탐색기 GPU 패널의 매핑 구현 전입니다.");
     }
 }

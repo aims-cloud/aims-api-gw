@@ -1,6 +1,7 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
@@ -9,9 +10,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuAllocationR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuGroupSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuInstanceInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuInstanceListItemResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 자원 탐색기 VM GPU 카테고리 패널 조회 서비스.
@@ -91,9 +90,7 @@ public class ResourceExplorerVmGpuService {
         throw dataSourceNotImplemented();
     }
 
-    private ResponseStatusException dataSourceNotImplemented() {
-        return new ResponseStatusException(
-                HttpStatus.NOT_IMPLEMENTED,
-                "GPU 인스턴스 데이터와 자원 탐색기 VM GPU 패널의 매핑 구현 전입니다.");
+    private static BusinessException dataSourceNotImplemented() {
+        return BusinessException.notImplemented("GPU 인스턴스 데이터와 자원 탐색기 VM GPU 패널의 매핑 구현 전입니다.");
     }
 }

@@ -20,7 +20,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSys
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostFileSystemMetricsQueryService.MountUsage;
-import org.springframework.http.HttpStatus;
 
 /**
  * File system 카테고리 패널 응답 조립 — 노드·VM 패널 서비스가 공유하는 순수 계산 부분.
@@ -118,7 +117,7 @@ public final class FileSystemPanelAssembler {
 
     /** 표본이 없는 마운트의 개요·정보 요청에 대한 404 */
     public static BusinessException mountNotFound(String mountPath) {
-        return new BusinessException(HttpStatus.NOT_FOUND, "마운트를 찾을 수 없습니다: " + mountPath);
+        return BusinessException.notFound("마운트를 찾을 수 없습니다: " + mountPath);
     }
 
     // ── 시계열 ──────────────────────────────────────────────────
@@ -164,7 +163,7 @@ public final class FileSystemPanelAssembler {
             case "usedGb" -> Comparator.comparingDouble(FileSystemMountListItemResponse::usedGb);
             case "freeGb" -> Comparator.comparingDouble(FileSystemMountListItemResponse::freeGb);
             case "inodeUsagePercent" -> nullsLast(FileSystemMountListItemResponse::inodeUsagePercent, desc);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<FileSystemMountListItemResponse> stable = comparator.thenComparing(FileSystemMountListItemResponse::mountPath);
         return desc ? stable.reversed() : stable;

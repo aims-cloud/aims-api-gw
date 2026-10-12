@@ -15,7 +15,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoMetri
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoMetricTrendResponse.Series;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoSummaryResponse;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDiskIoMetricsQueryService.DeviceIo;
-import org.springframework.http.HttpStatus;
 
 /**
  * Disk I/O 카테고리 패널 응답 조립 — 노드·VM 패널 서비스가 공유하는 순수 계산 부분.
@@ -94,7 +93,7 @@ public final class DiskIoPanelAssembler {
             case "readLatencyMs" -> nullsLast(DiskIoDeviceListItemResponse::readLatencyMs, desc);
             case "writeLatencyMs" -> nullsLast(DiskIoDeviceListItemResponse::writeLatencyMs, desc);
             case "utilizationPercent" -> nullsLast(DiskIoDeviceListItemResponse::utilizationPercent, desc);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<DiskIoDeviceListItemResponse> stable = comparator.thenComparing(DiskIoDeviceListItemResponse::device);
         return desc ? stable.reversed() : stable;

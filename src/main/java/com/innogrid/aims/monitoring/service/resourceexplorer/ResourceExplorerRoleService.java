@@ -22,7 +22,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedNamespace;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedVm;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -109,7 +108,7 @@ public class ResourceExplorerRoleService {
     /** roleName 이 현재 사용자 토큰에 부여된 역할일 때만 그 역할의 스코프를 조회한다. 아니면 404. */
     private Scope accessibleScope(String roleName) {
         if (!authService.currentUserRoleIds().contains(roleName)) {
-            throw new BusinessException(HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleName);
+            throw BusinessException.notFound("역할을 찾을 수 없습니다: " + roleName);
         }
         return scopeService.scopeOf(List.of(roleName));
     }
@@ -191,8 +190,7 @@ public class ResourceExplorerRoleService {
             case "kind" -> Comparator.comparing(RoleAreaListItemResponse::kind);
             case "nodeCount" -> Comparator.comparingLong(RoleAreaListItemResponse::nodeCount);
             case "vmCount" -> Comparator.comparingLong(RoleAreaListItemResponse::vmCount);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         return desc ? comparator.reversed() : comparator;
     }

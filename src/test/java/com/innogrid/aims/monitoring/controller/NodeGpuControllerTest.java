@@ -3,6 +3,7 @@ package com.innogrid.aims.monitoring.controller;
 import java.time.Instant;
 import java.util.List;
 
+import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.exception.GlobalExceptionHandler;
 import com.innogrid.aims.monitoring.controller.resourceexplorer.node.ResourceExplorerNodeGpuController;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
@@ -24,7 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 노드 GPU 차트의 from/to 해석 — 형식 오류는 서비스 호출 없이 400(공통 응답), 정상 값은 그대로 전달. */
+/** 노드 GPU 컨트롤러 — 차트 from/to 형식 오류는 서비스 호출 없이 400, 정상 값은 그대로 전달, 501 도 공통 응답 형식. */
 class NodeGpuControllerTest {
 
     ResourceExplorerNodeGpuService gpus = mock(ResourceExplorerNodeGpuService.class);
@@ -45,6 +46,16 @@ class NodeGpuControllerTest {
         mvc.perform(get(base + "/devices/GPU-a/metrics/trend").param("to", "2026-10-12 00:00"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(gpus);
+    }
+
+    @Test
+    void 구현_전_API의_501도_공통_응답_형식이다() throws Exception {
+        when(gpus.getXidErrors("11", null)).thenThrow(BusinessException.notImplemented("구현 전입니다."));
+
+        mvc.perform(get(base + "/health/xid-errors"))
+                .andExpect(status().isNotImplemented())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("구현 전입니다."));
     }
 
     @Test

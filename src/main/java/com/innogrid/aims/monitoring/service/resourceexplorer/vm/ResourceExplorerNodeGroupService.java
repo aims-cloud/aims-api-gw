@@ -28,7 +28,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeB
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbInfra;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -226,7 +225,7 @@ public class ResourceExplorerNodeGroupService {
             case "cpuUtilization" -> nullsLast(VmListItemResponse::cpuUtilization, desc);
             case "memoryUtilization" -> nullsLast(VmListItemResponse::memoryUtilization, desc);
             case "fileSystemUtilization" -> nullsLast(VmListItemResponse::fileSystemUtilization, desc);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         // 동률이면 이름순으로 고정해 Tumblebug 응답 순서에 따라 결과가 흔들리지 않게 한다
         Comparator<VmListItemResponse> stable = comparator.thenComparing(VmListItemResponse::name, String.CASE_INSENSITIVE_ORDER);

@@ -22,7 +22,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMe
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuDevice;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuInventory;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -143,7 +142,7 @@ public class ResourceExplorerNodeCpuService {
             case "threadCount" -> Comparator.comparingInt(CpuDeviceListItemResponse::threadCount);
             case "baseClockGhz" -> Comparator.comparing(CpuDeviceListItemResponse::baseClockGhz,
                     Comparator.nullsLast(Comparator.naturalOrder()));
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<CpuDeviceListItemResponse> stable = comparator.thenComparingInt(CpuDeviceListItemResponse::socket);
         return desc ? stable.reversed() : stable;

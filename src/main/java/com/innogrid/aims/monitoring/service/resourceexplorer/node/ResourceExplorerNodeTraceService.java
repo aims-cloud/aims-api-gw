@@ -10,7 +10,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceDetailR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceEndpointStatResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceListResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.trace.TraceMethodDistributionResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import com.innogrid.aims.common.exception.BusinessException;
 
@@ -80,8 +79,7 @@ public class ResourceExplorerNodeTraceService {
 
     private BusinessException dataSourceNotImplemented(String nodeId, String serviceId) {
         services.requireAccessibleService(nodeId, serviceId);
-        return new BusinessException(
-                HttpStatus.NOT_IMPLEMENTED,
+        return BusinessException.notImplemented(
                 "트레이스 기능은 이번 연차 범위에서 제외되었습니다(2026-09-30). 계획서·요구사항에 없는 기능으로 501 을 유지합니다.");
     }
 }

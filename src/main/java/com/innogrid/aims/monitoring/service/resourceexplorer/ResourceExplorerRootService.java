@@ -18,7 +18,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.root.RootSummaryRespons
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedVm;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -162,8 +161,7 @@ public class ResourceExplorerRootService {
             case "mdcCount" -> Comparator.comparingLong(RoleListItemResponse::mdcCount);
             case "nodeCount" -> Comparator.comparingLong(RoleListItemResponse::nodeCount);
             case "vmCount" -> Comparator.comparingLong(RoleListItemResponse::vmCount);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         return desc ? comparator.reversed() : comparator;
     }

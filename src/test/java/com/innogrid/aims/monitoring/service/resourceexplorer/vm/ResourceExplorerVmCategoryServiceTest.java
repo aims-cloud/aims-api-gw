@@ -33,7 +33,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeB
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -189,10 +188,10 @@ class ResourceExplorerVmCategoryServiceTest {
 
     @Test
     void GPU는_스코프_검증_뒤_501이다() {
+        // 501 도 BusinessException — 공통 처리기를 거쳐 ApiResponse 오류 형식으로 나간다
         assertThatThrownBy(() -> gpu.getGroupSummary(null, NS, INFRA, NODE))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
-                        .isEqualTo(HttpStatus.NOT_IMPLEMENTED));
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_IMPLEMENTED));
         assertThatThrownBy(() -> gpu.getGroupSummary(null, "other-ns", INFRA, NODE))
                 .isInstanceOf(BusinessException.class);
     }

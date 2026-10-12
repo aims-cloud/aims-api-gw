@@ -397,6 +397,13 @@ class ResourceExplorerNodeGpuServiceTest {
     }
 
     @Test
+    void XID_오류_상세는_BusinessException_501이다() {
+        assertThatThrownBy(() -> service.getXidErrors("11", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    @Test
     void 활성_사유가_없으면_정상에_빈_목록이다() {
         when(metrics.health(DCGM_SEL)).thenReturn(Map.of("GPU-a", new GpuHealth(0.0, 0.0, 0.0, 0.0, 0L)));
 

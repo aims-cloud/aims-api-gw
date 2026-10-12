@@ -16,7 +16,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetricTrend
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostCategoryMetricsQueryService.CpuDevice;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -92,7 +91,7 @@ public class ResourceExplorerVmCpuService {
             case "model" -> Comparator.comparing(VmCpuListItemResponse::model, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
             case "coreCount" -> Comparator.comparingInt(VmCpuListItemResponse::coreCount);
             case "threadCount" -> Comparator.comparingInt(VmCpuListItemResponse::threadCount);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<VmCpuListItemResponse> stable = comparator.thenComparingInt(VmCpuListItemResponse::socket);
         return desc ? stable.reversed() : stable;

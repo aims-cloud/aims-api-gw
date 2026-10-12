@@ -78,8 +78,7 @@ public class VmAgentInstallService {
     public VmAgentInstallResponse install(String roleName, String nsId, String infraId, String vmId) {
         TbNode vm = support.accessibleNode(roleName, nsId, infraId, vmId);
         if (!"Running".equalsIgnoreCase(vm.status())) {
-            throw new BusinessException(HttpStatus.CONFLICT,
-                    "실행 중(Running)인 VM 에만 설치할 수 있습니다. 현재 상태: " + vm.status());
+            throw BusinessException.conflict("실행 중(Running)인 VM 에만 설치할 수 있습니다. 현재 상태: " + vm.status());
         }
         AgentProperties.VmInstall settings = properties.getVmInstall();
         if (isBlank(settings.getLokiPushUrl()) || isBlank(settings.getTargetsUrl())) {
@@ -91,7 +90,7 @@ public class VmAgentInstallService {
         try {
             body = command.requestBody(owner, settings);
         } catch (IllegalArgumentException e) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, e.getMessage());
+            throw BusinessException.badRequest(e.getMessage());
         }
 
         Long agentId = tx.execute(s -> begin(owner, settings.getTimeoutMinutes()));
@@ -117,7 +116,7 @@ public class VmAgentInstallService {
         AgentNode node = nodes.findByTbNsAndTbInfraAndTbNode(owner.tbNs(), owner.tbInfra(), owner.tbNode())
                 .orElseGet(() -> AgentNode.forVm(owner));
         if (node.getInstallStatus() == AgentInstallStatus.INSTALLING && !isStale(node, timeoutMinutes)) {
-            throw new BusinessException(HttpStatus.CONFLICT, "이 VM 의 에이전트 설치가 이미 진행 중입니다(단계: " + node.getInstallStep() + ").");
+            throw BusinessException.conflict("이 VM 의 에이전트 설치가 이미 진행 중입니다(단계: " + node.getInstallStep() + ").");
         }
         if (node.getTransport() != AgentTransport.PULL) {
             node.configurePull(null);

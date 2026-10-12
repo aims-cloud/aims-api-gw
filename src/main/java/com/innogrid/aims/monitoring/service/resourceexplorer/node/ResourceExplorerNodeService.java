@@ -39,7 +39,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQue
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.Sebu1VirtualResourceProvider.VirtualResource;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -194,10 +193,6 @@ public class ResourceExplorerNodeService {
         return instance == null ? null : MetricSelector.instance(instance);
     }
 
-    private static BusinessException notFound(String nodeId) {
-        return new BusinessException(HttpStatus.NOT_FOUND, "노드를 찾을 수 없습니다: " + nodeId);
-    }
-
     // ── 행·카드 구성 ────────────────────────────────────────────
 
     private static NodeVmListItemResponse vmRow(VirtualResource vm, HostUtilization u) {
@@ -264,7 +259,7 @@ public class ResourceExplorerNodeService {
             case "cpuUtilization" -> nullsLast(NodeVmListItemResponse::cpuUtilization, desc);
             case "memoryUtilization" -> nullsLast(NodeVmListItemResponse::memoryUtilization, desc);
             case "diskUtilization" -> nullsLast(NodeVmListItemResponse::diskUtilization, desc);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         return desc ? comparator.reversed() : comparator;
     }
@@ -281,7 +276,7 @@ public class ResourceExplorerNodeService {
             case "maxMemoryUtilization" -> nullsLast(NodeDailyUsageResponse::maxMemoryUtilization, desc);
             case "maxFileSystemUtilization" -> nullsLast(NodeDailyUsageResponse::maxFileSystemUtilization, desc);
             case "maxVmCount" -> nullsLast(NodeDailyUsageResponse::maxVmCount, desc);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         return desc ? comparator.reversed() : comparator;
     }

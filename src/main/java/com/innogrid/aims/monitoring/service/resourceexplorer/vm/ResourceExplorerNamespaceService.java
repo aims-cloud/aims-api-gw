@@ -12,7 +12,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.namespace.NamespaceSumm
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbInfra;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -90,7 +89,7 @@ public class ResourceExplorerNamespaceService {
             case "tumblebugStatus" -> Comparator.comparing(InfraListItemResponse::tumblebugStatus,
                     Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
             case "vmCount" -> Comparator.comparingLong(InfraListItemResponse::vmCount);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<InfraListItemResponse> stable = comparator.thenComparing(InfraListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
         return desc ? stable.reversed() : stable;

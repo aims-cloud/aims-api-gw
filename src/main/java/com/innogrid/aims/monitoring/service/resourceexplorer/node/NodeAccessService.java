@@ -5,7 +5,6 @@ import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /** 모든 노드 패널에서 동일한 역할 스코프 검증을 수행한다. */
@@ -31,6 +30,6 @@ public class NodeAccessService {
     }
 
     private static BusinessException notFound() {
-        return new BusinessException(HttpStatus.NOT_FOUND, "노드를 찾을 수 없습니다.");
+        return BusinessException.notFound("노드를 찾을 수 없습니다.");
     }
 }

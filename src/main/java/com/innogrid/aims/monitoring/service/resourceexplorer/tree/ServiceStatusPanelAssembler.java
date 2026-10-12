@@ -16,7 +16,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.Serv
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceUnitListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceUnitState;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostServiceStatusMetricsQueryService.Unit;
-import org.springframework.http.HttpStatus;
 
 /**
  * Service Status 카테고리 패널 응답 조립 — 노드·VM 패널 서비스가 공유하는 순수 계산 부분.
@@ -86,7 +85,7 @@ public final class ServiceStatusPanelAssembler {
             case "name" -> Comparator.comparing(ServiceUnitListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
             case "type" -> Comparator.comparing(ServiceUnitListItemResponse::type, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
             case "state" -> Comparator.comparing(ServiceUnitListItemResponse::state);
-            default -> throw new BusinessException(HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         Comparator<ServiceUnitListItemResponse> stable = comparator.thenComparing(ServiceUnitListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
         return desc ? stable.reversed() : stable;

@@ -23,7 +23,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -205,8 +204,7 @@ public class ResourceExplorerMdcService {
             case "cpuUtilization" -> nullsLastComparator(NodeListItemResponse::cpuUtilization, desc);
             case "memoryUtilization" -> nullsLastComparator(NodeListItemResponse::memoryUtilization, desc);
             case "fileSystemUtilization" -> nullsLastComparator(NodeListItemResponse::fileSystemUtilization, desc);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
+            default -> throw BusinessException.badRequest("지원하지 않는 정렬 필드입니다: " + field);
         };
         return desc ? comparator.reversed() : comparator;
     }

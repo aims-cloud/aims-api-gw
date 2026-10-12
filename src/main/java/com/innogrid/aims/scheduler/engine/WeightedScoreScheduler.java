@@ -106,10 +106,10 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
             // 전력·온도를 수집하지 못한 노드(0W·0°C)는 판단 근거가 없으므로 중립 0.5.
             // 실측 0 을 그대로 계산하면 여유 100% 로 읽혀 미계측 노드가 만점을 받는다.
-            double powerScore = !policy.isPowerAwareEnabled() || node.getPowerWatts() <= 0
+            double powerScore = Measured.weightedPowerNeutral(policy, node)
                     ? 0.5
                     : powerModel.effectiveHeadroomPercent(node) / 100.0;
-            double tempScore = !policy.isTemperatureAwareEnabled() || node.getTemperatureCelsius() <= 0
+            double tempScore = Measured.weightedThermalNeutral(policy, node)
                     ? 0.5
                     : thermalModel.headroomScore(thermalModel.effectiveTemperature(node),
                                                  policy.getMaxTemperatureCelsius());
@@ -146,26 +146,26 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             // 우선순위 보너스
             totalScore *= getPriorityMultiplier(workload.getPriority());
 
-            totalScore = round(totalScore);
+            totalScore = Scores.round(totalScore);
 
             Map<String, Double> details = new LinkedHashMap<>();
-            details.put("cpu여유", round(cpuScore));
-            details.put("메모리여유", round(memScore));
-            details.put("전력여유", round(powerScore));
-            details.put("온도여유", round(tempScore));
-            details.put("네트워크한산도", round(netScore));
+            details.put("cpu여유", Scores.round(cpuScore));
+            details.put("메모리여유", Scores.round(memScore));
+            details.put("전력여유", Scores.round(powerScore));
+            details.put("온도여유", Scores.round(tempScore));
+            details.put("네트워크한산도", Scores.round(netScore));
             if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
                 details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
             }
             if (linkScore != null) {   // 게이트 on 일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
-                details.put("링크품질", round(linkScore));
+                details.put("링크품질", Scores.round(linkScore));
                 details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)
             }
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),
-                    round(cpuScore), round(memScore), round(powerScore),
-                    round(tempScore), round(netScore), totalScore,
+                    Scores.round(cpuScore), Scores.round(memScore), Scores.round(powerScore),
+                    Scores.round(tempScore), Scores.round(netScore), totalScore,
                     eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
@@ -200,9 +200,5 @@ public class WeightedScoreScheduler implements SchedulingEngine {
             case NORMAL -> 1.0;
             case LOW -> 0.9;
         };
-    }
-
-    private double round(double value) {
-        return Math.round(value * 10000.0) / 10000.0;
     }
 }

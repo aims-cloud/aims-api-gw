@@ -116,7 +116,7 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
         double avgTemperature = context.averageTemperature(thermalModel);
 
         // 클러스터에 계측 노드가 몇 대인가. 평균 온도 표기와 선택 사유가 함께 쓴다.
-        long measuredCount = candidates.stream().filter(n -> n.getTemperatureCelsius() > 0).count();
+        long measuredCount = candidates.stream().filter(Measured::thermal).count();
 
         List<NodeScore> scores = new ArrayList<>();
         NodeScore bestScore = null;
@@ -137,7 +137,7 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
             // 임계 척도(maxTemp)의 부재를 여기에 섞지 않는다. headroomScore·coolingScore 는 ThermalModel 이
             // maxTemperature<=0 에 이미 중립을 돌려주고, balanceScore 는 maxTemp 를 아예 쓰지 않는다 —
             // 섞으면 임계가 0 인 정책에서 계측된 노드까지 "온도를 못 쟀다" 로 취급되어 균형 항이 죽는다.
-            boolean hasThermal = node.getTemperatureCelsius() > 0;
+            boolean hasThermal = Measured.thermal(node);
 
             // 예약분까지 반영한 온도. 실측만 보면 다건 배치가 한 노드로 몰린다.
             double temperature = thermalModel.effectiveTemperature(node);
@@ -161,29 +161,29 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
                     + coolingScore * COOLING_COST_WEIGHT
                     + resourceScore * RESOURCE_WEIGHT;
 
-            totalScore = round(totalScore);
+            totalScore = Scores.round(totalScore);
 
             Map<String, Double> details = new LinkedHashMap<>();
             // 중립 0.5 가 "재 봤더니 0.5" 로 읽히지 않게 계측 여부를 함께 낸다(power 엔진과 같은 관례).
             details.put("온도계측", hasThermal ? 1.0 : 0.0);
-            details.put("열적여유", round(headroomScore));
-            details.put("열적균형", round(balanceScore));
-            details.put("냉각점수", round(coolingScore));
-            details.put("자원여유", round(resourceScore));
+            details.put("열적여유", Scores.round(headroomScore));
+            details.put("열적균형", Scores.round(balanceScore));
+            details.put("냉각점수", Scores.round(coolingScore));
+            details.put("자원여유", Scores.round(resourceScore));
             if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
                 details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
             }
             // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다 — 0 을 넣으면
             // "재 봤더니 0°C" 로 읽혀 판단 근거가 없다는 사실이 가려진다(power 엔진과 같은 관례).
             details.put("배치후예상온도C",
-                    measured(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
-            details.put("클러스터평균온도C", measured(measuredCount > 0, avgTemperature));
+                    Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
+            details.put("클러스터평균온도C", Measured.valueOrNull(measuredCount > 0, avgTemperature));
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),
-                    round(resourceScore), round(resourceScore),
-                    round(coolingScore), round(headroomScore),
-                    round(balanceScore),
+                    Scores.round(resourceScore), Scores.round(resourceScore),
+                    Scores.round(coolingScore), Scores.round(headroomScore),
+                    Scores.round(balanceScore),
                     totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
@@ -227,17 +227,5 @@ public class TemperatureAwareScheduler implements SchedulingEngine {
 
         return new SchedulingResult(true, bestScore.mdcId(), bestScore.nodeId(),
                 bestScore.totalScore(), reason, scores);
-    }
-
-    private double round(double value) {
-        return Math.round(value * 10000.0) / 10000.0;
-    }
-
-    /**
-     * 계측된 값만 담고, 아니면 {@code null} 을 돌려준다.
-     * 삼항 연산자를 그대로 쓰면 자동 언박싱 때문에 NPE 가 날 수 있어 메서드로 감싼다.
-     */
-    private Double measured(boolean present, double value) {
-        return present ? Double.valueOf(round(value)) : null;
     }
 }

@@ -107,8 +107,8 @@ public class PowerAwareScheduler implements SchedulingEngine {
             Exclusion exclusion = context.exclusion(workload, node);
             boolean eligible = (exclusion == null);
 
-            boolean hasPower = node.getPowerWatts() > 0 && node.getPowerCapacityWatts() > 0;
-            boolean hasThermal = node.getTemperatureCelsius() > 0;
+            boolean hasPower = Measured.powerEnginePower(node);
+            boolean hasThermal = Measured.thermal(node);
             anyPowerMetric |= hasPower;
 
             // ── 전력 복합 점수 ──────────────────────────────────
@@ -131,7 +131,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
             double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
             double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
 
-            double totalScore = round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
+            double totalScore = Scores.round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
 
             // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0 을 넣으면 "포화" 로
             // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
@@ -147,28 +147,28 @@ public class PowerAwareScheduler implements SchedulingEngine {
             Map<String, Double> details = new LinkedHashMap<>();
             details.put("전력계측", hasPower ? 1.0 : 0.0);
             details.put("온도계측", hasThermal ? 1.0 : 0.0);
-            details.put("PEI", measured(hasPower, pei));
-            details.put("비낭비", measured(hasPower, waste));
-            details.put("실질한계전력점수", round(marginal));
-            details.put("전력점수", round(powerScore));
-            details.put("열점수", round(thermalScore));
-            details.put("cpu여유", round(cpuScore));
-            details.put("메모리여유", round(memScore));
-            details.put("네트워크한산도", round(netScore));
+            details.put("PEI", Measured.valueOrNull(hasPower, pei));
+            details.put("비낭비", Measured.valueOrNull(hasPower, waste));
+            details.put("실질한계전력점수", Scores.round(marginal));
+            details.put("전력점수", Scores.round(powerScore));
+            details.put("열점수", Scores.round(thermalScore));
+            details.put("cpu여유", Scores.round(cpuScore));
+            details.put("메모리여유", Scores.round(memScore));
+            details.put("네트워크한산도", Scores.round(netScore));
             if (ConstraintEvaluator.diskCheckRelevant(workload)) {   // 요구가 있을 때만 — 없는 배치의 키 집합은 그대로
                 details.put(ConstraintEvaluator.DISK_CHECK_DETAIL, ConstraintEvaluator.diskCheckApplied(workload, node) ? 1.0 : 0.0);
             }
-            details.put("실질한계전력W", round(powerModel.realMarginalPower(node, workload.getRequiredCpu())));
+            details.put("실질한계전력W", Scores.round(powerModel.realMarginalPower(node, workload.getRequiredCpu())));
             details.put("배치후예상전력W",
-                    measured(hasPower, powerModel.predictedPower(node, workload.getRequiredCpu())));
+                    Measured.valueOrNull(hasPower, powerModel.predictedPower(node, workload.getRequiredCpu())));
             details.put("배치후예상온도C",
-                    measured(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
+                    Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
             details.put("가동중", powerModel.isActive(node) ? 1.0 : 0.0);
 
             NodeScore ns = new NodeScore(
                     node.getMdcId(), node.getNodeId(),
-                    round(cpuScore), round(memScore),
-                    round(powerScore), round(thermalScore), round(netScore),
+                    Scores.round(cpuScore), Scores.round(memScore),
+                    Scores.round(powerScore), Scores.round(thermalScore), Scores.round(netScore),
                     totalScore, eligible, Exclusion.messageOf(exclusion), Exclusion.reasonOf(exclusion), details
             );
             scores.add(ns);
@@ -255,14 +255,6 @@ public class PowerAwareScheduler implements SchedulingEngine {
                 context.reclaimableIdleWatts(props.getActiveCpuPercent(), powerModel));
     }
 
-    /**
-     * 계측된 값만 담고, 아니면 {@code null} 을 돌려준다.
-     * 삼항 연산자를 그대로 쓰면 자동 언박싱 때문에 NPE 가 날 수 있어 메서드로 감싼다.
-     */
-    private Double measured(boolean present, double value) {
-        return present ? Double.valueOf(round(value)) : null;
-    }
-
     private double clamp01(double v) {
         return Math.max(0.0, Math.min(1.0, v));
     }
@@ -284,11 +276,7 @@ public class PowerAwareScheduler implements SchedulingEngine {
             else bestIdle = Double.isNaN(bestIdle) ? ns.totalScore() : Math.max(bestIdle, ns.totalScore());
         }
         if (Double.isNaN(bestActive) || Double.isNaN(bestIdle)) return;
-        double margin = Math.round((bestActive - bestIdle) * 10000.0) / 10000.0;
+        double margin = Scores.round(bestActive - bestIdle);
         for (NodeScore ns : scores) ns.details().put("통합여유", margin);
-    }
-
-    private double round(double value) {
-        return Math.round(value * 10000.0) / 10000.0;
     }
 }

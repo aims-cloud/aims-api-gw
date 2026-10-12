@@ -20,6 +20,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,6 +86,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 전력·열 중립값 숫자(power-unmeasured-winner) · 온도 엔진의 음수 냉각 점수(temperature-mixed-nodes ·
  * temperature-unmeasured-winner). 또 weighted-mixed-nodes 의 미계측 노드 총점은 반올림 전 0.71875 라 0.7188 이지만 항을
  * 더하는 순서만 바꿔도 0.7187 이 된다 — 리팩터링은 점수 합산식을 항 순서까지 그대로 옮긴다.</p>
+ *
+ * <p><b>선택 규칙</b> — 기준 파일과 별도로, 가중치 엔진 전용 입력과 정책의 전력·온도 반영 끔이 전력·온도 엔진 결과를 바꾸지
+ * 않는지(전력·온도 제약에서 먼 노드로 본다), 가중치 엔진이 정책의 전력 반영과 온도 반영을 하나씩 끄면 그 점수만 중립 0.5 가
+ * 되는지, 우선순위 배수와 선호 MDC 보너스가 가중치 엔진 총점에 곱해지는지와 보너스가 동점을 깨는지, 반올림한 총점이 같으면
+ * 입력 순서가 앞인 노드를 고르는지, 후보가 없을 때 세 엔진이 같은 실패를 내는지 본다.
+ * HTTP 층에서는 저장 전 모의 배치가 엔진을 생략하면 가중치 엔진으로 평가하는지 본다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -313,7 +321,7 @@ class PlacementResponseGoldenTest {
         s.intent().accept(result);
     }
 
-    /** 후보는 총점 내림차순, 적격 후보가 있을 때만 성공, 선택은 적격 후보 중 최고점(동점이면 입력 순서 앞). */
+    /** 후보는 총점 내림차순, 적격 후보가 있을 때만 성공, 선택은 정렬된 후보 중 첫 적격 후보. 동점의 입력 순서는 동점 시험이 본다. */
     private static void assertSelectionRule(SchedulingResult r) {
         List<SchedulingResult.NodeScore> c = r.candidateScores();
         for (int i = 1; i < c.size(); i++) assertTrue(c.get(i - 1).totalScore() >= c.get(i).totalScore(), "총점 내림차순");
@@ -335,6 +343,71 @@ class PlacementResponseGoldenTest {
             files.forEach(f -> actual.add(f.getFileName().toString()));
         }
         assertEquals(expected, actual);
+    }
+
+    /** 쌍둥이 노드 — 입력 순서 b(mdc-2) → a(mdc-1). a 는 메모리 사용률만 0.0001%p 낮아 반올림 전 총점이 아주 조금 높고 반올림한 총점은 같다. */
+    private static List<NodeResource> twins() {
+        return List.of(mixNode("gld-mdc-2", "tie-b", 8, 10, 20, 200, 500, 40), mixNode("gld-mdc-1", "tie-a", 8, 10, 19.9999, 200, 500, 40));
+    }
+
+    @DisplayName("가중치 엔진 전용 입력과 정책의 전력·온도 반영 끔은 제약에서 먼 노드의 전력·온도 엔진 결과를 바꾸지 않는다")
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"power", "temperature"})
+    void weighted_only_inputs_leave_other_engines_unchanged(String engine) {
+        // 세 노드 모두 전력·온도 제약에서 멀어 반영 끔이 제외 판정을 바꾸지 않는다 — 결과가 달라지면 가중치 엔진 전용 입력이나 반영 끔이 채점에 새어 든 것이다
+        SchedulingResult plain = engine(engine).schedule(small(), three(), policy());
+        SchedulingResult boostedRun = engine(engine).schedule(boosted(), three(), flagsOff());
+        assertEquals(pretty(objectMapper.valueToTree(plain)), pretty(objectMapper.valueToTree(boostedRun)));
+    }
+
+    @DisplayName("가중치 엔진은 정책의 전력 반영과 온도 반영을 하나씩 끄면 그 점수만 중립 0.5 로 둔다")
+    @ParameterizedTest(name = "전력 반영 {0} · 온도 반영 {1}")
+    @CsvSource({"false, true", "true, false"})
+    void weighted_policy_flags_act_separately(boolean powerAware, boolean temperatureAware) {
+        // 둘 다 끈 시나리오(weighted-flags-off)만으로는 온도 판정이 전력 반영 끔을 따라가도 모른다 — 하나씩만 끈다
+        Map<String, SchedulingResult.NodeScore> on = new HashMap<>();
+        engine("weighted").schedule(small(), three(), policy()).candidateScores().forEach(c -> on.put(c.nodeId(), c));
+        assertTrue(on.values().stream().anyMatch(c -> c.powerScore() != 0.5 && c.temperatureScore() != 0.5),
+                "켠 정책의 계측 점수가 중립과 달라야 시험이 성립한다");
+        SchedulingPolicy p = policy(); p.setPowerAwareEnabled(powerAware); p.setTemperatureAwareEnabled(temperatureAware);
+        engine("weighted").schedule(small(), three(), p).candidateScores().forEach(c -> {
+            assertEquals(powerAware ? on.get(c.nodeId()).powerScore() : 0.5, c.powerScore(), c.nodeId() + " 전력");
+            assertEquals(temperatureAware ? on.get(c.nodeId()).temperatureScore() : 0.5, c.temperatureScore(), c.nodeId() + " 온도");
+        });
+    }
+
+    @DisplayName("가중치 엔진은 우선순위 배수와 선호 MDC 보너스를 총점에 곱하고 보너스로 동점을 깬다")
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(Workload.WorkloadPriority.class)
+    void weighted_priority_and_preferred_mdc_scale_totals(Workload.WorkloadPriority priority) {
+        // 링크 게이트를 끈 기본 정책 — 우선순위·선호 MDC 가 데이터 MDC 링크와 무관하게 걸리는지도 본다
+        Map<String, Double> base = totals(engine("weighted").schedule(small(), twins(), policy()));
+        Workload w = small(); w.setPriority(priority); w.setPreferredMdcId("gld-mdc-1");
+        SchedulingResult r = engine("weighted").schedule(w, twins(), policy());
+        double m = switch (priority) { case LOW -> 0.9; case NORMAL -> 1.0; case HIGH -> 1.1; case CRITICAL -> 1.2; };
+        Map<String, Double> t = totals(r);
+        assertEquals(m * 1.10, t.get("gld-tie-a:9100") / base.get("gld-tie-a:9100"), 1e-3, "선호 MDC 노드");
+        assertEquals(m, t.get("gld-tie-b:9100") / base.get("gld-tie-b:9100"), 1e-3, "그 밖 노드");
+        assertEquals("gld-tie-a:9100", r.selectedNodeId(), "보너스가 동점을 깬다");
+    }
+
+    @DisplayName("반올림한 총점이 같으면 입력 순서가 앞인 노드를 고르고 동점 후보의 순서도 입력 순서를 지킨다")
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"weighted", "power", "temperature"})
+    void ties_go_to_the_earlier_input(String engine) {
+        SchedulingResult r = engine(engine).schedule(small(), twins(), policy());
+        List<SchedulingResult.NodeScore> c = r.candidateScores();
+        assertEquals(c.get(0).totalScore(), c.get(1).totalScore(), "반올림한 두 총점이 같아야 동점 시험이 성립한다");
+        assertEquals("gld-tie-b:9100", r.selectedNodeId());
+        assertEquals(List.of("gld-tie-b:9100", "gld-tie-a:9100"), c.stream().map(SchedulingResult.NodeScore::nodeId).toList());
+        assertSelectionRule(r);
+    }
+
+    @DisplayName("후보가 없으면 세 엔진 모두 같은 실패 결과를 낸다")
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"weighted", "power", "temperature"})
+    void no_candidates_fail_the_same_way(String engine) {
+        assertEquals(SchedulingResult.failure("후보 노드가 없습니다"), engine(engine).schedule(small(), List.of(), policy()));
     }
 
     // ── HTTP 층 ────────────────────────────────────────────────────────────
@@ -365,6 +438,16 @@ class PlacementResponseGoldenTest {
                         .content("{\"name\":\"gld-draft\",\"requiredCpu\":1,\"requiredMemoryMb\":64}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertShape(body, engine);
+    }
+
+    @DisplayName("저장 전 모의 배치는 엔진을 생략하면 가중치 엔진으로 평가한다")
+    @Test
+    void draft_dry_run_without_engine_uses_weighted() throws Exception {
+        oneNode();
+        JsonNode body = objectMapper.readTree(mockMvc.perform(post(BASE + "/dry-run").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"gld-draft\",\"requiredCpu\":1,\"requiredMemoryMb\":64}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertShape(body, "weighted");
     }
 
     @DisplayName("실제 단건 배치 응답도 같은 키 순서다")

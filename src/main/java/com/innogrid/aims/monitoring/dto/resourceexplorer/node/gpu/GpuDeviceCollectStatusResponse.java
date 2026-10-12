@@ -15,7 +15,7 @@ public record GpuDeviceCollectStatusResponse(
         int totalMetricCount,
         List<MetricCollectStatus> metrics
 ) {
-    /** 지표 1개의 수집 성공 여부 — 분모(기대 지표 세트) 정의는 TODO:: 확정 필요 */
+    /** 지표 1개의 지금 수집 여부 — 분모는 dcgm_exporter 기본 수집 지표 7종(HostGpuMetricsQueryService.EXPECTED_METRICS) */
     public record MetricCollectStatus(String metricName, boolean collected) {}
 
     public GpuDeviceCollectStatusResponse {

@@ -56,7 +56,8 @@ public class ResourceExplorerNodeGpuController {
 
     @Operation(summary = "GPU 그룹 개요 KPI",
             description = "그룹 개요 탭 카드 4종 — 총 GPU 수, VRAM Utilization(사용/전체 GB 포함), "
-                    + "GPU Power Usage(합산 W, Peak 포함), 최대 GPU Temperature 를 조회합니다.")
+                    + "GPU Power Usage(합산 W, Peak 포함), 최대 GPU Temperature 를 조회합니다. "
+                    + "총 GPU 수는 최근 24시간 안에 수집된 GPU 수, 나머지는 지금 수집 중인 GPU 기준이며 없으면 null 입니다.")
     @GetMapping("/summary")
     public ApiResponse<GpuGroupSummaryResponse> getGroupSummary(@PathVariable String nodeId) {
         return ApiResponse.ok(resourceExplorerNodeGpuService.getGroupSummary(nodeId));
@@ -71,22 +72,25 @@ public class ResourceExplorerNodeGpuController {
     }
 
     @Operation(summary = "GPU 목록",
-            description = "그룹 개요 탭 목록 — GPU/모델/GPU Util(현재/평균)/VRAM Util(현재/평균)/VRAM(사용/전체)/"
-                    + "온도/전력/최근 알람 수. 컬럼 정렬과 페이징을 지원합니다. "
-                    + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
+            description = "그룹 개요 탭 목록 — GPU(gpuId=UUID, gpuName=트리 표시 이름)/모델/GPU Util(현재/최근 1시간 평균)/"
+                    + "VRAM Util(현재/최근 1시간 평균)/VRAM(사용/전체)/온도/전력/최근 알람 수. "
+                    + "지금 수집되지 않는 값은 null, 최근 알람 수는 GPU 단위 알람 기록 전까지 null 입니다. "
+                    + "컬럼 정렬과 페이징을 지원합니다. page 는 1부터, sort 는 '{필드},{asc|desc}' 형식이며 "
+                    + "gpuName 은 인덱스 숫자순, 값 없음은 방향과 무관하게 마지막입니다.")
     @GetMapping("/devices")
     public ApiResponse<PageResponse<GpuDeviceListItemResponse>> getDevices(
             @PathVariable String nodeId,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
-            @RequestParam(defaultValue = "gpuId,asc") String sort) {
+            @RequestParam(defaultValue = "gpuName,asc") String sort) {
         return ApiResponse.ok(resourceExplorerNodeGpuService.getDevices(nodeId, page, size, sort));
     }
 
     @Operation(summary = "GPU 그룹 모니터링 차트",
             description = "그룹 모니터링 탭 — metric(GPU_UTILIZATION|VRAM_UTILIZATION|VRAM_USED|GPU_POWER|"
                     + "GPU_TEMPERATURE|FAN_SPEED)별 GPU 별 분해 시계열. "
-                    + "화면 설계 확정 전으로 지표 세트가 변경될 수 있습니다. from/to 미지정 시 오늘 00시~현재입니다.")
+                    + "화면 설계 확정 전으로 지표 세트가 변경될 수 있습니다. from/to 미지정 시 오늘 00시~현재이며 from 이 to 보다 같거나 늦으면 400 입니다. "
+                    + "시리즈 이름은 트리와 같은 'GPU {인덱스}' 입니다.")
     @GetMapping("/metrics/trend")
     public ApiResponse<GpuMetricTrendResponse> getGroupMetricTrend(
             @PathVariable String nodeId,
@@ -104,7 +108,9 @@ public class ResourceExplorerNodeGpuController {
 
     @Operation(summary = "GPU 장치 개요 KPI",
             description = "개별 GPU 개요 탭 카드 6종 — GPU Utilization, VRAM Utilization, VRAM Used/Total(GB), "
-                    + "GPU Power Usage(W), GPU Temperature(°C), Fan Speed(%) 를 조회합니다.")
+                    + "GPU Power Usage(W), GPU Temperature(°C), Fan Speed(%) 를 조회합니다. "
+                    + "gpuId 는 장치 UUID 이며 최근 24시간 안에 수집된 적 없으면 404, 지금 수집되지 않는 값은 null 입니다. "
+                    + "Fan Speed 는 수집 설정에 DCGM_FI_DEV_FAN_SPEED 가 있어야 채워집니다.")
     @GetMapping("/devices/{gpuId}/summary")
     public ApiResponse<GpuDeviceSummaryResponse> getDeviceSummary(
             @PathVariable String nodeId,
@@ -123,7 +129,9 @@ public class ResourceExplorerNodeGpuController {
 
     @Operation(summary = "GPU 장치 정보",
             description = "개별 GPU 개요 탭 정보 표 — GPU 모델/UUID/PCI Bus ID/CUDA 버전/NVIDIA 드라이버 버전/"
-                    + "NVML 버전/VBIOS 버전/P-State/수집 상태/마지막 수집 시각을 조회합니다.")
+                    + "NVML 버전/VBIOS 버전/P-State/수집 상태/마지막 수집 시각을 조회합니다. "
+                    + "드라이버 버전은 exporter 가 DCGM_FI_DRIVER_VERSION 라벨을 붙일 때만, CUDA·NVML·VBIOS·P-State 는 "
+                    + "기본 수집 항목에 없어 null 입니다. 수집 상태는 COLLECTING|UNAVAILABLE 입니다.")
     @GetMapping("/devices/{gpuId}/info")
     public ApiResponse<GpuDeviceInfoResponse> getDeviceInfo(
             @PathVariable String nodeId,
@@ -133,7 +141,8 @@ public class ResourceExplorerNodeGpuController {
 
     @Operation(summary = "GPU 장치 모니터링 차트",
             description = "개별 GPU 모니터링 탭 — 해당 GPU 의 지표별 시계열. "
-                    + "화면 설계 확정 전으로 지표 세트가 변경될 수 있습니다. from/to 미지정 시 오늘 00시~현재입니다.")
+                    + "화면 설계 확정 전으로 지표 세트가 변경될 수 있습니다. from/to 미지정 시 오늘 00시~현재이며 from 이 to 보다 같거나 늦으면 400 입니다. "
+                    + "시리즈 이름은 트리와 같은 'GPU {인덱스}' 입니다.")
     @GetMapping("/devices/{gpuId}/metrics/trend")
     public ApiResponse<GpuMetricTrendResponse> getDeviceMetricTrend(
             @PathVariable String nodeId,
@@ -152,14 +161,18 @@ public class ResourceExplorerNodeGpuController {
 
     @Operation(summary = "수집 상태 상세 (그룹)",
             description = "상태 요약의 수집 상태 카드 상세 — 수집 대상/정상/오류 GPU 수, 최근 수집 시각, 수집 주기와 "
-                    + "GPU별 수집 상태(HEALTHY|FAILED|NO_DATA)·마지막 수집·수집 지표 수를 조회합니다.")
+                    + "GPU별 수집 상태(HEALTHY|FAILED|NO_DATA)·마지막 수집·수집 지표 수를 조회합니다. "
+                    + "대상은 최근 24시간 안에 수집된 GPU, 분모는 dcgm_exporter 기본 지표 7종이며 "
+                    + "모두 지금 수집되면 HEALTHY, 하나라도 빠지면 FAILED 입니다.")
     @GetMapping("/health/collect-status")
     public ApiResponse<GpuCollectStatusResponse> getCollectStatus(@PathVariable String nodeId) {
         return ApiResponse.ok(resourceExplorerNodeGpuService.getCollectStatus(nodeId));
     }
 
     @Operation(summary = "수집 상태 상세 (개별 GPU)",
-            description = "개별 GPU 의 수집 상태 상세 — 요약 표와 지표별 수집 성공 여부 체크리스트를 조회합니다.")
+            description = "개별 GPU 의 수집 상태 상세 — 요약 표와 지표별 수집 성공 여부 체크리스트를 조회합니다. "
+                    + "체크리스트는 dcgm_exporter 기본 지표 7종(GPU_UTIL·MEM_COPY_UTIL·FB_USED·FB_FREE·GPU_TEMP·"
+                    + "POWER_USAGE·SM_CLOCK)의 지금 수집 여부입니다.")
     @GetMapping("/devices/{gpuId}/health/collect-status")
     public ApiResponse<GpuDeviceCollectStatusResponse> getDeviceCollectStatus(
             @PathVariable String nodeId,

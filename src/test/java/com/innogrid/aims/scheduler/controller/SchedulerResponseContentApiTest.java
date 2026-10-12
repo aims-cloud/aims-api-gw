@@ -1,7 +1,10 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -49,6 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 스케줄러 응답 열 곳의 내용 고정 — 리소스 종류·엔진·일괄 재개·냉각 대기는 키와 값을 순서와 관계없이,
  * 제약 설명·단건 모의 배치·효율 추세는 서비스 결과 직렬화와 바이트까지, 진단 셋은 평가 시각을 뺀 값으로 비교한다.
  * 응답 타입을 바꾸기 전과 후에 같은 시험이 통과해야 하므로 응답 타입이나 서비스 반환 타입을 참조하지 않는다.
+ * 냉각 대기의 남은 분은 표시 시각을 과거로 옮겨 「설정값 − 지난 분」인지와 설정값만큼 지나면 목록에서 빠지는지를 본다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -144,6 +148,25 @@ class SchedulerResponseContentApiTest {
         JsonNode data = data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn());
         assertEquals(objectMapper.readTree("[{\"mdcId\":\"" + PREFIX + "mdc\",\"nodeId\":\"" + NODE + "\",\"temperatureCelsius\":36.5,"
                 + "\"thermalState\":\"" + state + "\",\"remainingCooldownMinutes\":" + properties.getThermal().getCooldownMinutes() + "}]"), data);
+    }
+
+    @DisplayName("냉각 대기의 남은 분은 설정값에서 표시 뒤 지난 분을 뺀 값이고 설정값만큼 지나면 목록에서 빠진다")
+    @Test
+    void thermal_cooldown_remaining_subtracts_elapsed_minutes() throws Exception {
+        long cooldown = properties.getThermal().getCooldownMinutes();
+        assertTrue(cooldown > 3, "시험 전제: 냉각 설정값이 3분보다 길다 — " + cooldown);
+        // 모델의 시계는 시스템 시계라 돌릴 수 없다 — 표시 시각을 과거로 옮겨 지난 시간을 만든다(분 내림까지 55초 여유)
+        thermalModel.markCritical(NODE);
+        @SuppressWarnings("unchecked")
+        Map<String, Instant> since = (Map<String, Instant>) ReflectionTestUtils.getField(thermalModel, "criticalSince");
+        since.put(NODE, Instant.now().minus(Duration.ofMinutes(3)).minusSeconds(5));
+        JsonNode data = data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn());
+        assertEquals(1, data.size(), data.toString());
+        assertEquals(cooldown - 3, data.get(0).get("remainingCooldownMinutes").asLong());
+
+        since.put(NODE, Instant.now().minus(Duration.ofMinutes(cooldown)).minusSeconds(5));
+        assertEquals(objectMapper.readTree("[]"), data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn()));
+        assertTrue(since.keySet().stream().noneMatch(k -> k.startsWith(PREFIX)), "설정값만큼 지난 항목은 목록 조회가 지운다");
     }
 
     @DisplayName("제약 설명·단건 모의 배치·효율 추세 본문은 서비스 결과를 직렬화한 바이트와 같다")

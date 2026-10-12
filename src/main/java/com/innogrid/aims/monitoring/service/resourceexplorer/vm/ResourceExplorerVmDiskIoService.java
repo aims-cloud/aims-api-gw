@@ -41,7 +41,7 @@ public class ResourceExplorerVmDiskIoService {
     /** 개요 탭 장치 목록 — 장치별 읽기·쓰기 B/s·IOPS·지연·사용률, 페이징(1부터)·컬럼 정렬 */
     public PageResponse<DiskIoDeviceListItemResponse> getDiskIoDevices(String roleName, String nsId, String infraId, String vmId,
                                                                        int page, int size, String sort) {
-        Comparator<DiskIoDeviceListItemResponse> comparator = DiskIoPanelAssembler.comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<DiskIoDeviceListItemResponse> comparator = DiskIoPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         return DiskIoPanelAssembler.devicePage(metrics.devices(selector(roleName, nsId, infraId, vmId)), comparator, page, size);
     }
 

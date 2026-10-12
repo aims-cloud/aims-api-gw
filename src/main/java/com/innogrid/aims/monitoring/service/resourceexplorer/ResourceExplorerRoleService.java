@@ -11,6 +11,7 @@ import com.innogrid.aims.auth.repository.UserRepository;
 import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusDistributionResponse.StatusCount;
@@ -22,7 +23,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedNamespace;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedVm;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -35,6 +35,15 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerRoleService {
+
+    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400. */
+    private static final ListSort.Spec<RoleAreaListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(RoleAreaListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("kind", ListSort.by(RoleAreaListItemResponse::kind)),
+                    Map.entry("nodeCount", ListSort.by(RoleAreaListItemResponse::nodeCount)),
+                    Map.entry("vmCount", ListSort.by(RoleAreaListItemResponse::vmCount))),
+            null);
 
     private final ResourceScopeService scopeService;
     private final UserRepository userRepository;
@@ -90,7 +99,7 @@ public class ResourceExplorerRoleService {
 
     /** 자원 영역 섹션 — MDC 행(물리 호스트+1세부 VM)과 Namespace 행(Tumblebug VM), 키워드 검색·컬럼 정렬·페이징(1부터) */
     public PageResponse<RoleAreaListItemResponse> getRoleAreas(String roleName, String keyword, int page, int size, String sort) {
-        Comparator<RoleAreaListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<RoleAreaListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         Scope scope = accessibleScope(roleName);
 
         List<RoleAreaListItemResponse> rows = new ArrayList<>();
@@ -109,7 +118,7 @@ public class ResourceExplorerRoleService {
     /** roleName 이 현재 사용자 토큰에 부여된 역할일 때만 그 역할의 스코프를 조회한다. 아니면 404. */
     private Scope accessibleScope(String roleName) {
         if (!authService.currentUserRoleIds().contains(roleName)) {
-            throw new BusinessException(HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleName);
+            throw BusinessException.notFound("역할을 찾을 수 없습니다: " + roleName);
         }
         return scopeService.scopeOf(List.of(roleName));
     }
@@ -180,20 +189,4 @@ public class ResourceExplorerRoleService {
         return row.name().toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT));
     }
 
-    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400. */
-    private static Comparator<RoleAreaListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<RoleAreaListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(RoleAreaListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "kind" -> Comparator.comparing(RoleAreaListItemResponse::kind);
-            case "nodeCount" -> Comparator.comparingLong(RoleAreaListItemResponse::nodeCount);
-            case "vmCount" -> Comparator.comparingLong(RoleAreaListItemResponse::vmCount);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
-        };
-        return desc ? comparator.reversed() : comparator;
-    }
 }

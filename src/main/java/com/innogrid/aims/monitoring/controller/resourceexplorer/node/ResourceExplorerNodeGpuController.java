@@ -1,11 +1,10 @@
 package com.innogrid.aims.monitoring.controller.resourceexplorer.node;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.util.TimeParams;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuClocksEventsResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuCollectStatusResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceCollectStatusResponse;
@@ -102,8 +101,8 @@ public class ResourceExplorerNodeGpuController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "300s") String step) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeGpuService.getGroupMetricTrend(
                 nodeId, metric, fromInstant, toInstant, step));
     }
@@ -156,8 +155,8 @@ public class ResourceExplorerNodeGpuController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "300s") String step) {
-        Instant toInstant = to != null ? Instant.parse(to) : Instant.now();
-        Instant fromInstant = from != null ? Instant.parse(from) : todayStart();
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeGpuService.getDeviceMetricTrend(
                 nodeId, gpuId, metric, fromInstant, toInstant, step));
     }
@@ -219,10 +218,5 @@ public class ResourceExplorerNodeGpuController {
             @PathVariable String nodeId,
             @RequestParam(required = false) String gpuId) {
         return ApiResponse.ok(resourceExplorerNodeGpuService.getClocksEvents(nodeId, gpuId));
-    }
-
-    /** from 기본값: 오늘 00:00:00 (서버 타임존) */
-    private static Instant todayStart() {
-        return LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant();
     }
 }

@@ -397,6 +397,21 @@ class ResourceExplorerNodeGpuServiceTest {
     }
 
     @Test
+    void 정렬_방향이_asc_desc가_아니면_조회_전에_400이다() {
+        assertThatThrownBy(() -> service.getDevices("11", 1, 10, "powerWatts,up"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(metrics, never()).devices(any());
+    }
+
+    @Test
+    void XID_오류_상세는_BusinessException_501이다() {
+        assertThatThrownBy(() -> service.getXidErrors("11", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    @Test
     void 활성_사유가_없으면_정상에_빈_목록이다() {
         when(metrics.health(DCGM_SEL)).thenReturn(Map.of("GPU-a", new GpuHealth(0.0, 0.0, 0.0, 0.0, 0L)));
 

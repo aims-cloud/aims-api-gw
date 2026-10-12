@@ -53,7 +53,7 @@ public class ResourceExplorerNodeFileSystemService {
 
     /** 그룹 개요 File System 목록 — 마운트별 용량·사용률, 페이징(1부터)·컬럼 정렬 */
     public PageResponse<FileSystemMountListItemResponse> getMounts(String nodeId, int page, int size, String sort) {
-        Comparator<FileSystemMountListItemResponse> comparator = FileSystemPanelAssembler.comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<FileSystemMountListItemResponse> comparator = FileSystemPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         MetricSelector selector = selector(nodeId);
         List<MountUsage> mounts = selector == null ? List.of() : metrics.mounts(selector);
         return FileSystemPanelAssembler.mountPage(mounts, comparator, page, size);

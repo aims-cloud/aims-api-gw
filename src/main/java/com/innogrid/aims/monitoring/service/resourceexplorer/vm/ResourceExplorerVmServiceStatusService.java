@@ -43,7 +43,7 @@ public class ResourceExplorerVmServiceStatusService {
     public PageResponse<ServiceUnitListItemResponse> getServiceUnits(String roleName, String nsId, String infraId, String vmId,
                                                                      ServiceUnitState state, String keyword,
                                                                      int page, int size, String sort) {
-        Comparator<ServiceUnitListItemResponse> comparator = ServiceStatusPanelAssembler.comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<ServiceUnitListItemResponse> comparator = ServiceStatusPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         return ServiceStatusPanelAssembler.unitPage(metrics.units(selector(roleName, nsId, infraId, vmId)),
                 state, keyword, comparator, page, size);
     }

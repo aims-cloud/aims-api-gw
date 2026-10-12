@@ -170,7 +170,7 @@ public class ResourceExplorerNodeLogService {
     public PageResponse<CollectServiceResponse> collectServicesOf(LogTarget target, String keyword,
                                                                   int page, int size, String sort) {
         if (page < 1 || size < 1 || size > MAX_PAGE_SIZE) {
-            throw bad("page/size 범위가 잘못되었습니다.");
+            throw BusinessException.badRequest("page/size 범위가 잘못되었습니다.");
         }
         String[] order = parseSort(sort);
 
@@ -393,10 +393,10 @@ public class ResourceExplorerNodeLogService {
                                                Instant from, Instant to, int limit) {
         Context context = context(target, serviceId);
         if (limit < 1 || limit > MAX_SEARCH_LIMIT) {
-            throw bad("limit은 1~" + MAX_SEARCH_LIMIT + "입니다.");
+            throw BusinessException.badRequest("limit은 1~" + MAX_SEARCH_LIMIT + "입니다.");
         }
         if (keyword != null && keyword.length() > MAX_KEYWORD_LENGTH) {
-            throw bad("검색어는 " + MAX_KEYWORD_LENGTH + "자 이내입니다.");
+            throw BusinessException.badRequest("검색어는 " + MAX_KEYWORD_LENGTH + "자 이내입니다.");
         }
 
         return queries.search(
@@ -436,7 +436,7 @@ public class ResourceExplorerNodeLogService {
             return service.getLogPaths().stream().sorted().toList();
         }
         if (requested.isEmpty() || !service.getLogPaths().containsAll(requested)) {
-            throw bad("해당 서비스에 등록된 전체 파일 경로만 조회할 수 있습니다.");
+            throw BusinessException.badRequest("해당 서비스에 등록된 전체 파일 경로만 조회할 수 있습니다.");
         }
         return requested.stream().distinct().sorted().toList();
     }
@@ -460,7 +460,7 @@ public class ResourceExplorerNodeLogService {
     private static String[] parseSort(String sort) {
         String[] order = sort == null ? new String[0] : sort.split(",", -1);
         if (order.length != 2 || !SORT_FIELDS.contains(order[0]) || !SORT_DIRECTIONS.contains(order[1])) {
-            throw bad("지원하지 않는 정렬입니다.");
+            throw BusinessException.badRequest("지원하지 않는 정렬입니다.");
         }
         return order;
     }
@@ -529,7 +529,7 @@ public class ResourceExplorerNodeLogService {
     static void validate(CollectServiceRequest request) {
         List<Issue> issues = issues(request);
         if (!issues.isEmpty()) {
-            throw bad(issues.get(0).message());
+            throw BusinessException.badRequest(issues.get(0).message());
         }
         // 전체 비활성화도 저장 가능. 활성화 여부와 과거 로그 조회 권한은 독립적이다.
     }
@@ -631,14 +631,11 @@ public class ResourceExplorerNodeLogService {
     // ── 예외 ───────────────────────────────────────────────────
 
     private static BusinessException conflict() {
-        return new BusinessException(HttpStatus.CONFLICT, "같은 이름의 서비스가 이미 있습니다.");
+        return BusinessException.conflict("같은 이름의 서비스가 이미 있습니다.");
     }
 
     private static BusinessException notFound() {
-        return new BusinessException(HttpStatus.NOT_FOUND, "수집 서비스를 찾을 수 없습니다.");
+        return BusinessException.notFound("수집 서비스를 찾을 수 없습니다.");
     }
 
-    private static BusinessException bad(String message) {
-        return new BusinessException(HttpStatus.BAD_REQUEST, message);
-    }
 }

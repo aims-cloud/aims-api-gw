@@ -7,11 +7,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 
 import com.innogrid.aims.auth.service.AuthService;
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.MdcSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetric;
@@ -23,7 +22,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeServic
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -38,6 +36,18 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ResourceExplorerMdcService {
+
+    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400, 미수집(null)은 마지막. */
+    private static final ListSort.Spec<NodeListItemResponse> SORT = ListSort.spec(
+            Map.ofEntries(
+                    Map.entry("name", ListSort.by(NodeListItemResponse::name, String.CASE_INSENSITIVE_ORDER)),
+                    Map.entry("alias", ListSort.by(NodeListItemResponse::alias)),
+                    Map.entry("status", ListSort.by(row -> row.status().name())),
+                    Map.entry("ipAddress", ListSort.by(row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0))),
+                    Map.entry("cpuUtilization", ListSort.by(NodeListItemResponse::cpuUtilization)),
+                    Map.entry("memoryUtilization", ListSort.by(NodeListItemResponse::memoryUtilization)),
+                    Map.entry("fileSystemUtilization", ListSort.by(NodeListItemResponse::fileSystemUtilization))),
+            null);
 
     /** 노드 목록의 "현재" 사용률 집계 윈도우 */
     static final NodeMetricInterval LIST_INTERVAL = NodeMetricInterval.LAST_10M;
@@ -94,7 +104,7 @@ public class ResourceExplorerMdcService {
             int page,
             int size,
             String sort) {
-        Comparator<NodeListItemResponse> comparator = comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<NodeListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         List<ScopedHost> hosts = scopedHosts(roleName, mdcId).stream()
                 .filter(h -> status == null || nodeStatus(h) == status)
                 .toList();
@@ -190,34 +200,4 @@ public class ResourceExplorerMdcService {
         };
     }
 
-    /** sort 파라미터("{필드},{asc|desc}")를 Comparator 로 해석한다. 미지원 필드는 400, 미수집(null)은 마지막. */
-    private static Comparator<NodeListItemResponse> comparator(String sort) {
-        String[] parts = sort.split(",", 2);
-        String field = parts[0].trim();
-        boolean desc = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim());
-
-        Comparator<NodeListItemResponse> comparator = switch (field) {
-            case "name" -> Comparator.comparing(NodeListItemResponse::name, String.CASE_INSENSITIVE_ORDER);
-            case "alias" -> nullsLastComparator(NodeListItemResponse::alias, desc);
-            case "status" -> Comparator.comparing(row -> row.status().name());
-            case "ipAddress" -> nullsLastComparator(
-                    row -> row.ipAddresses().isEmpty() ? null : row.ipAddresses().get(0), desc);
-            case "cpuUtilization" -> nullsLastComparator(NodeListItemResponse::cpuUtilization, desc);
-            case "memoryUtilization" -> nullsLastComparator(NodeListItemResponse::memoryUtilization, desc);
-            case "fileSystemUtilization" -> nullsLastComparator(NodeListItemResponse::fileSystemUtilization, desc);
-            default -> throw new BusinessException(
-                    HttpStatus.BAD_REQUEST, "지원하지 않는 정렬 필드입니다: " + field);
-        };
-        return desc ? comparator.reversed() : comparator;
-    }
-
-    /** 값 없음(null — 별칭 없음/미수집)이 오름/내림 어느 방향에서도 항상 마지막에 오는 비교자.
-     *  desc 면 바깥에서 reversed() 되어 null 위치도 뒤집히므로, 미리 nullsFirst 로 두어 상쇄한다. */
-    private static <T extends Comparable<T>> Comparator<NodeListItemResponse> nullsLastComparator(
-            Function<NodeListItemResponse, T> extractor, boolean desc) {
-        Comparator<T> nullHandling = desc
-                ? Comparator.nullsFirst(Comparator.naturalOrder())
-                : Comparator.nullsLast(Comparator.naturalOrder());
-        return Comparator.comparing(extractor, nullHandling);
-    }
 }

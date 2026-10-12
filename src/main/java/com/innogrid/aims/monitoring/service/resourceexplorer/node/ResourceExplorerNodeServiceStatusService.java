@@ -45,7 +45,7 @@ public class ResourceExplorerNodeServiceStatusService {
     /** 개요 탭 유닛 목록 — 상태 필터·유닛명 키워드(부분 일치, 대소문자 무시)·컬럼 정렬·페이징(1부터) */
     public PageResponse<ServiceUnitListItemResponse> getServiceUnits(String nodeId, ServiceUnitState state, String keyword,
                                                                      int page, int size, String sort) {
-        Comparator<ServiceUnitListItemResponse> comparator = ServiceStatusPanelAssembler.comparator(sort);   // 미지원 필드는 조회 전에 400
+        Comparator<ServiceUnitListItemResponse> comparator = ServiceStatusPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
         MetricSelector selector = selector(nodeId);
         List<Unit> units = selector == null ? List.of() : metrics.units(selector);
         return ServiceStatusPanelAssembler.unitPage(units, state, keyword, comparator, page, size);

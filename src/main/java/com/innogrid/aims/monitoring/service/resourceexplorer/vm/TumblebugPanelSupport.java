@@ -17,7 +17,6 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeB
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbInfra;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbSnapshot;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /**
@@ -50,7 +49,7 @@ public class TumblebugPanelSupport {
                 .map(RoleNamespace::getNsId)
                 .anyMatch(nsId::equals);
         if (!mapped) {
-            throw new BusinessException(HttpStatus.NOT_FOUND, "Namespace 를 찾을 수 없습니다: " + nsId);
+            throw BusinessException.notFound("Namespace 를 찾을 수 없습니다: " + nsId);
         }
         return tumblebugTreeBuilder.snapshot(Set.of(nsId));
     }
@@ -64,7 +63,7 @@ public class TumblebugPanelSupport {
      */
     public RoleNamespaces accessibleRoleNamespaces(String roleName) {
         if (!authService.currentUserRoleIds().contains(roleName)) {
-            throw new BusinessException(HttpStatus.NOT_FOUND, "역할을 찾을 수 없습니다: " + roleName);
+            throw BusinessException.notFound("역할을 찾을 수 없습니다: " + roleName);
         }
         List<String> nsIds = roleNamespaceRepository.findByRole_NameIn(List.of(roleName)).stream()
                 .map(RoleNamespace::getNsId)
@@ -82,7 +81,7 @@ public class TumblebugPanelSupport {
         return snapshot.infrasByNamespace().getOrDefault(nsId, List.of()).stream()
                 .filter(i -> i.id().equals(infraId))
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "Infra 를 찾을 수 없습니다: " + infraId));
+                .orElseThrow(() -> BusinessException.notFound("Infra 를 찾을 수 없습니다: " + infraId));
     }
 
     /**
@@ -97,7 +96,7 @@ public class TumblebugPanelSupport {
                 .flatMap(List::stream)
                 .filter(n -> n.id().equals(vmId))
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "가상머신을 찾을 수 없습니다: " + vmId));
+                .orElseThrow(() -> BusinessException.notFound("가상머신을 찾을 수 없습니다: " + vmId));
     }
 
     /** Node(VM) 목록의 §6.1 상태 버킷 */

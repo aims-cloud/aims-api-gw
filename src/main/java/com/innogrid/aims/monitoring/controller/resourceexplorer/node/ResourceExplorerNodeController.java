@@ -1,16 +1,13 @@
 package com.innogrid.aims.monitoring.controller.resourceexplorer.node;
 
 import com.innogrid.aims.common.log.PortalLog;
-import com.innogrid.aims.common.exception.BusinessException;
-import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.util.TimeParams;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDailyUsageResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeInfoResponse;
@@ -233,7 +230,7 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
         return ApiResponse.ok(resourceExplorerNodeLogService.getLogFiles(nodeId, serviceId,
-                parseLogTime(from, todayStart()), parseLogTime(to, Instant.now())));
+                TimeParams.parseInstant("from", from, TimeParams.startOfToday()), TimeParams.parseInstant("to", to, Instant.now())));
     }
 
     @Operation(summary = "서비스 로그 KPI",
@@ -246,8 +243,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String file,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeLogService.getLogSummary(
                 nodeId, serviceId, file, fromInstant, toInstant));
     }
@@ -264,8 +261,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "1h") String interval) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeLogService.getLogTrend(
                 nodeId, serviceId, files, fromInstant, toInstant, interval));
     }
@@ -284,8 +281,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeLogService.searchLogs(
                 nodeId, serviceId, files, levels, keyword, fromInstant, toInstant, limit));
     }
@@ -307,8 +304,8 @@ public class ResourceExplorerNodeController {
             @PathVariable String serviceId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceSummary(
                 nodeId, serviceId, fromInstant, toInstant));
     }
@@ -327,8 +324,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "1h") String interval) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceTrend(
                 nodeId, serviceId, fromInstant, toInstant, interval));
     }
@@ -345,8 +342,8 @@ public class ResourceExplorerNodeController {
             @PathVariable String serviceId,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getMethodDistribution(
                 nodeId, serviceId, fromInstant, toInstant));
     }
@@ -364,8 +361,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "5") @Min(1) @Max(50) int limit) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTopEndpoints(
                 nodeId, serviceId, fromInstant, toInstant, limit));
     }
@@ -402,8 +399,8 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
-        Instant toInstant = parseLogTime(to, Instant.now());
-        Instant fromInstant = parseLogTime(from, todayStart());
+        Instant toInstant = TimeParams.parseInstant("to", to, Instant.now());
+        Instant fromInstant = TimeParams.parseInstant("from", from, TimeParams.startOfToday());
         return ApiResponse.ok(resourceExplorerNodeTraceService.searchTraces(
                 nodeId, serviceId, ports, statusClasses, keyword, minDurationMs,
                 fromInstant, toInstant, limit));
@@ -439,19 +436,6 @@ public class ResourceExplorerNodeController {
             @RequestParam(required = false) List<String> files) {
         return ApiResponse.ok(resourceExplorerNodeTraceService.getTraceLogs(
                 nodeId, serviceId, traceId, files));
-    }
-
-    /** from 기본값: 오늘 00:00:00 (서버 타임존) */
-    private static Instant todayStart() {
-        return LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant();
-    }
-
-    private static Instant parseLogTime(String value, Instant fallback) {
-        if (value == null) return fallback;
-        try { return Instant.parse(value); }
-        catch (java.time.format.DateTimeParseException e) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "from/to는 ISO-8601 시각이어야 합니다.");
-        }
     }
 }
 

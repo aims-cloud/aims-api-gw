@@ -29,11 +29,11 @@ public class NodeLogQueries {
         long seconds() { return Duration.between(from, to).getSeconds(); }
     }
     public static Window window(Instant from, Instant to) {
-        if (from == null || to == null) throw bad("조회 시작/종료 시간이 필요합니다.");
+        if (from == null || to == null) throw BusinessException.badRequest("조회 시작/종료 시간이 필요합니다.");
         from = from.truncatedTo(ChronoUnit.SECONDS);
         to = to.truncatedTo(ChronoUnit.SECONDS);
         if (!from.isBefore(to) || Duration.between(from, to).compareTo(Duration.ofDays(30)) > 0)
-            throw bad("조회 기간은 1초 이상 30일 이하여야 합니다.");
+            throw BusinessException.badRequest("조회 기간은 1초 이상 30일 이하여야 합니다.");
         return new Window(from, to);
     }
     /** 조회 대상(물리 노드 instance·mdc_id 또는 VM tb_* 라벨)의 라벨 매핑이 모두 있는가 */
@@ -41,7 +41,7 @@ public class NodeLogQueries {
         return host.logConfigured();
     }
     private static void requireConfigured(LogScope host) {
-        if (!configured(host)) throw new BusinessException(HttpStatus.CONFLICT, "조회 대상의 Loki 라벨 매핑이 미설정입니다.");
+        if (!configured(host)) throw BusinessException.conflict("조회 대상의 Loki 라벨 매핑이 미설정입니다.");
     }
 
     public record Observation(boolean configured, boolean failed, Map<String, Long> counts) {
@@ -88,9 +88,9 @@ public class NodeLogQueries {
 
     public ServiceLogTrendResponse trend(LogScope host, List<String> paths, Window window, String interval) {
         Long step = INTERVALS.get(interval);
-        if (step == null) throw bad("interval은 1m/5m/15m/1h/6h/1d입니다.");
+        if (step == null) throw BusinessException.badRequest("interval은 1m/5m/15m/1h/6h/1d입니다.");
         long bucketCount = (window.seconds() + step - 1) / step;
-        if (bucketCount > 1000) throw bad("차트는 최대 1000개 버킷입니다. interval을 늘려주세요.");
+        if (bucketCount > 1000) throw BusinessException.badRequest("차트는 최대 1000개 버킷입니다. interval을 늘려주세요.");
         requireConfigured(host);
         Map<Long, Map<ServiceLogLevel, Long>> counts = new HashMap<>();
         long full = window.seconds() / step;
@@ -163,7 +163,7 @@ public class NodeLogQueries {
      * detected_level 로 옮겨 주므로 결과가 같다. UNKNOWN 을 고르면 선택하지 않은 레벨을 제외하는 부정 매처라 감지값이 없는 줄도 남는다.
      */
     static String selector(LogScope host, List<String> paths, List<ServiceLogLevel> levels) {
-        if (paths.isEmpty()) throw bad("조회 경로가 필요합니다.");
+        if (paths.isEmpty()) throw BusinessException.badRequest("조회 경로가 필요합니다.");
         String base = nodeSelector(host);
         StringBuilder result = new StringBuilder(base.substring(0, base.length() - 1));
         if (paths.size() == 1) result.append(", filename=").append(quote(paths.get(0)));
@@ -228,5 +228,4 @@ public class NodeLogQueries {
         for (Point point : points) result.merge(effectiveLevel(point.labels()), point.count(), Long::sum);
         return result;
     }
-    private static BusinessException bad(String message) { return new BusinessException(HttpStatus.BAD_REQUEST, message); }
 }

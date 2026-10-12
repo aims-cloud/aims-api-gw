@@ -1,14 +1,12 @@
 package com.innogrid.aims.monitoring.controller.resourceexplorer.vm;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
-import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.common.util.TimeParams;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogFileResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogLevel;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.log.ServiceLogListResponse;
@@ -26,7 +24,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -195,7 +192,7 @@ public class ResourceExplorerVmLogController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
         return ApiResponse.ok(vmLogs.getLogFiles(roleName, nsId, infraId, vmId, serviceId,
-                parseLogTime(from, todayStart()), parseLogTime(to, Instant.now())));
+                TimeParams.parseInstant("from", from, TimeParams.startOfToday()), TimeParams.parseInstant("to", to, Instant.now())));
     }
 
     @Operation(summary = "VM 서비스 로그 KPI", description = "수집 상태, 총 로그 수, Warning, Error. from/to 미지정 시 오늘 00시~현재입니다.")
@@ -210,7 +207,7 @@ public class ResourceExplorerVmLogController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
         return ApiResponse.ok(vmLogs.getLogSummary(roleName, nsId, infraId, vmId, serviceId, file,
-                parseLogTime(from, todayStart()), parseLogTime(to, Instant.now())));
+                TimeParams.parseInstant("from", from, TimeParams.startOfToday()), TimeParams.parseInstant("to", to, Instant.now())));
     }
 
     @Operation(summary = "VM 서비스 로그 발생 추이", description = "레벨별 스택 버킷 시계열. from/to 미지정 시 오늘 00시~현재입니다.")
@@ -226,7 +223,7 @@ public class ResourceExplorerVmLogController {
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "1h") String interval) {
         return ApiResponse.ok(vmLogs.getLogTrend(roleName, nsId, infraId, vmId, serviceId, files,
-                parseLogTime(from, todayStart()), parseLogTime(to, Instant.now()), interval));
+                TimeParams.parseInstant("from", from, TimeParams.startOfToday()), TimeParams.parseInstant("to", to, Instant.now()), interval));
     }
 
     @Operation(summary = "VM 서비스 로그 목록/검색",
@@ -245,21 +242,6 @@ public class ResourceExplorerVmLogController {
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "100") @Min(1) @Max(1000) int limit) {
         return ApiResponse.ok(vmLogs.searchLogs(roleName, nsId, infraId, vmId, serviceId, files, levels, keyword,
-                parseLogTime(from, todayStart()), parseLogTime(to, Instant.now()), limit));
-    }
-
-    private static Instant todayStart() {
-        return LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant();
-    }
-
-    private static Instant parseLogTime(String value, Instant fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        try {
-            return Instant.parse(value);
-        } catch (java.time.format.DateTimeParseException e) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "from/to는 ISO-8601 시각이어야 합니다.");
-        }
+                TimeParams.parseInstant("from", from, TimeParams.startOfToday()), TimeParams.parseInstant("to", to, Instant.now()), limit));
     }
 }

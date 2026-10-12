@@ -17,7 +17,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreePathRe
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.ResourceTreeSearchResponse;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.PhysicalTreeBuilder;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
@@ -143,7 +142,7 @@ public class ResourceExplorerTreeService {
         ResourceTreeNodeResponse found = findNode(
                 getTree(new ResourceTreeFilter(null, null, null)), treeNodeId);
         if (found == null) {
-            throw new BusinessException(HttpStatus.NOT_FOUND, "트리 항목을 찾을 수 없습니다: " + treeNodeId);
+            throw BusinessException.notFound("트리 항목을 찾을 수 없습니다: " + treeNodeId);
         }
         return found;
     }

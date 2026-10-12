@@ -20,7 +20,7 @@ public class MockDataProvider {
     // TODO:: 실제 Thanos 연동 시 GPU Mock 데이터와 이 메서드 제거
     public GpuDashboardDataset getGpuDashboardDataset() {
         return new GpuDashboardDataset(
-                new GpuDashboardThreshold(10.0, 60.0, 60.0),
+                new GpuDashboardThreshold(10.0, 10.0, 60.0, 60.0),
                 List.of(
                         gpu("gpu-01", "0", "GPU-A001", "gpu-node-01", "AI_TRAINING", "seoul-a",
                                 "vm-01", "training-vm-01", "projectA", "credentialA", "NVIDIA A100",

@@ -9,6 +9,7 @@ import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse;
+import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
@@ -42,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -50,6 +53,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 스케줄러 응답 타입 명시의 계약 — 레코드로 바꾼 네 응답의 키 순서, 작업 10개의 응답 스키마 참조와 새 이름,
  * 기존 Point·Candidate 스키마 본문 보존, 스케줄러 컨트롤러 응답 선언에 와일드카드·원시 타입이 없음.
+ * 진단 응답 넷과 그 안에 실리는 레코드는 값이 비어도 선언한 키를 모두 순서대로 내야 한다 — 판단 근거가 없다는 사실도 정보다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -84,6 +88,34 @@ class SchedulerResponseTypeApiTest {
             "PowerEfficiencyTrendPoint", "PowerEfficiencyTrendResponse", "PowerOptimizationCluster", "PowerOptimizationFinding",
             "PowerOptimizationMdc", "PowerOptimizationResponse", "PowerOptimizationSummary",
             "ResourceTypeOptionResponse", "ResumeExhaustedResponse", "ThermalCooldownResponse");
+
+    /** 진단 넷과 그 안에 실리는 레코드의 JSON 키 — 선언 순서. 바꾸면 화면이 읽는 키가 바뀐다. */
+    private static final Map<Class<?>, List<String>> JSON_KEYS = Map.ofEntries(
+            Map.entry(PowerEfficiencyResponse.class, List.of("evaluatedAt", "summary", "nodes")),
+            Map.entry(PowerEfficiencyResponse.Summary.class, List.of("totalNodes", "evaluableNodes", "averagePeiRaw", "minPeiRaw", "maxPeiRaw",
+                    "totalPowerWatts", "totalCapacityWatts", "gradeAvailable", "gradeUnavailableReason")),
+            Map.entry(PowerEfficiencyResponse.NodeEfficiency.class, List.of("mdcId", "nodeId", "evaluable", "cpuUsagePercent", "powerWatts",
+                    "powerCapacityWatts", "idlePowerWatts", "headroomPercent", "peiRaw", "peiNormalized", "proportionality", "grade", "rank",
+                    "powerSource", "recommendation")),
+            Map.entry(PowerEfficiencyTrendResponse.class, List.of("nodeId", "from", "to", "step", "points", "message")),
+            Map.entry(PowerEfficiencyTrendResponse.Point.class, List.of("at", "powerWatts", "cpuUsagePercent", "peiRaw")),
+            Map.entry(PowerOptimizationResponse.class, List.of("evaluatedAt", "cluster", "mdcs", "findings", "summary")),
+            Map.entry(PowerOptimizationResponse.Mdc.class, List.of("mdcId", "nodeCount", "measuredNodes", "totalPowerWatts", "effectivePowerWatts",
+                    "budgetWatts", "remainingWatts", "overBudget")),
+            Map.entry(PowerOptimizationResponse.Cluster.class, List.of("totalNodes", "activeNodes", "idleNodes", "totalPowerWatts",
+                    "reclaimableIdleWatts", "measured", "unmeasuredReason", "excludedNodes", "excluded")),
+            Map.entry(PowerOptimizationResponse.Finding.class, List.of("type", "severity", "mdcId", "nodeId", "title", "detail",
+                    "estimatedSavingWatts", "action")),
+            Map.entry(PowerOptimizationResponse.Summary.class, List.of("findingCount", "estimatedSavingWatts", "savingPercent")),
+            Map.entry(ConsolidationResponse.class, List.of("evaluatedAt", "feasible", "candidates", "summary", "limitation")),
+            Map.entry(ConsolidationResponse.Candidate.class, List.of("mdcId", "nodeId", "evaluated", "skipReason", "reclaimable", "basis",
+                    "workloadCount", "idlePowerWatts", "relocationCostWatts", "netSavingWatts", "powerRatioToIdle", "moves", "blockedReason", "detail")),
+            Map.entry(ConsolidationResponse.Move.class, List.of("workloadId", "workloadName", "toNodeId", "marginalWatts")),
+            Map.entry(ConsolidationResponse.Summary.class, List.of("candidateCount", "reclaimableNodes", "reclaimableWatts", "savingPercent",
+                    "truncated", "truncatedReason", "excludedNodes", "excluded")),
+            Map.entry(ExcludedNodeResponse.class, List.of("mdcId", "nodeId", "reason")));
+    /** 기본형 성분에 넣는 표본 값 — 여기 없는 기본형이 생기면 생성에서 소리 나게 실패한다. */
+    private static final Map<Class<?>, Object> ZERO = Map.of(boolean.class, false, int.class, 0, long.class, 0L, double.class, 0.0);
 
     private static final Set<String> TEN = Set.of("getResourceTypes", "resumeExhaustedWorkloads", "scheduleWorkload",
             "getPowerEfficiency", "getPowerEfficiencyTrend", "getConstraints", "getThermalCooldowns", "getEngines",
@@ -200,6 +232,49 @@ class SchedulerResponseTypeApiTest {
                 schemas.get("ConsolidationCandidate").get("properties").get("moves").get("items").get("$ref").asString());
         assertEquals(REF + "PowerEfficiencyNodeEfficiency",
                 schemas.get("PowerEfficiencyResponse").get("properties").get("nodes").get("items").get("$ref").asString());
+    }
+
+    @DisplayName("전력 효율·효율 추세·전력 최적화·통합 진단 응답과 그 안의 레코드는 값이 비어도 선언한 키를 모두 순서대로 낸다")
+    @Test
+    void diagnostic_records_write_every_key() throws Exception {
+        Set<Class<?>> types = new HashSet<>();
+        for (Class<?> root : List.of(PowerEfficiencyResponse.class, PowerEfficiencyTrendResponse.class,
+                PowerOptimizationResponse.class, ConsolidationResponse.class)) collect(root, types);
+        assertEquals(JSON_KEYS.keySet(), types, "진단 응답에 실리는 레코드가 바뀌었다 — 의도한 변경이면 JSON_KEYS 를 고치고 화면 담당에 알린다");
+        for (Class<?> type : types) {
+            JsonNode json = objectMapper.readTree(objectMapper.writeValueAsString(blank(type)));
+            assertEquals(JSON_KEYS.get(type), names(json), type.getName() + " — null·빈 목록이어도 키는 있어야 한다");
+        }
+    }
+
+    /** 레코드 성분(목록·배열이면 원소까지)을 따라 닿는 레코드 타입을 모은다. */
+    private static void collect(Class<?> type, Set<Class<?>> out) {
+        if (!out.add(type)) return;
+        for (RecordComponent c : type.getRecordComponents()) collect(c.getGenericType(), out);
+    }
+
+    private static void collect(Type t, Set<Class<?>> out) {
+        if (t instanceof Class<?> k) {
+            if (k.isArray()) collect(k.getComponentType(), out);
+            else if (k.isRecord()) collect(k, out);
+        } else if (t instanceof ParameterizedType p) {
+            for (Type x : p.getActualTypeArguments()) collect(x, out);
+        } else if (t instanceof GenericArrayType g) {
+            collect(g.getGenericComponentType(), out);
+        }
+    }
+
+    /** 정준 생성자에 0·false·null 을 넣은 표본 — 압축 생성자가 null 목록을 빈 목록으로 바꾼다. */
+    private static Object blank(Class<?> type) throws ReflectiveOperationException {
+        Class<?>[] params = Arrays.stream(type.getRecordComponents()).map(RecordComponent::getType).toArray(Class<?>[]::new);
+        Object[] args = new Object[params.length];
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].isPrimitive() && !ZERO.containsKey(params[i])) {
+                fail(type.getName() + "." + type.getRecordComponents()[i].getName() + " — 표본 값이 없는 기본형 " + params[i] + ": ZERO 에 더한다");
+            }
+            args[i] = ZERO.get(params[i]);
+        }
+        return type.getDeclaredConstructor(params).newInstance(args);
     }
 
     @DisplayName("스케줄러 컨트롤러의 응답 선언에 와일드카드·타입 변수·원시 제네릭이 없다")

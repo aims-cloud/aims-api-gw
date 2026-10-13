@@ -17,6 +17,7 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -352,12 +353,30 @@ class ConsolidationServiceTest {
         assertTrue(r.summary().excluded().get(0).reason().contains("cpu사용률"));
     }
 
+    // ── 정책 선택 ──────────────────────────────────────────────
+
+    @DisplayName("진단은 저장하지 않는 정책 선택만 부른다")
+    @Test
+    void diagnose_does_not_save_policy() {
+        given(List.of(node("idle", 1, 5, 150)), List.of());
+        // 저장하는 선택도 값을 주게 해 둔다 — 진단이 그쪽을 부르면 NPE 가 아니라 아래 never 확인에서 실패한다
+        SchedulingPolicy saved = new SchedulingPolicy("saved", "saved");
+        when(schedulingService.resolvePolicy()).thenReturn(saved);
+        when(schedulingService.resolvePolicyChoice(any())).thenReturn(new PolicyChoice(saved, PolicyChoice.Source.DEFAULT, true));
+
+        service.diagnose();
+
+        verify(schedulingService).choosePolicy(null);
+        verify(schedulingService, never()).resolvePolicy();
+        verify(schedulingService, never()).resolvePolicyChoice(any());
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     /** 노드 목록과 "모든 노드에 공통으로 배치된" 워크로드를 세팅한다. */
     private void given(List<NodeResource> nodes, List<Workload> workloads) {
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
-        when(schedulingService.resolvePolicy()).thenReturn(policy);
+        when(schedulingService.choosePolicy(null)).thenReturn(new PolicyChoice(policy, PolicyChoice.Source.COMMON, true));
         when(schedulingService.getNodeResources()).thenReturn(nodes);
         // createContext 는 호출할 때마다 새 스냅샷을 줘야 한다 — 샌드박스가 원본을 건드리지
         // 않는지 확인하려면 복사본이어야 한다.

@@ -200,6 +200,37 @@ class ScheduleDryRunTest {
         }
     }
 
+    @DisplayName("상한을 넘으면 우선순위 순서의 앞 건을 남기고 뒤 건을 자르며, 바로 이은 실제 실행도 같은 건을 남긴다")
+    @Test
+    void truncation_keeps_the_head_of_the_run_order() {
+        eightCoreNode();
+        // 등록 순서를 우선순위와 어긋나게 둔다 — 정렬이 빠지거나 뒤에서 자르면 남는 건이 달라진다
+        Workload low = save("cut-low", 1, Workload.WorkloadPriority.LOW);
+        Workload high = save("cut-high", 1, Workload.WorkloadPriority.HIGH);
+        Workload normal = save("cut-normal", 1, Workload.WorkloadPriority.NORMAL);
+        long scheduleId = schedule("cut", Workload.ResourceType.GPU, true, null);
+        int limit = properties.getMaxWorkloadsPerRun();
+        properties.setMaxWorkloadsPerRun(2);
+        try {
+            ScheduleDryRunResponse dry = executionService.dryRun(scheduleId);
+            ScheduleRun run = executionService.runNow(scheduleId, "tester");
+            ScheduleRunDetailResponse detail = scheduleService.runDetail(scheduleId, run.getId());
+
+            List<Long> kept = List.of(high.getId(), normal.getId());
+            assertEquals(kept, dry.decisions().stream().map(ScheduleDryRunResponse.DryRunDecision::workloadId).toList(),
+                    "우선순위 앞 두 건만 남는다");
+            assertEquals(kept, detail.decisions().stream().map(ScheduleRunDetailResponse.Decision::workloadId).toList(),
+                    "실제 실행도 같은 두 건을 남긴다");
+            assertTrue(dry.truncated());
+            assertTrue(run.isTruncated());
+            assertEquals(run.getMessage(), dry.message());
+            assertEquals(Workload.WorkloadStatus.PENDING,
+                    workloadRepository.findById(low.getId()).orElseThrow().getStatus(), "잘린 건은 손대지 않고 다음 실행으로 남는다");
+        } finally {
+            properties.setMaxWorkloadsPerRun(limit);
+        }
+    }
+
     @DisplayName("대상이 없으면 노드를 모으지 않고 실행과 같은 '대상 없음' 결과를 돌려준다")
     @Test
     void no_target_skips_node_collection() {

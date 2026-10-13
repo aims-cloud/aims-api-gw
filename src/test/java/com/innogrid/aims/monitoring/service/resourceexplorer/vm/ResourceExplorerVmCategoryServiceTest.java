@@ -45,8 +45,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * VM 카테고리 패널(CPU/Memory/Network/GPU) 테스트 — 공통 스코프(404), tb_* 선택자 전달, interval 구간·step,
- * CPU KPI·목록 정렬·페이징, 빈 시리즈, GPU 501.
+ * VM 카테고리 패널(CPU/Memory/Network) 테스트 — 공통 스코프(404), tb_* 선택자 전달, interval 구간·step,
+ * CPU KPI·목록 정렬·페이징, 빈 시리즈. GPU 는 ResourceExplorerVmGpuServiceTest.
  *
  * 대역: ns openstack / infra openstack-infra-01 / node vm-1, ADMIN → openstack 매핑
  */
@@ -61,7 +61,6 @@ class ResourceExplorerVmCategoryServiceTest {
     ResourceExplorerVmCpuService cpu = new ResourceExplorerVmCpuService(support, metrics);
     ResourceExplorerVmMemoryService memory = new ResourceExplorerVmMemoryService(support, metrics);
     ResourceExplorerVmNetworkService network = new ResourceExplorerVmNetworkService(support, metrics);
-    ResourceExplorerVmGpuService gpu = new ResourceExplorerVmGpuService(support);
 
     static final String NS = "openstack";
     static final String INFRA = "openstack-infra-01";
@@ -182,17 +181,5 @@ class ResourceExplorerVmCategoryServiceTest {
         assertThat(res.step()).isEqualTo("5m");
         assertThat(res.series().get(0).name()).isEqualTo("network");
         assertThat(res.series().get(0).dataPoints()).containsExactly(new DataPoint(1L, 120.0));
-    }
-
-    // ── GPU ─────────────────────────────────────────────────────
-
-    @Test
-    void GPU는_스코프_검증_뒤_501이다() {
-        // 501 도 BusinessException — 공통 처리기를 거쳐 ApiResponse 오류 형식으로 나간다
-        assertThatThrownBy(() -> gpu.getGroupSummary(null, NS, INFRA, NODE))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getStatus()).isEqualTo(HttpStatus.NOT_IMPLEMENTED));
-        assertThatThrownBy(() -> gpu.getGroupSummary(null, "other-ns", INFRA, NODE))
-                .isInstanceOf(BusinessException.class);
     }
 }

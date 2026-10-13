@@ -2,8 +2,6 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -37,15 +35,20 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.GpuCounter;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.TrendSeries;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuXidErrorsResponse;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuHealth;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuSample;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import org.springframework.stereotype.Service;
+
+import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.gb;
+import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.gpuName;
+import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.round1;
+import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.toOffsetDateTime;
 
 /**
  * 자원 탐색기 노드 GPU 카테고리 패널 조회 서비스.
@@ -70,7 +73,7 @@ public class ResourceExplorerNodeGpuService {
      */
     private static final ListSort.Spec<GpuDeviceListItemResponse> SORT = ListSort.spec(
             Map.ofEntries(
-                    Map.entry("gpuName", ListSort.by(GpuDeviceListItemResponse::gpuName, ResourceExplorerNodeGpuService::compareGpuName)),
+                    Map.entry("gpuName", ListSort.by(GpuDeviceListItemResponse::gpuName, GpuPanelAssembler::compareGpuName)),
                     Map.entry("gpuId", ListSort.by(GpuDeviceListItemResponse::gpuId)),
                     Map.entry("model", ListSort.by(GpuDeviceListItemResponse::model)),
                     Map.entry("gpuUtilCurrentPercent", ListSort.by(GpuDeviceListItemResponse::gpuUtilCurrentPercent)),
@@ -82,9 +85,8 @@ public class ResourceExplorerNodeGpuService {
                     Map.entry("temperatureCelsius", ListSort.by(GpuDeviceListItemResponse::temperatureCelsius)),
                     Map.entry("powerWatts", ListSort.by(GpuDeviceListItemResponse::powerWatts)),
                     Map.entry("recentAlarmCount", ListSort.by(GpuDeviceListItemResponse::recentAlarmCount))),
-            Comparator.comparing(GpuDeviceListItemResponse::gpuName, ResourceExplorerNodeGpuService::compareGpuName));
+            Comparator.comparing(GpuDeviceListItemResponse::gpuName, GpuPanelAssembler::compareGpuName));
 
-    private static final double MB_PER_GB = 1024.0;
     private static final Duration PCIE_TREND_WINDOW = Duration.ofHours(24);
 
     private final NodeAccessService nodeAccess;
@@ -148,15 +150,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** 개별 GPU 개요 KPI 카드 6종 — Util / VRAM Util / VRAM 사용·전체 / Power / 온도 / Fan. 지금 수집되지 않는 값은 null */
     public GpuDeviceSummaryResponse getDeviceSummary(String nodeId, String gpuId) {
-        GpuSample gpu = requireDevice(nodeId, gpuId);
-        return new GpuDeviceSummaryResponse(
-                round1(gpu.utilization()),
-                round1(gpu.vramPercent()),
-                gb(gpu.fbUsedMb()),
-                gb(gpu.fbTotalMb()),
-                round1(gpu.powerWatts()),
-                round1(gpu.temperatureC()),
-                round1(gpu.fanSpeedPercent()));
+        return GpuPanelAssembler.deviceSummary(requireDevice(nodeId, gpuId));
     }
 
     /** 개별 GPU 상태 요약 — 그룹과 동일 구조, 해당 GPU 1장 기준 */
@@ -178,7 +172,7 @@ public class ResourceExplorerNodeGpuService {
                 null,
                 null,
                 null,
-                (gpu.collecting() ? MonitoringStatus.COLLECTING : MonitoringStatus.UNAVAILABLE).name(),
+                GpuPanelAssembler.collectStatus(gpu),
                 toOffsetDateTime(gpu.lastCollectedAt()));
     }
 
@@ -293,10 +287,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** 최근 24시간 안에 수집된 GPU 만 개별 패널을 연다 — dcgm_exporter 가 없거나 해당 UUID 가 없으면 404 */
     private GpuSample requireDevice(MetricSelector selector, String gpuId) {
-        return devices(selector).stream()
-                .filter(g -> g.uuid().equals(gpuId))
-                .findFirst()
-                .orElseThrow(() -> BusinessException.notFound("GPU 를 찾을 수 없습니다: " + gpuId));
+        return GpuPanelAssembler.requireDevice(devices(selector), gpuId);
     }
 
     private GpuMetricTrendResponse trend(String nodeId, String gpuId, GpuMetric metric,
@@ -305,9 +296,8 @@ public class ResourceExplorerNodeGpuService {
             throw BusinessException.badRequest("조회 시작 시각은 종료 시각보다 앞서야 합니다.");
         }
         MetricSelector selector = dcgmSelector(nodeId);
-        List<Series> series = selector == null ? List.of() : metrics.trend(metric, selector, gpuId, from, to, step).stream()
-                .map(s -> new Series(gpuName(s.index(), s.uuid()), s.points()))
-                .toList();
+        List<Series> series = selector == null ? List.of()
+                : GpuPanelAssembler.series(metrics.trend(metric, selector, gpuId, from, to, step));
         return new GpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step, series);
     }
 
@@ -327,11 +317,6 @@ public class ResourceExplorerNodeGpuService {
                 round1(g.temperatureC()),
                 round1(g.powerWatts()),
                 null);
-    }
-
-    /** "GPU {n}" 이름을 인덱스 숫자순으로 — "GPU 2" < "GPU 10". 인덱스가 없는 이름("GPU {UUID}")은 뒤에 문자열순 */
-    private static int compareGpuName(String a, String b) {
-        return HostGpuMetricsQueryService.compareIndex(a.substring("GPU ".length()), b.substring("GPU ".length()));
     }
 
     // ── 상태 요약 판정 ──────────────────────────────────────────
@@ -441,11 +426,6 @@ public class ResourceExplorerNodeGpuService {
         return value == null ? null : Math.max(0L, Math.round(value));
     }
 
-    /** 트리와 같은 표시 이름 — "GPU {인덱스}", 인덱스가 없으면 UUID */
-    private static String gpuName(String index, String uuid) {
-        return "GPU " + (index == null ? uuid : index);
-    }
-
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }
@@ -466,18 +446,6 @@ public class ResourceExplorerNodeGpuService {
 
     private static Double max(List<GpuSample> gpus, Function<GpuSample, Double> value) {
         return gpus.stream().map(value).filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null);
-    }
-
-    private static Double gb(Double mb) {
-        return mb == null ? null : round1(mb / MB_PER_GB);
-    }
-
-    private static Double round1(Double value) {
-        return value == null ? null : Math.round(value * 10) / 10.0;
-    }
-
-    private static OffsetDateTime toOffsetDateTime(Instant instant) {
-        return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
     private static BusinessException dataSourceNotImplemented() {

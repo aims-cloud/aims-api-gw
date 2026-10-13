@@ -166,6 +166,11 @@ public class HostGpuMetricsQueryService {
         return currentQuery("DCGM_FI_DEV_CLOCKS_EVENT_REASONS", s) + " or " + currentQuery("DCGM_FI_DEV_CLOCK_THROTTLE_REASONS", s);
     }
 
+    /** MIG 인스턴스가 있는 GPU — dcgm_exporter 는 MIG 인스턴스 시계열에 GPU_I_ID 를 붙인다 */
+    static String migQuery(MetricSelector s) {
+        return "count by (UUID) (DCGM_FI_DEV_FB_USED" + s.braces("GPU_I_ID!=\"\"") + ")";
+    }
+
     /** PCIe Replay 시간당 증가 시계열 — GPU(UUID, gpu)별. uuid 가 있으면 그 GPU 1장만 */
     static String pcieReplayTrendQuery(MetricSelector s, String uuid) {
         String matchers = uuid == null ? PHYSICAL : PHYSICAL + "," + MetricSelector.label("UUID", uuid);
@@ -246,6 +251,16 @@ public class HostGpuMetricsQueryService {
         } catch (RuntimeException e) {
             log.warn("Thanos GPU 상태 지표 조회 실패 — 상태 카드를 미수집으로 표시합니다: {}", e.getMessage());
             return Map.of();
+        }
+    }
+
+    /** MIG 로 나뉜 GPU 의 UUID — 장애면 빈 집합(MIG 아님으로 본다) */
+    public Set<String> migUuids(MetricSelector s) {
+        try {
+            return Set.copyOf(byUuid(migQuery(s)).keySet());
+        } catch (RuntimeException e) {
+            log.warn("Thanos GPU MIG 조회 실패 — MIG 구분 없이 표시합니다: {}", e.getMessage());
+            return Set.of();
         }
     }
 

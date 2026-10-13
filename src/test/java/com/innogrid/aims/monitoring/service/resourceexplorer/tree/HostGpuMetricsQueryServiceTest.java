@@ -197,6 +197,19 @@ class HostGpuMetricsQueryServiceTest {
     }
 
     @Test
+    void MIG_판별은_GPU_I_ID가_있는_시계열의_UUID이고_장애면_빈_집합이다() {
+        MetricSelector tb = MetricSelector.tumblebugNode("aws", "aims-gpu-monitoring", "aims-aws-gpu-1");
+        assertThat(HostGpuMetricsQueryService.migQuery(tb)).isEqualTo("count by (UUID) (DCGM_FI_DEV_FB_USED"
+                + "{GPU_I_ID!=\"\",tb_ns=\"aws\",tb_infra=\"aims-gpu-monitoring\",tb_node=\"aims-aws-gpu-1\"})");
+
+        when(client.queryResults(HostGpuMetricsQueryService.migQuery(SEL))).thenReturn(List.of(byUuid("GPU-c", "2")));
+        assertThat(service.migUuids(SEL)).containsExactly("GPU-c");
+
+        when(client.queryResults(anyString())).thenThrow(new RuntimeException("timeout"));
+        assertThat(service.migUuids(SEL)).isEmpty();
+    }
+
+    @Test
     void Clock_이벤트_비트마스크는_선언_순서로_풀고_모르는_비트는_무시한다() {
         assertThat(ClocksEventReason.fromMask(0L)).isEmpty();
         assertThat(ClocksEventReason.fromMask(0x1FFL)).containsExactly(ClocksEventReason.values());

@@ -1,5 +1,10 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 스케줄이 온도 한계를 덧씌울 때 만드는 정책 사본이 <b>판단 필드를 하나도 잃지 않는가</b>.
  *
  * <p>사본에 {@code affinityEnabled} 가 복사되지 않아, 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가
- * 꺼진 채 실행되던 결함을 고정한다. 정책의 다른 필드가 그대로 옮겨지는 것도 함께 확인한다.</p>
+ * 꺼진 채 실행되던 결함을 고정한다. 정책의 다른 필드가 그대로 옮겨지는 것도 함께 확인한다. 사본은
+ * {@code SchedulingPolicy.detachedCopy()} 가 만들므로 선언된 필드 전량을 반사로 대조하는 테스트를 하나 둔다.</p>
  */
 @SpringBootTest
 class ScheduleOverridePolicyCopyTest {
@@ -65,6 +71,69 @@ class ScheduleOverridePolicyCopyTest {
         Schedule schedule = new Schedule("s3", "s3", "0 0 2 * * ?");
 
         assertSame(policy, executionService.applyOverrides(policy, schedule));
+    }
+
+    /**
+     * 선언된 필드를 반사로 훑어 사본이 온도 한계 말고는 원본과 같은지 대조한다. 나중에 판단 필드가 늘어났을 때
+     * 사본이 따라오지 않으면 여기가 빨간불이 된다.
+     */
+    @DisplayName("사본은 온도 한계를 빼면 선언된 모든 필드가 원본과 같다")
+    @Test
+    void override_copy_matches_original_except_thermal_limit() {
+        SchedulingPolicy policy = distinctive();
+        Schedule schedule = new Schedule("s4", "s4", "0 0 2 * * ?");
+        schedule.setMaxTemperatureCelsius(66.0);
+
+        SchedulingPolicy copy = executionService.applyOverrides(policy, schedule);
+
+        Map<String, Object> expected = fields(policy);
+        Map<String, Object> actual = fields(copy);
+        // id 와 createdAt 은 영속 계층의 몫이고, 온도 한계는 스케줄 값으로 덮어쓴 것이 맞다
+        for (String excluded : new String[]{"id", "createdAt", "maxTemperatureCelsius"}) {
+            expected.remove(excluded);
+            actual.remove(excluded);
+        }
+        assertEquals(expected, actual, "필드가 늘어났는데 사본이 따라오지 않았다");
+        assertTrue(expected.size() >= 17, "필드가 줄었다면 이 테스트가 무엇을 지키는지 다시 봐야 한다: " + expected.keySet());
+        assertEquals(66.0, copy.getMaxTemperatureCelsius());
+        assertEquals(71.0, policy.getMaxTemperatureCelsius(), "원본은 그대로");
+    }
+
+    /** 모든 필드를 기본값과 다른 값으로 채운 정책 — 기본값을 그대로 두면 옮기지 않아도 통과해 버린다. */
+    private static SchedulingPolicy distinctive() {
+        SchedulingPolicy p = new SchedulingPolicy("override-원본", "반사 대조용");
+        p.setResourceType(Workload.ResourceType.CONTAINER);
+        p.setDefaultEngine("temperature");
+        p.setWarningTemperatureCelsius(61.5);
+        p.setCpuWeight(0.31);
+        p.setMemoryWeight(0.29);
+        p.setPowerWeight(0.19);
+        p.setTemperatureWeight(0.13);
+        p.setNetworkWeight(0.08);
+        p.setMaxCpuUsagePercent(77.5);
+        p.setMaxMemoryUsagePercent(82.5);
+        p.setMaxTemperatureCelsius(71.0);
+        p.setMaxPowerUsagePercent(88.0);
+        p.setPowerAwareEnabled(false);
+        p.setTemperatureAwareEnabled(false);
+        p.setAffinityEnabled(true);
+        p.setActive(false);
+        return p;
+    }
+
+    /** 선언된 인스턴스 필드 전량의 값. 합성 필드와 정적 필드는 뺀다. */
+    private static Map<String, Object> fields(SchedulingPolicy policy) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (Field field : SchedulingPolicy.class.getDeclaredFields()) {
+            if (field.isSynthetic() || Modifier.isStatic(field.getModifiers())) continue;
+            field.setAccessible(true);
+            try {
+                values.put(field.getName(), field.get(policy));
+            } catch (IllegalAccessException e) {
+                throw new AssertionError("필드를 읽을 수 없다: " + field.getName(), e);
+            }
+        }
+        return values;
     }
 
     private static SchedulingPolicy policy() {

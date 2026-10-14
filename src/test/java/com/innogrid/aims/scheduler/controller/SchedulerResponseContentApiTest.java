@@ -178,7 +178,7 @@ class SchedulerResponseContentApiTest {
         assertArrayEquals(objectMapper.writeValueAsBytes(ApiResponse.ok(ConstraintDescriptionResponse.all())),
                 body(mockMvc.perform(get(BASE + "/constraints")).andExpect(status().isOk()).andReturn()), "제약 설명");
 
-        schedulingService.resolvePolicy();   // default 정책이 없으면 모의 배치가 만든다 — 두 호출이 같은 정책을 보도록 먼저 만든다
+        schedulingService.resolvePolicy(null);   // default 정책이 없으면 모의 배치가 만든다 — 두 호출이 같은 정책을 보도록 먼저 만든다
         Workload w = new Workload(PREFIX + "dry", 1, 64);
         long id = workloadRepository.saveAndFlush(w).getId();
         byte[] viaHttp = body(mockMvc.perform(post(BASE + "/workloads/" + id + "/schedule").param("dryRun", "true").param("engine", "weighted"))
@@ -197,7 +197,7 @@ class SchedulerResponseContentApiTest {
     @DisplayName("전력 효율·전력 최적화·통합 진단은 평가 시각을 뺀 값이 서비스 결과와 같다")
     @Test
     void diagnostics_equal_service_output_except_time() throws Exception {
-        schedulingService.resolvePolicy();   // default 정책 행이 있는 상태에서 HTTP 응답과 직접 호출을 비교한다(행이 없는 경우는 아래 정책 행 테스트가 본다)
+        schedulingService.resolvePolicy(null);   // default 정책 행이 있는 상태에서 HTTP 응답과 직접 호출을 비교한다(행이 없는 경우는 아래 정책 행 테스트가 본다)
 
         JsonNode efficiency = data(mockMvc.perform(get(BASE + "/nodes/power-efficiency")).andExpect(status().isOk()).andReturn());
         assertEquals(withoutTime(objectMapper.readTree(objectMapper.writeValueAsString(powerEfficiencyService.evaluateCurrent()))),

@@ -624,9 +624,6 @@ public class ScheduleExecutionService {
         return saved;
     }
 
-    /** 실행 결과 메시지의 컬럼 길이. 스케줄·실행 이력 두 컬럼이 같은 길이라 한 상수를 공유한다. */
-    static final int MESSAGE_MAX = ScheduleRun.MESSAGE_MAX;
-
     static final String RECOVERED_MESSAGE = "앱 재기동으로 중단됨 — 실행 권한을 회수했습니다";
 
     /**

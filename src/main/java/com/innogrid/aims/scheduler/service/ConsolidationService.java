@@ -34,7 +34,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * <p><b>유휴 여부를 고정 임계로 정하지 않는다.</b> "CPU 5% 미만이면 유휴" 같은 기준은 64코어의
  * 5%(3.2코어)와 8코어의 5%(0.4코어)를 같게 취급하는 자의적 절벽을 만든다. 대신 <b>순절감</b>을
  * 계산한다 — 노드를 비워 아끼는 유휴 전력에서 그 워크로드를 옮기는 비용을 뺀 값이며, 양수여야
- * 통합할 가치가 있다. 옮기는 비용은 PR ② 의 {@code realMarginalPower} 로 잰다.</p>
+ * 통합할 가치가 있다. 옮기는 비용은 {@code PowerModel.realMarginalPower} 로 잰다.</p>
  */
 @Service
 public class ConsolidationService {
@@ -212,7 +212,7 @@ public class ConsolidationService {
                 .map(NodeResource::snapshot)
                 .toList();
         // 링크·예산 스냅샷은 실제 배치 컨텍스트의 것을 그대로 잇는다. 빠뜨리면 시뮬레이션은 "옮길 수 있다"고
-        // 답하고 실제 배치는 C5(링크 단절)나 C6(MDC 예산 초과)으로 막히는 어긋남이 생긴다(4-D ㄱ).
+        // 답하고 실제 배치는 C5(링크 단절)나 C6(MDC 예산 초과)으로 막히는 어긋남이 생긴다.
         return PlacementContext.of(others, policy).withLinkMatrix(links).withMdcBudgets(budgets);
     }
 

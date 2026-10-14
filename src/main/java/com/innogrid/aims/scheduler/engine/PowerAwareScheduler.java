@@ -248,7 +248,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
      *
      * <p>양수면 통합 쪽(가동 노드)을 골랐고, 값이 작으면 노드 조건이 조금만 달라져도 빈 노드를 깨우는 선택으로
      * 뒤집힌다는 뜻이다. 기준 시나리오에서 0.0002 였다. 점수·순위·선택은 바꾸지 않고 <b>보이게만</b> 한다 —
-     * 어느 쪽으로 얼마나 밀어야 하는지는 노드 2대 이상 실환경의 이 값이 쌓인 뒤에 정한다(단계 16 재판단).
+     * 어느 쪽으로 얼마나 밀어야 하는지는 노드 2대 이상 실환경의 이 값이 쌓인 뒤에 정한다.
      * 한쪽 집단이 없으면 키를 넣지 않는다.</p>
      */
     private static void annotateConsolidationMargin(List<NodeScore> scores) {

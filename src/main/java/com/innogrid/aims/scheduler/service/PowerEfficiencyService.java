@@ -344,7 +344,7 @@ public class PowerEfficiencyService {
     /** 시계열 하나를 타임스탬프→값 으로 편다. 여러 시리즈가 오면 첫 건만 쓴다. */
     private Map<Long, Double> seriesOf(String promQL, OffsetDateTime start,
                                        OffsetDateTime end, String step) {
-        // 저장소가 응답을 안 주면 요청 스레드가 무한 대기하던 경로다(단계 14). 상한 안에서만 기다리고, 넘기면
+        // 저장소가 응답을 안 주면 요청 스레드가 무한 대기하던 경로다. 상한 안에서만 기다리고, 넘기면
         // 보호 장치의 예외가 trend() 의 기존 처리로 올라가 "메트릭 저장소를 조회하지 못했습니다: 질의가 상한 …" 사유를
         // 담은 빈 결과(200)가 된다 — 조회 실패에 500 을 내지 않는다는 이 클래스의 원칙 그대로다.
         List<Map<String, Object>> results = guard.call(() -> metricsClient.queryRangeResults(

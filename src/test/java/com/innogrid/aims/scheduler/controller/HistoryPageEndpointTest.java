@@ -346,7 +346,7 @@ class HistoryPageEndpointTest {
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data[?(@.workloadName == 'hp-24')]").exists());
         // 페이지 총합은 배열 길이와 같다.
-        // 단, 배열에는 반환 상한이 있고(단계 23) 페이지 총건수에는 없다. 이 단언은 전체 이력이 상한 아래일 때만
+        // 단, 배열에는 반환 상한이 있고 페이지 총건수에는 없다. 이 단언은 전체 이력이 상한 아래일 때만
         // 성립하므로 상한으로 한 번 감싼다 — 그러지 않으면 이 스위트가 커진 어느 날 원인 모를 실패가 된다.
         int arrayLength = objectMapper.readTree(mockMvc.perform(get("/api/v1/scheduler/history")).andReturn()
                 .getResponse().getContentAsString()).get("data").size();

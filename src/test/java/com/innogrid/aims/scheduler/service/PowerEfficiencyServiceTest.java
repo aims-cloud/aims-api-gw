@@ -294,7 +294,7 @@ class PowerEfficiencyServiceTest {
 
     // ── 픽스처 ─────────────────────────────────────────────────
 
-    /** 설계 문서의 9노드 픽스처. 전력 200W 고정, CPU 만 10~80% 로 변화. */
+    /** 9노드 픽스처. 전력 200W 고정, CPU 만 10~80% 로 변화. */
     private List<NodeResource> cluster() {
         return List.of(
                 node("n1", 80, 200), node("n2", 70, 200), node("n3", 60, 200),

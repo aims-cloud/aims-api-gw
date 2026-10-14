@@ -96,7 +96,7 @@ public class PlacementContext {
      * MDC 전력 예산 스냅샷을 싣는다. null 이면 빈 원장.
      *
      * <p>이름을 {@code withPowerBudget} 과 구분한 이유: 그쪽은 <b>노드 한 대</b>의 전력을 비교하는
-     * 실행 단위 상한이고(12장 T10 의 이름 문제), 이쪽은 <b>MDC 한 곳</b>의 합계 상한이다.</p>
+     * 실행 단위 상한이고, 이쪽은 <b>MDC 한 곳</b>의 합계 상한이다.</p>
      */
     public PlacementContext withMdcBudgets(MdcPowerBudgets budgets) {
         this.mdcBudgets = budgets == null ? MdcPowerBudgets.EMPTY : budgets;

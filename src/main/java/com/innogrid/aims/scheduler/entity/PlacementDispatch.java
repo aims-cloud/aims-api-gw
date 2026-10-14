@@ -12,7 +12,7 @@ import jakarta.persistence.*;
  * 갱신되며, 실행 계층이 콜백으로 알려 주는 진행(RUNNING → COMPLETED / FAILED)이 뒤따른다.</p>
  *
  * <p>워크로드와는 FK 없이 식별자로만 연결한다. 워크로드 삭제 때 함께 지운다(서비스 규칙).
- * 우리 결정의 기록이므로 저장해도 형상 규칙(0-1)에 맞는다.</p>
+ * 우리 결정의 기록이므로 저장해도 원시 메트릭을 저장하지 않는 원칙에 맞는다.</p>
  */
 @Entity
 @Table(name = "placement_dispatches",

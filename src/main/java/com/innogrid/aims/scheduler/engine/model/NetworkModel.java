@@ -14,7 +14,7 @@ import com.innogrid.aims.scheduler.model.NodeResource;
  * 네트워크 모델 — 배치 판단에 쓰는 네트워크 점수를 계산한다.
  *
  * <p>두 가지를 본다. <b>노드 자신의 트래픽 부하</b>({@link #localTrafficScore})는 예전부터 있었고,
- * <b>데이터 MDC 와 노드 MDC 사이의 링크 품질</b>({@link #linkScore})은 단계 4-② 에서 더했다.
+ * <b>데이터 MDC 와 노드 MDC 사이의 링크 품질</b>({@link #linkScore})은 나중에 더했다.
  * 둘을 {@link #blend} 로 섞는 것은 엔진이 게이트(정책 {@code affinityEnabled} + 워크로드 {@code dataMdcId})가
  * 켜졌을 때만 한다.</p>
  *

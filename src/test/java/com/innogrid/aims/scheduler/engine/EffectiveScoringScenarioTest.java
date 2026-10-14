@@ -28,7 +28,7 @@ import static com.innogrid.aims.scheduler.service.SchedulingServiceBuilder.aSche
 import static org.mockito.Mockito.when;
 
 /**
- * 합성 클러스터 시나리오 — 단계 9 의 수정이 세 엔진과 수집기에서 함께 동작하는지.
+ * 합성 클러스터 시나리오 — 실효 점수와 수집 제외 수정이 세 엔진과 수집기에서 함께 동작하는지.
  *
  * <p>배포 VM 은 노드 1대라 "여러 노드 사이의 분산"을 실환경에서 볼 수 없다. 합성 데이터가
  * 유일한 수단이다. 각 시나리오는 <b>입력 → 예상 출력</b>을 주석에 적고 표로 출력한다.</p>

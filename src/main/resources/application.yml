@@ -133,7 +133,7 @@ aims:
     password: ${AIMS_ADMIN_PASSWORD}
     name: ${AIMS_ADMIN_NAME:관리자}
   scheduler:
-    # 모의 메트릭 모드(단계 19) — 1세부 데이터가 없는 동안 가상 클러스터로 시연·검증. 배포는 항상 false.
+    # 모의 메트릭 모드 — 1세부 데이터가 없는 동안 가상 클러스터로 시연·검증. 배포는 항상 false.
     mock-enabled: ${AIMS_SCHEDULER_MOCK_ENABLED:false}
   gpu-dashboard:
     # TODO:: 실제 Thanos 연동이 완료되면 Mock 설정 제거

@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 요약의 절대 기준값 — 상대 등급(4분위)은 클러스터 전체가 비효율이어도 누군가는 A 를 받는다.
- * 화면이 "A 지만 최대가 0.05%/W" 를 보여 줄 수 있도록 평가 가능 노드의 최소·최대 PEI 원값을 함께 낸다(12장 T1 → 단계 13).
+ * 화면이 "A 지만 최대가 0.05%/W" 를 보여 줄 수 있도록 평가 가능 노드의 최소·최대 PEI 원값을 함께 낸다.
  */
 @SpringBootTest
 class PowerEfficiencySummaryRangeTest {

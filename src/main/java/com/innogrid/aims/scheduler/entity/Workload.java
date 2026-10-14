@@ -279,7 +279,7 @@ public class Workload {
 
     /**
      * 리소스 종류.
-     * 값을 추가할 때는 DB 의 CHECK 제약도 함께 바꿔야 한다(개발순서.md 부록 A).
+     * 값을 추가할 때는 DB 의 CHECK 제약도 함께 바꿔야 한다.
      */
     public enum ResourceType {
         VM, GPU, NPU, CONTAINER;

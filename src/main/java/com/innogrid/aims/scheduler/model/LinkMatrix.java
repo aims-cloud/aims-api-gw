@@ -12,7 +12,7 @@ import com.innogrid.aims.scheduler.entity.MdcLink;
  * 배치 한 번에 쓰는 MDC 링크 원장의 <b>불변 스냅샷</b>.
  *
  * <p>실행당 한 번 원장을 읽어 만들고({@code SchedulingService.createContext}), 엔진과 제약 평가기는
- * 이것만 본다 — 노드 메트릭을 실행당 1회 수집하는 원칙(단계 9)과 같다. 배치 도중 원장이 바뀌어도
+ * 이것만 본다 — 노드 메트릭을 실행당 1회 수집하는 원칙과 같다. 배치 도중 원장이 바뀌어도
  * 같은 실행 안에서는 같은 링크 품질을 본다.</p>
  *
  * <p>키는 {@link MdcLink.Pair} 로 정렬된 쌍이라 방향이 없다. 같은 MDC·미등록 쌍은 {@link #between} 이

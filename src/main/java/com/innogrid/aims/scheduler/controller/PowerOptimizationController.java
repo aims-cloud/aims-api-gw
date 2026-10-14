@@ -31,7 +31,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  *
  * <p><b>{@code SchedulerController} 와 별도 클래스로 둔다.</b> 그쪽은 {@code /nodes/{nodeId}} 같은
  * 경로 변수를 잡고 있어, 같은 클래스에 리터럴 경로를 더하면 어느 쪽이 먼저 잡히는지가 매핑
- * 순서에 걸린다. 단계 5 에서 {@code /nodes/power-efficiency} 가 {@code /nodes/{nodeId}} 로 잡힐
+ * 순서에 걸린다. {@code /nodes/power-efficiency} 가 {@code /nodes/{nodeId}} 로 잡힐
  * 뻔한 선례가 있다.</p>
  */
 @Tag(name = "스케줄러 (전력 최적화 진단)",

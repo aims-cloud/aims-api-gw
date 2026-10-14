@@ -23,11 +23,11 @@ import com.innogrid.aims.scheduler.repository.NodePowerSpecRepository;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 시나리오 — 원장에 정격을 넣으면 단계 19 에서 드러난 한계가 실제로 닫히는가.
+ * 시나리오 — 원장에 정격을 넣으면 모의 메트릭 모드에서 드러난 한계가 실제로 닫히는가.
  *
  * <pre>
  * 배경   가상 클러스터의 GPU 노드 seoul-02 는 정격 900W 로 전력을 만들지만, 엔진은 원장·설정이 비어 있어 500W 로 본다.
- *        그래서 한 주기의 87% 동안 "전력 여유 부족"으로 후보에서 빠진다(단계 19 의 T22).
+ *        그래서 한 주기의 87% 동안 "전력 여유 부족"으로 후보에서 빠진다.
  * 절차   ① 원장 비었을 때 정격 500W 확인  ② 원장에 900W 등록  ③ 정격이 900W 로 바뀌고 전력 여유가 양수로 돌아섬
  *        ④ 회수 가능 전력(정격 × 유휴 비율)도 함께 커짐  ⑤ 원장을 지우면 500W 로 원복
  * </pre>
@@ -68,7 +68,7 @@ class NodePowerSpecScenarioTest {
         assertEquals(900.0, after.getPowerCapacityWatts(), "원장 값이 수집에 반영된다");
         assertTrue(after.powerHeadroomPercent() > headroomBefore,
                 "같은 실측 전력이라도 정격이 커지면 여유가 는다: %.1f%% → %.1f%%".formatted(headroomBefore, after.powerHeadroomPercent()));
-        assertTrue(after.powerHeadroomPercent() > 0, "900W 정격에서는 전력 여유가 양수 — 단계 19 의 상시 제외가 풀린다");
+        assertTrue(after.powerHeadroomPercent() > 0, "900W 정격에서는 전력 여유가 양수 — 모의 메트릭 모드의 상시 제외가 풀린다");
 
         specService.delete(saved.getId());
         assertEquals(500.0, gpuNode().orElseThrow().getPowerCapacityWatts(), "지우면 설정 기본값으로 원복");

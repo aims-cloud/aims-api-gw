@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 정책 요청이 {@code affinityEnabled} 를 받는가 — 응답(20필드)에는 있었지만 요청 DTO 에 없어 API 로 켤 수 없던 필드.
- * 게이트를 화면·API 에서 켜고 끌 수 있어야 4-② 가 쓰인다.
+ * 게이트를 화면·API 에서 켜고 끌 수 있어야 C5 와 링크 점수가 쓰인다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

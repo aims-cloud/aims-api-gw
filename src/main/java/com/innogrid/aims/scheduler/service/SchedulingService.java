@@ -224,8 +224,12 @@ public class SchedulingService {
     /**
      * 임계 온도를 넘겨 냉각 대기 중인 노드 목록.
      * 온도 제어(연구계획 B3)가 실제로 배치를 막고 있는지 밖에서 확인할 수단이다.
+     *
+     * <p>대기 노드가 하나도 없으면 노드를 수집하지 않는다 — 수집해도 응답이 비기 때문이다. 대기 노드가
+     * 있을 때는 수집한 뒤 노드마다 다시 확인하므로, 수집하는 동안 만료된 노드는 목록에서 빠진다.</p>
      */
     public List<ThermalCooldownResponse> getCoolingDownNodes() {
+        if (!constraintEvaluator.anyCoolingDown()) return List.of();
         return getNodeResources().stream()
                 .filter(n -> constraintEvaluator.isCoolingDown(n.getNodeId()))
                 .map(n -> ThermalCooldownResponse.of(n, constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))

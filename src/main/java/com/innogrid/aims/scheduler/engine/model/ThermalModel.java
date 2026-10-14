@@ -152,6 +152,19 @@ public class ThermalModel {
         return true;
     }
 
+    /**
+     * 냉각 대기 중인 노드가 하나라도 있는지. 기록 전부를 {@link #isCoolingDown} 으로 확인하므로
+     * 설정 시간이 지난 기록은 이때 모두 지워진다. 중간에 멈추지 않고 끝까지 돈다 — 멈추면 어느
+     * 만료 기록이 지워지는지가 맵의 순회 순서에 좌우된다.
+     */
+    public boolean anyCoolingDown() {
+        boolean any = false;
+        for (String nodeId : criticalSince.keySet()) {
+            if (isCoolingDown(nodeId)) any = true;
+        }
+        return any;
+    }
+
     /** 쿨다운 잔여 시간(분). 제외 사유 메시지에 쓴다. */
     public long remainingCooldownMinutes(String nodeId) {
         Instant since = criticalSince.get(nodeId);

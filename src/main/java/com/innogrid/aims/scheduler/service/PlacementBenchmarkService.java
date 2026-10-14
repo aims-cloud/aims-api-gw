@@ -1170,7 +1170,7 @@ public class PlacementBenchmarkService {
     private static SchedulingPolicy policyFor(PlacementStrategy strategy, Map<String, String> override) {
         SchedulingPolicy policy = policyFor(strategy.policy());
         if ("true".equals(override.get("affinityEnabled"))) {
-            policy = BenchmarkPolicies.copyOf(policy);
+            policy = policy.detachedCopy();
             policy.setAffinityEnabled(true);
         }
         return policy;

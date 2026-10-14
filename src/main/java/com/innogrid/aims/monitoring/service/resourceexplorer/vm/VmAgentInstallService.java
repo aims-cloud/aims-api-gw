@@ -81,9 +81,9 @@ public class VmAgentInstallService {
             throw BusinessException.conflict("실행 중(Running)인 VM 에만 설치할 수 있습니다. 현재 상태: " + vm.status());
         }
         AgentProperties.VmInstall settings = properties.getVmInstall();
-        if (isBlank(settings.getLokiPushUrl()) || isBlank(settings.getTargetsUrl())) {
-            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "VM 에이전트 설치 설정이 비어 있습니다(AIMS_AGENT_VM_LOKI_PUSH_URL, AIMS_AGENT_VM_TARGETS_URL).");
+        if (isBlank(settings.getLokiPushUrl()) || isBlank(settings.getTargetsUrl()) || isBlank(settings.getRemoteWriteUrl())) {
+            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "VM 에이전트 설치 설정이 비어 있습니다"
+                    + "(AIMS_AGENT_VM_LOKI_PUSH_URL, AIMS_AGENT_VM_TARGETS_URL, AIMS_AGENT_VM_REMOTE_WRITE_URL).");
         }
         CollectOwner owner = CollectOwner.vm(nsId, infraId, vmId);
         Map<String, Object> body;

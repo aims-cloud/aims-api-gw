@@ -46,6 +46,7 @@ class VmAgentInstallServiceTest {
     @BeforeEach void setup() {
         properties.getVmInstall().setLokiPushUrl("http://10.0.0.179:3100/loki/api/v1/push");
         properties.getVmInstall().setTargetsUrl("http://10.0.0.179:8080/api/v1/agent/targets");
+        properties.getVmInstall().setRemoteWriteUrl("http://10.0.0.179:19291/api/v1/receive");
         when(support.accessibleNode(any(), eq("ns-1"), eq("infra-1"), eq("vm-1"))).thenReturn(vm("Running"));
         when(nodes.save(any(AgentNode.class))).thenAnswer(inv -> {
             saved = inv.getArgument(0);
@@ -142,6 +143,11 @@ class VmAgentInstallServiceTest {
 
         when(support.accessibleNode(any(), eq("ns-1"), eq("infra-1"), eq("vm-1"))).thenReturn(vm("Running"));
         properties.getVmInstall().setTargetsUrl(" ");
+        assertThatThrownBy(() -> service.install(null, "ns-1", "infra-1", "vm-1"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        properties.getVmInstall().setTargetsUrl("http://10.0.0.179:8080/api/v1/agent/targets");
+        properties.getVmInstall().setRemoteWriteUrl("");                                       // 지표 전송 주소도 필수
         assertThatThrownBy(() -> service.install(null, "ns-1", "infra-1", "vm-1"))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));

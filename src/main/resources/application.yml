@@ -156,9 +156,13 @@ aims:
   agent:
     vm-install:
       # Tumblebug VM 수집 에이전트 설치 (docs/11 §5.5) — VM 의 Alloy 가 직접 부르는 주소라 VM 에서 보이는 주소로 둔다.
-      # 둘 중 하나라도 비면 설치 API 는 503. 목록 API 는 인증이 없으므로 VM 대역에서만 백엔드에 닿게 방화벽을 둔다.
+      # 세 주소 중 하나라도 비면 설치 API 는 503. 목록 API 는 인증이 없으므로 VM 대역에서만 백엔드에 닿게 방화벽을 둔다.
       loki-push-url: ${AIMS_AGENT_VM_LOKI_PUSH_URL:}
       targets-url: ${AIMS_AGENT_VM_TARGETS_URL:}
+      # VM 의 Alloy 가 node_exporter·dcgm-exporter 지표를 tb_* 라벨과 함께 보내는 Thanos Receive 주소
+      remote-write-url: ${AIMS_AGENT_VM_REMOTE_WRITE_URL:}
+      # GPU 가 있고 Docker·NVIDIA Container Toolkit 이 있는 VM 에만 띄운다
+      dcgm-exporter-image: ${AIMS_AGENT_VM_DCGM_EXPORTER_IMAGE:nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04}
   portal-log:
     retention:
       # 포털 로그 보존 배치 (docs/08 §9) — 매일 03:30, 일반 1년 / SYSTEM 90일. 배치 단위로 별도 트랜잭션, 한 실행 최대 200배치

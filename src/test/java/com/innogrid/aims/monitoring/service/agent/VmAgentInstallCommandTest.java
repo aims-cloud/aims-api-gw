@@ -12,7 +12,7 @@ import com.innogrid.aims.monitoring.service.agent.VmAgentInstallCommand.Outcome;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
-/** 설치 명령 조립(base64 로만 값 전달·형식 검사·패키지 리소스)과 Tumblebug 응답 판정(성공 표식·실패 단계·사유 우선순위). */
+/** 설치 명령 조립(base64 로만 값 전달·형식 검사·패키지 리소스 — 로그·지표·GPU 계약)과 Tumblebug 응답 판정(성공 표식·실패 단계·사유 우선순위). */
 class VmAgentInstallCommandTest {
 
     CollectOwner vm = CollectOwner.vm("openstack", "openstack-infra-01", "openstack-nodegroup-01-1");
@@ -21,6 +21,7 @@ class VmAgentInstallCommandTest {
         AgentProperties.VmInstall s = new AgentProperties.VmInstall();
         s.setLokiPushUrl("http://10.0.0.179:3100/loki/api/v1/push");
         s.setTargetsUrl("http://10.0.0.179:8080/api/v1/agent/targets");
+        s.setRemoteWriteUrl("http://10.0.0.179:19291/api/v1/receive");
         return s;
     }
 
@@ -52,6 +53,8 @@ class VmAgentInstallCommandTest {
                 TB_NODE=openstack-nodegroup-01-1
                 LOKI_PUSH_URL=http://10.0.0.179:3100/loki/api/v1/push
                 AIMS_TARGETS_URL=http://10.0.0.179:8080/api/v1/agent/targets
+                REMOTE_WRITE_URL=http://10.0.0.179:19291/api/v1/receive
+                DCGM_EXPORTER_IMAGE=nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04
                 ALLOY_VERSION=1.20.0
                 NODE_EXPORTER_VERSION=1.9.1
                 """);
@@ -80,6 +83,14 @@ class VmAgentInstallCommandTest {
         AgentProperties.VmInstall badUser = settings();
         badUser.setUserName("root;id");
         assertThatThrownBy(() -> command.requestBody(vm, badUser)).isInstanceOf(IllegalArgumentException.class);
+        AgentProperties.VmInstall noThanos = settings();
+        noThanos.setRemoteWriteUrl(null);
+        assertThatThrownBy(() -> command.requestBody(vm, noThanos)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Thanos remote_write 주소");
+        AgentProperties.VmInstall badImage = settings();
+        badImage.setDcgmExporterImage("nvcr.io/x:1 && curl evil");
+        assertThatThrownBy(() -> command.requestBody(vm, badImage)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("dcgm-exporter 이미지");
         assertThatThrownBy(() -> command.requestBody(CollectOwner.asset(1L), settings())).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -89,10 +100,19 @@ class VmAgentInstallCommandTest {
         String script = payloads.get(0);
         String config = payloads.get(2);
         assertThat(script).doesNotContain("\r").startsWith("#!/usr/bin/env bash")
-                .contains("AIMS_STEP=", "AIMS_ERROR=", "AIMS_AGENT_OK alloy=v${ALLOY_VERSION} node_exporter=${NODE_EXPORTER_VERSION}")
-                .contains("--collector.systemd");                                               // VM 후보 탐지(systemd 유닛)가 쓴다
+                .contains("AIMS_STEP=", "AIMS_ERROR=", "AIMS_AGENT_OK alloy=v${ALLOY_VERSION} node_exporter=${NODE_EXPORTER_VERSION} gpu=${GPU_STATE}")
+                .contains("--collector.systemd")                                                // VM 후보 탐지(systemd 유닛)가 쓴다
+                .contains("--hostname \"$TB_NODE\"", "\"$DCGM_EXPORTER_IMAGE\"", "127.0.0.1:9400:9400")   // GPU 라벨이 VM 이름, 포트는 VM 안에서만
+                .contains("sed '/AIMS:GPU:BEGIN/,/AIMS:GPU:END/d'");                            // GPU 가 없으면 GPU 수집 구간을 뺀 설정
         assertThat(config).doesNotContain("\r").doesNotContain("/host$1").doesNotContain("discovery.relabel")   // 호스트 프로세스라 접두어 없음
                 .contains("tbNs=%s&tbInfra=%s&tbNode=%s", "tb_ns    = sys.env(\"TB_NS\")", "tb_node  = sys.env(\"TB_NODE\")");
+        // 지표: node·GPU 를 instance=<TB_NODE>:<포트> 로 읽어 Thanos 로, tb_* 라벨은 로그와 같은 값
+        assertThat(config).contains("prometheus.remote_write \"aims\"", "url = sys.env(\"REMOTE_WRITE_URL\")",
+                "job_name        = \"node-exporter\"", "job_name        = \"gpu-metrics\"",
+                "string.format(\"%s:9100\", sys.env(\"TB_NODE\"))", "string.format(\"%s:9400\", sys.env(\"TB_NODE\"))");
+        String gpuBlock = config.substring(config.indexOf("// AIMS:GPU:BEGIN"), config.indexOf("// AIMS:GPU:END"));
+        assertThat(gpuBlock).contains("prometheus.scrape \"dcgm\"").doesNotContain("prometheus.scrape \"node\"")
+                .doesNotContain("prometheus.remote_write \"aims\"");                          // 지우는 구간은 GPU 수집만(전송 정의는 밖)
         for (String staticPath : new AgentProperties().getRemoteStaticLogPaths()) {
             assertThat(config).contains("\"" + staticPath + "\"");                             // 목록에서 빼는 정적 경로 = 설정이 읽는 경로
         }
@@ -105,11 +125,11 @@ class VmAgentInstallCommandTest {
 
     @Test void successMarkerWinsAndCarriesVersion() {
         Outcome ok = VmAgentInstallCommand.parse(response("vm-1",
-                Map.of("0", "AIMS_STEP=PREPARE\nAIMS_STEP=VERIFY\nAIMS_AGENT_OK alloy=v1.20.0 node_exporter=1.9.1\n"),
+                Map.of("0", "AIMS_STEP=PREPARE\nAIMS_STEP=GPU\nAIMS_STEP=VERIFY\nAIMS_AGENT_OK alloy=v1.20.0 node_exporter=1.9.1 gpu=dcgm\n"),
                 Map.of("0", "sudo: unable to resolve host tb8sursfo0ia00o3c8s1: Name or service not known\n"), ""), "vm-1");
         assertThat(ok.success()).isTrue();
         assertThat(ok.step()).isEqualTo("DONE");
-        assertThat(ok.version()).isEqualTo("alloy=v1.20.0 node_exporter=1.9.1");
+        assertThat(ok.version()).isEqualTo("alloy=v1.20.0 node_exporter=1.9.1 gpu=dcgm").hasSizeLessThanOrEqualTo(50);   // agent_version 컬럼
         assertThat(ok.error()).isNull();
     }
 

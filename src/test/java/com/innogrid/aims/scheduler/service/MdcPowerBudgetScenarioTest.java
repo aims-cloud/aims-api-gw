@@ -71,7 +71,7 @@ class MdcPowerBudgetScenarioTest {
     @DisplayName("MDC 예산을 현재 합계 아래로 걸면 그 MDC 노드가 전부 빠지고, 지우면 돌아온다")
     @Test
     void budget_excludes_whole_mdc_and_delete_restores() {
-        PlacementContext before = schedulingService.createContext(schedulingService.resolvePolicy());
+        PlacementContext before = schedulingService.createContext(schedulingService.resolvePolicy(null));
         assertEquals(3, nodesOf(before, MDC).size(), "가상 클러스터의 mdc-seoul 은 3대다");
         assertFalse(eligible(before, MDC).isEmpty(), "예산이 없으면 mdc-seoul 노드가 후보에 있다");
 
@@ -81,7 +81,7 @@ class MdcPowerBudgetScenarioTest {
 
         var saved = budgetService.create(new MdcPowerBudgetRequest(MDC, sum / 2, "SPEC_SHEET", null));
 
-        PlacementContext after = schedulingService.createContext(schedulingService.resolvePolicy());
+        PlacementContext after = schedulingService.createContext(schedulingService.resolvePolicy(null));
         assertTrue(eligible(after, MDC).isEmpty(),
                 "합계의 절반이 예산이면 mdc-seoul 노드는 전부 빠진다: " + eligible(after, MDC));
 
@@ -96,7 +96,7 @@ class MdcPowerBudgetScenarioTest {
                 "다른 MDC 는 영향을 받지 않아 배치할 곳이 남는다");
 
         budgetService.delete(saved.getId());
-        PlacementContext restored = schedulingService.createContext(schedulingService.resolvePolicy());
+        PlacementContext restored = schedulingService.createContext(schedulingService.resolvePolicy(null));
         assertFalse(eligible(restored, MDC).isEmpty(), "예산을 지우면 mdc-seoul 노드가 후보로 돌아온다");
     }
 
@@ -127,7 +127,7 @@ class MdcPowerBudgetScenarioTest {
         // daejeon 2대는 IPMI 가 없어 전력이 0 이다. 예산을 아주 낮게 걸어도 C6 은 후보를 건드리지 않는다.
         budgetRepository.save(new MdcPowerBudget("mdc-daejeon", 1.0));
         try {
-            PlacementContext ctx = schedulingService.createContext(schedulingService.resolvePolicy());
+            PlacementContext ctx = schedulingService.createContext(schedulingService.resolvePolicy(null));
             List<NodeResource> daejeon = nodesOf(ctx, "mdc-daejeon");
             assertFalse(daejeon.isEmpty(), "mdc-daejeon 노드가 후보 목록에 있다");
             assertTrue(daejeon.stream().allMatch(n -> n.getPowerWatts() <= 0), "mdc-daejeon 은 전력 미계측이다");

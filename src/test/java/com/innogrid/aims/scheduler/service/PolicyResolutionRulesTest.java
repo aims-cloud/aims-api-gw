@@ -53,7 +53,7 @@ class PolicyResolutionRulesTest {
         repository.save(active("common-a", null));
         repository.save(active("gpu", ResourceType.GPU));
 
-        assertEquals("common-a", schedulingService.resolvePolicy().getName());
+        assertEquals("common-a", schedulingService.resolvePolicy(null).getName());
         assertEquals("common-a", schedulingService.resolvePolicy(ResourceType.VM).getName());
         assertEquals("gpu", schedulingService.resolvePolicy(ResourceType.GPU).getName());
     }

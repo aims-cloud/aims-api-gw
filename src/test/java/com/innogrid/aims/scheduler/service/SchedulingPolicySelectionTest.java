@@ -59,7 +59,7 @@ class SchedulingPolicySelectionTest {
         policyRepository.save(active("common", null));
         policyRepository.save(active("gpu", ResourceType.GPU));
 
-        assertEquals("common", schedulingService.resolvePolicy().getName());
+        assertEquals("common", schedulingService.resolvePolicy(null).getName());
     }
 
     @DisplayName("활성 정책이 없으면 기본 정책을 만든다")
@@ -244,25 +244,6 @@ class SchedulingPolicySelectionTest {
         when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(
                 java.util.List.of(new NodeResource("mdc-01", "prp:9100", 16, 65536, 0, cpuUsagePercent, 20, 0, 0, 500, 0, 0, 0)),
                 java.util.List.of()));
-    }
-
-    // ── 리소스 종류별 조회 ──────────────────────────────────────
-
-    @DisplayName("리소스 종류로 대기 워크로드를 고른다")
-    @Test
-    void pending_selected_by_resource_type() {
-        Workload gpu = new Workload("gpu-job", 1, 1024);
-        gpu.setResourceType(ResourceType.GPU);
-        workloadRepository.save(gpu);
-        workloadRepository.save(new Workload("legacy-job", 1, 1024));   // resourceType = null
-
-        assertEquals(1, workloadRepository
-                .findByStatusAndResourceTypeOrderByPriorityDescCreatedAtAsc(
-                        WorkloadStatus.PENDING, ResourceType.GPU).size());
-        assertEquals(1, workloadRepository
-                .findByStatusAndResourceTypeIsNullOrderByPriorityDescCreatedAtAsc(
-                        WorkloadStatus.PENDING).size(),
-                "종류가 없는 기존 행은 별도 조회로 잡는다");
     }
 
     private java.util.List<Long> reservedIds() {

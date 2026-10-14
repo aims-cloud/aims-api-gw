@@ -361,13 +361,13 @@ class ConsolidationServiceTest {
         given(List.of(node("idle", 1, 5, 150)), List.of());
         // 저장하는 선택도 값을 주게 해 둔다 — 진단이 그쪽을 부르면 NPE 가 아니라 아래 never 확인에서 실패한다
         SchedulingPolicy saved = new SchedulingPolicy("saved", "saved");
-        when(schedulingService.resolvePolicy()).thenReturn(saved);
+        when(schedulingService.resolvePolicy(any())).thenReturn(saved);
         when(schedulingService.resolvePolicyChoice(any())).thenReturn(new PolicyChoice(saved, PolicyChoice.Source.DEFAULT, true));
 
         service.diagnose();
 
         verify(schedulingService).choosePolicy(null);
-        verify(schedulingService, never()).resolvePolicy();
+        verify(schedulingService, never()).resolvePolicy(any());
         verify(schedulingService, never()).resolvePolicyChoice(any());
     }
 

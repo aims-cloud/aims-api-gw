@@ -356,4 +356,9 @@ public class ConstraintEvaluator {
     public long remainingCooldownMinutes(String nodeId) {
         return thermalModel.remainingCooldownMinutes(nodeId);
     }
+
+    /** 냉각 대기 중인 노드가 하나라도 있는지. 확인하면서 만료된 기록을 지운다. */
+    public boolean anyCoolingDown() {
+        return thermalModel.anyCoolingDown();
+    }
 }

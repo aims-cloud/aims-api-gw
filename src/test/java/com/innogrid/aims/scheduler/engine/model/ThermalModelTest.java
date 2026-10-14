@@ -109,6 +109,28 @@ class ThermalModelTest {
         assertFalse(cooling.isCoolingDown("node-1"), "10분이 지나면 해제된다");
     }
 
+    @DisplayName("냉각 대기 여부 확인은 대기 노드가 있으면 참, 없거나 전부 만료면 거짓이고 어느 경우든 만료 기록을 모두 지운다")
+    @Test
+    void any_cooling_down_checks_every_record_and_drops_expired() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-31T00:00:00Z"));
+        ThermalModel cooling = new ThermalModel(new SchedulerProperties(), clock);
+        assertFalse(cooling.anyCoolingDown(), "기록이 없으면 거짓이다");
+
+        // 기록 맵은 node-1 을 node-2 보다 먼저 돈다 — 만료 기록을 뒤(node-2)에 두어, 대기 노드에서 멈추는 구현이면 지우지 못한다
+        cooling.markCritical("node-2");
+        clock.advance(Duration.ofMinutes(5));
+        cooling.markCritical("node-1");
+        clock.advance(Duration.ofMinutes(5));                 // node-2 10분(만료) · node-1 5분(대기)
+        assertTrue(cooling.anyCoolingDown());
+        cooling.markCritical("node-2");                       // 지워졌으면 지금 시각으로 다시 걸린다
+        assertEquals(10, cooling.remainingCooldownMinutes("node-2"), "대기 노드가 있어도 만료 기록을 끝까지 지운다");
+
+        clock.advance(Duration.ofMinutes(10));                // 둘 다 만료
+        assertFalse(cooling.anyCoolingDown(), "전부 만료면 거짓이다");
+        cooling.markCritical("node-1");
+        assertEquals(10, cooling.remainingCooldownMinutes("node-1"), "전부 만료일 때도 기록을 지운다");
+    }
+
     @DisplayName("쿨다운은 수동으로도 해제할 수 있다")
     @Test
     void cooldown_cleared_manually() {

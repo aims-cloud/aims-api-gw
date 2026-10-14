@@ -28,6 +28,8 @@ public final class VmAgentInstallCommand {
     static final Pattern URL = Pattern.compile("https?://[^\\s'\"`$\\\\;&|<>()]+");
     static final Pattern VERSION = Pattern.compile("[0-9A-Za-z.+-]{1,32}");
     static final Pattern USER = Pattern.compile("[a-z_][a-z0-9_-]{0,31}");
+    /** 컨테이너 이미지 참조 — 레지스트리/경로:태그(@digest) 글자만 */
+    static final Pattern IMAGE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}");
 
     static final String OK_MARKER = "AIMS_AGENT_OK";
     static final String STEP_PREFIX = "AIMS_STEP=";
@@ -82,6 +84,8 @@ public final class VmAgentInstallCommand {
                 + "TB_NODE=" + require(TB_ID, vm.tbNode(), "Node id") + "\n"
                 + "LOKI_PUSH_URL=" + require(URL, trim(settings.getLokiPushUrl()), "Loki push 주소") + "\n"
                 + "AIMS_TARGETS_URL=" + require(URL, trim(settings.getTargetsUrl()), "수집 대상 목록 API 주소") + "\n"
+                + "REMOTE_WRITE_URL=" + require(URL, trim(settings.getRemoteWriteUrl()), "Thanos remote_write 주소") + "\n"
+                + "DCGM_EXPORTER_IMAGE=" + require(IMAGE, trim(settings.getDcgmExporterImage()), "dcgm-exporter 이미지") + "\n"
                 + "ALLOY_VERSION=" + require(VERSION, trim(settings.getAlloyVersion()), "Alloy 버전") + "\n"
                 + "NODE_EXPORTER_VERSION=" + require(VERSION, trim(settings.getNodeExporterVersion()), "node_exporter 버전") + "\n";
     }

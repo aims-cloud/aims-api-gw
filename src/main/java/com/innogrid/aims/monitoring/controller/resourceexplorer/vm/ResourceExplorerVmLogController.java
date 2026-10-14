@@ -111,9 +111,13 @@ public class ResourceExplorerVmLogController {
 
     @Operation(summary = "VM 수집 에이전트 설치",
             description = "Tumblebug 원격 명령으로 이 VM 한 대에 node_exporter(:9100)와 Grafana Alloy(systemd aims-alloy)를 설치합니다. "
+                    + "Alloy 가 로그는 Loki 로, 지표는 Thanos Receive 로 보냅니다(tb_ns·tb_infra·tb_node 라벨). "
+                    + "GPU 가 있고 Docker·NVIDIA Container Toolkit 이 있으면 dcgm-exporter 도 띄워 GPU 지표를 함께 보냅니다 — "
+                    + "결과 agentVersion 의 gpu=dcgm|skip|none 으로 확인합니다(드라이버·Docker 는 설치하지 않음). "
                     + "수 분 걸려 바로 INSTALLING 을 돌려주고 백그라운드에서 진행하며, 결과는 GET /agent/install 로 봅니다. "
                     + "다시 부르면 재설치(같은 결과)입니다. 404: 스코프 밖·없는 VM, 409: Running 이 아니거나 설치 진행 중, "
-                    + "503: 서버의 VM 설치 설정(Loki·목록 API 주소) 미구성. VM 은 github.com(내려받기), Loki 3100, 백엔드 8080 으로 나갈 수 있어야 합니다.")
+                    + "503: 서버의 VM 설치 설정(Loki·목록 API·Thanos 주소) 미구성. VM 은 github.com(내려받기), Loki 3100, 백엔드 8080, "
+                    + "Thanos Receive 19291, GPU 면 nvcr.io(이미지) 로 나갈 수 있어야 합니다.")
     @PortalLog(screen = "VM 수집 서비스", action = "에이전트 설치",
             content = "'VM 수집 에이전트 설치: ' + #nsId + '/' + #infraId + '/' + #vmId")
     @PostMapping("/agent/install")

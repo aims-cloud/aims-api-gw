@@ -50,6 +50,10 @@ public class AgentProperties {
         private String lokiPushUrl;
         /** 백엔드 수집 대상 목록 API. 예) http://&lt;백엔드&gt;:8080/api/v1/agent/targets */
         private String targetsUrl;
+        /** VM 지표를 보낼 Thanos Receive remote_write 주소. 예) http://&lt;수집서버&gt;:19291/api/v1/receive */
+        private String remoteWriteUrl;
+        /** GPU VM 에 띄울 dcgm-exporter 이미지(태그 형식: DCGM 버전-exporter 버전-OS). MDC 표준 문서의 4.2.0-4.1.3 은 없는 태그라 4.2.3-4.1.3 */
+        private String dcgmExporterImage = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04";
         /** Grafana Alloy 릴리스 버전(k8s-cp 와 같게) */
         private String alloyVersion = "1.20.0";
         /** node_exporter 릴리스 버전(docs/07 §3.1 과 같게) */
@@ -63,6 +67,10 @@ public class AgentProperties {
         public void setLokiPushUrl(String lokiPushUrl) { this.lokiPushUrl = lokiPushUrl; }
         public String getTargetsUrl() { return targetsUrl; }
         public void setTargetsUrl(String targetsUrl) { this.targetsUrl = targetsUrl; }
+        public String getRemoteWriteUrl() { return remoteWriteUrl; }
+        public void setRemoteWriteUrl(String remoteWriteUrl) { this.remoteWriteUrl = remoteWriteUrl; }
+        public String getDcgmExporterImage() { return dcgmExporterImage; }
+        public void setDcgmExporterImage(String dcgmExporterImage) { this.dcgmExporterImage = dcgmExporterImage; }
         public String getAlloyVersion() { return alloyVersion; }
         public void setAlloyVersion(String alloyVersion) { this.alloyVersion = alloyVersion; }
         public String getNodeExporterVersion() { return nodeExporterVersion; }

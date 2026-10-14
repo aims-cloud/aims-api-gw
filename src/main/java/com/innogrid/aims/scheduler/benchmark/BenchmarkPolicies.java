@@ -10,49 +10,19 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
  * 구현하지 않는 것이 요점이다. 같은 코드에 정책만 달리 준 것이므로, 두 열의 차이는 알고리즘 차이가
  * 아니라 <b>정책이 무엇을 보게 했는지</b>의 차이라고 말할 수 있다.</p>
  *
- * <p><b>사본은 영속되지 않는다.</b> {@link SchedulingPolicy} 에는 {@code id} 세터가 없으므로 새로
- * 만든 사본의 {@code id} 는 항상 {@code null} 이고, JPA 가 이것을 기존 행과 동일시할 경로가 없다.
+ * <p><b>사본은 영속되지 않는다.</b> 변종의 출발점은 {@link SchedulingPolicy#detachedCopy()} 가 만든 사본이다 —
+ * {@code id} 세터가 없어 사본의 {@code id} 는 항상 {@code null} 이고, JPA 가 이것을 기존 행과 동일시할 경로가 없다.
  * 사본을 저장할 코드도 없다 — 비교 하네스는 정책 저장소를 쓰지 않는다. 스케줄이 지정한 온도 한계를
- * 이번 실행에만 적용하는 {@code ScheduleExecutionService.applyOverrides} 가 같은 방식을 먼저 썼다.</p>
+ * 이번 실행에만 적용하는 {@code ScheduleExecutionService.applyOverrides} 도 같은 사본을 쓴다.</p>
  *
- * <p><b>필드를 하나 빠뜨리면 게이트가 조용히 꺼진다.</b> 실제로 그 사본에서 {@code affinityEnabled}
+ * <p><b>필드를 하나 빠뜨리면 게이트가 조용히 꺼진다.</b> 실제로 예전 실행 경로의 손 복사에서 {@code affinityEnabled}
  * 가 빠져 있어 온도 한계를 지정한 스케줄에서만 MDC 링크 게이트가 꺼지던 결함이 있었다. 여기서 그런
  * 일이 나면 "대조군이 제약을 덜 받아 유리했다"가 되어 비교 자체가 무효가 되므로,
- * {@code BenchmarkPoliciesTest} 가 선언된 필드 전량을 반사로 훑어 고정한다.</p>
+ * {@code SchedulingPolicyCopyTest} 가 선언된 필드 전량을 반사로 훑어 고정한다.</p>
  */
 public final class BenchmarkPolicies {
 
     private BenchmarkPolicies() {
-    }
-
-    /** 비영속 사본. id 세터가 없어 사본의 id 는 항상 null 이라 JPA 가 flush 할 경로가 없다. */
-    public static SchedulingPolicy copyOf(SchedulingPolicy src) {
-        SchedulingPolicy copy = new SchedulingPolicy(src.getName(), src.getDescription());
-
-        copy.setResourceType(src.getResourceType());
-        copy.setDefaultEngine(src.getDefaultEngine());
-        copy.setWarningTemperatureCelsius(src.getWarningTemperatureCelsius());
-
-        copy.setCpuWeight(src.getCpuWeight());
-        copy.setMemoryWeight(src.getMemoryWeight());
-        copy.setPowerWeight(src.getPowerWeight());
-        copy.setTemperatureWeight(src.getTemperatureWeight());
-        copy.setNetworkWeight(src.getNetworkWeight());
-
-        copy.setMaxCpuUsagePercent(src.getMaxCpuUsagePercent());
-        copy.setMaxMemoryUsagePercent(src.getMaxMemoryUsagePercent());
-        copy.setMaxTemperatureCelsius(src.getMaxTemperatureCelsius());
-        copy.setMaxPowerUsagePercent(src.getMaxPowerUsagePercent());
-
-        copy.setPowerAwareEnabled(src.isPowerAwareEnabled());
-        copy.setTemperatureAwareEnabled(src.isTemperatureAwareEnabled());
-        copy.setAffinityEnabled(src.isAffinityEnabled());
-
-        copy.setActive(src.isActive());
-
-        // createdAt 은 세터가 없고 @PrePersist 가 채운다. 사본은 저장되지 않으므로 비어 있는 것이 맞다 —
-        // 여기에 시각을 넣으면 "저장된 정책"처럼 보인다.
-        return copy;
     }
 
     /**
@@ -71,7 +41,7 @@ public final class BenchmarkPolicies {
      * 만드는 쪽이 정한 값을 대조군이 마음대로 바꾸면 후보 집합 자체가 달라진다.</p>
      */
     public static SchedulingPolicy resourceOnly(SchedulingPolicy base, boolean keepGates) {
-        SchedulingPolicy copy = copyOf(base);
+        SchedulingPolicy copy = base.detachedCopy();
 
         copy.setPowerWeight(0);
         copy.setTemperatureWeight(0);

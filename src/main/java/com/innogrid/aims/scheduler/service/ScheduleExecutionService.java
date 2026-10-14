@@ -581,29 +581,15 @@ public class ScheduleExecutionService {
      * <p>저장된 정책을 고치지 않으려고 <b>영속되지 않는 사본</b>을 만들어 쓴다.
      * 정책은 여러 스케줄이 공유하므로 한 스케줄의 설정이 남으면 안 된다.</p>
      *
-     * <p>사본은 정책의 <b>모든 판단 필드</b>를 옮겨야 한다. {@code affinityEnabled} 가 빠져 있어
-     * 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가 조용히 꺼지던 결함이 있었다
-     * (2026-09-02, 단계 4-② 설계 중 발견). 테스트 {@code ScheduleOverridePolicyCopyTest} 가 고정한다.</p>
+     * <p>사본은 {@link SchedulingPolicy#detachedCopy()} 가 만든다 — 판단 필드 전부를 옮기는 곳은 그 메서드 하나다.
+     * 전에는 여기서 필드를 손으로 옮기다 {@code affinityEnabled} 가 빠져 온도 한계를 지정한 스케줄에서만 MDC 링크
+     * 게이트가 조용히 꺼지던 결함이 있었다(2026-09-02). 테스트 {@code ScheduleOverridePolicyCopyTest} 가 고정한다.</p>
      */
     SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
         if (schedule.getMaxTemperatureCelsius() == null) {
             return policy;
         }
-        SchedulingPolicy copy = new SchedulingPolicy(policy.getName(), policy.getDescription());
-        copy.setResourceType(policy.getResourceType());
-        copy.setDefaultEngine(policy.getDefaultEngine());
-        copy.setWarningTemperatureCelsius(policy.getWarningTemperatureCelsius());
-        copy.setCpuWeight(policy.getCpuWeight());
-        copy.setMemoryWeight(policy.getMemoryWeight());
-        copy.setPowerWeight(policy.getPowerWeight());
-        copy.setTemperatureWeight(policy.getTemperatureWeight());
-        copy.setNetworkWeight(policy.getNetworkWeight());
-        copy.setMaxCpuUsagePercent(policy.getMaxCpuUsagePercent());
-        copy.setMaxMemoryUsagePercent(policy.getMaxMemoryUsagePercent());
-        copy.setMaxPowerUsagePercent(policy.getMaxPowerUsagePercent());
-        copy.setPowerAwareEnabled(policy.isPowerAwareEnabled());
-        copy.setTemperatureAwareEnabled(policy.isTemperatureAwareEnabled());
-        copy.setAffinityEnabled(policy.isAffinityEnabled());
+        SchedulingPolicy copy = policy.detachedCopy();
         copy.setMaxTemperatureCelsius(schedule.getMaxTemperatureCelsius());
         return copy;
     }
@@ -637,9 +623,6 @@ public class ScheduleExecutionService {
         complete(schedule, status, startedAt, message);
         return saved;
     }
-
-    /** 실행 결과 메시지의 컬럼 길이. 스케줄·실행 이력 두 컬럼이 같은 길이라 한 상수를 공유한다. */
-    static final int MESSAGE_MAX = ScheduleRun.MESSAGE_MAX;
 
     static final String RECOVERED_MESSAGE = "앱 재기동으로 중단됨 — 실행 권한을 회수했습니다";
 

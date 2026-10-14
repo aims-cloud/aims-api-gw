@@ -26,8 +26,10 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
+import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 import com.innogrid.aims.scheduler.service.ConsolidationService;
 import com.innogrid.aims.scheduler.service.NodeResourceCollector;
@@ -66,6 +68,7 @@ class SchedulerResponseContentApiTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired WorkloadRepository workloadRepository;
+    @Autowired SchedulingPolicyRepository policyRepository;
     @Autowired SchedulingService schedulingService;
     @Autowired EngineRegistry engineRegistry;
     @Autowired ThermalModel thermalModel;
@@ -175,7 +178,7 @@ class SchedulerResponseContentApiTest {
         assertArrayEquals(objectMapper.writeValueAsBytes(ApiResponse.ok(ConstraintDescriptionResponse.all())),
                 body(mockMvc.perform(get(BASE + "/constraints")).andExpect(status().isOk()).andReturn()), "제약 설명");
 
-        schedulingService.resolvePolicy();   // default 정책이 없으면 모의 배치가 만든다 — 두 호출이 같은 정책을 보도록 먼저 만든다
+        schedulingService.resolvePolicy(null);   // default 정책이 없으면 모의 배치가 만든다 — 두 호출이 같은 정책을 보도록 먼저 만든다
         Workload w = new Workload(PREFIX + "dry", 1, 64);
         long id = workloadRepository.saveAndFlush(w).getId();
         byte[] viaHttp = body(mockMvc.perform(post(BASE + "/workloads/" + id + "/schedule").param("dryRun", "true").param("engine", "weighted"))
@@ -194,7 +197,7 @@ class SchedulerResponseContentApiTest {
     @DisplayName("전력 효율·전력 최적화·통합 진단은 평가 시각을 뺀 값이 서비스 결과와 같다")
     @Test
     void diagnostics_equal_service_output_except_time() throws Exception {
-        schedulingService.resolvePolicy();   // 통합 진단도 정책을 읽는다 — default 가 없으면 만들므로 먼저 만들어 둔다
+        schedulingService.resolvePolicy(null);   // default 정책 행이 있는 상태에서 HTTP 응답과 직접 호출을 비교한다(행이 없는 경우는 아래 정책 행 테스트가 본다)
 
         JsonNode efficiency = data(mockMvc.perform(get(BASE + "/nodes/power-efficiency")).andExpect(status().isOk()).andReturn());
         assertEquals(withoutTime(objectMapper.readTree(objectMapper.writeValueAsString(powerEfficiencyService.evaluateCurrent()))),
@@ -209,6 +212,28 @@ class SchedulerResponseContentApiTest {
         JsonNode consolidation = data(mockMvc.perform(get(BASE + "/optimization/consolidation")).andExpect(status().isOk()).andReturn());
         assertEquals(withoutTime(objectMapper.readTree(objectMapper.writeValueAsString(consolidationService.diagnose()))),
                 withoutTime(consolidation), "통합 진단");
+    }
+
+    @DisplayName("통합 진단 조회는 정책이 없어도 정책 행을 만들지 않는다")
+    @Test
+    void consolidation_get_creates_no_policy_row() throws Exception {
+        List<SchedulingPolicy> snapshot = policyRepository.findAll();
+        policyRepository.deleteAll();
+        try {
+            mockMvc.perform(get(BASE + "/optimization/consolidation")).andExpect(status().isOk());
+
+            assertEquals(0, policyRepository.count(), "읽기 진단은 정책 행을 만들지 않는다");
+            assertTrue(policyRepository.findByName(SchedulingService.DEFAULT_POLICY_NAME).isEmpty(), "default 행도 만들지 않는다");
+        } finally {
+            // 지운 정책을 이름·설명·종류·활성 상태로 되돌린다(id 는 새로 매김 · 나머지 값은 기본값 — PolicyRulesScenarioTest.restore() 와 같은 방식)
+            policyRepository.deleteAll();
+            for (SchedulingPolicy p : snapshot) {
+                SchedulingPolicy copy = new SchedulingPolicy(p.getName(), p.getDescription());
+                copy.setResourceType(p.getResourceType());
+                copy.setActive(p.isActive());
+                policyRepository.save(copy);
+            }
+        }
     }
 
     private JsonNode data(MvcResult result) throws Exception {

@@ -361,11 +361,6 @@ public class SchedulingService {
         return Optional.of(actives.get(0));
     }
 
-    /** 종류를 지정하지 않은 호출(공통 정책 기준). */
-    public SchedulingPolicy resolvePolicy() {
-        return resolvePolicy(null);
-    }
-
     /**
      * 재시도 상한에 걸린 워크로드를 <b>여러 건 한 번에</b> 되살린다.
      *

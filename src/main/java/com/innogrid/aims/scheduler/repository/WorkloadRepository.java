@@ -21,20 +21,6 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
     List<Workload> findByStatusIn(Collection<Workload.WorkloadStatus> statuses);
 
     /**
-     * 스케줄 실행 대상 조회.
-     * 우선순위가 높고 먼저 등록된 것부터 배치한다.
-     */
-    List<Workload> findByStatusAndResourceTypeOrderByPriorityDescCreatedAtAsc(
-            Workload.WorkloadStatus status, Workload.ResourceType resourceType);
-
-    /**
-     * 리소스 종류가 지정되지 않은(=VM 으로 해석하는) 워크로드.
-     * 기존 행이 null 이므로 VM 대상 실행에서 함께 잡아야 한다.
-     */
-    List<Workload> findByStatusAndResourceTypeIsNullOrderByPriorityDescCreatedAtAsc(
-            Workload.WorkloadStatus status);
-
-    /**
      * 스케줄 실행이 배치할 후보 워크로드.
      *
      * <p>재시도 횟수가 상한에 이른 워크로드는 제외한다. 자원이 영영 모자란 워크로드가

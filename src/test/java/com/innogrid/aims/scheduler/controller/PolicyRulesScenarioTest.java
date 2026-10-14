@@ -113,7 +113,7 @@ class PolicyRulesScenarioTest {
         assertEquals(0, policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc().size());
 
         long before = policyRepository.count();
-        SchedulingPolicy resolved = schedulingService.resolvePolicy();
+        SchedulingPolicy resolved = schedulingService.resolvePolicy(null);
         step(steps, "⑥", "활성 0 에서 정책 해석", "default 생성(+1)", resolved.getName() + " 행 " + before + "→" + policyRepository.count());
         assertEquals("default", resolved.getName());
         assertEquals(before + 1, policyRepository.count());
@@ -121,7 +121,7 @@ class PolicyRulesScenarioTest {
         long defaultId = policyRepository.findByName("default").orElseThrow().getId();
         body(put(P + "/" + defaultId).contentType(MediaType.APPLICATION_JSON).content("{\"active\":false}"));
         long before7 = policyRepository.count();
-        SchedulingPolicy resolved7 = assertDoesNotThrow(() -> schedulingService.resolvePolicy());
+        SchedulingPolicy resolved7 = assertDoesNotThrow(() -> schedulingService.resolvePolicy(null));
         step(steps, "⑦", "default 비활성 후 해석", "default 사용, 행 불변(예전 500)", resolved7.getName() + " 행 " + before7 + "→" + policyRepository.count());
         assertEquals(before7, policyRepository.count());
         assertFalse(policyRepository.findByName("default").orElseThrow().isActive(), "재활성화하지 않는다");

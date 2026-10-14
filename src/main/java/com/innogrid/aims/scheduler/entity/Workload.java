@@ -169,12 +169,6 @@ public class Workload {
         if (this.retryCount == null) this.retryCount = 0;   // 기존 행의 응답 계약(null → 0)은 유지하되 실패 누적은 지우지 않는다
     }
 
-    public void markRunning() { this.status = WorkloadStatus.RUNNING; }
-    public void markCompleted() {
-        this.status = WorkloadStatus.COMPLETED;
-        clearRetryAccounting();
-    }
-
     /** 배치에 실패했다. 재시도 횟수를 누적해 무한 재시도를 막는다. */
     public void markFailed(String reason) {
         this.status = WorkloadStatus.FAILED;

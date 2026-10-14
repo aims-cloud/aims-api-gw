@@ -29,7 +29,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * @param id            전략 식별자. 응답의 열 이름이 된다
  * @param label         사람이 읽는 이름
  * @param kind          운영 엔진인지 대조군인지 — 표에서 두 집단을 갈라 보여줄 때 쓴다
- * @param policy        이 전략이 볼 정책 변종. 정책 사본은 {@link BenchmarkPolicies} 가 만든다
+ * @param policy        이 전략이 볼 정책 변종. 변종은 {@link BenchmarkPolicies} 가 정책 사본 위에 만든다
  * @param workloadOrder 워크로드를 배치할 순서. {@code null} 이면 표본 순서(도착 순서)
  * @param placer        배치 함수
  */

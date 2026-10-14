@@ -64,7 +64,8 @@ public class ConsolidationService {
      * 평가된 상태가 된다.</p>
      */
     public ConsolidationResponse diagnose() {
-        SchedulingPolicy policy = schedulingService.resolvePolicy();
+        // 읽기 진단은 정책 행을 만들지 않는다 — 공통 활성 정책이 없으면 default 정책 값(행이 없으면 저장하지 않은 기본값)으로 판단한다.
+        SchedulingPolicy policy = schedulingService.choosePolicy(null).policy();
         OffsetDateTime now = OffsetDateTime.now();
 
         // 메트릭은 요청당 한 번만 수집한다. 1차 필터·시뮬레이션·요약이 전부 같은 스냅샷을 본다 —

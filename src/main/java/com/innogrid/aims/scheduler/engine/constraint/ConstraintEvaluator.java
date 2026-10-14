@@ -111,7 +111,7 @@ public class ConstraintEvaluator {
      *
      * <p><b>합계는 실측이 아니라 예약분을 반영한 실효 전력으로 낸다.</b> 실측 전력은 이미 실행 중인 부하만
      * 담아서, 한 실행에서 워크로드를 몇 개 얹든 합계가 그대로다 — 그러면 예산이 누적되지 않아 상한이
-     * 사실상 적용되지 않는다(단계 6①·9 에서 고친 결함과 같은 부류). 후보 자신은 아직 예약 전이므로
+     * 사실상 적용되지 않는다({@code WeightedScoreScheduler} 가 고친 실효 점수 결함과 같은 부류). 후보 자신은 아직 예약 전이므로
      * "배치 후 예상 전력"을 쓴다. 두 값 모두 {@link PowerModel} 에 이미 있는 것으로 새 수식은 없다.</p>
      *
      * <p>건너뛰는 경우 셋: 예산 원장이 비었을 때, 이 MDC 에 예산이 등록되지 않았을 때, <b>후보 노드의
@@ -229,7 +229,7 @@ public class ConstraintEvaluator {
                     node.availableCpu(), node.availableMemoryMb(), node.availableGpu());
         }
         // 디스크는 총량을 아는 노드에서만 본다. 총량 0 은 "모름"이고, 모르는 값으로 배치를 막지 않는다 —
-        // 없는 값에 숫자를 채우던 결함(단계 9)의 반대 방향 실수를 피한다. 요구량 0 이면 검사할 것이 없다.
+        // 없는 값에 숫자를 채우던 결함의 반대 방향 실수를 피한다. 요구량 0 이면 검사할 것이 없다.
         if (workload.getRequiredDiskGb() > 0 && node.diskCapacityGb() > 0
                 && node.availableDiskGb() < workload.getRequiredDiskGb()) {
             return of(ExclusionReason.INSUFFICIENT_DISK, "디스크 부족 (필요 %dGB, 가용 %dGB / 총량 %dGB)",

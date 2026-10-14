@@ -12,7 +12,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 /**
  * 추세 API 의 구간·간격 검증 — 전력 효율 추세(노드 단위)와 전력 최적화 추세(클러스터 단위)가 같은 규칙을 쓴다.
  *
- * <p>메트릭 클라이언트에 읽기 타임아웃이 없어(단계 14 보호 장치가 2차 방어) 무거운 질의는 애초에 내보내지 않는다 —
+ * <p>메트릭 클라이언트에 읽기 타임아웃이 없어({@code MetricsQueryGuard} 가 2차 방어) 무거운 질의는 애초에 내보내지 않는다 —
  * 지점 수가 설정 상한을 넘으면 400.</p>
  */
 public final class TrendRangeSupport {

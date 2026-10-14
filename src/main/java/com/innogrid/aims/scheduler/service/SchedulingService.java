@@ -303,13 +303,13 @@ public class SchedulingService {
      * 리소스 종류에 맞는 활성 정책을 고른다.
      * 종류별 활성 → 공통 활성 → 기본 정책 순으로 찾는다.
      *
-     * <p>활성 정책은 종류당 하나가 규칙이지만(단계 13, {@code SchedulingPolicyService} 가 409 로 지킨다) API 밖에서
+     * <p>활성 정책은 종류당 하나가 규칙이지만({@code SchedulingPolicyService} 가 409 로 지킨다) API 밖에서
      * 들어온 데이터로 둘 이상일 수 있다. 그때는 <b>이름 사전순 첫 번째</b>를 골라 결과가 DB 순서에 흔들리지 않게
      * 하고 WARN 을 남긴다.</p>
      *
      * <p>공통 활성이 없으면 기본 정책을 쓴다. 이름이 {@value #DEFAULT_POLICY_NAME} 인 정책이 이미 있으면(전환이나
      * 비활성화로 꺼진 경우) 그 행을 <b>저장·재활성화하지 않고 값만</b> 쓴다 — 예전에는 같은 이름으로 다시 저장하려다
-     * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 단계 13 점검). 없을 때만 만들어 저장한다.</p>
+     * 이름 유니크 제약에 걸려 배치 경로 전체가 500 이 났다(2026-09-02 점검). 없을 때만 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
         return resolvePolicyChoice(resourceType).policy();

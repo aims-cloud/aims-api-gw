@@ -22,7 +22,7 @@ public class SchedulerProperties {
     private String nodeJob = "mdc-nodes";
 
     /**
-     * 모의 메트릭 모드 — 실제 저장소 대신 가상 클러스터({@link #syntheticClusterPath})를 본다(단계 19).
+     * 모의 메트릭 모드 — 실제 저장소 대신 가상 클러스터({@link #syntheticClusterPath})를 본다.
      * 1세부 데이터가 없는 동안 시연·검증용. 팀 관행({@code aims.gpu-dashboard.mock-enabled})과 같은 플래그 방식이며
      * 환경변수 {@code AIMS_SCHEDULER_MOCK_ENABLED} 로 켠다. 기본 false — 배포는 항상 꺼진 채로.
      */
@@ -31,7 +31,7 @@ public class SchedulerProperties {
     /** 가상 클러스터 정의 파일. {@code classpath:} 또는 파일 경로. */
     private String syntheticClusterPath = "classpath:scheduler/synthetic-cluster.yml";
 
-    /** 메트릭 질의 시간 상한. 저장소가 응답을 안 줄 때 스케줄러가 멈추지 않게 한다(단계 14). */
+    /** 메트릭 질의 시간 상한. 저장소가 응답을 안 줄 때 스케줄러가 멈추지 않게 한다. */
     private Metrics metrics = new Metrics();
 
     /** 디스크 사용률을 읽을 마운트 포인트. 여러 시리즈 중 하나를 고정하기 위해 사용한다. */
@@ -389,7 +389,7 @@ public class SchedulerProperties {
      * 메트릭 질의 시간 상한 — 저장소 클라이언트에 타임아웃이 없어(타 담당자 파일) 스케줄러 쪽에서 기다리기를 멈춘다.
      *
      * <p>기다리기를 멈춰도 HTTP 호출 자체는 저장소가 응답할 때까지 풀 스레드를 붙잡는다. 그래서 풀은 고정 크기이고,
-     * 붙잡힌 스레드를 실제로 회수하는 것은 클라이언트 타임아웃(12장 T8)만 할 수 있다.</p>
+     * 붙잡힌 스레드를 실제로 회수하는 것은 클라이언트 타임아웃만 할 수 있다.</p>
      */
     public static class Metrics {
 

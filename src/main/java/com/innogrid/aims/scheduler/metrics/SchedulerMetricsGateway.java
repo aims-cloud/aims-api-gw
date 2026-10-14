@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * 스케줄러가 메트릭 저장소에 묻는 네 가지 질의.
  *
- * <p>스케줄러는 데이터를 수집하지 않고 Thanos 에서 당겨 쓴다(0-1). 이 인터페이스는 그 "당겨 오는 자리"다. 기본 구현
+ * <p>스케줄러는 데이터를 수집하지 않고 Thanos 에서 당겨 쓴다. 이 인터페이스는 그 "당겨 오는 자리"다. 기본 구현
  * {@link VictoriaMetricsGateway} 는 기존 클라이언트에 그대로 위임하고, {@link SyntheticMetricsGateway} 는 1세부 데이터가
  * 없는 동안 가상 클러스터로 같은 형태의 응답을 만든다. 반환 형태는 Prometheus HTTP API 의 JSON 을 Map/List 로 푼 것과 같다.</p>
  */

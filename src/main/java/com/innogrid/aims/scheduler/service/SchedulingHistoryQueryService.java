@@ -37,12 +37,12 @@ import jakarta.persistence.criteria.Root;
  *
  * <p>기존 {@code GET /history} 는 배열로 돌려준다 — 응답 형태를 바꾸면 프런트가 깨지므로 그 경로는 배열 그대로 두고,
  * 페이징·필터·정렬은 새 경로에서 한다. 다만 그 배열은 <b>더 이상 전량이 아니다</b>: 이력은 삭제되지 않아 단조
- * 증가하므로 최근 건수만 돌려준다(단계 23, {@code SchedulerController.HISTORY_MAX}). <b>여기 총건수에는 상한이
+ * 증가하므로 최근 건수만 돌려준다({@code SchedulerController.HISTORY_MAX}). <b>여기 총건수에는 상한이
  * 없다</b> — 그래서 배열 길이와 이 API 의 {@code totalElements} 는 이력이 상한을 넘으면 서로 달라진다. 규칙은 스케줄 목록과 같다 — page 1부터,
  * size 최대 100, sort 는 "필드,방향".</p>
  *
  * <p>필터는 {@link Specification} 으로 null 이 아닌 조건만 붙인다. JPQL 의 {@code :x is null or h.x = :x} 는 PostgreSQL 이
- * null 파라미터의 타입을 정하지 못해 실패할 수 있고 H2 에서는 통과해 배포에서만 드러난다(단계 13 점검).</p>
+ * null 파라미터의 타입을 정하지 못해 실패할 수 있고 H2 에서는 통과해 배포에서만 드러난다.</p>
  */
 @Service
 public class SchedulingHistoryQueryService {

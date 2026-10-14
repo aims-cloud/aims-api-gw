@@ -40,7 +40,7 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
  *
  * <p>노드 하나의 효율은 {@link PowerEfficiencyService} 가 답한다. 이 서비스는 한 층 위에서
  * <b>클러스터 전체로 무엇을 할 수 있는지</b>를 답한다 — 몇 대가 놀고 있고 얼마를 반납할 수 있는가.
- * PR ② 에서 만든 {@code reclaimableIdleWatts} 가 배치 근거 문자열에만 찍히고 있었는데, 이 진단이
+ * {@code PlacementContext.reclaimableIdleWatts} 가 배치 근거 문자열에만 찍히고 있었는데, 이 진단이
  * 그 값의 출구다.</p>
  *
  * <p>새 수식을 만들지 않는다. {@code PowerModel} 과 {@code PlacementContext} 가 이미 가진 계산을
@@ -214,7 +214,7 @@ public class PowerOptimizationService {
             TreeSet<Long> timestamps = new TreeSet<>();
             cpu.values().forEach(series -> timestamps.addAll(series.keySet()));
 
-            // 정격 전력 원장은 시각마다가 아니라 추세 1회당 한 번만 읽는다(단계 20).
+            // 정격 전력 원장은 시각마다가 아니라 추세 1회당 한 번만 읽는다.
             NodePowerSpecs specs = powerSpecRepository == null
                     ? NodePowerSpecs.EMPTY : NodePowerSpecs.of(powerSpecRepository.findAll());
 

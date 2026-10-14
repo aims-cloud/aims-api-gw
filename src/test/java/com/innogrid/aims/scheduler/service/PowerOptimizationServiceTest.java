@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 클러스터 전력 최적화 진단.
  *
  * <p>모든 노드를 8코어 · 용량 500W(유휴 150W)로 맞추고 부하·전력만 바꿔, 결과 차이의 출처를
- * 분명히 한다. PR ② 의 시나리오 픽스처와 같은 값이라 손으로 검산할 수 있다.</p>
+ * 분명히 한다. {@code PowerAwareScenarioTest} 의 픽스처와 같은 값이라 손으로 검산할 수 있다.</p>
  */
 class PowerOptimizationServiceTest {
 

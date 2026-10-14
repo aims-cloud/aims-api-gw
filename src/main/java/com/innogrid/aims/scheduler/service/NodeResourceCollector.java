@@ -45,7 +45,7 @@ public class NodeResourceCollector {
 
     private static final Logger log = LoggerFactory.getLogger(NodeResourceCollector.class);
 
-    /** 메트릭 질의 자리 — 실제 저장소 또는 가상 클러스터(단계 19). 이 클래스는 어느 쪽인지 모른다. */
+    /** 메트릭 질의 자리 — 실제 저장소 또는 가상 클러스터(모의 메트릭 모드). 이 클래스는 어느 쪽인지 모른다. */
     private final SchedulerMetricsGateway vmClient;
     private final SchedulerProperties properties;
     private final PowerModel powerModel;
@@ -135,7 +135,7 @@ public class NodeResourceCollector {
     /**
      * 후보 노드와 제외 노드를 함께 수집한다.
      *
-     * <p><b>질의는 상한 안에서만 기다린다</b>(단계 14). 대상 목록·GPU 개수·GPU 축 셋은 단건 상한, 노드 한 대의 질의 10회는
+     * <p><b>질의는 상한 안에서만 기다린다</b>({@code MetricsQueryGuard}). 대상 목록·GPU 개수·GPU 축 셋은 단건 상한, 노드 한 대의 질의 10회는
      * 노드 상한, 스냅샷 전체는 전체 상한이다. 노드별 수집은 보호 장치의 풀에서 병렬로 돌리되 결과는 <b>제출 순서대로</b>
      * 모아 노드 순서가 순차 수집과 같다. 상한을 넘긴 노드는 "응답 없음"으로 제외 목록에 넣고 나머지로 계속 간다 —
      * 저장소가 멈춰도 요청 스레드는 멈추지 않는다. 대상 목록 질의가 상한을 넘기면 빈 스냅샷(지금까지의 "수집 실패"와
@@ -176,7 +176,7 @@ public class NodeResourceCollector {
             // 세 익스포터의 instance 를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance 가
             // 달라(노드 :9100, DCGM :9400, IPMI 는 중앙 주소) 노드 instance 로는 GPU·전력·온도를 찾을 수 없었다.
             ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
-            // 정격 전력 원장도 수집 1회당 한 번만 읽는다(단계 20). 비어 있으면 정격은 종전대로 설정값에서 온다.
+            // 정격 전력 원장도 수집 1회당 한 번만 읽는다. 비어 있으면 정격은 종전대로 설정값에서 온다.
             NodePowerSpecs specs = powerSpecs();
 
             List<String> instances = new ArrayList<>();

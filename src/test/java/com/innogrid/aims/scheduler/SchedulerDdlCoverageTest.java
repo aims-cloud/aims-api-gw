@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p><b>이 테스트의 한계</b>를 분명히 해 둔다 — 대조는 <b>테이블 이름 수준</b>이다. 컬럼 타입·길이·NOT NULL
  * 이 엔티티와 맞는지는 여기서 알 수 없다. 그건 실제 PostgreSQL 에 붙여야 알 수 있는데 테스트가 H2 라 불가능하다.
- * 배포 뒤 {@code information_schema} 로 대조하는 절차(개발순서.md 8.4)가 그 자리를 대신한다.</p>
+ * 배포 뒤 {@code information_schema} 로 대조하는 절차가 그 자리를 대신한다.</p>
  *
  * <p>담당 범위가 스케줄러라서 <b>스케줄러 패키지의 엔티티만</b> 본다. 다른 패키지의 테이블은 대조 대상이 아니다.</p>
  */

@@ -21,8 +21,6 @@ import com.innogrid.aims.scheduler.entity.ScheduleRun;
  */
 public interface ScheduleRepository extends JpaRepository<Schedule, Long>, JpaSpecificationExecutor<Schedule> {
 
-    Optional<Schedule> findByScheduleId(String scheduleId);
-
     boolean existsByScheduleId(String scheduleId);
 
     /** 이 정책을 가리키는 스케줄이 있는지 — 정책 삭제 전에 본다. */

@@ -42,6 +42,5 @@ public record NodePowerSpecs(Map<String, Double> capacityByNode) {
         return v != null ? v : fallback.apply(nodeId);
     }
 
-    public int size() { return capacityByNode.size(); }
     public boolean isEmpty() { return capacityByNode.isEmpty(); }
 }

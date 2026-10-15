@@ -373,6 +373,35 @@ class ScheduleExecutionServiceTest {
         assertEquals(1, schedulingService.resumeExhausted(null, OffsetDateTime.now().minusHours(1), null).size());
     }
 
+    /**
+     * 조건에 걸린 건수가 한 실행이 처리하는 상한({@code max-workloads-per-run})을 넘으면 되살리지 않고
+     * 조건을 좁히라고 답한다 — 이유는 {@link SchedulingService#resumeExhausted} 설명에 있다.
+     */
+    @DisplayName("조건에 걸린 건수가 한 번에 되살릴 수 있는 상한을 넘으면 400 이고 아무것도 되살리지 않는다")
+    @Test
+    void bulk_resume_rejects_more_than_the_per_run_limit() {
+        int original = properties.getMaxWorkloadsPerRun();
+        properties.setMaxWorkloadsPerRun(1);
+        try {
+            for (String name : List.of("소진-상한-1", "소진-상한-2")) {
+                Workload w = new Workload(name, 1, 1024);
+                w.setResourceType(Workload.ResourceType.VM);
+                for (int i = 0; i < properties.getMaxRetryCount(); i++) w.markFailed("자원 부족");
+                workloadRepository.save(w);
+            }
+
+            BusinessException e = assertThrows(BusinessException.class,
+                    () -> schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null));
+
+            assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+            assertTrue(e.getMessage().contains("2건으로") && e.getMessage().contains("1건을 넘습니다"), e.getMessage());
+            assertEquals(2, workloadRepository.findAll().stream()
+                    .filter(w -> w.getStatus() == Workload.WorkloadStatus.FAILED).count(), "거부했는데 되살렸다");
+        } finally {
+            properties.setMaxWorkloadsPerRun(original);
+        }
+    }
+
     // ── 소진 → 재개 한 바퀴 ────────────────────────────
 
     /**

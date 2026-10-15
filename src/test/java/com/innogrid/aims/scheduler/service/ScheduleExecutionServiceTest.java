@@ -250,12 +250,12 @@ class ScheduleExecutionServiceTest {
     }
 
     /**
-     * <b>소진된 워크로드를 되살리는 길은 한 건씩뿐이다.</b> 단건 상태 변경은 이미 되고,
-     * 되살리면 재시도 횟수가 0 으로 지워진다. 없는 것은 여러 건을 한 번에 되살리는 길이다.
+     * <b>재시도 횟수를 다 쓴 워크로드는 단건으로도 되살릴 수 있다.</b> 실패에서 대기로 바꾸면 재시도 횟수가
+     * 0 으로 지워진다. 여러 건을 조건으로 골라 되살리는 {@link SchedulingService#resumeExhausted} 는 아래 일괄 재개 테스트가 본다.
      */
-    @DisplayName("현행: 소진 재개는 단건으로만 되고 재시도 횟수가 지워진다")
+    @DisplayName("재시도 끝난 워크로드를 단건으로 되살리면 재시도 횟수가 지워진다")
     @Test
-    void currently_only_one_by_one_resume_is_possible() {
+    void resuming_one_exhausted_workload_clears_its_retry_count() {
         Workload exhausted = new Workload("소진2", 1, 1024);
         exhausted.setResourceType(Workload.ResourceType.VM);
         for (int i = 0; i < properties.getMaxRetryCount(); i++) exhausted.markFailed("자원 부족");
@@ -371,6 +371,35 @@ class ScheduleExecutionServiceTest {
         assertTrue(schedulingService.resumeExhausted(null, longAgo.minusDays(1), longAgo).isEmpty(),
                 "기간 밖인데 되살렸다");
         assertEquals(1, schedulingService.resumeExhausted(null, OffsetDateTime.now().minusHours(1), null).size());
+    }
+
+    /**
+     * 조건에 걸린 건수가 한 실행이 처리하는 상한({@code max-workloads-per-run})을 넘으면 되살리지 않고
+     * 조건을 좁히라고 답한다 — 이유는 {@link SchedulingService#resumeExhausted} 설명에 있다.
+     */
+    @DisplayName("조건에 걸린 건수가 한 번에 되살릴 수 있는 상한을 넘으면 400 이고 아무것도 되살리지 않는다")
+    @Test
+    void bulk_resume_rejects_more_than_the_per_run_limit() {
+        int original = properties.getMaxWorkloadsPerRun();
+        properties.setMaxWorkloadsPerRun(1);
+        try {
+            for (String name : List.of("소진-상한-1", "소진-상한-2")) {
+                Workload w = new Workload(name, 1, 1024);
+                w.setResourceType(Workload.ResourceType.VM);
+                for (int i = 0; i < properties.getMaxRetryCount(); i++) w.markFailed("자원 부족");
+                workloadRepository.save(w);
+            }
+
+            BusinessException e = assertThrows(BusinessException.class,
+                    () -> schedulingService.resumeExhausted(Workload.ResourceType.VM, null, null));
+
+            assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+            assertTrue(e.getMessage().contains("2건으로") && e.getMessage().contains("1건을 넘습니다"), e.getMessage());
+            assertEquals(2, workloadRepository.findAll().stream()
+                    .filter(w -> w.getStatus() == Workload.WorkloadStatus.FAILED).count(), "거부했는데 되살렸다");
+        } finally {
+            properties.setMaxWorkloadsPerRun(original);
+        }
     }
 
     // ── 소진 → 재개 한 바퀴 ────────────────────────────

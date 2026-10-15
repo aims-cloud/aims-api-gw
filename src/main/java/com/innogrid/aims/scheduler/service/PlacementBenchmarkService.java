@@ -105,7 +105,7 @@ public class PlacementBenchmarkService {
      *
      * <p>{@link #strategies()} 가 이 목록과 구현 맵의 <b>키 집합이 같은지</b> 검사한다 — 목록에만 있으면 null 이
      * 담겨 한참 뒤 NPE 로 죽고, 맵에만 있으면 열 하나가 <b>조용히</b> 사라진 채 응답은 정상이다. 둘 다 여기서
-     * 크게 실패하게 한다. 시험이 같은 패키지에서 이 목록을 읽는다.</p>
+     * 크게 실패하게 한다. 테스트가 같은 패키지에서 이 목록을 읽는다.</p>
      */
     static final List<String> BASELINE_ORDER =
             List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "coolest-first", "random");
@@ -132,7 +132,7 @@ public class PlacementBenchmarkService {
 
     /**
      * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 전력식을 공유하는 ΔP 단독 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
-     * 값이 없다. 시험 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
+     * 값이 없다. 테스트 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
      */
     private static final String PABFD_ID = "pabfd";
 
@@ -155,7 +155,7 @@ public class PlacementBenchmarkService {
     /**
      * 순수성 캐시 — 키는 {@link #CACHE_AXES} 순서의 {@code 판|분포|판 파일 다이제스트|워크로드 파일 다이제스트|엔진 설정 다이제스트|규칙 축 다이제스트}.
      *
-     * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 시험이 지킨다). 그런데 한 번
+     * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 테스트가 지킨다). 그런데 한 번
      * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU 를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
      * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
      * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN 을 남기고 전부 비운다 — 판 10 × 분포 2 = 20 조합(설정·규칙은 프로세스
@@ -164,7 +164,7 @@ public class PlacementBenchmarkService {
     private final Map<String, PlacementBenchmarkResponse> cache = new ConcurrentHashMap<>();
     private static final int CACHE_LIMIT = 25;
 
-    /** 캐시 키의 입력 축 이름 — 순서가 키 순서다. 축을 더하면 이 목록과 시험의 리터럴이 함께 바뀌어야 한다. */
+    /** 캐시 키의 입력 축 이름 — 순서가 키 순서다. 축을 더하면 이 목록과 테스트의 리터럴이 함께 바뀌어야 한다. */
     static final List<String> CACHE_AXES = List.of("board", "distribution", "boardDigest", "workloadDigest", "configDigest", "rulesDigest");
     /** 판정 규칙 축 전부의 다이제스트 — 규칙 상수(시드·지점 수·문턱)가 바뀌면 옛 표가 캐시에서 나가지 않게 키에 넣는다. 프로세스 안에서 상수다. */
     private static final String RULES_DIGEST = BenchmarkClusters.digestOf(String.join("|", BenchmarkRules.ruleAxes().values()));
@@ -187,7 +187,7 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 대조군 집합을 갈아 끼우는 이음매 — <b>시험 전용</b>이라 패키지 밖에서 보이지 않는다.
+     * 대조군 집합을 갈아 끼우는 이음매 — <b>테스트 전용</b>이라 패키지 밖에서 보이지 않는다.
      *
      * <p>대조군 하나를 넣고 빼면서 "기존 열의 어느 숫자가 움직여도 되는가"를 고정하려면 같은 판을 두 집합으로
      * 돌려야 한다. 스프링은 공개 생성자만 쓰므로 운영 경로가 이 인자를 볼 길은 없다.</p>
@@ -250,7 +250,7 @@ public class PlacementBenchmarkService {
 
     /**
      * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@link #CACHE_AXES} 순서로 {@code |} 로 잇는다. 축이 하나라도 빠지면 다른
-     * 입력이 같은 표를 돌려받으므로(워크로드 파일 다이제스트가 그렇게 빠졌던 전례), 축 이름 목록은 시험이 리터럴로 고정한다.
+     * 입력이 같은 표를 돌려받으므로(워크로드 파일 다이제스트가 그렇게 빠졌던 전례), 축 이름 목록은 테스트가 리터럴로 고정한다.
      */
     static String cacheKey(String... values) {
         if (values.length != CACHE_AXES.size()) throw new IllegalStateException("캐시 축 수 불일치: " + values.length + " ≠ " + CACHE_AXES);
@@ -258,7 +258,7 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 캐시·동시 제한을 거치지 않는 계산 — <b>시험 전용</b>(패키지 밖에서 보이지 않는다). 결정론 시험이 "두 번 계산해도 같은
+     * 캐시·동시 제한을 거치지 않는 계산 — <b>테스트 전용</b>(패키지 밖에서 보이지 않는다). 결정론 테스트가 "두 번 계산해도 같은
      * 숫자" 를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
      */
     PlacementBenchmarkResponse compareFresh(String boardId, String distribution) {
@@ -346,8 +346,8 @@ public class PlacementBenchmarkService {
      * 한 주기를 고르게 훑는 시각 지점. <b>벽시계를 쓰지 않는다</b> — 절대 시각에 기대면 같은 요청이
      * 두 번 다른 숫자를 내고, 그 차이가 알고리즘 차이와 구분되지 않는다.
      *
-     * <p>{@code private} 이 아닌 이유는 같은 패키지의 시험이 <b>같은 지점 목록</b>으로 역산을 다시 계산하기
-     * 때문이다. 시험이 사본을 두면 두 목록이 갈라져도 초록불이 된다.</p>
+     * <p>{@code private} 이 아닌 이유는 같은 패키지의 테스트가 <b>같은 지점 목록</b>으로 역산을 다시 계산하기
+     * 때문이다. 테스트가 사본을 두면 두 목록이 갈라져도 초록불이 된다.</p>
      */
     static List<Long> sweepPoints(SyntheticCluster cluster) {
         long period = cluster.periodMinutes() * 60L;
@@ -787,11 +787,11 @@ public class PlacementBenchmarkService {
      * 지점별 값 — 길이는 <b>항상</b> 스윕 지점 수이고 인덱스가 시각 지점이다.
      *
      * <p>지점 루프가 지표마다 지점당 한 번씩 담으므로 운영 경로에서는 이미 길이가 맞는다 — 길이를 채우는
-     * 가지는 <b>방어</b>이고, 지금은 시험이 직접 부를 때만 지난다. 어떤 키가 조건부로만 담기게 되는 날
+     * 가지는 <b>방어</b>이고, 지금은 테스트가 직접 부를 때만 지난다. 어떤 키가 조건부로만 담기게 되는 날
      * 길이 불변식이 조용히 깨지는 것을 막는 자리다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
      * 성립하지 않는다 — 짝이 아닌 지점이 몇 번째였는지가 응답에 남아야 한다.</p>
      *
-     * <p>응답만 보고는 이 성질을 확인할 수 없어 같은 패키지의 시험이 직접 부른다. 길이·표본 수·중앙값은
+     * <p>응답만 보고는 이 성질을 확인할 수 없어 같은 패키지의 테스트가 직접 부른다. 길이·표본 수·중앙값은
      * 값을 앞으로 당겨 모아도 그대로라서, 정렬이 깨진 것을 응답 수준 단언이 잡지 못한다.</p>
      */
     static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
@@ -949,7 +949,7 @@ public class PlacementBenchmarkService {
      * 0 이 되는 자리였다. 이제 {@link ExclusionReason#isThermal()} 이 온도 계열 넷을 가른다 — 세는 조건이
      * 같아 값은 그대로다.</p>
      *
-     * <p>패키지 안에서 보이게 둔 것은 시험이 이 셈을 직접 부르기 위해서다 — 등록된 판은 온도 제약이
+     * <p>패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다 — 등록된 판은 온도 제약이
      * 걸리지 않아 이 지표가 늘 0 이라, 판 응답만으로는 무엇을 세는지 가려낼 수 없다.</p>
      */
     static int countThermalExclusions(SchedulingResult result) {
@@ -1032,7 +1032,7 @@ public class PlacementBenchmarkService {
         baselines.put(RANDOM_ID, BaselinePlacers.random(BenchmarkRules.RANDOM_SEEDS.get(0)));
 
         // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id 는 여기서 크게 실패해야 한다. 목록에만 있으면
-        // null 이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200 이다. 시험 전용 이음매로 부분 집합을
+        // null 이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200 이다. 테스트 전용 이음매로 부분 집합을
         // 줄 수는 있으므로 검사는 "목록 ⊆ 맵" 과 "각 id 의 record id 일치" 다.
         for (String id : baselineOrder) {
             PlacementStrategy strategy = baselines.get(id);
@@ -1071,7 +1071,7 @@ public class PlacementBenchmarkService {
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED, null, weighted::schedule),
                 Map.of(), powerModel));
         // 링크 게이트를 켠 가중 점수 — 링크 판에서 weighted 와의 차이가 netScore 경로의 효과다. 링크 없는 판에서는 워크로드에
-        // dataMdcId 가 없어 게이트가 켜지지 않으므로 weighted 와 같은 값이다(구조적 사실 — 시험이 고정한다)
+        // dataMdcId 가 없어 게이트가 켜지지 않으므로 weighted 와 같은 값이다(구조적 사실 — 테스트가 고정한다)
         variants.put(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
                 "가중 점수(링크 게이트 on · 링크 판에서만 weighted 와 다르다 · 판정 자격 없음)",
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),
@@ -1194,7 +1194,7 @@ public class PlacementBenchmarkService {
      * record 의 {@code toString} 이 아니라 <b>명시적 이름=값 목록</b>이다 — 필드 순서를 바꾸는 리팩터링에
      * 어제 낸 표와 오늘 낸 표가 "다른 설정"으로 보이면 안 된다.</p>
      */
-    EngineConfigSnapshot engineConfig() {   // 패키지 공개 — 다이제스트 시험이 판을 계산하지 않고 스냅샷만 읽는다
+    EngineConfigSnapshot engineConfig() {   // 패키지 공개 — 다이제스트 테스트가 판을 계산하지 않고 스냅샷만 읽는다
         SchedulerProperties.Power p = properties.getPower();
         SchedulerProperties.Thermal t = properties.getThermal();
         SchedulerProperties.Network nw = properties.getNetwork();
@@ -1280,8 +1280,8 @@ public class PlacementBenchmarkService {
     /**
      * 클러스터 파일의 노드를 한 시각의 {@link NodeResource} 로 만든다.
      *
-     * <p>{@code private} 이 아닌 이유는 {@link #sweepPoints} 와 같다 — 같은 패키지의 시험이 이 스냅샷의
-     * 전력이 오라클의 같은 시각 값과 같은지를 본다. 시험이 사본을 두면 두 세계가 갈라져도 초록불이 된다.</p>
+     * <p>{@code private} 이 아닌 이유는 {@link #sweepPoints} 와 같다 — 같은 패키지의 테스트가 이 스냅샷의
+     * 전력이 오라클의 같은 시각 값과 같은지를 본다. 테스트가 사본을 두면 두 세계가 갈라져도 초록불이 된다.</p>
      *
      * <p><b>정격 전력은 계측 여부와 무관하게 싣는다.</b> 운영에서도 정격은 원장에서 오고 IPMI 와 별개다 —
      * 계측이 없는 노드는 "지금 몇 W 인지"를 모르는 것이고 "몇 W 까지 쓸 수 있는지"를 모르는 게 아니다.

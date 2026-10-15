@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>필터는 전부 선택이고 AND 로 겹치며, 창은 시작 시각({@code startedAt})의 반개구간 {@code [from, to)} 에 기본 창이 없다.
  * 이 컨텍스트는 실 게이트웨이라 즉시 실행으로는 실행 이력이 생기지 않으므로 행을 저장소에 직접 심는다.
- * {@code startedAt} 은 생성자가 지금 시각으로 채우므로 JPQL 일괄 갱신으로 고정 시각에 흩어 놓는다(배치 이력 시험의 선례).</p>
+ * {@code startedAt} 은 생성자가 지금 시각으로 채우므로 JPQL 일괄 갱신으로 고정 시각에 흩어 놓는다(배치 이력 테스트의 선례).</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

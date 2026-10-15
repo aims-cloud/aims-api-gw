@@ -73,7 +73,7 @@ public class NodeResourceCollector {
                 : new ExporterInstanceResolver(metrics, guard, properties);
     }
 
-    /** 익스포터 대응 원장 없이 조립하는 형태(기존 시험 경로) — 호스트명 일치와 그대로만 쓴다. */
+    /** 익스포터 대응 원장 없이 조립하는 형태(기존 테스트 경로) — 호스트명 일치와 그대로만 쓴다. */
     public NodeResourceCollector(SchedulerMetricsGateway metrics,
                                  SchedulerProperties properties,
                                  PowerModel powerModel,

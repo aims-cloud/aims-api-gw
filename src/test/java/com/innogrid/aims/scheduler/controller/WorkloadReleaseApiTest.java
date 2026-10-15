@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 삭제 가능, 상태 변경 API 의 되돌리기 400 회귀.
  *
  * <p>수집기를 대역으로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API 로 결정을 만든다(기본 record 모드 → ACCEPTED).
- * 이 시험은 트랜잭션을 걸지 않아 롤백이 없다 — 이름 접두어로 정리한다.</p>
+ * 이 테스트는 트랜잭션을 걸지 않아 롤백이 없다 — 이름 접두어로 정리한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

@@ -88,7 +88,7 @@ class ExporterInstanceResolverTest {
         SchedulerMetricsGateway gw = mock(SchedulerMetricsGateway.class);
         when(gw.queryResults(anyString())).thenAnswer(inv -> {
             if (ExporterInstanceResolver.IPMI_DISCOVERY.equals(inv.getArgument(0))) {
-                release.await();   // 시험이 풀어 줄 때까지 답하지 않는다 — 시간이 아니라 래치로 결정한다
+                release.await();   // 테스트가 풀어 줄 때까지 답하지 않는다 — 시간이 아니라 래치로 결정한다
             }
             return List.of(row("n1:9100", "1"));
         });

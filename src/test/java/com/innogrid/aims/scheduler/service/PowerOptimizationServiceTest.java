@@ -176,7 +176,7 @@ class PowerOptimizationServiceTest {
     }
 
     /**
-     * 플래그를 끄면 서비스 층까지 대체값 고정이 배선돼야 한다 — PowerModel 단위 시험만으로는
+     * 플래그를 끄면 서비스 층까지 대체값 고정이 배선돼야 한다 — PowerModel 단위 테스트만으로는
      * PowerOptimizationService 생성 경로에 플래그가 실제로 닿는지 보장하지 않는다.
      */
     @DisplayName("플래그를 끄면 반납 가능 전력이 대체값으로 돌아간다")

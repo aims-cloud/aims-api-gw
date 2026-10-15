@@ -36,7 +36,7 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
  * 바꿨는지 들여다보는 진단용</b>이고, 기간 절감량은 고정 간격 표본이 필요한 별개의 일이다.</p>
  *
  * <p>스프링 빈으로 두는 이유는 실행 서비스가 이 계산을 <b>갈아끼울 수 있어야</b> 하기 때문이다 — 계산이
- * 터져도 실행이 깨지지 않는다는 것을 시험으로 보이려면 던지는 대역이 필요하다.</p>
+ * 터져도 실행이 깨지지 않는다는 것을 테스트로 보이려면 던지는 대역이 필요하다.</p>
  */
 @Component
 public class RunClusterSnapshot {

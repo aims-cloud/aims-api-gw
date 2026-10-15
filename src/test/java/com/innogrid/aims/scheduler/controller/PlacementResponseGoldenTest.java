@@ -58,7 +58,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배치 결정 응답의 기준 파일 시험.
+ * 배치 결정 응답의 기준 파일 테스트.
  *
  * <p><b>값 층</b> — 엔진 3종을 고정 입력(노드·워크로드·정책)으로 직접 불러 결정 결과 전체(키 순서·타입·값)를
  * {@code src/test/resources/scheduler/golden/placement/<시나리오>.json} 과 문자열로 비교한다. 같은 매퍼로 들여쓰기
@@ -74,7 +74,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 결과를 {@code build/golden-candidates/placement/} 에 쓰고 실패한다
  * (소스 아래에는 쓰지 않는다 · 기준과 같으면 옛 후보는 지운다). 다시 만들 때는
  * {@code gradlew test --tests "*PlacementResponseGoldenTest" --no-build-cache --rerun-tasks} 로 돌려 후보를 검토한 뒤 복사한다.
- * 기준 파일은 시험 입력으로 잡히도록 {@code src/test/resources} 아래에 둔다. 출력을 바꾸는 코드 변경은 같은 커밋에서 기준 파일을
+ * 기준 파일은 테스트 입력으로 잡히도록 {@code src/test/resources} 아래에 둔다. 출력을 바꾸는 코드 변경은 같은 커밋에서 기준 파일을
  * 갱신하고, 커밋 본문에 바뀐 시나리오·키·이유를 적는다. 기준 파일만 고치는 커밋은 두지 않으며, 시나리오 추가는 test 커밋으로
  * 한다. 값은 설정 기본값·정책 기본값·엔진 상수로 계산하므로 이 중 하나가 바뀌어 값이 움직이면 그 원인(설정 다이제스트 변화
  * 포함)을 함께 적는다. 동작이 바뀌지 않아야 하는 리팩터링은 기준 파일과 시나리오 입력·추가 확인을 그대로 둔 채 통과해야
@@ -321,7 +321,7 @@ class PlacementResponseGoldenTest {
         s.intent().accept(result);
     }
 
-    /** 후보는 총점 내림차순, 적격 후보가 있을 때만 성공, 선택은 정렬된 후보 중 첫 적격 후보. 동점의 입력 순서는 동점 시험이 본다. */
+    /** 후보는 총점 내림차순, 적격 후보가 있을 때만 성공, 선택은 정렬된 후보 중 첫 적격 후보. 동점의 입력 순서는 동점 테스트가 본다. */
     private static void assertSelectionRule(SchedulingResult r) {
         List<SchedulingResult.NodeScore> c = r.candidateScores();
         for (int i = 1; i < c.size(); i++) assertTrue(c.get(i - 1).totalScore() >= c.get(i).totalScore(), "총점 내림차순");

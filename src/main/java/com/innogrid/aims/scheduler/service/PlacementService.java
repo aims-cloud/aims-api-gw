@@ -35,7 +35,7 @@ public class PlacementService {
     private final WorkloadRepository workloadRepository;
     private final SchedulingHistoryRepository historyRepository;
     private final EngineRegistry engineRegistry;
-    /** 디스크 총량 질의의 마운트 설정 — 검사 없이 통과한 노드를 알릴 때 함께 찍는다. 없이 조립하면(시험) 기본값. */
+    /** 디스크 총량 질의의 마운트 설정 — 검사 없이 통과한 노드를 알릴 때 함께 찍는다. 없이 조립하면(테스트) 기본값. */
     private final String diskMountPoint;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -49,7 +49,7 @@ public class PlacementService {
         this.diskMountPoint = properties == null ? "/" : properties.getDiskMountPoint();
     }
 
-    /** 설정 없이 조립하는 형태(기존 시험 경로). */
+    /** 설정 없이 조립하는 형태(기존 테스트 경로). */
     public PlacementService(WorkloadRepository workloadRepository,
                             SchedulingHistoryRepository historyRepository,
                             EngineRegistry engineRegistry) {

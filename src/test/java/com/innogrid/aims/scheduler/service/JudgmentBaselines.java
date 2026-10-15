@@ -25,10 +25,10 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult;
 
 /**
- * 판정 기준선 파일의 <b>형식과 생산 경로</b> — 시험 쪽에 둔다(파일 내용은 결과이므로 규칙 클래스는 값을 들지 않는다).
+ * 판정 기준선 파일의 <b>형식과 생산 경로</b> — 테스트 쪽에 둔다(파일 내용은 결과이므로 규칙 클래스는 값을 들지 않는다).
  *
- * <p>같은 코드가 세 곳에서 쓰인다: 증거 묶음 시험이 후보 파일을 {@code build/} 에 쓰고, 사람이 그 후보를
- * {@link BenchmarkRules#JUDGMENT_BASELINE_PATH} 로 복사해 커밋하며(이력 행과 함께), 판정 회전 시험이 현 실행을 같은 형식으로
+ * <p>같은 코드가 세 곳에서 쓰인다: 증거 묶음 테스트가 후보 파일을 {@code build/} 에 쓰고, 사람이 그 후보를
+ * {@link BenchmarkRules#JUDGMENT_BASELINE_PATH} 로 복사해 커밋하며(이력 행과 함께), 판정 회전 테스트가 현 실행을 같은 형식으로
  * 만들어 파일과 견준다. 생산 경로가 하나라 B 와 N 이 다른 조립으로 갈리지 않는다 — 규칙이 요구하는 "같은 생산 경로" 다.</p>
  *
  * <p>담는 것: 판정 셀·방향 셀의 {@code power}·눈금 3열·역산 차단 열 {@code gapVsPabfdPercent} 지점 배열(길이 12, null 자리 보존)과 표본 수·중앙값,
@@ -200,7 +200,7 @@ final class JudgmentBaselines {
         return mapper().readValue(in, JudgmentBaseline.class);
     }
 
-    /** 저장소의 기준선 파일 경로 — 작업 디렉터리가 프로젝트 루트라는 시험 실행의 전제를 그대로 쓴다(증거 묶음의 {@code build/} 와 같다). */
+    /** 저장소의 기준선 파일 경로 — 작업 디렉터리가 프로젝트 루트라는 테스트 실행의 전제를 그대로 쓴다(증거 묶음의 {@code build/} 와 같다). */
     static Path repositoryFile() {
         return Path.of(BenchmarkRules.JUDGMENT_BASELINE_PATH);
     }

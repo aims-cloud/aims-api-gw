@@ -56,7 +56,7 @@ class BenchmarkBoardDigestEolTest {
     @DisplayName("CRLF 와 LF 로 적은 같은 내용은 파일·OS 와 무관하게 같은 다이제스트다")
     @Test
     void crlf_and_lf_content_digest_alike_regardless_of_checkout() {
-        // LF 체크아웃(Linux·CI)에서는 판 파일이 이미 LF 라 리터럴 시험이 정규화 회귀를 못 잡는다 — 이 단언이 OS 무관 가드다
+        // LF 체크아웃(Linux·CI)에서는 판 파일이 이미 LF 라 리터럴 테스트가 정규화 회귀를 못 잡는다 — 이 단언이 OS 무관 가드다
         byte[] lf = "name: x\nnodes:\n  - { mdcId: a }\n".getBytes(StandardCharsets.UTF_8);
         byte[] crlf = "name: x\r\nnodes:\r\n  - { mdcId: a }\r\n".getBytes(StandardCharsets.UTF_8);
         assertEquals(BenchmarkClusters.digestOfContent(lf), BenchmarkClusters.digestOfContent(crlf));
@@ -69,7 +69,7 @@ class BenchmarkBoardDigestEolTest {
     /**
      * 판 id → 저장소 LF 바이트 해시 리터럴. <b>판 추가 절차</b>: (1) 규칙 커밋을 먼저(판정 상수가 바뀌면 그 커밋에서),
      * (2) 판 yml 과 등록부 레코드, (3) 이 맵에 한 줄, (4) 계약 §10 에 행, (5) 증거 묶음 재생성. 등록부와 이 맵의 키 집합이
-     * 다르면 아래 시험이 깨진다 — 판을 더하고 다이제스트를 고정하지 않은 채 지나갈 수 없다.
+     * 다르면 아래 테스트가 깨진다 — 판을 더하고 다이제스트를 고정하지 않은 채 지나갈 수 없다.
      */
     private static final Map<String, String> BOARD_DIGESTS = Map.of(
             BenchmarkClusters.MAIN, "fb011848258b",

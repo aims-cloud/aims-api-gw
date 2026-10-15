@@ -255,7 +255,7 @@ class GroundTruthOracleTest {
             java.nio.file.Files.writeString(file, yaml);
             return new GroundTruthOracle(SyntheticCluster.load(file.toUri().toString()));
         } catch (java.io.IOException e) {
-            throw new IllegalStateException("판 임시 파일을 만들 수 없습니다", e);   // 판을 못 만들면 시험이 아무것도 재지 않는다
+            throw new IllegalStateException("판 임시 파일을 만들 수 없습니다", e);   // 판을 못 만들면 테스트가 아무것도 재지 않는다
         }
     }
 

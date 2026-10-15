@@ -156,7 +156,7 @@ class ScheduleRunDetailDecisionApiTest {
             run.recordCounts(2, 1, 1, false);
             run.finish(ScheduleRun.RunStatus.FAILED, "시험용");
             run = runRepository.save(run);
-            // 워크로드 id 는 실재 행과 겹치지 않는 예약 대역(다른 이력 시험의 9_9xx_xxx 관례)
+            // 워크로드 id 는 실재 행과 겹치지 않는 예약 대역(다른 이력 테스트의 9_9xx_xxx 관례)
             SchedulingHistory failed = new SchedulingHistory(9_930_001L, key + "-fail", null, null, 0, "모든 후보 노드가 제약 조건을 충족하지 못합니다", "weighted", "default");
             failed.setCandidateCount(1);
             failed.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":1}");
@@ -177,7 +177,7 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
-    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id 는 예약 대역 9_930_003, 동률 시험 전용. */
+    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id 는 예약 대역 9_930_003, 동률 테스트 전용. */
     private Seeded seedTied(int n) throws Exception {
         String key = "rdtie-" + Long.toHexString(System.nanoTime());
         JsonNode schedule = objectMapper.readTree(mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
@@ -207,7 +207,7 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
-    /** 저장 경로가 채운 결정 시각을 하나로 덮어 동률을 만든다 — 실행 이력 필터 시험의 backdate 와 같은 방식. */
+    /** 저장 경로가 채운 결정 시각을 하나로 덮어 동률을 만든다 — 실행 이력 필터 테스트의 backdate 와 같은 방식. */
     private void pinCreatedAt(List<Long> ids, OffsetDateTime at) {
         tx.executeWithoutResult(st -> em.createQuery("update SchedulingHistory h set h.createdAt = :t where h.id in :ids")
                 .setParameter("t", at).setParameter("ids", ids).executeUpdate());

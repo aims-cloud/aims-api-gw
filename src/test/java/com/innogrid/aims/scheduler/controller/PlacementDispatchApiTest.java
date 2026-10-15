@@ -50,7 +50,7 @@ class PlacementDispatchApiTest {
             "status", "idempotencyKey", "externalRef", "message", "requestedAt", "respondedAt", "createdBy"));
 
     private static final String BASE = "/api/v1/scheduler";
-    /** 실재 실행과 겹치지 않는 예약 대역의 실행 id — 동률 페이지 시험 전용. */
+    /** 실재 실행과 겹치지 않는 예약 대역의 실행 id — 동률 페이지 테스트 전용. */
     private static final long RUN_Z = 9_900_880L;
 
     @Autowired MockMvc mockMvc;

@@ -52,20 +52,20 @@ class HistoryPageEndpointTest {
     private static final long WORKLOAD_B = 9_900_002L;
     /** 위 둘의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_C = 9_900_003L;
-    /** 실행 필터 시험 전용 — 실행에 묶인 행은 이 id 로만 심는다. */
+    /** 실행 필터 테스트 전용 — 실행에 묶인 행은 이 id 로만 심는다. */
     private static final long WORKLOAD_D = 9_900_004L;
-    /** 제외 코드 키 경계 시험 전용 — A·B 의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
+    /** 제외 코드 키 경계 테스트 전용 — A·B 의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_E = 9_900_005L;
     /**
      * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id 는 1 부터 자라 이 대역에 닿지 않고, FK 가 없어 실행 행이
-     * 없어도 저장된다. 시험마다 다른 값을 써 서로의 정리에 기대지 않는다.
+     * 없어도 저장된다. 테스트마다 다른 값을 써 서로의 정리에 기대지 않는다.
      */
     private static final long RUN_X = 9_900_777L;
-    /** 위와 같은 용도, 다른 시험용. */
+    /** 위와 같은 용도, 다른 테스트용. */
     private static final long RUN_Y = 9_900_778L;
     /** 아무 행도 묶지 않는 실행 id — "없는 실행 id 는 빈 페이지" 를 볼 때만 쓴다. */
     private static final long RUN_NONE = 9_900_999L;
-    /** 동률 페이지 경계 시험 전용 — 성공 12건만 심어 success 가 전부 같은 값이 되게 한다. 다른 시드의 건수 단언과 겹치지 않는 id. */
+    /** 동률 페이지 경계 테스트 전용 — 성공 12건만 심어 success 가 전부 같은 값이 되게 한다. 다른 시드의 건수 단언과 겹치지 않는 id. */
     private static final long WORKLOAD_G = 9_900_011L;
 
     @BeforeEach

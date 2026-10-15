@@ -26,14 +26,14 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄러 엔티티의 <b>컬럼</b>이 배포 SQL 에 있는지 본다.
  *
- * <p>기존 {@code SchedulerDdlCoverageTest} 는 <b>테이블 이름 수준</b>만 대조한다(그 시험이 스스로
- * 한계를 밝혀 뒀다). 그래서 컬럼을 더하고 DDL 을 빠뜨려도 아무 시험이 빨간불이 되지 않고,
+ * <p>기존 {@code SchedulerDdlCoverageTest} 는 <b>테이블 이름 수준</b>만 대조한다(그 테스트가 스스로
+ * 한계를 밝혀 뒀다). 그래서 컬럼을 더하고 DDL 을 빠뜨려도 아무 테스트가 빨간불이 되지 않고,
  * {@code ddl-auto=validate} 인 새 DB 에서 <b>기동 실패</b>로만 드러난다. 배포 VM 은 {@code update} 라
  * Hibernate 가 자동으로 만들어 주므로 그때도 안 드러난다.</p>
  *
  * <p>여기서는 엔티티의 필드 이름을 스네이크 케이스로 바꿔 해당 테이블을 만드는·고치는 SQL
  * 어딘가에 그 이름이 나오는지 본다. 타입·길이·제약은 보지 않는다 — 그건 실제 PostgreSQL 에
- * 붙어야 알 수 있고, 이 시험의 목적은 <b>누락</b>을 잡는 것이다.</p>
+ * 붙어야 알 수 있고, 이 테스트의 목적은 <b>누락</b>을 잡는 것이다.</p>
  */
 class SchedulerDdlColumnTest {
 
@@ -95,7 +95,7 @@ class SchedulerDdlColumnTest {
         return snake(type.getSimpleName());
     }
 
-    /** 이 시험이 실제로 무언가를 보고 있는지 — 엔티티가 한 개도 없으면 위 시험은 항상 초록불이다. */
+    /** 이 테스트가 실제로 무언가를 보고 있는지 — 엔티티가 한 개도 없으면 위 테스트는 항상 초록불이다. */
     @DisplayName("대상 엔티티가 비어 있지 않다")
     @Test
     void the_entity_list_is_not_empty() throws Exception {

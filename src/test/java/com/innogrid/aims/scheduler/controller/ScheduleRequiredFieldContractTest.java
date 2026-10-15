@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>반사만으로는 "스키마가 스키마와 일치" 를 볼 뿐이다. 필수 세 개만 보내면 200 이고 하나라도 빼면
  * 400 인지, 엔진 허용값이 실제로 등록된 엔진과 같은지, 미리보기 예시가 실제 응답과 같은 형태인지는
- * 서버를 띄워야 보인다. 다른 시험은 컨텍스트 비용을 물지 않게 반사 시험과 파일을 나눴다.</p>
+ * 서버를 띄워야 보인다. 다른 테스트는 컨텍스트 비용을 물지 않게 반사 테스트와 파일을 나눴다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

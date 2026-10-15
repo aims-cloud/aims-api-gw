@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>전력 엔진은 후보 점수를 다 매긴 뒤 {@code details().put("통합여유", …)} 로 진단 키를 더한다. 세 엔진은
  * 지금 {@code LinkedHashMap} 을 직접 넘겨 문제가 없지만, details 없이 만드는 편의 생성자가 불변 맵을 채우면
- * 후처리를 공통 단계로 올리는 순간 그 경로에서 {@code UnsupportedOperationException} 이 난다. 이 시험이
+ * 후처리를 공통 단계로 올리는 순간 그 경로에서 {@code UnsupportedOperationException} 이 난다. 이 테스트가
  * 그 함정을 미리 막는다.</p>
  */
 class NodeScoreDetailsMutabilityTest {

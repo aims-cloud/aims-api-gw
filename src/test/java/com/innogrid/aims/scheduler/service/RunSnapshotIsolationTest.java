@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
  * 실패로 남아, 다음 실행이 같은 워크로드를 다시 집는다. 그래서 계산기를 던지는 대역으로 갈아끼워
  * 실행 결과가 흔들리지 않는지 값으로 못 박는다.</p>
  *
- * <p>계산기를 스프링 빈으로 둔 까닭이 바로 이 시험이다. 정적 유틸이었다면 던지게 만들 방법이 없다.</p>
+ * <p>계산기를 스프링 빈으로 둔 까닭이 바로 이 테스트다. 정적 유틸이었다면 던지게 만들 방법이 없다.</p>
  */
 @SpringBootTest
 class RunSnapshotIsolationTest {

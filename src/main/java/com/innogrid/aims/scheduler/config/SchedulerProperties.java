@@ -399,7 +399,7 @@ public class SchedulerProperties {
         /** 스냅샷 전체 상한(ms). 넘으면 끝나지 않은 노드를 전부 제외한다. */
         private long collectTimeoutMs = 30_000;
 
-        /** 단건 질의(대상 노드 목록·GPU 개수·전력 효율 추세) 상한(ms). */
+        /** 단건 질의 상한(ms). 노드 상한 밖의 질의가 쓴다 — 대상 노드 목록·GPU 개수·IPMI 발견·전력 추세는 한 건씩, GPU 축·익스포터 후보는 세 건 묶음으로. */
         private long queryTimeoutMs = 5_000;
 
         /** 내부 풀 크기 = 저장소 동시 질의 수. */

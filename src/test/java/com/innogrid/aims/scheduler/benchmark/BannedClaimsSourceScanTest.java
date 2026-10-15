@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>기존 계약 테스트는 판정 규칙의 사본(한계 문구·지표 라벨·판 설명·전제 문구·Swagger 설명)만 본다. 그래서
  * 주석이나 어노테이션 설명에 "볼록하기 때문이다" 같은 단정이 되돌아와도 아무 테스트가 깨지지 않았다 — 문구 <!-- ban-ok: 예시 --> 정정
- * PR 의 효과가 다음 편집에서 조용히 사라질 수 있었다. 이 테스트는 {@code src/main/java} 의 스케줄러 소스를
+ * PR 의 효과가 다음 편집에서 조용히 사라질 수 있었다. 이 테스트는 {@code src/main}·{@code src/test} 의 스케줄러 소스를
  * 텍스트로 읽어 <b>주석 블록</b>(javadoc 블록 · 일반 블록 주석 · 줄 주석)과 <b>설명 어노테이션</b>
  * ({@code @Tag}·{@code @Operation}·{@code @Schema})의 문자열을 검사한다. 예외 메시지 같은 일반 문자열 리터럴은
  * 대상이 아니다 — 그것은 사용자에게 가는 문장이 아니라 코드 안의 값이다.</p>
@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 블록 마커({@code ban-ok-block} 을 HTML 주석으로)로 블록 전체를 면제한다. 마커는 {@code <!-- ban-ok} 로 시작하는 HTML 주석만
  * 인식하므로 이 문장처럼 이름을 언급하는 것은 면제가 아니다.</p>
  *
- * <p>대상은 {@code src/main}·{@code src/test} 의 스케줄러 패키지 전부다 — 테스트 주석의 옛 표기도 같은 규칙으로 잡는다.</p>
+ * <p>대상은 {@code src/main}·{@code src/test} 의 스케줄러 패키지 전부다 — 테스트 주석에 남은 금지 문구 조각도 같은 규칙으로 잡는다.</p>
  */
 class BannedClaimsSourceScanTest {
 

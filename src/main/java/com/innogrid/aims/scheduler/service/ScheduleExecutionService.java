@@ -49,7 +49,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 수행     노드 스냅샷 1회 → 예약 반영 → 워크로드마다 제약→엔진→배치→예약 누적
  *
  * 판정     대상 0건 · AUTO      → 실행 이력을 만들지 않고 최근 실행 정보만 갱신
- *          대상 0건 · MANUAL    → COMPLETED "대상 없음" 으로 기록
+ *          대상 0건 · MANUAL    → 소진이면 FAILED(사유에 일괄 재개 필요), 아니면 COMPLETED "대상 없음"
  *          성공 1건 이상         → COMPLETED
  *          대상은 있는데 전부 실패 → FAILED
  *          활성 노드 0건 · 예외   → FAILED

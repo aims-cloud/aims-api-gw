@@ -40,7 +40,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  * 두 advice 가 같은 예외의 후보가 되면 어느 쪽이 처리할지가 빈 등록 순서에 좌우되고, 그때
  * 스케줄러 응답에서 파라미터 이름·받은 값·가능한 값이 조용히 사라진다. 아래 문단이
  * {@code BusinessException} 에 대해 말하는 것과 같은 이유다. 확인은 {@code SchedulerParameterErrorTest}
- * 를 그대로 돌리면 된다 — 사유 문구까지 단언하므로 사라지면 빨간불이 된다.</p>
+ * 를 그대로 돌리면 된다 — 사유 문구까지 확인하므로 사라지면 빨간불이 된다.</p>
  *
  * <p>{@code BusinessException} 은 여기서 다루지 않는다. 전역 핸들러와 후보가 겹치면
  * 어느 쪽이 처리할지가 우선순위에 좌우되어, 스케줄러만 응답 형태가 달라질 수 있다.</p>

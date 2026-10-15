@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 가상 클러스터의 <b>시각 불변 성질</b> — 한 주기(60분)를 30초 간격으로 전부 훑어, 언제 실행해도 성립하는 것만 가려낸다.
  *
  * <p>합성 값은 시각의 함수라 같은 시각이면 재현되지만 <b>실행 시각이 다르면 값이 달라진다.</b> 그래서 시나리오 테스트
- * ({@code SyntheticModeScenarioTest})는 실제 시계로 도는 순간 한 컷만 본다. 여기서 확인된 성질만 그쪽 단언으로 쓴다.</p>
+ * ({@code SyntheticModeScenarioTest})는 실제 시계로 도는 순간 한 컷만 본다. 여기서 확인된 성질만 그쪽 조건으로 쓴다.</p>
  *
  * <p>실제 수집 경로({@link NodeResourceCollector} + {@link SyntheticMetricsGateway})를 그대로 쓰고 시각만 고정한다.
  * 스프링 컨텍스트는 쓰지 않는다.</p>

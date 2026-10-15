@@ -120,7 +120,7 @@ class ScheduleRunDetailDecisionApiTest {
             List<Long> fromPage = new ArrayList<>();
             for (JsonNode row : data(get(HISTORY_PAGE).param("scheduleRunId", String.valueOf(s.runId()))
                     .param("sort", "createdAt,asc").param("size", "100")).get("items")) fromPage.add(row.get("id").asLong());
-            // H2 는 동률을 삽입 순(id 오름차순)으로 주는 경향이 있어 오름차순 단언만으로는 보조 키 누락을 못 잡는다 — 검출은 아래 내림차순 페이지 단언이 맡는다.
+            // H2 는 동률을 삽입 순(id 오름차순)으로 주는 경향이 있어 오름차순 확인만으로는 보조 키 누락을 못 잡는다 — 검출은 아래 내림차순 페이지 확인이 맡는다.
             assertEquals(ascending, fromDetail, "실행 상세는 createdAt 동률을 id 오름차순으로 싣는다");
             assertEquals(fromDetail, fromPage, "sort=createdAt,asc 페이징과 실행 상세의 행 순서가 같다");
 
@@ -231,7 +231,7 @@ class ScheduleRunDetailDecisionApiTest {
         clean(s.scheduleId(), s.historyIds());
     }
 
-    /** 결정 행을 지운 뒤 스케줄을 지운다 — 스케줄 삭제가 실행 이력 행까지 지운다. 정리는 단언하지 않아 본문의 원인을 가리지 않는다. */
+    /** 결정 행을 지운 뒤 스케줄을 지운다 — 스케줄 삭제가 실행 이력 행까지 지운다. 정리는 확인하지 않아 본문의 원인을 가리지 않는다. */
     private void clean(long scheduleId, List<Long> historyIds) throws Exception {
         historyRepository.deleteAllById(historyIds);
         mockMvc.perform(delete(BASE).param("ids", String.valueOf(scheduleId)));

@@ -50,11 +50,11 @@ class HistoryPageEndpointTest {
     private final List<Long> seeded = new ArrayList<>();
     private static final long WORKLOAD_A = 9_900_001L;
     private static final long WORKLOAD_B = 9_900_002L;
-    /** 위 둘의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
+    /** 위 둘의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_C = 9_900_003L;
     /** 실행 필터 테스트 전용 — 실행에 묶인 행은 이 id 로만 심는다. */
     private static final long WORKLOAD_D = 9_900_004L;
-    /** 제외 코드 키 경계 테스트 전용 — A·B 의 건수 단언을 건드리지 않으려고 따로 쓰는 id. */
+    /** 제외 코드 키 경계 테스트 전용 — A·B 의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_E = 9_900_005L;
     /**
      * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id 는 1 부터 자라 이 대역에 닿지 않고, FK 가 없어 실행 행이
@@ -65,7 +65,7 @@ class HistoryPageEndpointTest {
     private static final long RUN_Y = 9_900_778L;
     /** 아무 행도 묶지 않는 실행 id — "없는 실행 id 는 빈 페이지" 를 볼 때만 쓴다. */
     private static final long RUN_NONE = 9_900_999L;
-    /** 동률 페이지 경계 테스트 전용 — 성공 12건만 심어 success 가 전부 같은 값이 되게 한다. 다른 시드의 건수 단언과 겹치지 않는 id. */
+    /** 동률 페이지 경계 테스트 전용 — 성공 12건만 심어 success 가 전부 같은 값이 되게 한다. 다른 시드의 건수 확인과 겹치지 않는 id. */
     private static final long WORKLOAD_G = 9_900_011L;
 
     @BeforeEach
@@ -199,7 +199,7 @@ class HistoryPageEndpointTest {
      * 인데, 조회 필터만 그 해석을 따르지 않아 성공한 결정이 통째로 빠졌다.
      *
      * <p>다른 시드(WORKLOAD_A·B, 엔진 weighted·power)를 건드리지 않도록 <b>제3의 워크로드 id 와 다른 엔진명</b>
-     * 으로 심는다 — 그러지 않으면 위의 건수 단언들이 함께 깨진다.</p>
+     * 으로 심는다 — 그러지 않으면 위의 건수 확인들이 함께 실패한다.</p>
      */
     @DisplayName("성공을 물으면 성공 여부가 비어 있는 행도 함께 나온다 — 실패를 물을 때는 아니다")
     @Test
@@ -220,7 +220,7 @@ class HistoryPageEndpointTest {
     }
 
     /**
-     * 필터가 최상위 OR 로 잘못 조립되면 다른 조건이 무력화된다 — 그러면 위 단언은 통과하면서
+     * 필터가 최상위 OR 로 잘못 조립되면 다른 조건이 무력화된다 — 그러면 위 확인은 통과하면서
      * {@code success=true} 에 {@code workloadId} 를 함께 준 결과가 전체 행으로 부풀어 오른다.
      * 그래서 조합 필터의 건수와, 성공·실패 두 필터의 합이 전체와 같은지를 함께 본다.
      */
@@ -240,7 +240,7 @@ class HistoryPageEndpointTest {
 
     /**
      * 실행 필터의 모집단은 실행 상세 결정 목록과 같다 — 그 실행에 {@code linkToRun} 으로 묶인 행 전부.
-     * 기존 시드(A·B)는 실행 연결이 없으므로 제4의 워크로드 id 로 심어 위 건수 단언과 겹치지 않게 한다.
+     * 기존 시드(A·B)는 실행 연결이 없으므로 제4의 워크로드 id 로 심어 위 건수 확인과 겹치지 않게 한다.
      */
     @DisplayName("실행 필터는 그 실행이 만든 결정만 돌려주고 다른 필터와 함께 걸어도 무너지지 않는다")
     @Test
@@ -346,7 +346,7 @@ class HistoryPageEndpointTest {
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data[?(@.workloadName == 'hp-24')]").exists());
         // 페이지 총합은 배열 길이와 같다.
-        // 단, 배열에는 반환 상한이 있고 페이지 총건수에는 없다. 이 단언은 전체 이력이 상한 아래일 때만
+        // 단, 배열에는 반환 상한이 있고 페이지 총건수에는 없다. 이 조건은 전체 이력이 상한 아래일 때만
         // 성립하므로 상한으로 한 번 감싼다 — 그러지 않으면 이 스위트가 커진 어느 날 원인 모를 실패가 된다.
         int arrayLength = objectMapper.readTree(mockMvc.perform(get("/api/v1/scheduler/history")).andReturn()
                 .getResponse().getContentAsString()).get("data").size();

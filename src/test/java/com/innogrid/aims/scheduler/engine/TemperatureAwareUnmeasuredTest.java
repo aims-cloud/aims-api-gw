@@ -70,7 +70,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TemperatureAwareUnmeasuredTest {
 
     /**
-     * 모든 단언이 쓰는 허용오차. 반복소수(0.4666…7, 0.6363…6)를 손으로 4자리 반올림한 기대값도
+     * 모든 확인이 쓰는 허용오차. 반복소수(0.4666…7, 0.6363…6)를 손으로 4자리 반올림한 기대값도
      * <b>이 값으로</b> 비교한다 — 엔진이 {@code Math.round(v × 10000) / 10000} 으로 이미 4자리로
      * 반올림해 내보내므로, 기대값을 같은 4자리로 적으면 정확히 같은 double 이 나온다.
      *
@@ -238,7 +238,7 @@ class TemperatureAwareUnmeasuredTest {
         // 오라클을 문자열 "평균온도:40.0" 으로 두면 안 된다 — 그 조각은 분기2(승자만 미계측)의
         // "계측 노드 평균온도:%.1f°C" 에도 그대로 들어 있어 <b>두 분기를 구분하지 못한다</b>.
         // 실제로 승자 판정(bestHasThermal)을 승자가 아니라 마지막 후보 기준으로 망가뜨려도
-        // 이 단언은 통과했다. 그래서 분기1에만 있는 표지 " (여유:" 로 분기를 고정하고,
+        // 이 확인은 통과했다. 그래서 분기1에만 있는 표지 " (여유:" 로 분기를 고정하고,
         // 평균값 자체는 문자열이 아니라 details 에서 확인한다(로케일 의존도 함께 사라진다).
         SchedulingResult result = scheduler.schedule(new Workload("w", 1, 512),
                 List.of(node("M", 40), node("U", 0)), policy());

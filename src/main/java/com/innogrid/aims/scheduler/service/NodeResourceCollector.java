@@ -132,6 +132,11 @@ public class NodeResourceCollector {
         return collect().nodes();
     }
 
+    /** 원장 스냅샷 — 수집 1회당 한 번만 읽는다. 원장이 없거나 비면 {@link NodePowerSpecs#EMPTY}. */
+    private NodePowerSpecs powerSpecs() {
+        return powerSpecRepository == null ? NodePowerSpecs.EMPTY : NodePowerSpecs.of(powerSpecRepository.findAll());
+    }
+
     /**
      * 후보 노드와 제외 노드를 함께 수집한다.
      *
@@ -143,11 +148,6 @@ public class NodeResourceCollector {
      * 조립이 끝난 목록을 오염시키지 않게 하기 위해서다.</p>
      */
     @SuppressWarnings("unchecked")
-    /** 원장 스냅샷 — 수집 1회당 한 번만 읽는다. 원장이 없거나 비면 {@link NodePowerSpecs#EMPTY}. */
-    private NodePowerSpecs powerSpecs() {
-        return powerSpecRepository == null ? NodePowerSpecs.EMPTY : NodePowerSpecs.of(powerSpecRepository.findAll());
-    }
-
     public Snapshot collect() {
         List<NodeResource> nodes = new ArrayList<>();
         List<ExcludedNode> excluded = new ArrayList<>();

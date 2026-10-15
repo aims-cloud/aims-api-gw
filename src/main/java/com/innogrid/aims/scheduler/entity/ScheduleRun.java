@@ -216,7 +216,6 @@ public class ScheduleRun {
         this.startedAt = OffsetDateTime.now();
     }
 
-    /** 실행 결과를 확정한다. */
     /** 실행 결과 메시지의 컬럼 길이. */
     public static final int MESSAGE_MAX = 500;
 

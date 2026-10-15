@@ -62,7 +62,7 @@ public class PowerModel {
     public double placementPei(NodeResource node) {
         double powerEff = effectivePowerWatts(node);
         // 정격 0 이면 실효 전력이 실측에 머물러(D = 0) 분자만 실효가 되는 기저 혼재라 중립값 — placementWasteScore 와 같은 가드.
-        // 엔진은 hasPower(전력·정격 > 0)로 이 경로를 이미 막으므로 직접 호출자(시험·앞으로의 호출부)를 위한 방어다
+        // 엔진은 hasPower(전력·정격 > 0)로 이 경로를 이미 막으므로 직접 호출자(테스트·앞으로의 호출부)를 위한 방어다
         if (node.getPowerCapacityWatts() <= 0 || powerEff <= 0) return 0.5;
         double efficiency = node.effectiveCpuUsagePercent() / powerEff;
         return Math.min(1.0, efficiency / effectivePeiNormalizer());
@@ -266,7 +266,7 @@ public class PowerModel {
      * {@link #wakeupPower} 를 쓴다 — 계측된 유휴 노드는 실측 역산, 그 밖(가동·미계측·정격 미상·역산 범위 밖·역산 끔)은
      * 대체값이라 {@link #idlePower} 와 비트까지 같다. 정정 전에는 동적항이 선언 유휴({@code idlePower}), 깨우기항만
      * 역산이라 계측된 유휴 노드의 유휴가 한 식의 두 자리에서 다른 값으로 쓰였다(판정 회차 3 지목). 진단 지표(비례성·비낭비)와
-     * 공개 {@link #marginalPowerOnCurve}(진단·시험 표면)와 선형 {@link #marginalPower}(제약·예상 전력·대조군)의 절편은 선언 유휴 그대로다 —
+     * 공개 {@link #marginalPowerOnCurve}(진단·테스트 표면)와 선형 {@link #marginalPower}(제약·예상 전력·대조군)의 절편은 선언 유휴 그대로다 —
      * 지목 밖이며, 그래서 계측 유휴 노드에서는 한계 전력 점수의 절편과 제약·예상 전력의 절편이 갈린다.</p>
      */
     public double realMarginalPower(NodeResource node, int requiredCpu) {

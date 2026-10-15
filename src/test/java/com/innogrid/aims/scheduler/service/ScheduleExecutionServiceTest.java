@@ -142,7 +142,7 @@ class ScheduleExecutionServiceTest {
 
         Schedule schedule = save(scheduleOf("retry-ok", true, false));
         int backoff = properties.getRetryBackoffMinutes();
-        properties.setRetryBackoffMinutes(0);   // 이 시험이 보는 것은 횟수 조건이지 간격이 아니다
+        properties.setRetryBackoffMinutes(0);   // 이 테스트가 보는 것은 횟수 조건이지 간격이 아니다
         ScheduleRun run;
         try {
             run = executionService.runNow(schedule.getId(), "tester");
@@ -209,7 +209,7 @@ class ScheduleExecutionServiceTest {
      * <b>전부 소진되면 실행을 실패로 마감한다.</b> 사람이 되살리기 전에는 아무 일도 못 하기 때문이다.
      *
      * <p>대상이 0건이면 "할 일이 없어서" 든 "전부 소진돼서" 든 똑같이 완료로 끝난다. 화면에서는
-     * 두 상황을 구분할 수 없고, 스케줄은 영원히 성공한 것처럼 보인다. 뒤 커밋이 이 시험을
+     * 두 상황을 구분할 수 없고, 스케줄은 영원히 성공한 것처럼 보인다. 뒤 커밋이 이 테스트를
      * 뒤집는 것이 곧 고쳤다는 증거다.</p>
      */
     @DisplayName("전부 소진되면 실행이 실패로 끝나고 사유에 재개가 필요하다고 적힌다")
@@ -378,7 +378,7 @@ class ScheduleExecutionServiceTest {
     /**
      * <b>반복 실패 → 소진 → 일괄 재개 → 다시 대상</b> 한 바퀴를 그대로 돈다.
      *
-     * <p>각 단계를 따로 본 시험은 위에 있지만, 이어 붙였을 때 상태가 맞물리는지는 여기서만 보인다.
+     * <p>각 단계를 따로 본 테스트는 위에 있지만, 이어 붙였을 때 상태가 맞물리는지는 여기서만 보인다.
      * 특히 재개가 마지막 실패 시각까지 지우지 않으면 되살린 워크로드가 백오프에 다시 걸려,
      * 사람이 재개를 눌러도 아무 일이 일어나지 않는다.</p>
      */

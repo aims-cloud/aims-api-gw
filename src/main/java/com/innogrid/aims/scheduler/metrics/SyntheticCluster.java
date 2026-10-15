@@ -404,7 +404,7 @@ public final class SyntheticCluster {
         return (Math.floorMod(h, 1000) / 1000.0) * 2 * Math.PI;
     }
 
-    /** 시험용 — 노드별 위상(라디안)을 그대로 본다. */
+    /** 테스트용 — 노드별 위상(라디안)을 그대로 본다. */
     public double phaseOf(String nodeId) {
         Double p = phaseByNodeId.get(nodeId);
         if (p == null) throw new IllegalArgumentException("판에 없는 노드: " + nodeId);

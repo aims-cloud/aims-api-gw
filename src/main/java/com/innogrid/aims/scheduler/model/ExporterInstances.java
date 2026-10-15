@@ -16,7 +16,7 @@ import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
  * 노드 익스포터는 {@code host:9100}, DCGM 은 {@code host:9400}, IPMI 는 {@code ipmi-exporter:9290} 같은
  * 중앙 주소다(2026-09-21 배포 서버 실측). 수집기는 노드 익스포터의 값을 키로 GPU 개수를 찾고 전력·온도를 질의해
  * 왔으므로, 실장비에서는 <b>GPU 개수가 항상 0 이고 전력·온도는 항상 미계측</b>이었다. 모의 게이트웨이가 모든
- * 시리즈에 같은 노드 id 를 붙여 시험이 초록불이었을 뿐이다.</p>
+ * 시리즈에 같은 노드 id 를 붙여 테스트가 초록불이었을 뿐이다.</p>
  *
  * <p><b>세 단계로 떨어진다.</b>
  * <ol>
@@ -89,7 +89,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
 
     /**
      * 이 노드의 그 익스포터 시리즈가 저장소에 실제로 있는가 — 원장·호스트명으로 이어졌거나, 노드 instance 그대로의
-     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 떨어진 경우만 false. 시험용.
+     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 떨어진 경우만 false. 테스트용.
      */
     public boolean resolvedDcgm(String nodeInstance) { return !dcgmOf(nodeInstance).equals(nodeInstance) || dcgmSeen.contains(nodeInstance); }
     public boolean resolvedIpmi(String nodeInstance) { return !ipmiOf(nodeInstance).equals(nodeInstance) || ipmiSeen.contains(nodeInstance); }

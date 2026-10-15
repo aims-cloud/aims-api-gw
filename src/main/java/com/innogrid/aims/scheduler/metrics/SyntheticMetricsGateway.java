@@ -25,11 +25,11 @@ import java.util.regex.Pattern;
  *
  * <p><b>익스포터별 instance 형식을 실환경대로 낸다.</b> 노드 익스포터 시리즈는 {@code host:9100}, DCGM 은
  * {@code host:9400}, IPMI 는 {@code host:9290} 이다. 예전에는 모든 시리즈에 노드 id 하나를 붙여, 수집기가 노드
- * instance 로 GPU 개수·전력·온도를 찾는 결함이 시험에서 드러나지 않았다. 실장비에서는 익스포터마다 포트가 달라
+ * instance 로 GPU 개수·전력·온도를 찾는 결함이 테스트에서 드러나지 않았다. 실장비에서는 익스포터마다 포트가 달라
  * 그 결합이 빈손이었다. 이제 IPMI·DCGM 메트릭을 노드 instance 로 물으면 <b>빈 결과</b>다 — 실환경과 같다.</p>
  *
  * <p><b>구간 집계 함수를 해석한다.</b> {@code avg_over_time(메트릭[24h])} 같은 질의는 감싼 함수를 무시하면 그 순간
- * 값을 돌려주게 되어, 시험은 초록불인데 값이 틀린다. 실환경 저장소는 창 안의 표본을 모아 답하므로 여기서도 창을
+ * 값을 돌려주게 되어, 테스트는 초록불인데 값이 틀린다. 실환경 저장소는 창 안의 표본을 모아 답하므로 여기서도 창을
  * 걸어 표본을 모아 답한다. 표본 간격은 실환경 스크레이프 주기와 같은 {@link #SAMPLE_STEP_SECONDS} 로 둔다.</p>
  */
 public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {

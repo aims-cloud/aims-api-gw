@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>규칙 축 이력({@code RULE_AXIS_HISTORY})과 같은 장치다. 기준선 값은 결과라 규칙 클래스에 두지 않지만, 파일을 고치는 커밋이
  * 여기 행을 더해야만 초록불이 되므로 "결과 보고를 고치는 자유도" 는 diff 에 드러난다. 갱신 순서(판정 PR 은 파일 불변, 갱신은 보고
- * 게시 뒤 별도 커밋)는 저장소 밖의 사실이라 이 시험이 볼 수 없다 — 이력 행의 사유와 B 리비전 칸이 리뷰의 근거다.</p>
+ * 게시 뒤 별도 커밋)는 저장소 밖의 사실이라 이 테스트가 볼 수 없다 — 이력 행의 사유와 B 리비전 칸이 리뷰의 근거다.</p>
  *
- * <p>값은 판을 돌리지 않고 파일만 읽어 본다. 현 실행과의 대조는 판정 회전 시험의 몫이다.</p>
+ * <p>값은 판을 돌리지 않고 파일만 읽어 본다. 현 실행과의 대조는 판정 회전 테스트의 몫이다.</p>
  */
 class JudgmentBaselineTest {
 
@@ -33,13 +33,13 @@ class JudgmentBaselineTest {
      * 기준선 이력 한 줄 — 파일 다이제스트(개행 LF 정규화 · SHA-256 앞 12자) · 날짜 · 사유 · 두 리비전 칸 · 직전 기준선과의 두 셀 중앙값 차(첫 행은 "없음").
      *
      * <p>리비전 칸은 둘이고 뜻이 다르다. {@code engineRevision} 은 엔진·판 생성 코드가 이 값을 낸 마지막 머지 리비전(리뷰 항목 — 저장소 안에서
-     * 확인할 수 없다). {@code producedAt} 은 후보 파일을 실제로 산출한 HEAD 의 앞 7자로, 파일 출처의 {@code gitHead} 와 같아야 하며 시험이 그것을 본다.
+     * 확인할 수 없다). {@code producedAt} 은 후보 파일을 실제로 산출한 HEAD 의 앞 7자로, 파일 출처의 {@code gitHead} 와 같아야 하며 테스트가 그것을 본다.
      * 브랜치 커밋 해시는 머지 방식에 따라 히스토리에 남지 않을 수 있다 — 파일 안의 값이 그 사실을 함께 적는다.</p>
      */
     record BaselineSeal(String digest, String date, String reason, String engineRevision, String producedAt, String medianShiftFromPrevious,
                         double judgmentMedian, double directionMedian) {}
 
-    /** 마지막 행이 현재 파일이다. 파일을 갱신하는 커밋은 여기 행을 더한다 — 후보는 증거 묶음 시험이 만든다. */
+    /** 마지막 행이 현재 파일이다. 파일을 갱신하는 커밋은 여기 행을 더한다 — 후보는 증거 묶음 테스트가 만든다. */
     static final List<BaselineSeal> BASELINE_HISTORY = List.of(
             new BaselineSeal("3fef93c9862b", "2026-09-15",
                     "기준선 봉인 도입 — 소비된 W 눈금 판정 뒤 처음으로 지점 배열째 보존. 판정 셀·방향 셀 × 열 5(power·눈금 3·역산 차단)·위상 짝 판 seed 3·오목 판. "

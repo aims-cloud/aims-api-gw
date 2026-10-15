@@ -30,7 +30,7 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
  * 새 판이나 새 판정 셀을 더할 때는 그 규칙 커밋을 결과·판 파일 커밋보다 앞에 둔다. 2026-09-14 개정(방법론 변경 PR 의
  * {@code rules:} 커밋): 민감도 눈금 3값·역산 차단 열·링크 판·위상 독립 판 2장·오목 판 상수, 실측 불변조건을 판정 시점
  * 고정값과 현 실측값으로 분리, 판정 자격을 폐쇄형 문장으로 — 여기까지는 해당 판 파일·결과 코드보다 앞선 커밋이다.
- * <b>사후 개정</b>(관측 수치를 본 뒤 고친 규칙 — 개수는 세지 않고 목록으로 둔다, 전량은 계약 시험의 축 이력에 있다):
+ * <b>사후 개정</b>(관측 수치를 본 뒤 고친 규칙 — 개수는 세지 않고 목록으로 둔다, 전량은 계약 테스트의 축 이력에 있다):
  * <ul>
  *   <li>2026-09-14 — 총량 짝 조건의 기준 집합({@link #PAIRING_RULE}). 배포 검증에서 변종 열 추가만으로 기존 열의 총량 표본이
  *       5 → 1 로 줄어드는 것을 보고 고정.</li>
@@ -118,7 +118,7 @@ public final class BenchmarkRules {
      * 회계가 달라지므로, 이 상수를 바꾸려면 판을 다시 설계해야 한다.</p>
      *
      * <p>가동 노드의 "기준 사용률 20~70%"는 진폭 ±15%p 를 더하기 전 값이다. 판 파일의 {@code swing} 을
-     * 한 칸만 키워도 이 문단이 조용히 거짓이 되므로, 계약 시험이 유휴 상한 &lt; 이 상수 ≤ 가동 하한을 고정한다.</p>
+     * 한 칸만 키워도 이 문단이 조용히 거짓이 되므로, 계약 테스트가 유휴 상한 &lt; 이 상수 ≤ 가동 하한을 고정한다.</p>
      *
      * <p>엔진이 <b>스스로 믿은 비용</b>({@code PowerModel.realMarginalPower})은 여전히 엔진 노브로 계산한다 —
      * 그건 엔진의 믿음을 재는 값이므로 하네스가 대신 정해 주면 안 된다.</p>
@@ -135,11 +135,11 @@ public final class BenchmarkRules {
      *
      * <p><b>실서버 곡선의 근사가 아니다.</b> 지수를 1 보다 크게 둔 판은 "엔진 가정이 틀린 방향"으로
      * 세계를 기울인 <b>응력 시험</b>이고, 문헌에는 반대 방향(오목)의 보고도 있다. 1.4 를 피한 이유는
-     * 그 값이 문헌 계수와 같은 수라 "문헌 근거" 로 오독되기 때문이고, 1.8 은 엔진 시험의
+     * 그 값이 문헌 계수와 같은 수라 "문헌 근거" 로 오독되기 때문이고, 1.8 은 엔진 테스트의
      * {@code curveAlpha} 와 같은 수라 피했다. 값 자체에 물리적 근거는 없다.</p>
      *
      * <p><b>판 파일이 진실이고 이 상수는 그 사본이다.</b> 판이 실제로 쓰는 β 는 클러스터 파일의
-     * {@code powerExponent} 이고, 여기 적힌 값은 결과보다 먼저 등록해 둔 사전 선언이다 — 계약 시험이
+     * {@code powerExponent} 이고, 여기 적힌 값은 결과보다 먼저 등록해 둔 사전 선언이다 — 계약 테스트가
      * 둘의 일치를 강제한다. <b>이 값은 뒤에 바뀔 수 있으며, 바뀌면 이 판으로 뜬 기준선은 무효다.</b></p>
      */
     public static final double CONVEX_POWER_EXPONENT = 1.6;
@@ -152,7 +152,7 @@ public final class BenchmarkRules {
      */
     public static final double CONCAVE_POWER_EXPONENT = 0.625;
 
-    /** 오목 판 id. 판 등록부의 같은 문자열과 계약 시험이 대조한다. seed 는 하나(legacy 위상) — β 와 위상 두 축을 한 판에 걸지 않는다. */
+    /** 오목 판 id. 판 등록부의 같은 문자열과 계약 테스트가 대조한다. seed 는 하나(legacy 위상) — β 와 위상 두 축을 한 판에 걸지 않는다. */
     public static final String CONCAVE_BOARD = "concave";
 
     /**
@@ -204,7 +204,7 @@ public final class BenchmarkRules {
      * 정격 어긋남 판에서 엔진에게 알려 주는 정격의 어긋남 크기 — 한쪽은 {@code ×(1+r)} 로 과대,
      * 다른 쪽은 {@code ×(1−r)} 로 과소 믿게 한다. 생성식이 쓰는 정격은 그대로다.
      *
-     * <p><b>부호 규칙(판 파일이 따르고 계약 시험이 파일만 보고 재계산한다)</b> — 노드를 두 층으로
+     * <p><b>부호 규칙(판 파일이 따르고 계약 테스트가 파일만 보고 재계산한다)</b> — 노드를 두 층으로
      * 나눈다. 한 층은 {@link #SWEEP_POINTS} 지점 전부 {@link #POWERED_ON_CPU_PERCENT} 아래에 머무는
      * 계측 노드(깨우기 벌점이 붙는 유일한 층)이고, 나머지가 가동 층이다. 층마다 노드를 절반(홀수면 한쪽이
      * 하나 많다)으로 갈라 한쪽은 과대, 다른 쪽은 과소 믿게 한다. 어느 절반인지는 <b>층마다 한 가지 양을
@@ -231,7 +231,7 @@ public final class BenchmarkRules {
      * 셀을 결과를 보고 고르면 사후 선택이 된다. 기준선 값 자체는 여기 두지 않는다 — 값은 판을 실행해야
      * 나오고, 상수에 값을 박으면 실행 순서가 커밋 순서를 강제한다.
      *
-     * <p>판 등록 쪽 상수 {@link BenchmarkClusters#CONVEX_MISRATED} 와 <b>같은 문자열</b>이며, 계약 시험이
+     * <p>판 등록 쪽 상수 {@link BenchmarkClusters#CONVEX_MISRATED} 와 <b>같은 문자열</b>이며, 계약 테스트가
      * 이 값이 등록된 판 목록에 들어 있는지를 본다.</p>
      */
     public static final String JUDGMENT_BOARD = "convex-misrated";
@@ -250,13 +250,13 @@ public final class BenchmarkRules {
     /**
      * 판정 셀의 워크로드 분포. 분포는 판정 결과를 바꾸는 입력인데 규칙 축 밖에 있어 보고자가 고를 수 있었다 — <b>소급 명문화</b>다(2026-09-15):
      * 값은 지금까지의 판정·관측이 전부 쓴 분포와 같고, 이 상수는 앞으로의 선택 자유도만 닫는다. 서비스의 기본 분포 상수와 같은 문자열이며
-     * 계약 시험이 둘의 일치를 본다(이 클래스는 서비스를 참조하지 않는다 — 의존 방향을 지키기 위해 시험이 대신 묶는다).
+     * 계약 테스트가 둘의 일치를 본다(이 클래스는 서비스를 참조하지 않는다 — 의존 방향을 지키기 위해 테스트가 대신 묶는다).
      */
     public static final String JUDGMENT_DISTRIBUTION = "heavytail";
 
     /**
-     * 판정 기준선 파일의 저장소 경로(시험 자원). 값은 배포 jar 에 실리지 않는다 — 판정은 저장소 시험이 하는 일이고 배포 응답은 재현 참고다.
-     * 파일 형식과 갱신 이력({@code BASELINE_HISTORY})은 시험 쪽에 있다: 파일 내용은 결과이므로 규칙 클래스가 값을 들지 않는다.
+     * 판정 기준선 파일의 저장소 경로(테스트 자원). 값은 배포 jar 에 실리지 않는다 — 판정은 저장소 테스트가 하는 일이고 배포 응답은 재현 참고다.
+     * 파일 형식과 갱신 이력({@code BASELINE_HISTORY})은 테스트 쪽에 있다: 파일 내용은 결과이므로 규칙 클래스가 값을 들지 않는다.
      */
     public static final String JUDGMENT_BASELINE_PATH = "src/test/resources/scheduler/judgment/judgment-baseline.json";
 
@@ -284,8 +284,8 @@ public final class BenchmarkRules {
 
     /**
      * 판정 보고 0단계(출처 대조)에서 규칙 축 8값을 <b>등급별로</b> 읽는다 — 전량 일치를 요구하면 절차 문장이 한 번만 고쳐져도 0단계가
-     * 상시 발동해 무력화된다. 등급표 자체를 규칙 축(prose)에 봉인하고, 세 집합의 합이 {@link #ruleAxes()} 의 키 집합과 같음을 계약 시험이 본다 —
-     * 축이 새로 생기면 등급을 정하지 않고는 시험이 통과하지 않는다.
+     * 상시 발동해 무력화된다. 등급표 자체를 규칙 축(prose)에 봉인하고, 세 집합의 합이 {@link #ruleAxes()} 의 키 집합과 같음을 계약 테스트가 본다 —
+     * 축이 새로 생기면 등급을 정하지 않고는 테스트가 통과하지 않는다.
      *
      * <ul>
      *   <li>판정 무효화 축 — 불일치면 B 와 N 이 다른 규칙으로 산출된 것이라 1~4항 판정 불가.</li>
@@ -309,23 +309,23 @@ public final class BenchmarkRules {
                     + "기준선을 다시 뜨지 못하므로 그 PR 안에서 지목을 바꿀 수 없다.";
 
     /**
-     * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. 계약 시험이 축마다 다이제스트 리터럴을
+     * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. 계약 테스트가 축마다 다이제스트 리터럴을
      * 두고, 증거 묶음 매니페스트가 같은 값을 싣는다. 축을 나눈 이유는 "어느 규칙이 바뀌었나" 가 값 하나에 뭉개지지 않게
      * 하기 위해서다. 응답에는 싣지 않는다(형태 불변).
      *
      * <p><b>축이 바뀌는 커밋의 형식.</b> 제목을 {@code rules:} 로 시작하고, 본문에 축·옛 값 → 새 값·사유를 적고, 결과 코드
-     * 변경을 같은 커밋에 담지 않는다. 계약 시험의 축 이력({@code RULE_AXIS_HISTORY})에 행을 더해야 시험이 통과하므로
+     * 변경을 같은 커밋에 담지 않는다. 계약 테스트의 축 이력({@code RULE_AXIS_HISTORY})에 행을 더해야 테스트가 통과하므로
      * 이력 누락은 기계가 막고, 커밋 순서는 리뷰가 본다.</p>
      */
     public static Map<String, String> ruleAxes() {
         java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
-        // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(계약 시험 DECLARED_KEY_DIGEST)와는 목적이 달라 값이 같지 않다
+        // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(계약 테스트 DECLARED_KEY_DIGEST)와는 목적이 달라 값이 같지 않다
         axes.put("metrics", METRICS.stream().map(m -> m.key() + ":" + m.direction() + ":" + m.role()).sorted()
                 .collect(java.util.stream.Collectors.joining(",")));
         axes.put("sweep", "loadRatios=" + LOAD_RATIOS + "|sweepPoints=" + SWEEP_POINTS + "|randomSeeds=" + RANDOM_SEEDS
                 + "|memoryMbPerCore=" + MEMORY_MB_PER_CORE + "|poweredOnCpuPercent=" + POWERED_ON_CPU_PERCENT
                 + "|cooldownMinutes=" + COOLDOWN_MINUTES_FOR_BENCHMARK);
-        // 판 파일 값의 사전 등록(교차 검증) — 지수·비율·위상 방식·seed 수·혼합 상수. 판 파일이 진실이고 계약 시험이 대조한다
+        // 판 파일 값의 사전 등록(교차 검증) — 지수·비율·위상 방식·seed 수·혼합 상수. 판 파일이 진실이고 계약 테스트가 대조한다
         axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO
                 + "|concaveExponent=" + CONCAVE_POWER_EXPONENT + "|concaveBoard=" + CONCAVE_BOARD + "|linkBoard=" + LINK_BOARD
                 + "|phaseIndependentBoards=" + PHASE_INDEPENDENT_BOARDS + "|phaseSeedCount=" + PHASE_SEED_COUNT
@@ -486,7 +486,7 @@ public final class BenchmarkRules {
      *
      * <p><b>왜 판정 규칙에 두는가.</b> 이 식이 다음 PR 의 성공 문턱이 읽을 값을 만든다. 서비스 안에 두면
      * 결과 코드와 같은 커밋에서 바뀔 수 있어 "문턱을 결과보다 먼저 등록했다"는 주장이 식에는 걸리지 않는다.
-     * 여기 두면 식 자체가 사전 등록의 대상이 되고, 단위 시험이 짝 조건·분모·부호를 잠근다 — 분모를 이 행의
+     * 여기 두면 식 자체가 사전 등록의 대상이 되고, 단위 테스트가 짝 조건·분모·부호를 잠근다 — 분모를 이 행의
      * 전력으로 바꾸거나 부호를 뒤집거나 짝 조건을 지우면 판을 돌려 보기 전에 빨간불이 된다.</p>
      *
      * <p>짝 조건은 총량 열보다 <b>느슨하다</b>. 총량 열은 전 전략의 배치 건수가 같은 지점만 쓰지만 여기는
@@ -565,7 +565,7 @@ public final class BenchmarkRules {
      *
      * <p>상수 넷만 두면 "무엇을 무엇과 견주는가"가 사람의 기억에 남고, 기억은 결과를 본 뒤에 바뀐다.
      * 교집합을 먼저 잡는 것·중앙값을 같은 집합에서 내는 것·축소의 부호·불일치의 처리를 여기 적어 두고,
-     * 계약 시험이 이 문장에서 네 조각이 사라지지 않게 지킨다.</p>
+     * 계약 테스트가 이 문장에서 네 조각이 사라지지 않게 지킨다.</p>
      */
     public static final String GAP_JUDGMENT_RULE =
             "격차 판정 규칙. 판정 셀은 JUDGMENT_BOARD·JUDGMENT_LOAD_RATIO·JUDGMENT_POWER_CONTROL 로 정해지며, "
@@ -630,7 +630,7 @@ public final class BenchmarkRules {
                     + "사전 추정을 적을 때는 산출 방법(해석적 추정인지 변경 코드 실행값인지)을 함께 적는다.";
 
 
-    // ── 판정 계산 함수 — 규칙 문장의 1~4항을 식으로. 축 성분이 아니라 다이제스트는 불변이고, 단위 시험이 경계값을 잠근다 ──
+    // ── 판정 계산 함수 — 규칙 문장의 1~4항을 식으로. 축 성분이 아니라 다이제스트는 불변이고, 단위 테스트가 경계값을 잠근다 ──
 
     /** 격차 판정의 결말 — 판정 불가는 성공도 실패도 아니다. */
     public enum GapOutcome { UNJUDGEABLE, PASS, FAIL }
@@ -752,7 +752,7 @@ public final class BenchmarkRules {
         return new PairedDifference(diffs.size(), excludedA, excludedB, median(diffs));
     }
 
-    /** null 을 뺀 값들의 중앙값을 응답과 같은 4자리 반올림으로. 비면 null. 시험의 손 구현을 대신하는 단일 정의다. */
+    /** null 을 뺀 값들의 중앙값을 응답과 같은 4자리 반올림으로. 비면 null. 테스트의 손 구현을 대신하는 단일 정의다. */
     public static Double median(List<Double> values) {
         List<Double> sorted = values.stream().filter(java.util.Objects::nonNull).sorted().toList();
         if (sorted.isEmpty()) return null;
@@ -825,7 +825,7 @@ public final class BenchmarkRules {
      * 등록된 판 전부에서 실측한 {@code PowerModel.realMarginalPower} 의 <b>최댓값(W)</b>.
      *
      * <p>등록된 판 전부 × 12지점 × 전 노드 × 두 워크로드 파일이 쓰는 요구 코어 집합을 모두 훑어 잰 값이다.
-     * 계약 시험이 이 수를 실측과 대조하므로, 판이나 생성식이 바뀌면 시험이 먼저 빨간불이 된다.</p>
+     * 계약 테스트가 이 수를 실측과 대조하므로, 판이나 생성식이 바뀌면 테스트가 먼저 빨간불이 된다.</p>
      *
      * <p><b>무엇을 위한 수인가</b> — 한계 전력 점수의 분모를 노드 정격에서 고정 W 눈금 S 로 바꿀 때,
      * {@code S} 가 이 값보다 작으면 판에서 {@code realMarginalPower > S} 인 지점이 생겨 점수가 0 으로

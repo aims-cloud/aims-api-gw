@@ -62,7 +62,7 @@ public class ExporterInstanceResolver {
         this.properties = properties;
     }
 
-    /** 원장 없이 조립하는 형태(시험) — 호스트명 일치와 그대로만 쓴다. */
+    /** 원장 없이 조립하는 형태(테스트) — 호스트명 일치와 그대로만 쓴다. */
     public ExporterInstanceResolver(SchedulerMetricsGateway metrics, MetricsQueryGuard guard, SchedulerProperties properties) {
         this(null, metrics, guard, properties);
     }

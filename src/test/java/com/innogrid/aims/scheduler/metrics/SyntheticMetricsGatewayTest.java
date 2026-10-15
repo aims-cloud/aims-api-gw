@@ -173,7 +173,7 @@ class SyntheticMetricsGatewayTest {
         double max = val(gw.queryResults("max_over_time(" + selector + "[24h])").get(0));
         double count = val(gw.queryResults("count_over_time(" + selector + "[24h])").get(0));
 
-        // 감싼 함수를 무시하면 넷이 전부 순간값과 같아진다 — 시험은 초록불인데 값이 틀리는 자리다.
+        // 감싼 함수를 무시하면 넷이 전부 순간값과 같아진다 — 테스트는 초록불인데 값이 틀리는 자리다.
         assertTrue(min < max, "창 안에서 전력이 움직여야 구간 집계에 뜻이 있다");
         assertTrue(min <= avg && avg <= max);
         assertEquals(24 * 60 + 1, count, "24시간을 1분 눈금으로 뜨면 표본은 1441개다");

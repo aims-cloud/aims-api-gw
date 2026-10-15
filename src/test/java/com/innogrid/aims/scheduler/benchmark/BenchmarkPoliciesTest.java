@@ -102,7 +102,7 @@ class BenchmarkPoliciesTest {
 
     /**
      * 모든 필드를 <b>기본값과 다른</b> 값으로 채운 정책.
-     * 기본값을 그대로 두면 옮기지 않아도 시험이 통과해 버린다.
+     * 기본값을 그대로 두면 옮기지 않아도 테스트가 통과해 버린다.
      */
     private static SchedulingPolicy distinctive() {
         SchedulingPolicy policy = new SchedulingPolicy("원본정책", "사본 시험용");

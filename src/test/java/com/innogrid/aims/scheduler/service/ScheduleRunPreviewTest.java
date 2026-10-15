@@ -60,7 +60,7 @@ class ScheduleRunPreviewTest {
         // 트랜잭션 안에서 INSERT 가 DELETE 보다 먼저 나가면 같은 이름 저장이 유니크에 걸린다 — 삭제를 즉시 반영한다.
         policyRepository.deleteAll();
         policyRepository.flush();
-        // 시험 환경에는 메트릭 저장소가 없다 — 실제 실행이 부르는 수집은 빈 스냅샷으로 답한다(미리보기는 부르지 않아야 한다)
+        // 테스트 환경에는 메트릭 저장소가 없다 — 실제 실행이 부르는 수집은 빈 스냅샷으로 답한다(미리보기는 부르지 않아야 한다)
         when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(), List.of()));
     }
 

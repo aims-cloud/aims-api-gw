@@ -252,7 +252,7 @@ public class Workload {
          * <p>배치된(SCHEDULED)·실행 중(RUNNING) 워크로드는 행 자체가 노드 예약 장부라 요구량을 바꾸면 재배치 없이 장부만
          * 어긋나고, 실행 계층이 받은 요구와도 달라진다. 완료(COMPLETED)는 무엇을 돌렸는지의 유일한 기록이다(배치 이력은
          * 요구량을 저장하지 않는다). 엔티티가 아니라 열거형에 둔다 — 엔티티에 {@code isX} 를 더하면 엔티티 직렬화 키가 늘어
-         * 응답 DTO 동등성 시험({@code ResponseDtoEquivalenceTest})이 깨진다.</p>
+         * 응답 DTO 동등성 테스트({@code ResponseDtoEquivalenceTest})가 깨진다.</p>
          */
         public boolean isEditable() {
             return this == PENDING || this == FAILED;

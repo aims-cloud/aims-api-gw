@@ -194,11 +194,11 @@ public class BenchmarkClusters {
     }
 
     /**
-     * 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 시험이 같은 식으로 기대값을 만든다.
+     * 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 테스트가 같은 식으로 기대값을 만든다.
      *
      * <p><b>정규화 대상은 {@code \r\n} 개행만이다.</b> UTF-8 BOM·단독 {@code \r}·파일 끝 개행 유무는 내용의 일부로
      * 해시된다 — 등록된 판 파일 전부는 BOM 없음·단독 CR 없음·끝 개행 1개다(수는 등록부가 진실이라 여기 적지 않는다). BOM 을 붙이는 편집기로 저장하면 값이
-     * 조용히 바뀌므로 리터럴 시험이 그것을 잡는다.</p>
+     * 조용히 바뀌므로 리터럴 테스트가 그것을 잡는다.</p>
      */
     public static String digestOfContent(byte[] fileBytes) {
         String normalized = new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8).replace("\r\n", "\n");

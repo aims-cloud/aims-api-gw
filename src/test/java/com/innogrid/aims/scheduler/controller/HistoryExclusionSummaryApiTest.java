@@ -37,8 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>합계와 페이징은 같은 조건식을 쓴다 — 그래서 "응답의 창을 그대로 넘긴 같은 필터의 {@code exclusionCode=CODE} 총건수 ==
  * {@code codes[CODE].decisions}" 가 이 스위트의 오라클이다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징(LIKE)에는 걸리고 합계에서는
- * {@code skipped} 로 빠지므로 그 차이도 함께 고정한다. 시드는 이 시험 전용 워크로드 id 로만 심고, {@code createdAt} 은
- * {@code @PrePersist} 가 덮어쓰므로 창 시험은 JPQL 일괄 갱신으로 과거로 옮긴다.</p>
+ * {@code skipped} 로 빠지므로 그 차이도 함께 고정한다. 시드는 이 테스트 전용 워크로드 id 로만 심고, {@code createdAt} 은
+ * {@code @PrePersist} 가 덮어쓰므로 창 테스트는 JPQL 일괄 갱신으로 과거로 옮긴다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -49,7 +49,7 @@ class HistoryExclusionSummaryApiTest {
     private static final String PAGE = "/api/v1/scheduler/history/page";
     private static final Set<String> SUMMARY_FIELDS = new TreeSet<>(Set.of("from", "to", "decisions", "withExclusions", "skipped", "codes"));
     private static final Set<String> CODE_FIELDS = new TreeSet<>(Set.of("decisions", "candidates"));
-    /** 이 시험 전용 — 다른 이력 시험의 9_900_00x 대역과 겹치지 않는다. */
+    /** 이 테스트 전용 — 다른 이력 테스트의 9_900_00x 대역과 겹치지 않는다. */
     private static final long WORKLOAD_F = 9_900_006L;
     private static final String W = String.valueOf(WORKLOAD_F);
 
@@ -217,7 +217,7 @@ class HistoryExclusionSummaryApiTest {
         return data(req);
     }
 
-    /** 이 시험 워크로드에 코드·창 필터(와 추가 파라미터 쌍)를 건 페이징 총건수 — null 인 인자는 붙이지 않는다. */
+    /** 이 테스트 워크로드에 코드·창 필터(와 추가 파라미터 쌍)를 건 페이징 총건수 — null 인 인자는 붙이지 않는다. */
     private long pageTotal(String code, String from, String to, String... extraPairs) throws Exception {
         var req = get(PAGE).param("size", "1").param("workloadId", W);
         if (code != null) req = req.param("exclusionCode", code);

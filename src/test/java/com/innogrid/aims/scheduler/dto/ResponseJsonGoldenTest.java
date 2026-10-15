@@ -72,7 +72,7 @@ public class ResponseJsonGoldenTest {
             "reservedCpu", "reservedMemoryMb", "reservedGpu", "reservedDiskGb", "thermalState", "powerSource",
             "availableCpu", "availableMemoryMb", "availableGpu", "availableDiskGb");
 
-    /** 키 집합 — 순서 목록에서 만든다(중복이 있으면 크기가 달라 순서 시험에서 잡힌다). */
+    /** 키 집합 — 순서 목록에서 만든다(중복이 있으면 크기가 달라 순서 테스트에서 잡힌다). */
     public static final Set<String> WORKLOAD_FIELDS = new TreeSet<>(WORKLOAD_ORDER);
     public static final Set<String> HISTORY_FIELDS = new TreeSet<>(HISTORY_ORDER);
     public static final Set<String> POLICY_FIELDS = new TreeSet<>(POLICY_ORDER);

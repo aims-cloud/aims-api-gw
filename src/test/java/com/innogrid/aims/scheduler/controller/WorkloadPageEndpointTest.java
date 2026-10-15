@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * {@code GET /scheduler/workloads/page} — 총건수·필터·정렬·동률·페이지 경계, 그리고 기존 {@code /workloads} 배열이 그대로인가.
  *
- * <p>시드 8건은 {@code wp-} 접두어로 심고 {@code keyword} 로 격리한다(다른 시험의 워크로드와 섞이지 않게).
+ * <p>시드 8건은 {@code wp-} 접두어로 심고 {@code keyword} 로 격리한다(다른 테스트의 워크로드와 섞이지 않게).
  * 종류가 비어 있는 행 2건은 {@code resourceType=VM} 이 옛 행을 포함하는 규칙을, 이름에 {@code _}·{@code %} 가 든 행은
  * LIKE 이스케이프를 고정한다.</p>
  */

@@ -192,6 +192,12 @@ public class ConsolidationService {
                         workloads.size(), cost, idle, net));
     }
 
+    /** 예산 원장을 잇지 않는 형태 — MDC 총량 제약이 없던 때와 같다(기존 호출 경로). */
+    PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
+                                    SchedulingPolicy policy, LinkMatrix links) {
+        return sandboxWithout(excluded, base, policy, links, MdcPowerBudgets.EMPTY);
+    }
+
     /**
      * 후보 노드를 제외한 배치 컨텍스트.
      *
@@ -199,12 +205,6 @@ public class ConsolidationService {
      * 판정에 섞이고, 조회용으로 나간 객체까지 오염된다. 메트릭을 다시 수집하지 않는 이유는
      * {@link NodeResource#snapshot()} 주석에 적었다.</p>
      */
-    /** 예산 원장을 잇지 않는 형태 — MDC 총량 제약이 없던 때와 같다(기존 호출 경로). */
-    PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
-                                    SchedulingPolicy policy, LinkMatrix links) {
-        return sandboxWithout(excluded, base, policy, links, MdcPowerBudgets.EMPTY);
-    }
-
     PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
                                     SchedulingPolicy policy, LinkMatrix links, MdcPowerBudgets budgets) {
         List<NodeResource> others = base.stream()

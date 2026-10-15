@@ -51,8 +51,6 @@ public class PowerEfficiencyService {
     private static final double LOW_UTILIZATION_PERCENT = 30.0;
     private static final double LOW_HEADROOM_PERCENT = 20.0;
 
-    /** {@code 30s}·{@code 5m}·{@code 1h}·{@code 1d} 형식. */
-
     private final SchedulingService schedulingService;
     private final PowerModel powerModel;
     private final SchedulerMetricsGateway metricsClient;

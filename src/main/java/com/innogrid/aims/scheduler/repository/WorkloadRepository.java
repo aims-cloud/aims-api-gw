@@ -49,17 +49,11 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
             @Param("retryableBefore") OffsetDateTime retryableBefore);
 
     /**
-     * 재시도 상한에 걸려 대상에서 빠진 워크로드 수.
-     * 실행 결과 메시지에 함께 적어, 대상 0건이 "할 일이 없어서"인지
-     * "전부 소진되어서"인지 구분할 수 있게 한다.
-     */
-    /**
      * 재시도 상한에 걸려 대상에서 빠진 워크로드. 일괄 재개가 되살릴 후보다.
      *
      * <p>리소스 종류와 기간은 <b>선택</b>이지만 호출부가 둘 중 하나는 반드시 준다 — 조건 없는
      * 전체 일괄은 실수로 수백 건을 되살리는 사고 경로라 서비스에서 막는다.</p>
-     */
-    /**
+     *
      * <p><b>널 파라미터를 쓰지 않는다.</b> {@code (:from is null or ...)} 형태는 H2 에서는 통과하지만
      * PostgreSQL 이 "could not determine data type of parameter" 로 거절한다 — 값이 없는 자리의 타입을
      * 추론할 수 없기 때문이다. 그래서 호출부가 경계값과 깃발을 채워 넘기고, 여기서는 전부
@@ -107,6 +101,11 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
             @Param("maxRetryCount") int maxRetryCount,
             @Param("retryableBefore") OffsetDateTime retryableBefore);
 
+    /**
+     * 재시도 상한에 걸려 대상에서 빠진 워크로드 수.
+     * 실행 결과 메시지에 함께 적어, 대상 0건이 "할 일이 없어서"인지
+     * "전부 소진되어서"인지 구분할 수 있게 한다.
+     */
     @Query("""
            select count(w) from Workload w
             where w.status = :status

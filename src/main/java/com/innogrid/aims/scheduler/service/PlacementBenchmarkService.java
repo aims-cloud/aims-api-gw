@@ -723,7 +723,7 @@ public class PlacementBenchmarkService {
             "총전력 격차 열은 이 행과 기준 전략 둘의 건수만 맞으면 내므로 이 셀에서도 값이 있을 수 있다";
 
     /**
-     * 총량 지표를 몇 곳에서 냈는지 밝히는 문장. 셀에 실어 두면 "몇 곳의 중앙값" 이라는 사실이 숫자와
+     * 총량·온도 분포 지표를 몇 곳에서 냈는지 밝히는 문장. 셀에 실어 두면 "몇 곳의 중앙값" 이라는 사실이 숫자와
      * 같은 자리에서 읽힌다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.
      */
     private static String pairingNote(int usable, int total, Map<String, Integer> mismatchExample) {
@@ -791,8 +791,8 @@ public class PlacementBenchmarkService {
      * 길이 불변식이 조용히 깨지는 것을 막는 자리다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
      * 성립하지 않는다 — 짝이 아닌 지점이 몇 번째였는지가 응답에 남아야 한다.</p>
      *
-     * <p>응답만 보고는 이 성질을 확인할 수 없어 같은 패키지의 테스트가 직접 부른다. 길이·표본 수·중앙값은
-     * 값을 앞으로 당겨 모아도 그대로라서, 정렬이 깨진 것을 응답 수준 단언이 잡지 못한다.</p>
+     * <p>응답 수준 테스트는 빈 자리 뒤에 값이 남는 행이 있는지만 센다. 빈 자리가 제자리에 남는지는 같은 패키지의 테스트가
+     * 이 메서드를 직접 불러 확인한다 — 길이·표본 수·중앙값은 값을 앞으로 당겨 모아도 그대로라 그 셋으로는 잡지 못한다.</p>
      */
     static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
         List<Double> series = new ArrayList<>(Math.max(raw.size(), sweepPoints));

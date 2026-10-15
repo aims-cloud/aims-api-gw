@@ -46,11 +46,6 @@ public class ScheduleActorResolver {
         return new Actor(email, name);
     }
 
-    /** 러너가 쓰는 고정 주체. */
-    public Actor system() {
-        return Actor.system();
-    }
-
     /**
      * @param email 로그인 계정. 화면에는 이름과 조합해 "이름(email)" 로 표시한다
      * @param name  조회 시점의 사용자 이름. 원장에 없으면 null

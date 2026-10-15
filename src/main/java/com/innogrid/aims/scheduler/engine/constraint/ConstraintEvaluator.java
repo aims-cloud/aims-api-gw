@@ -166,11 +166,6 @@ public class ConstraintEvaluator {
                 .orElse(null);
     }
 
-    /** 배치 가능 여부. */
-    public boolean isEligible(Workload workload, NodeResource node, PlacementContext ctx) {
-        return exclusion(workload, node, ctx) == null;
-    }
-
     // ── C1 디스크 검사의 표기 — 판정을 바꾸지 않고 "검사가 적용됐는가" 만 밖으로 낸다 ────────────────
 
     /** 후보 상세 키. 워크로드가 디스크를 요구할 때만 붙는다 — 요구가 없는 배치의 키 집합은 그대로다. */

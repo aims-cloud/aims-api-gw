@@ -133,11 +133,6 @@ public class MetricsQueryGuard {
         return out;
     }
 
-    /** 지금 붙잡힌(실행 중) 스레드 수. 포화 판단과 테스트에 쓴다. */
-    public int activeCount() {
-        return pool.getActiveCount();
-    }
-
     public int parallelism() {
         return pool.getMaximumPoolSize();
     }

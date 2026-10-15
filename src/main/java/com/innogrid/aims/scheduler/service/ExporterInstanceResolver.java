@@ -80,11 +80,6 @@ public class ExporterInstanceResolver {
         return ExporterInstances.of(ledger(), dcgmSeen, ipmiSeen);
     }
 
-    /** 발견 질의로 두 집합을 채워 해석기를 만든다. 수집기와 단일 노드 추세가 쓴다. */
-    public ExporterInstances discover() {
-        return resolve(discoverGpuCounts().keySet(), discoverIpmiInstances());
-    }
-
     /**
      * 노드별 GPU 개수 — <b>키는 DCGM 시리즈의 instance</b>. DCGM exporter 가 없으면 빈 맵이고 GPU 요구 워크로드는
      * 배치되지 않는다. 수집기가 GPU 개수와 DCGM 발견을 한 질의로 겸하려고 여기 둔다.

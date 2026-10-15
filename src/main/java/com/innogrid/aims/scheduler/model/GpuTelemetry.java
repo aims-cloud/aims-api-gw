@@ -24,9 +24,4 @@ public record GpuTelemetry(double usagePercent, double temperatureCelsius, doubl
     private static double finite(double v) {
         return Double.isFinite(v) && v > 0 ? v : 0;
     }
-
-    /** 셋 다 0 — 시리즈가 없었다. */
-    public boolean isEmpty() {
-        return usagePercent <= 0 && temperatureCelsius <= 0 && powerWatts <= 0;
-    }
 }

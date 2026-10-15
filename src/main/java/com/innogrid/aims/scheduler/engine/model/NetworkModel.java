@@ -83,11 +83,6 @@ public class NetworkModel {
         return 1.0 / (1.0 + loadMbps / REFERENCE_MBPS);
     }
 
-    /** 요구 대역폭 없이 보는 링크 비용 — 부족분 항이 0 이라 이 항이 생기기 전과 같다. 엔진은 이 자리를 쓰지 않는다. */
-    public double linkCost(LinkMatrix.Quality q) {
-        return linkCost(q, null);
-    }
-
     /**
      * 링크 하나의 비용. 지연은 기준(ms)으로 정규화해 1 에서 자르고, 손실률·DEGRADED 가산에 대역폭 부족분을 더한다.
      *

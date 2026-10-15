@@ -34,7 +34,7 @@ import static org.mockito.Mockito.*;
  */
 class PlacementHistoryScoreTest {
 
-    /** 기본 정책의 가중치 — 아래 불변식 단언에 쓴다. */
+    /** 기본 정책의 가중치 — 아래 불변식 확인에 쓴다. */
     private static final double CPU_W = 0.25, MEM_W = 0.25, PWR_W = 0.20, TEMP_W = 0.15, NET_W = 0.15;
 
     private final WorkloadRepository workloadRepository = mock(WorkloadRepository.class);

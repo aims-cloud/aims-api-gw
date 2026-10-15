@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WithMockUser
 class HistoryReturnLimitTest {
 
-    /** {@code SchedulerController.HISTORY_MAX} 와 같아야 한다. 다르면 아래 단언이 실패한다. */
+    /** {@code SchedulerController.HISTORY_MAX} 와 같아야 한다. 다르면 아래 확인이 실패한다. */
     private static final int EXPECTED_LIMIT = 1000;
     /** 상한을 넘겼다는 것과 "최신이 남는다"를 함께 보기 위해 상한보다 이만큼 더 심는다. */
     private static final int EXTRA = 5;

@@ -248,7 +248,7 @@ class ScheduleRunListFilterApiTest {
         clean(s.scheduleId(), s.runIds());
     }
 
-    /** 심은 실행 행을 지우고 스케줄을 지운다(스케줄 삭제도 실행 행을 지우지만 시드 실패 경로와 대칭으로 명시). 정리는 단언하지 않는다. */
+    /** 심은 실행 행을 지우고 스케줄을 지운다(스케줄 삭제도 실행 행을 지우지만 시드 실패 경로와 대칭으로 명시). 정리는 확인하지 않는다. */
     private void clean(long scheduleId, List<Long> runIds) throws Exception {
         runRepository.deleteAllById(runIds);
         mockMvc.perform(delete(BASE).param("ids", String.valueOf(scheduleId)));

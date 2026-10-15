@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * convex-misrated   bdbbfd0f5b06      d199d46fa3b0
  * </pre>
  *
- * <p><b>리터럴은 판 파일 바이트에 묶여 있다 — 의도다.</b> 판 파일을 한 글자라도 고치면(주석 문구 포함) 해당 단언이
+ * <p><b>리터럴은 판 파일 바이트에 묶여 있다 — 의도다.</b> 판 파일을 한 글자라도 고치면(주석 문구 포함) 해당 조건이
  * 깨진다. 그때는 (1) 새 값으로 리터럴을 갱신하고 (2) 계약 문서 §10 에 옛→새 행을 추가하고 (3) 커밋 메시지에 판 이름을
  * 적는다. 판을 바꾸면 눈에 보이게 하려는 장치이므로 리터럴만 조용히 고치지 않는다.</p>
  */
@@ -56,7 +56,7 @@ class BenchmarkBoardDigestEolTest {
     @DisplayName("CRLF 와 LF 로 적은 같은 내용은 파일·OS 와 무관하게 같은 다이제스트다")
     @Test
     void crlf_and_lf_content_digest_alike_regardless_of_checkout() {
-        // LF 체크아웃(Linux·CI)에서는 판 파일이 이미 LF 라 리터럴 테스트가 정규화 회귀를 못 잡는다 — 이 단언이 OS 무관 가드다
+        // LF 체크아웃(Linux·CI)에서는 판 파일이 이미 LF 라 리터럴 테스트가 정규화 회귀를 못 잡는다 — 이 확인이 OS 무관 가드다
         byte[] lf = "name: x\nnodes:\n  - { mdcId: a }\n".getBytes(StandardCharsets.UTF_8);
         byte[] crlf = "name: x\r\nnodes:\r\n  - { mdcId: a }\r\n".getBytes(StandardCharsets.UTF_8);
         assertEquals(BenchmarkClusters.digestOfContent(lf), BenchmarkClusters.digestOfContent(crlf));

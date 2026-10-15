@@ -23,11 +23,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 부르므로 MockMvc 에서는 똑같이 400 으로 보인다. 차이는 <b>본문</b>이다 — 기본 처리는 본문을 비우고,
  * 배포 환경에서는 그 뒤 {@code /error} 재요청이 인증에 막혀 클라이언트가 <b>403(본문 없음)</b> 을 받는다.
  * 실제로 배포본에서 {@code /workloads/abc/history}·{@code ?from=not-a-date}·{@code ?enabled=maybe} 가
- * 모두 403 이었다. 그래서 여기서는 {@code $.success} 와 <b>사유 문구</b>까지 단언한다 —
+ * 모두 403 이었다. 그래서 여기서는 {@code $.success} 와 <b>사유 문구</b>까지 확인한다 —
  * {@code ApiResponse.error} 만이 그 필드를 만들기 때문에, 그것이 보이면 핸들러를 탄 것이다.</p>
  *
  * <p>사유에는 <b>어느 파라미터가 어떤 값 때문에</b> 걸렸는지가 있어야 한다. 고정 문구만 돌려주는 구현도
- * "400 + success=false" 는 만족시키므로, 그 두 조각을 함께 단언해야 실제로 쓸모 있는 사유임이 고정된다.</p>
+ * "400 + success=false" 는 만족시키므로, 그 두 조각을 함께 확인해야 실제로 쓸모 있는 사유임이 고정된다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

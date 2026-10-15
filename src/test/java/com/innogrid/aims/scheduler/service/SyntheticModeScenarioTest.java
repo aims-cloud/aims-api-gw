@@ -96,7 +96,7 @@ class SyntheticModeScenarioTest {
         assertEquals(8, eff.summary().totalNodes());
         assertEquals(5, eff.summary().evaluableNodes(), "IPMI 있는 노드만 평가 가능");
         assertTrue(eff.summary().gradeAvailable(), eff.summary().gradeUnavailableReason());
-        // 시각과 무관한 성질만 단언한다. "최저 PEI 는 언제나 busan-02" 는 여유 노드(busan-01)의 CPU 가 0 에 가까워지는
+        // 시각과 무관한 성질만 확인한다. "최저 PEI 는 언제나 busan-02" 는 여유 노드(busan-01)의 CPU 가 0 에 가까워지는
         // 구간(한 주기의 8.6%)에 뒤집힌다 — 일을 안 하는 노드의 PEI 도 0 에 가깝기 때문이다. 한 주기 전체를 훑어
         // 확인한 불변 성질은 metrics/SyntheticModeInvariantTest 에 있다.
         PowerEfficiencyResponse.NodeEfficiency idleHighPower = eff.nodes().stream()

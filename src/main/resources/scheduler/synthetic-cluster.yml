@@ -5,7 +5,7 @@
 # ipmi: false 인 노드는 전력·온도 메트릭이 없다(실환경의 미계측 노드). gpus 가 0 이면 DCGM 시리즈가 없다.
 # GPU 카드 한 장: 전력 = gpuIdleWatts + (gpuCapacityWatts − gpuIdleWatts) × 카드 사용률/100 · 온도 = gpuBaseTemperature + 0.4 × 카드 사용률.
 #   셋은 선택이고 기본값 60W · 300W · 35°C. 카드 사용률은 노드 CPU 곡선(+15%p)에 카드마다 상수 위상을 얹은 것이라 avg·max·sum 이 서로 다르다.
-#   GPU 시나리오 시험이 이 기본값 범위(카드 4장 = 240~1,200W, 온도 35°C 이상)를 단언한다 — 값을 바꾸면 그 시험도 함께 본다.
+#   GpuTelemetryScenarioTest 가 이 기본값 범위(카드 4장 = 240~1,200W, 온도 35°C 이상)를 확인한다 — 값을 바꾸면 그 테스트도 함께 고친다.
 # capacityWatts 는 전력값 생성에만 쓰인다 — 배치 엔진의 정격은 전력 사양 원장(/scheduler/node-power-specs) → 설정 capacityByNode → 기본값 순으로 온다.
 # 여기 값과 엔진의 정격을 맞추려면 시연 전에 원장에 같은 값을 넣는다(자동 주입하지 않는다 — 모의 데이터가 실데이터와 섞이면 안 되므로).
 # MDC 총량 상한은 MDC 전력 예산 원장(/scheduler/mdc-power-budgets)이 담당한다 — mdcId 를 키로 쓴다.

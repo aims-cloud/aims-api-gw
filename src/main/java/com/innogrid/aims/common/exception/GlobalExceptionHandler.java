@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 @RestControllerAdvice
@@ -35,6 +36,17 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(status)
                 .body(ApiResponse.error(message));
+    }
+
+    /**
+     * 외부 연동 서버(Thanos·Tumblebug·Spider 등)에 연결하지 못함(연결 거부·시간 초과) — 응답 자체가 없으므로 503.
+     * 응답이 온 오류는 {@link #handleUpstreamError} 가 502 로 처리한다. 원인에는 내부 주소가 들어 있어 로그에만 남긴다.
+     */
+    @ExceptionHandler(ResourceAccessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUpstreamUnreachable(ResourceAccessException ex) {
+        log.warn("Upstream unreachable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("외부 연동 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."));
     }
 
     private static String extractUpstreamMessage(RestClientResponseException ex) {

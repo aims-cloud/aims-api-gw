@@ -12,13 +12,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.client.ResourceAccessException;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 2단계 계약 — allocationTypes·기간 파라미터 전달, GPU 단위 분포 경로, 필터 목록 ?role=, 시계열 기간 생략 허용. */
+/** 2단계 계약 — allocationTypes·기간 파라미터 전달, GPU 단위 분포 경로, 필터 목록 ?role=, 시계열 기간 생략 허용, Thanos 연결 실패 503. */
 class GpuDashboardControllerTest {
 
     GpuDashboardService service = mock(GpuDashboardService.class);
@@ -53,5 +54,14 @@ class GpuDashboardControllerTest {
         mvc.perform(get(base + "/trends/gpus").param("metric", "GPU_UTILIZATION"))
                 .andExpect(status().isOk());                                 // 기간 생략 = 최근 1시간
         verify(service).getTrends(any(), eq(GpuMetric.GPU_UTILIZATION), eq(5), isNull(), isNull(), eq(false));
+    }
+
+    @Test void thanosUnreachableIs503InCommonResponseWithoutInternalAddress() throws Exception {
+        when(service.getSummary(any(), any(), any())).thenThrow(new ResourceAccessException(
+                "I/O error on GET request for \"http://10.0.0.5:19192/api/v1/query\": Connection refused"));
+        mvc.perform(get(base + "/summary"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("외부 연동 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."));
     }
 }

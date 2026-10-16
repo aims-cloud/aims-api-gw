@@ -194,6 +194,19 @@ class GpuDashboardLiveTest {
                 eq(now.minusSeconds(3600)), eq(now), eq("60s"));             // 1시간/60
     }
 
+    @Test void gpuTrendsSkipNonNumericSamplesInsteadOfPassingThemThrough() {
+        // VRAM 사용률 = used / (used + free) — 분모가 0 이면 Thanos 가 "NaN" 을 준다
+        Map<String, Object> rangeA = Map.of("metric", Map.of("instance", "10.0.0.11:9400", "UUID", "GPU-a", "gpu", "0"),
+                "values", List.of(List.of(1759719600, "75"), List.of(1759719660, "NaN"), List.of(1759719720, "+Inf"),
+                        List.of(1759719780, "abc"), List.of(1759719840, "80")));
+        when(metrics.queryRangeResults(anyString(), any(), any(), anyString())).thenReturn(List.of(rangeA));
+
+        List<GpuTrendResponse> trends = service.getTrends(all, GpuMetric.VRAM_UTILIZATION, 1, null, null, false);
+        assertThat(trends).extracting(GpuTrendResponse::id).containsExactly("GPU-a");
+        assertThat(trends.get(0).dataPoints()).extracting(GpuTrendResponse.DataPoint::value)
+                .containsExactly(75.0, 80.0);                                     // 비수치 시점만 빈다
+    }
+
     @Test void invalidWindowIs400() {
         OffsetDateTime t = OffsetDateTime.parse("2026-10-06T00:00:00Z");
         assertThatThrownBy(() -> service.getSummary(all, t, t)).isInstanceOf(BusinessException.class);

@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import com.innogrid.aims.dashboard.GpuDashboardProperties;
 import com.innogrid.aims.dashboard.model.GpuWindow;
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import org.springframework.stereotype.Component;
 
@@ -110,25 +111,15 @@ public class DcgmSnapshotLoader {
         return new DcgmSnapshot(result, Set.copyOf(collecting), now);
     }
 
-    @SuppressWarnings("unchecked")
     private void merge(Map<String, Builder> units, String promQl, Instant at, BiConsumer<Builder, Double> setter) {
         for (Map<String, Object> row : metrics.queryResultsAt(promQl, at)) {
-            Map<String, String> labels = (Map<String, String>) row.getOrDefault("metric", Map.of());
-            List<Object> value = (List<Object>) row.get("value");
-            if (value == null || value.size() < 2) {
+            Double value = ThanosResults.value(row);    // 없거나 NaN·±Inf·비수치면 미수집
+            if (value == null) {
                 continue;
             }
-            double parsed;
-            try {
-                parsed = Double.parseDouble(value.get(1).toString());
-            } catch (NumberFormatException e) {
-                continue;
-            }
-            if (Double.isNaN(parsed)) {
-                continue;
-            }
+            Map<String, String> labels = ThanosResults.labels(row);
             Builder builder = units.computeIfAbsent(unitId(labels), id -> new Builder(id, labels));
-            setter.accept(builder, parsed);
+            setter.accept(builder, value);
         }
     }
 

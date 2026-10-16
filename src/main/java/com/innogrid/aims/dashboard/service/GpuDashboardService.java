@@ -40,6 +40,7 @@ import com.innogrid.aims.dashboard.service.DcgmSnapshotLoader.DcgmUnit;
 import com.innogrid.aims.dashboard.service.GpuNodeScopeService.GpuNode;
 import com.innogrid.aims.dashboard.service.GpuNodeScopeService.GpuNodeScope;
 import com.innogrid.aims.mock.MockDataProvider;
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import org.springframework.stereotype.Service;
 
@@ -347,15 +348,14 @@ public class GpuDashboardService {
                 .map(result -> toLiveTrend(result, topIds, byVm)).filter(Objects::nonNull).toList();
     }
 
-    @SuppressWarnings("unchecked")
+    /** 시계열 1개 → 차트 행. NaN·±Inf·비수치 표본(예: VRAM 사용률의 0 나눗셈)은 그 시점만 비운다 */
     private GpuTrendResponse toLiveTrend(Map<String, Object> result, Set<String> topIds, boolean byVm) {
-        Map<String, String> labels = (Map<String, String>) result.getOrDefault("metric", Map.of());
+        Map<String, String> labels = ThanosResults.labels(result);
         String id = byVm ? labels.get("vm_id") : DcgmSnapshotLoader.unitId(labels);
         if (id == null || !topIds.contains(id)) return null;
-        List<List<Object>> raw = (List<List<Object>>) result.getOrDefault("values", List.of());
-        List<DataPoint> points = raw.stream().map(value -> new DataPoint(
-                OffsetDateTime.ofInstant(Instant.ofEpochSecond(((Number) value.get(0)).longValue()), ZoneOffset.UTC),
-                Double.parseDouble(value.get(1).toString()))).toList();
+        List<DataPoint> points = ThanosResults.values(result).stream().map(sample -> new DataPoint(
+                OffsetDateTime.ofInstant(Instant.ofEpochSecond(sample.epochSecond()), ZoneOffset.UTC),
+                sample.value())).toList();
         return new GpuTrendResponse(id, byVm ? labels.getOrDefault("vm_name", id) : DcgmSnapshotLoader.unitName(labels), points);
     }
 

@@ -1,11 +1,9 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.tree;
 
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse.Series;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
@@ -24,20 +22,18 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetrics
  */
 public final class GpuPanelAssembler {
 
-    private static final double MB_PER_GB = 1024.0;
-
     private GpuPanelAssembler() {}
 
     /** 개별 GPU 개요 KPI 카드 6종 — Util / VRAM Util / VRAM 사용·전체 / Power / 온도 / Fan. 지금 수집되지 않는 값은 null */
     public static GpuDeviceSummaryResponse deviceSummary(GpuSample gpu) {
         return new GpuDeviceSummaryResponse(
-                round1(gpu.utilization()),
-                round1(gpu.vramPercent()),
-                gb(gpu.fbUsedMb()),
-                gb(gpu.fbTotalMb()),
-                round1(gpu.powerWatts()),
-                round1(gpu.temperatureC()),
-                round1(gpu.fanSpeedPercent()));
+                MetricFormat.round1(gpu.utilization()),
+                MetricFormat.round1(gpu.vramPercent()),
+                MetricFormat.mbToGb(gpu.fbUsedMb()),
+                MetricFormat.mbToGb(gpu.fbTotalMb()),
+                MetricFormat.round1(gpu.powerWatts()),
+                MetricFormat.round1(gpu.temperatureC()),
+                MetricFormat.round1(gpu.fanSpeedPercent()));
     }
 
     /** 표본 목록에서 gpuId(UUID) 1장 — 최근 24시간 안에 수집된 적 없으면 404 */
@@ -65,17 +61,5 @@ public final class GpuPanelAssembler {
     /** "GPU {n}" 이름을 인덱스 숫자순으로 — "GPU 2" < "GPU 10". 인덱스가 없는 이름("GPU {UUID}")은 뒤에 문자열순 */
     public static int compareGpuName(String a, String b) {
         return HostGpuMetricsQueryService.compareIndex(a.substring("GPU ".length()), b.substring("GPU ".length()));
-    }
-
-    public static Double gb(Double mb) {
-        return mb == null ? null : round1(mb / MB_PER_GB);
-    }
-
-    public static Double round1(Double value) {
-        return value == null ? null : Math.round(value * 10) / 10.0;
-    }
-
-    public static OffsetDateTime toOffsetDateTime(Instant instant) {
-        return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 }

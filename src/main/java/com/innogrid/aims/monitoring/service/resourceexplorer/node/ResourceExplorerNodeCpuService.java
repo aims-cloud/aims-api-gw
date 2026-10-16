@@ -2,7 +2,6 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.node;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +10,7 @@ import java.util.regex.Pattern;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.ListSort;
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuDeviceListItemResponse;
@@ -83,7 +83,7 @@ public class ResourceExplorerNodeCpuService {
         }
 
         CpuInventory inventory = metrics.cpuInventory(selector);
-        OffsetDateTime collectedAt = toOffsetDateTime(inventory.collectedAt());
+        OffsetDateTime collectedAt = MetricFormat.toOffsetDateTime(inventory.collectedAt());
         List<CpuDeviceListItemResponse> rows = inventory.devices().stream()
                 .map(device -> row(device, collectedAt))
                 .sorted(comparator)
@@ -133,10 +133,6 @@ public class ResourceExplorerNodeCpuService {
         }
         Matcher matcher = BASE_CLOCK.matcher(model);
         return matcher.find() ? Double.parseDouble(matcher.group(1)) : null;
-    }
-
-    private static OffsetDateTime toOffsetDateTime(Instant instant) {
-        return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
 }

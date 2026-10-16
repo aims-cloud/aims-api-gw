@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -34,7 +35,6 @@ import org.springframework.stereotype.Component;
 public class HostCategoryMetricsQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(HostCategoryMetricsQueryService.class);
-    private static final double GB = 1024.0 * 1024 * 1024;
     private static final String RATE_WINDOW = "5m";
 
     /** CPU 목록 1행 — node_cpu_info 의 package(소켓) 단위 집계 */
@@ -85,15 +85,15 @@ public class HostCategoryMetricsQueryService {
         String total = "node_memory_MemTotal_bytes" + s.braces();
         String avail = "node_memory_MemAvailable_bytes" + s.braces();
         return switch (metric) {
-            case MEMORY_USED -> "(" + total + " - " + avail + ") / " + (long) GB;
+            case MEMORY_USED -> "(" + total + " - " + avail + ") / " + (long) MetricFormat.BYTES_PER_GB;
             case MEMORY_USED_PERCENT -> "(1 - " + avail + " / " + total + ") * 100";
-            case MEMORY_FREE -> "node_memory_MemFree_bytes" + s.braces() + " / " + (long) GB;
-            case MEMORY_AVAILABLE -> avail + " / " + (long) GB;
+            case MEMORY_FREE -> "node_memory_MemFree_bytes" + s.braces() + " / " + (long) MetricFormat.BYTES_PER_GB;
+            case MEMORY_AVAILABLE -> avail + " / " + (long) MetricFormat.BYTES_PER_GB;
             case MEMORY_AVAILABLE_PERCENT -> avail + " / " + total + " * 100";
-            case MEMORY_TOTAL -> total + " / " + (long) GB;
-            case MEMORY_CACHED -> "node_memory_Cached_bytes" + s.braces() + " / " + (long) GB;
-            case MEMORY_BUFFERED -> "node_memory_Buffers_bytes" + s.braces() + " / " + (long) GB;
-            case MEMORY_SHARED -> "node_memory_Shmem_bytes" + s.braces() + " / " + (long) GB;
+            case MEMORY_TOTAL -> total + " / " + (long) MetricFormat.BYTES_PER_GB;
+            case MEMORY_CACHED -> "node_memory_Cached_bytes" + s.braces() + " / " + (long) MetricFormat.BYTES_PER_GB;
+            case MEMORY_BUFFERED -> "node_memory_Buffers_bytes" + s.braces() + " / " + (long) MetricFormat.BYTES_PER_GB;
+            case MEMORY_SHARED -> "node_memory_Shmem_bytes" + s.braces() + " / " + (long) MetricFormat.BYTES_PER_GB;
         };
     }
 
@@ -102,11 +102,11 @@ public class HostCategoryMetricsQueryService {
         String total = "node_memory_MemTotal_bytes" + s.braces();
         String avail = "node_memory_MemAvailable_bytes" + s.braces();
         return switch (metric) {
-            case MEMORY_USED -> "(" + total + " - " + avail + ") / " + (long) GB;
+            case MEMORY_USED -> "(" + total + " - " + avail + ") / " + (long) MetricFormat.BYTES_PER_GB;
             case MEMORY_USED_PERCENT -> "(1 - " + avail + " / " + total + ") * 100";
-            case MEMORY_FREE -> avail + " / " + (long) GB;
+            case MEMORY_FREE -> avail + " / " + (long) MetricFormat.BYTES_PER_GB;
             case MEMORY_FREE_PERCENT -> avail + " / " + total + " * 100";
-            case MEMORY_TOTAL -> total + " / " + (long) GB;
+            case MEMORY_TOTAL -> total + " / " + (long) MetricFormat.BYTES_PER_GB;
         };
     }
 
@@ -159,10 +159,10 @@ public class HostCategoryMetricsQueryService {
     public CpuSummaryResponse cpuSummary(MetricSelector s) {
         try {
             return new CpuSummaryResponse(
-                    round1(scalar(cpuUsedPercent(s, RATE_WINDOW))),
-                    round1(scalar(cpuModePercent(s, "iowait", RATE_WINDOW))),
-                    round1(scalar(cpuModePercent(s, "system", RATE_WINDOW))),
-                    round1(scalar(cpuModePercent(s, "steal", RATE_WINDOW))));
+                    MetricFormat.round1(scalar(cpuUsedPercent(s, RATE_WINDOW))),
+                    MetricFormat.round1(scalar(cpuModePercent(s, "iowait", RATE_WINDOW))),
+                    MetricFormat.round1(scalar(cpuModePercent(s, "system", RATE_WINDOW))),
+                    MetricFormat.round1(scalar(cpuModePercent(s, "steal", RATE_WINDOW))));
         } catch (RuntimeException e) {
             log.warn("Thanos CPU KPI 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
             return new CpuSummaryResponse(null, null, null, null);
@@ -259,7 +259,7 @@ public class HostCategoryMetricsQueryService {
             }
             List<DataPoint> points = new ArrayList<>();
             for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
-                points.add(new DataPoint(sample.epochSecond(), round1(sample.value())));
+                points.add(new DataPoint(sample.epochSecond(), MetricFormat.round1(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {
@@ -270,10 +270,6 @@ public class HostCategoryMetricsQueryService {
 
     private Double scalar(String query) {
         return ThanosResults.firstValue(client.queryResults(query));
-    }
-
-    private static Double round1(Double value) {
-        return HostDetailMetricsQueryService.round1(value);
     }
 
     private static int parseInt(Object raw) {

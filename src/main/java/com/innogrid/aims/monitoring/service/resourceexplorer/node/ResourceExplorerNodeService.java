@@ -11,6 +11,7 @@ import java.util.Map;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.ListSort;
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.infra.entity.Asset;
 import com.innogrid.aims.infra.repository.AssetRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
@@ -233,8 +234,8 @@ public class ResourceExplorerNodeService {
         if (usedGb == null || totalGb == null) {
             return null;
         }
-        double percent = totalGb <= 0 ? 0.0 : round1(usedGb / totalGb * 100);
-        return new CapacityMetricCard(percent, round1(totalGb - usedGb), totalGb);
+        double percent = totalGb <= 0 ? 0.0 : MetricFormat.round1(usedGb / totalGb * 100);
+        return new CapacityMetricCard(percent, MetricFormat.round1(totalGb - usedGb), totalGb);
     }
 
     private static long uptimeDays(Long bootTimeSeconds) {
@@ -246,10 +247,6 @@ public class ResourceExplorerNodeService {
 
     private static int zeroIfNull(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private static double round1(double value) {
-        return Math.round(value * 10) / 10.0;
     }
 
     private static OffsetDateTime now() {

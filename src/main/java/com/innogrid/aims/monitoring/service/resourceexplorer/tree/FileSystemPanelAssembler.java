@@ -1,8 +1,6 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.tree;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +8,7 @@ import java.util.Map;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.util.ListSort;
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemGroupSummaryResponse;
@@ -48,7 +47,6 @@ public final class FileSystemPanelAssembler {
 
     /** Near Full 판정 — 마운트 사용률이 이 값 이상이면 임박으로 센다 */
     public static final double NEAR_FULL_PERCENT = 90.0;
-    private static final double GB = 1024.0 * 1024 * 1024;
 
     private FileSystemPanelAssembler() {
     }
@@ -88,14 +86,14 @@ public final class FileSystemPanelAssembler {
         return new FileSystemGroupSummaryResponse(
                 mounts.size(),
                 nearFull,
-                maxUsedPercent == null ? 0.0 : round1(maxUsedPercent.usedPercent()),
+                maxUsedPercent == null ? 0.0 : MetricFormat.round1(maxUsedPercent.usedPercent()),
                 maxUsedPercent == null ? null : maxUsedPercent.mountPath(),
-                maxUsedBytes == null ? 0.0 : gb(maxUsedBytes.usedBytes()),
+                maxUsedBytes == null ? 0.0 : MetricFormat.bytesToGb(maxUsedBytes.usedBytes()),
                 maxUsedBytes == null ? null : maxUsedBytes.mountPath(),
-                gb(totalSize),
-                gb(totalUsed),
-                gb(totalFree),
-                round1(maxInode));
+                MetricFormat.bytesToGb(totalSize),
+                MetricFormat.bytesToGb(totalUsed),
+                MetricFormat.bytesToGb(totalFree),
+                MetricFormat.round1(maxInode));
     }
 
     /** 그룹 개요 File System 목록 — 마운트별 용량·사용률을 정렬해 페이징(1부터)한다 */
@@ -114,12 +112,12 @@ public final class FileSystemPanelAssembler {
     /** 개별 마운트 개요 KPI 카드 6종 — Total / Used % / Used / Free / Growth(24h) / Inode */
     public static FileSystemMountSummaryResponse mountSummary(MountUsage mount, Double growth24hGb) {
         return new FileSystemMountSummaryResponse(
-                gb(mount.sizeBytes()),
-                round1(mount.usedPercent()),
-                gb(mount.usedBytes()),
-                gb(mount.availBytes()),
-                round1(growth24hGb),
-                round1(mount.inodeUsagePercent()));
+                MetricFormat.bytesToGb(mount.sizeBytes()),
+                MetricFormat.round1(mount.usedPercent()),
+                MetricFormat.bytesToGb(mount.usedBytes()),
+                MetricFormat.bytesToGb(mount.availBytes()),
+                MetricFormat.round1(growth24hGb),
+                MetricFormat.round1(mount.inodeUsagePercent()));
     }
 
     /** 개별 마운트 정보 표 — 마운트 경로 / 종류 / 수집 상태 / 마지막 수집. 표본이 있는 마운트만 오므로 COLLECTING */
@@ -128,7 +126,7 @@ public final class FileSystemPanelAssembler {
                 mount.mountPath(),
                 mount.fsType(),
                 MonitoringStatus.COLLECTING.name(),
-                toOffsetDateTime(mount.collectedAt()));
+                MetricFormat.toOffsetDateTime(mount.collectedAt()));
     }
 
     /** 표본이 없는 마운트의 개요·정보 요청에 대한 404 */
@@ -154,28 +152,10 @@ public final class FileSystemPanelAssembler {
         return new FileSystemMountListItemResponse(
                 mount.mountPath(),
                 mount.fsType(),
-                gb(mount.sizeBytes()),
-                round1(mount.usedPercent()),
-                gb(mount.usedBytes()),
-                gb(mount.availBytes()),
-                round1(mount.inodeUsagePercent()));
-    }
-
-    // ── 단위 ────────────────────────────────────────────────────
-
-    private static double gb(double bytes) {
-        return Math.round(bytes / GB * 10) / 10.0;
-    }
-
-    private static double round1(double value) {
-        return Math.round(value * 10) / 10.0;
-    }
-
-    private static Double round1(Double value) {
-        return value == null ? null : round1(value.doubleValue());
-    }
-
-    private static OffsetDateTime toOffsetDateTime(Instant instant) {
-        return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
+                MetricFormat.bytesToGb(mount.sizeBytes()),
+                MetricFormat.round1(mount.usedPercent()),
+                MetricFormat.bytesToGb(mount.usedBytes()),
+                MetricFormat.bytesToGb(mount.availBytes()),
+                MetricFormat.round1(mount.inodeUsagePercent()));
     }
 }

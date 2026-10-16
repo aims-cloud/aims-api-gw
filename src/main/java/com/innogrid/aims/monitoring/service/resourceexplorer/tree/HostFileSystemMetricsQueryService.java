@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -28,7 +29,6 @@ import org.springframework.stereotype.Component;
 public class HostFileSystemMetricsQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(HostFileSystemMetricsQueryService.class);
-    private static final double GB = 1024.0 * 1024 * 1024;
     private static final String FS_FILTER = HostDetailMetricsQueryService.FS_FILTER;
     private static final String GROWTH_WINDOW = "24h";
 
@@ -91,16 +91,16 @@ public class HostFileSystemMetricsQueryService {
 
     /** 최근 24시간 사용량 증가분(GB) — size 는 상수이므로 avail 감소분이 사용량 증가분이다. 감소 시 음수 */
     static String growthGbQuery(MetricSelector s, String mountPath) {
-        return "-delta(node_filesystem_avail_bytes" + s.braces(mountMatchers(mountPath)) + "[" + GROWTH_WINDOW + "]) / " + (long) GB;
+        return "-delta(node_filesystem_avail_bytes" + s.braces(mountMatchers(mountPath)) + "[" + GROWTH_WINDOW + "]) / " + (long) MetricFormat.BYTES_PER_GB;
     }
 
     private static String query(FileSystemMetric metric, String size, String avail, String files, String filesFree) {
         return switch (metric) {
-            case FS_USED -> "(" + size + " - " + avail + ") / " + (long) GB;
+            case FS_USED -> "(" + size + " - " + avail + ") / " + (long) MetricFormat.BYTES_PER_GB;
             case FS_USED_PERCENT -> "(1 - " + avail + " / " + size + ") * 100";
-            case FS_FREE -> avail + " / " + (long) GB;
+            case FS_FREE -> avail + " / " + (long) MetricFormat.BYTES_PER_GB;
             case FS_FREE_PERCENT -> avail + " / " + size + " * 100";
-            case FS_TOTAL -> size + " / " + (long) GB;
+            case FS_TOTAL -> size + " / " + (long) MetricFormat.BYTES_PER_GB;
             case FS_INODE_USAGE_PERCENT -> "(1 - " + filesFree + " / " + files + ") * 100";
         };
     }
@@ -204,7 +204,7 @@ public class HostFileSystemMetricsQueryService {
             }
             List<DataPoint> points = new ArrayList<>();
             for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
-                points.add(new DataPoint(sample.epochSecond(), HostDetailMetricsQueryService.round1(sample.value())));
+                points.add(new DataPoint(sample.epochSecond(), MetricFormat.round1(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {

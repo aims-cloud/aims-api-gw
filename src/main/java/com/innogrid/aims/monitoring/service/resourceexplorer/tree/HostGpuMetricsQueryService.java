@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -283,7 +284,7 @@ public class HostGpuMetricsQueryService {
                 List<DataPoint> points = new ArrayList<>();
                 for (ThanosResults.Sample sample : ThanosResults.values(result)) {
                     points.add(new DataPoint(sample.epochSecond(),
-                            HostDetailMetricsQueryService.round1(sample.value())));
+                            MetricFormat.round1(sample.value())));
                 }
                 if (!points.isEmpty()) {
                     out.add(new GpuSeries(labels.get("UUID"), labels.get("gpu"), points));

@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -95,11 +96,11 @@ public class HostProcessMetricsQueryService {
             }
             states.sort(Comparator.comparing(StateCount::state));
             return new ProcessSummary(
-                    toInt(scalar(running(s))),
-                    toInt(scalar(blocked(s))),
-                    toInt(scalar(processes(s))),
-                    toInt(scalar(threads(s))),
-                    round2(scalar(forksPerSec(s, RATE_WINDOW))),
+                    MetricFormat.toInt(scalar(running(s))),
+                    MetricFormat.toInt(scalar(blocked(s))),
+                    MetricFormat.toInt(scalar(processes(s))),
+                    MetricFormat.toInt(scalar(threads(s))),
+                    MetricFormat.round2(scalar(forksPerSec(s, RATE_WINDOW))),
                     List.copyOf(states));
         } catch (RuntimeException e) {
             log.warn("Thanos Process KPI 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
@@ -119,7 +120,7 @@ public class HostProcessMetricsQueryService {
             List<DataPoint> points = new ArrayList<>();
             for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
                 Double value = sample.value();
-                points.add(new DataPoint(sample.epochSecond(), rate ? round2(value) : (double) Math.round(value)));
+                points.add(new DataPoint(sample.epochSecond(), rate ? MetricFormat.round2(value) : (double) Math.round(value)));
             }
             return points;
         } catch (RuntimeException e) {
@@ -132,13 +133,5 @@ public class HostProcessMetricsQueryService {
 
     private Double scalar(String query) {
         return ThanosResults.firstValue(client.queryResults(query));
-    }
-
-    private static Integer toInt(Double value) {
-        return value == null ? null : (int) Math.round(value);
-    }
-
-    private static Double round2(Double value) {
-        return value == null ? null : Math.round(value * 100) / 100.0;
     }
 }

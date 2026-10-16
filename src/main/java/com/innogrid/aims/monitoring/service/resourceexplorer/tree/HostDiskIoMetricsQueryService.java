@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -130,7 +131,7 @@ public class HostDiskIoMetricsQueryService {
             }
             List<DataPoint> points = new ArrayList<>();
             for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
-                points.add(new DataPoint(sample.epochSecond(), round2(sample.value())));
+                points.add(new DataPoint(sample.epochSecond(), MetricFormat.round2(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {
@@ -152,9 +153,5 @@ public class HostDiskIoMetricsQueryService {
             }
         }
         return values;
-    }
-
-    static Double round2(Double value) {
-        return value == null ? null : Math.round(value * 100) / 100.0;
     }
 }

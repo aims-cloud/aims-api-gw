@@ -192,7 +192,7 @@ class PlacementDispatchServiceTest {
                 "같은 결과 재보고는 실패 횟수를 두 번 올리지 않는다");
     }
 
-    @DisplayName("운영자가 상태 변경 API 로 먼저 바꿔 워크로드 전이가 안 되면 디스패치만 갱신하고 그 사실을 message 에 남긴다")
+    @DisplayName("워크로드가 다른 경로로 먼저 바뀌어 전이가 안 되면 디스패치만 갱신하고 그 사실을 message 에 남긴다")
     @Test
     void callback_when_workload_already_moved() {
         when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
@@ -246,6 +246,127 @@ class PlacementDispatchServiceTest {
         assertEquals(400, assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "RUNNING", "x".repeat(201), null)).getStatus().value());
         assertEquals(400, assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "RUNNING", null, "y".repeat(501))).getStatus().value());
         assertEquals(DispatchStatus.RUNNING, service.applyResult(d.getId(), "RUNNING", "x".repeat(200), "y".repeat(500)).getStatus());
+    }
+
+    // ── 상태 변경과 전달 기록 마감 ──────────────────────────────
+
+    /**
+     * 운영자가 상태 변경 API 로 워크로드를 끝 상태로 보내면 현재 결정의 전달 기록도 같은 끝 상태로 마감된다.
+     * 전에는 워크로드만 바뀌고 기록은 ACCEPTED 로 그대로 남았다 — 기록형 디스패처 모드에서는 진행을 알리는 수단이
+     * 콜백 API 와 이 API 둘뿐이라, 이 API 로 끝낸 워크로드의 기록이 열린 채 쌓였다.
+     */
+    @DisplayName("상태 변경으로 실패 처리하면 현재 결정의 전달 기록이 FAILED 로 마감되고 비고 앞에 표지가 붙는다")
+    @Test
+    void status_change_to_failed_closes_current_dispatch() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-close-failed");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+        assertEquals(DispatchStatus.ACCEPTED, d.getStatus());
+
+        Workload after = schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.FAILED);
+
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        PlacementDispatch closed = dispatchRepository.findById(d.getId()).orElseThrow();
+        assertEquals(DispatchStatus.FAILED, closed.getStatus());
+        assertTrue(closed.getMessage().startsWith("운영자 상태 변경 — "), closed.getMessage());
+        assertFalse(closed.getRespondedAt().isBefore(d.getRespondedAt()), "마감 시각이 수락 시각보다 앞설 수 없다");
+    }
+
+    @DisplayName("실행 중(RUNNING 기록) 워크로드를 상태 변경으로 완료하면 기록도 COMPLETED 로 마감되고, 늦게 온 FAILED 콜백은 409·COMPLETED 재보고는 무변경이다")
+    @Test
+    void status_change_to_completed_closes_running_dispatch_and_rejects_late_callback() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-close-completed");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.RUNNING);
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(d.getId()).orElseThrow().getStatus(),
+                "실행 중으로 바꾸는 것은 끝 상태가 아니라 기록을 건드리지 않는다");
+        service.applyResult(d.getId(), "RUNNING", null, null);
+        assertEquals(DispatchStatus.RUNNING, dispatchRepository.findById(d.getId()).orElseThrow().getStatus());
+
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.COMPLETED);
+
+        PlacementDispatch closed = dispatchRepository.findById(d.getId()).orElseThrow();
+        assertEquals(DispatchStatus.COMPLETED, closed.getStatus());
+        assertTrue(closed.getMessage().startsWith("운영자 상태 변경 — COMPLETED"), closed.getMessage());
+        BusinessException e = assertThrows(BusinessException.class, () -> service.applyResult(d.getId(), "FAILED", null, null));
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT, e.getStatus());
+        assertEquals(DispatchStatus.COMPLETED, service.applyResult(d.getId(), "COMPLETED", null, null).getStatus(),
+                "같은 상태의 재보고는 무변경 200");
+        assertEquals(Workload.WorkloadStatus.COMPLETED, workloadRepository.findById(w.getId()).orElseThrow().getStatus());
+    }
+
+    @DisplayName("전달 중(REQUESTED) 기록도 상태 변경으로 실패 처리하면 FAILED 로 마감된다")
+    @Test
+    void status_change_closes_requested_dispatch() {
+        Workload w = assigned("dps-close-requested");
+        PlacementDispatch requested = dispatchRepository.saveAndFlush(new PlacementDispatch(w, null, "tester"));
+        assertEquals(DispatchStatus.REQUESTED, requested.getStatus());
+
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.FAILED);
+
+        PlacementDispatch closed = dispatchRepository.findById(requested.getId()).orElseThrow();
+        assertEquals(DispatchStatus.FAILED, closed.getStatus());
+        assertTrue(closed.getMessage().startsWith("운영자 상태 변경 — FAILED"), closed.getMessage());
+    }
+
+    /**
+     * 결함이 실제로 해를 끼치던 길. 상태 변경으로 실패 처리한 워크로드를 대기로 되살려 다시 배치하면, 전에는
+     * 옛 결정의 기록이 ACCEPTED 로 남아 있어 그 기록에 늦게 온 RUNNING 콜백이 새 결정의 워크로드를 실행 중으로 옮겼다.
+     */
+    @DisplayName("실패 처리 뒤 되살려 다시 배치한 워크로드는 옛 결정의 기록에 온 늦은 콜백으로 옮겨지지 않는다")
+    @Test
+    void late_callback_on_old_dispatch_does_not_move_rescheduled_workload() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-close-revive");
+        PlacementDispatch old = service.afterPlacement(w, ok(), null);
+
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.FAILED);
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.PENDING);
+        Workload revived = workloadRepository.findById(w.getId()).orElseThrow();
+        do {
+            revived.assignTo("mdc-01", "n2", 0.6, "재배치");
+        } while (PlacementDispatch.keyOf(revived).equals(old.getIdempotencyKey()));
+        revived = workloadRepository.saveAndFlush(revived);
+        PlacementDispatch current = service.afterPlacement(revived, ok(), null);
+        assertNotEquals(old.getId(), current.getId());
+
+        BusinessException e = assertThrows(BusinessException.class, () -> service.applyResult(old.getId(), "RUNNING", null, null));
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT, e.getStatus());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, workloadRepository.findById(w.getId()).orElseThrow().getStatus(),
+                "옛 기록의 늦은 콜백이 새 결정의 워크로드를 옮기면 안 된다");
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(current.getId()).orElseThrow().getStatus());
+    }
+
+    @DisplayName("상태 변경은 최신 결정의 기록만 마감하고 옛 결정의 기록은 건드리지 않는다")
+    @Test
+    void status_change_closes_only_latest_dispatch() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-close-latest");
+        PlacementDispatch old = service.afterPlacement(w, ok(), null);
+        do {
+            w.assignTo("mdc-01", "n2", 0.6, "재배치");
+        } while (PlacementDispatch.keyOf(w).equals(old.getIdempotencyKey()));
+        w = workloadRepository.saveAndFlush(w);
+        PlacementDispatch current = service.afterPlacement(w, ok(), null);
+        assertNotEquals(old.getId(), current.getId());
+
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.FAILED);
+
+        assertEquals(DispatchStatus.FAILED, dispatchRepository.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(old.getId()).orElseThrow().getStatus(), "옛 결정의 기록은 그대로");
+    }
+
+    @DisplayName("전달 기록이 없는 옛 배정은 상태만 바뀌고 기록은 생기지 않는다")
+    @Test
+    void status_change_without_dispatch_row_only_moves_workload() {
+        Workload w = assigned("dps-close-none");
+
+        Workload after = schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.FAILED);
+
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).isEmpty());
     }
 
     // ── 예약 취소 ──────────────────────────────────────────────

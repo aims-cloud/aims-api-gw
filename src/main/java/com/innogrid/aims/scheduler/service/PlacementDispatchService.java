@@ -160,7 +160,7 @@ public class PlacementDispatchService {
      * 전이표 밖               → 409
      * </pre>
      * 워크로드 전이는 기존 전이표({@link Workload#transitionTo})를 쓴다. 디스패치는 바뀌는데 워크로드가 이미 다른 상태라
-     * 전이가 안 되면(운영자가 상태 변경 API 로 먼저 바꾼 경우) 디스패치만 갱신하고 그 사실을 message 에 남긴다.
+     * 전이가 안 되면(워크로드가 다른 경로로 먼저 바뀐 경우) 디스패치만 갱신하고 그 사실을 message 에 남긴다.
      */
     @Transactional
     public PlacementDispatch applyResult(Long dispatchId, String rawStatus, String externalRef, String message) {
@@ -243,6 +243,34 @@ public class PlacementDispatchService {
         current.cancel("예약 취소 — 운영자 요청(" + actorResolver.current().email() + ")");
         if (hookNote != null) current.note(hookNote);
         log.info("예약 취소: dispatch={}, workload={}, node={} — 전달 기록 FAILED 마감", current.getId(), current.getWorkloadName(), current.getNodeId());
+        return repository.save(current);
+    }
+
+    /**
+     * 상태 변경 — 운영자가 워크로드를 끝 상태(COMPLETED·FAILED)로 바꿀 때 <b>최신 전달 기록</b>이 열려 있으면 같은 끝 상태로
+     * 마감한다(비고 앞에 "운영자 상태 변경 — "). 전에는 워크로드만 바뀌고 기록은 ACCEPTED 로 그대로 남아, 대기로 되살려 다시
+     * 배치한 뒤 그 옛 기록에 늦게 온 콜백이 새 결정의 워크로드를 옮길 수 있었다.
+     *
+     * <pre>
+     * 행 없음(전달 기능 이전의 배정)              → null
+     * 끝 상태(COMPLETED·FAILED·REJECTED·…)       → 그대로
+     * REQUESTED · ACCEPTED · RUNNING(열린 상태) → 대상 끝 상태로 마감
+     * </pre>
+     * 현재 결정은 멱등키가 아니라 <b>요청 시각이 가장 늦은 행</b>으로 본다 — 배정 시각은 나노초로 들고 있다가 DB 에는
+     * 마이크로초로 반올림되어 저장되므로, 저장 뒤 다시 읽은 값으로 만든 키가 드물게 1ms 어긋난다.
+     * 디스패처 취소 훅은 부르지 않는다 — 상태 변경은 실행 계층에 명령하는 경로가 아니라 결과를 대신 적는 경로다
+     * (기록형 디스패처는 할 일이 없고, 원격 구현체를 붙일 때 취소 알림 여부를 다시 판단한다).
+     * 호출자의 트랜잭션 안에서 부른다.
+     */
+    public PlacementDispatch closeCurrent(Workload workload, Workload.WorkloadStatus target) {
+        List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDesc(workload.getId());
+        if (rows.isEmpty()) return null;
+        PlacementDispatch current = rows.get(0);
+        if (current.getStatus().terminal()) return current;
+        DispatchStatus before = current.getStatus();
+        DispatchStatus outcome = target == Workload.WorkloadStatus.COMPLETED ? DispatchStatus.COMPLETED : DispatchStatus.FAILED;
+        current.finishByOperator(outcome, "운영자 상태 변경 — " + target + "(" + actorResolver.current().email() + ")");
+        log.info("상태 변경으로 전달 기록 마감: dispatch={}, workload={}, {} → {}", current.getId(), current.getWorkloadName(), before, outcome);
         return repository.save(current);
     }
 

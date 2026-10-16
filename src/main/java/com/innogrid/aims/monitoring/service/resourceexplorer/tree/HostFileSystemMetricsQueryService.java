@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMetric;
@@ -121,7 +122,7 @@ public class HostFileSystemMetricsQueryService {
     /** 최근 24시간 사용량 증가분(GB) — 미수집은 null */
     public Double growth24hGb(MetricSelector s, String mountPath) {
         try {
-            return firstValue(client.queryResults(growthGbQuery(s, mountPath)));
+            return ThanosResults.firstValue(client.queryResults(growthGbQuery(s, mountPath)));
         } catch (RuntimeException e) {
             log.warn("Thanos 마운트 증가분 조회 실패 — 미수집으로 표시합니다: {}", e.getMessage());
             return null;
@@ -156,13 +157,13 @@ public class HostFileSystemMetricsQueryService {
             for (Map.Entry<String, Map<String, Object>> entry : size.entrySet()) {
                 String mountPath = entry.getKey();
                 Map<String, Object> result = entry.getValue();
-                Double sizeBytes = value(result);
+                Double sizeBytes = ThanosResults.value(result);
                 Double availBytes = avail.get(mountPath);
                 if (sizeBytes == null || availBytes == null) {
                     continue;                                       // 용량 표본이 짝이 안 맞으면 행을 만들지 않는다
                 }
-                rows.add(new MountUsage(mountPath, label(result, "fstype"), label(result, "device"),
-                        sizeBytes, availBytes, files.get(mountPath), filesFree.get(mountPath), sampleTime(result)));
+                rows.add(new MountUsage(mountPath, ThanosResults.label(result, "fstype"), ThanosResults.label(result, "device"),
+                        sizeBytes, availBytes, files.get(mountPath), filesFree.get(mountPath), ThanosResults.sampleTime(result)));
             }
             rows.sort(Comparator.comparing(MountUsage::mountPath));
             return rows;
@@ -175,7 +176,7 @@ public class HostFileSystemMetricsQueryService {
     private static Map<String, Map<String, Object>> byMount(List<Map<String, Object>> results) {
         Map<String, Map<String, Object>> byMount = new LinkedHashMap<>();
         for (Map<String, Object> result : results) {
-            String mountPath = label(result, "mountpoint");
+            String mountPath = ThanosResults.label(result, "mountpoint");
             if (mountPath != null) {
                 byMount.putIfAbsent(mountPath, result);
             }
@@ -186,8 +187,8 @@ public class HostFileSystemMetricsQueryService {
     private static Map<String, Double> valuesByMount(List<Map<String, Object>> results) {
         Map<String, Double> values = new LinkedHashMap<>();
         for (Map<String, Object> result : results) {
-            String mountPath = label(result, "mountpoint");
-            Double value = value(result);
+            String mountPath = ThanosResults.label(result, "mountpoint");
+            Double value = ThanosResults.value(result);
             if (mountPath != null && value != null) {
                 values.putIfAbsent(mountPath, value);
             }
@@ -202,42 +203,13 @@ public class HostFileSystemMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                points.add(new DataPoint(((Number) pair[0]).longValue(), HostDetailMetricsQueryService.round1((Double) pair[1])));
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                points.add(new DataPoint(sample.epochSecond(), HostDetailMetricsQueryService.round1(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {
             log.warn("Thanos File system 차트 조회 실패 — 빈 시계열을 돌려줍니다: {}", e.getMessage());
             return List.of();
         }
-    }
-
-    private static String label(Map<String, Object> result, String name) {
-        Object metric = result.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object raw = labels.get(name);
-        return raw == null || raw.toString().isBlank() ? null : raw.toString();
-    }
-
-    private static Double value(Map<String, Object> result) {
-        Object value = result.get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
-    }
-
-    private static Double firstValue(List<Map<String, Object>> results) {
-        return results.isEmpty() ? null : value(results.get(0));
-    }
-
-    private static Instant sampleTime(Map<String, Object> result) {
-        Object value = result.get("value");
-        if (value instanceof List<?> pair && !pair.isEmpty() && pair.get(0) instanceof Number ts) {
-            return Instant.ofEpochSecond(ts.longValue());
-        }
-        return null;
     }
 }

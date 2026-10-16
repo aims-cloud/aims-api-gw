@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import org.slf4j.Logger;
@@ -39,12 +40,12 @@ public class HostMetricsQueryService {
     private static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
 
     /** 물리 호스트 그룹 — instance 라벨, 필터 없음 */
-    static final Grouping BY_INSTANCE = new Grouping("instance", "", row -> label(row, "instance"));
+    static final Grouping BY_INSTANCE = new Grouping("instance", "", row -> ThanosResults.label(row, "instance"));
     /** Tumblebug VM 그룹 — tb_* 라벨이 붙은 시계열만, 키는 ns/infra/node */
     static final Grouping BY_TB_NODE = new Grouping("tb_ns, tb_infra, tb_node", "tb_node!=\"\"", row -> {
-        String ns = label(row, "tb_ns");
-        String infra = label(row, "tb_infra");
-        String node = label(row, "tb_node");
+        String ns = ThanosResults.label(row, "tb_ns");
+        String infra = ThanosResults.label(row, "tb_infra");
+        String node = ThanosResults.label(row, "tb_node");
         return ns == null || infra == null || node == null ? null : tumblebugKey(ns, infra, node);
     });
 
@@ -159,30 +160,12 @@ public class HostMetricsQueryService {
         Map<String, Double> result = new HashMap<>();
         for (Map<String, Object> row : rows) {
             String key = g.key().apply(row);
-            Object value = row.get("value");
-            if (key == null || !(value instanceof List<?> pair) || pair.size() < 2 || pair.get(1) == null) {
-                continue;
-            }
-            try {
-                double v = Double.parseDouble(pair.get(1).toString());
-                if (!Double.isNaN(v) && !Double.isInfinite(v)) {
-                    result.put(key, v);
-                }
-            } catch (NumberFormatException ignored) {
-                // "NaN"/"+Inf" 등 수치가 아닌 샘플은 미수집으로 취급
+            Double value = ThanosResults.value(row);   // "NaN"/"+Inf" 등 수치가 아닌 샘플은 미수집(null)
+            if (key != null && value != null) {
+                result.put(key, value);
             }
         }
         return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static String label(Map<String, Object> row, String name) {
-        Object metric = row.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object v = ((Map<String, Object>) labels).get(name);
-        return v == null ? null : v.toString();
     }
 
     private static Double round1(Double value) {

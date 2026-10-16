@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.process.ProcessMetric;
@@ -86,8 +87,8 @@ public class HostProcessMetricsQueryService {
         try {
             List<StateCount> states = new ArrayList<>();
             for (Map<String, Object> row : client.queryResults(byState(s))) {
-                String state = label(row, "state");
-                Double count = value(row);
+                String state = ThanosResults.label(row, "state");
+                Double count = ThanosResults.value(row);
                 if (state != null && count != null) {
                     states.add(new StateCount(state, (int) Math.round(count)));
                 }
@@ -116,9 +117,9 @@ public class HostProcessMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                Double value = (Double) pair[1];
-                points.add(new DataPoint(((Number) pair[0]).longValue(), rate ? round2(value) : (double) Math.round(value)));
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                Double value = sample.value();
+                points.add(new DataPoint(sample.epochSecond(), rate ? round2(value) : (double) Math.round(value)));
             }
             return points;
         } catch (RuntimeException e) {
@@ -130,25 +131,7 @@ public class HostProcessMetricsQueryService {
     // ── 내부 ────────────────────────────────────────────────────
 
     private Double scalar(String query) {
-        List<Map<String, Object>> results = client.queryResults(query);
-        return results.isEmpty() ? null : value(results.get(0));
-    }
-
-    private static Double value(Map<String, Object> result) {
-        Object value = result.get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
-    }
-
-    private static String label(Map<String, Object> result, String name) {
-        Object metric = result.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object raw = labels.get(name);
-        return raw == null || raw.toString().isBlank() ? null : raw.toString();
+        return ThanosResults.firstValue(client.queryResults(query));
     }
 
     private static Integer toInt(Double value) {

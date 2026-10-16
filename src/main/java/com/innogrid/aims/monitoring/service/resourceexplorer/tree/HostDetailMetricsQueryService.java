@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
@@ -253,8 +254,8 @@ public class HostDetailMetricsQueryService {
             return List.of();
         }
         List<DataPoint> points = new ArrayList<>();
-        for (Object[] pair : values(results.get(0))) {
-            points.add(new DataPoint(((Number) pair[0]).longValue(), round1((Double) pair[1])));
+        for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+            points.add(new DataPoint(sample.epochSecond(), round1(sample.value())));
         }
         return points.isEmpty() ? List.of() : List.of(new Series(name, points));
     }
@@ -265,55 +266,17 @@ public class HostDetailMetricsQueryService {
         if (results.isEmpty()) {
             return byDay;
         }
-        for (Object[] pair : values(results.get(0))) {
+        for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
             // 평가 시각(다음날 00:00)의 1초 전이 해당 일자
-            LocalDate day = Instant.ofEpochSecond(((Number) pair[0]).longValue() - 1).atZone(zone).toLocalDate();
-            byDay.put(day, (Double) pair[1]);
+            LocalDate day = Instant.ofEpochSecond(sample.epochSecond() - 1).atZone(zone).toLocalDate();
+            byDay.put(day, sample.value());
         }
         return byDay;
     }
 
-    /** range 결과 1개의 values → [timestamp(Number), value(Double)] 목록. 비수치 샘플은 건너뛴다. */
-    static List<Object[]> values(Map<String, Object> result) {
-        List<Object[]> out = new ArrayList<>();
-        Object values = result.get("values");
-        if (!(values instanceof List<?> list)) {
-            return out;
-        }
-        for (Object item : list) {
-            if (item instanceof List<?> pair && pair.size() >= 2 && pair.get(0) instanceof Number ts) {
-                Double v = parse(pair.get(1));
-                if (v != null) {
-                    out.add(new Object[]{ts, v});
-                }
-            }
-        }
-        return out;
-    }
-
     /** 즉시 쿼리의 첫 벡터 값. 결과가 없거나 비수치면 null(미수집). */
     private Double scalar(String query) {
-        List<Map<String, Object>> results = client.queryResults(query);
-        if (results.isEmpty()) {
-            return null;
-        }
-        Object value = results.get(0).get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return parse(pair.get(1));
-        }
-        return null;
-    }
-
-    static Double parse(Object raw) {
-        if (raw == null) {
-            return null;
-        }
-        try {
-            double v = Double.parseDouble(raw.toString());
-            return Double.isNaN(v) || Double.isInfinite(v) ? null : v;
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        return ThanosResults.firstValue(client.queryResults(query));
     }
 
     private static Integer toInt(Double value) {

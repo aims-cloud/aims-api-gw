@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.swap.SwapMetric;
@@ -92,9 +93,9 @@ public class HostSwapMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                Double value = (Double) pair[1];
-                points.add(new DataPoint(((Number) pair[0]).longValue(),
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                Double value = sample.value();
+                points.add(new DataPoint(sample.epochSecond(),
                         fine ? round2(value) : HostDetailMetricsQueryService.round1(value)));
             }
             return points;
@@ -107,15 +108,7 @@ public class HostSwapMetricsQueryService {
     // ── 내부 ────────────────────────────────────────────────────
 
     private Double scalar(String query) {
-        List<Map<String, Object>> results = client.queryResults(query);
-        if (results.isEmpty()) {
-            return null;
-        }
-        Object value = results.get(0).get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
+        return ThanosResults.firstValue(client.queryResults(query));
     }
 
     private static Double gb(Double bytes) {

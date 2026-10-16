@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetric;
@@ -116,18 +117,18 @@ public class HostSystemMetricsQueryService {
             Map<String, Object> osRow = os.isEmpty() ? Map.of() : os.get(0);
             Double boot = scalar(bootTime(s));
 
-            String osName = label(osRow, "pretty_name");
+            String osName = ThanosResults.label(osRow, "pretty_name");
             if (osName == null) {
-                osName = label(osRow, "name");
+                osName = ThanosResults.label(osRow, "name");
             }
             return Optional.of(new SystemInfo(
-                    label(unameRow, "nodename"),
+                    ThanosResults.label(unameRow, "nodename"),
                     osName,
-                    label(osRow, "version_id"),
-                    label(unameRow, "release"),
-                    label(unameRow, "machine"),
+                    ThanosResults.label(osRow, "version_id"),
+                    ThanosResults.label(unameRow, "release"),
+                    ThanosResults.label(unameRow, "machine"),
                     boot == null ? null : boot.longValue(),
-                    sampleTime(unameRow)));
+                    ThanosResults.sampleTime(unameRow)));
         } catch (RuntimeException e) {
             log.warn("Thanos System 정보 조회 실패 — 미수집으로 표시합니다: {}", e.getMessage());
             return Optional.empty();
@@ -144,9 +145,9 @@ public class HostSystemMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                Double value = (Double) pair[1];
-                points.add(new DataPoint(((Number) pair[0]).longValue(),
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                Double value = sample.value();
+                points.add(new DataPoint(sample.epochSecond(),
                         load ? round2(value) : HostDetailMetricsQueryService.round1(value)));
             }
             return points;
@@ -159,32 +160,7 @@ public class HostSystemMetricsQueryService {
     // ── 내부 ────────────────────────────────────────────────────
 
     private Double scalar(String query) {
-        List<Map<String, Object>> results = client.queryResults(query);
-        if (results.isEmpty()) {
-            return null;
-        }
-        Object value = results.get(0).get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
-    }
-
-    private static String label(Map<String, Object> result, String name) {
-        Object metric = result.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object raw = labels.get(name);
-        return raw == null || raw.toString().isBlank() ? null : raw.toString();
-    }
-
-    private static Instant sampleTime(Map<String, Object> result) {
-        Object value = result.get("value");
-        if (value instanceof List<?> pair && !pair.isEmpty() && pair.get(0) instanceof Number ts) {
-            return Instant.ofEpochSecond(ts.longValue());
-        }
-        return null;
+        return ThanosResults.firstValue(client.queryResults(query));
     }
 
     private static Double round2(Double value) {

@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceStatusMetric;
@@ -59,10 +60,10 @@ public class HostServiceStatusMetricsQueryService {
         try {
             List<Unit> units = new ArrayList<>();
             for (Map<String, Object> row : client.queryResults(currentUnitStates(s))) {
-                String name = label(row, "name");
-                ServiceUnitState state = stateOf(label(row, "state"));
+                String name = ThanosResults.label(row, "name");
+                ServiceUnitState state = stateOf(ThanosResults.label(row, "state"));
                 if (name != null && state != null) {
-                    units.add(new Unit(name, label(row, "type"), state));
+                    units.add(new Unit(name, ThanosResults.label(row, "type"), state));
                 }
             }
             units.sort(Comparator.comparing(Unit::name, String.CASE_INSENSITIVE_ORDER));
@@ -81,8 +82,8 @@ public class HostServiceStatusMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                points.add(new DataPoint(((Number) pair[0]).longValue(), (double) Math.round((Double) pair[1])));
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                points.add(new DataPoint(sample.epochSecond(), (double) Math.round(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {
@@ -103,14 +104,5 @@ public class HostServiceStatusMetricsQueryService {
             }
         }
         return null;
-    }
-
-    private static String label(Map<String, Object> result, String name) {
-        Object metric = result.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object raw = labels.get(name);
-        return raw == null || raw.toString().isBlank() ? null : raw.toString();
     }
 }

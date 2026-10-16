@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoMetric;
@@ -128,8 +129,8 @@ public class HostDiskIoMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                points.add(new DataPoint(((Number) pair[0]).longValue(), round2((Double) pair[1])));
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                points.add(new DataPoint(sample.epochSecond(), round2(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {
@@ -144,30 +145,13 @@ public class HostDiskIoMetricsQueryService {
     private Map<String, Double> byDevice(String query) {
         Map<String, Double> values = new LinkedHashMap<>();
         for (Map<String, Object> result : client.queryResults(query)) {
-            String device = label(result, "device");
-            Double value = value(result);
+            String device = ThanosResults.label(result, "device");
+            Double value = ThanosResults.value(result);
             if (device != null && value != null) {
                 values.putIfAbsent(device, value);
             }
         }
         return values;
-    }
-
-    private static String label(Map<String, Object> result, String name) {
-        Object metric = result.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object raw = labels.get(name);
-        return raw == null || raw.toString().isBlank() ? null : raw.toString();
-    }
-
-    private static Double value(Map<String, Object> result) {
-        Object value = result.get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
     }
 
     static Double round2(Double value) {

@@ -8,6 +8,7 @@ import java.util.function.Function;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.ListSort;
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoDeviceListItemResponse;
@@ -62,13 +63,13 @@ public final class DiskIoPanelAssembler {
         }
         return new DiskIoSummaryResponse(
                 devices.size(),
-                round2(sum(devices, DeviceIo::readBytesPerSec)),
-                round2(sum(devices, DeviceIo::writeBytesPerSec)),
-                round2(sum(devices, DeviceIo::readIops)),
-                round2(sum(devices, DeviceIo::writeIops)),
-                round2(weightedLatency(devices, DeviceIo::readLatencyMs, DeviceIo::readIops)),
-                round2(weightedLatency(devices, DeviceIo::writeLatencyMs, DeviceIo::writeIops)),
-                round2(average(devices, DeviceIo::utilizationPercent)));
+                MetricFormat.round2(sum(devices, DeviceIo::readBytesPerSec)),
+                MetricFormat.round2(sum(devices, DeviceIo::writeBytesPerSec)),
+                MetricFormat.round2(sum(devices, DeviceIo::readIops)),
+                MetricFormat.round2(sum(devices, DeviceIo::writeIops)),
+                MetricFormat.round2(weightedLatency(devices, DeviceIo::readLatencyMs, DeviceIo::readIops)),
+                MetricFormat.round2(weightedLatency(devices, DeviceIo::writeLatencyMs, DeviceIo::writeIops)),
+                MetricFormat.round2(average(devices, DeviceIo::utilizationPercent)));
     }
 
     // ── 목록 ────────────────────────────────────────────────────
@@ -86,10 +87,10 @@ public final class DiskIoPanelAssembler {
 
     static DiskIoDeviceListItemResponse row(DeviceIo d) {
         return new DiskIoDeviceListItemResponse(d.device(),
-                round2(d.readBytesPerSec()), round2(d.writeBytesPerSec()),
-                round2(d.readIops()), round2(d.writeIops()),
-                round2(d.readLatencyMs()), round2(d.writeLatencyMs()),
-                round2(d.utilizationPercent()));
+                MetricFormat.round2(d.readBytesPerSec()), MetricFormat.round2(d.writeBytesPerSec()),
+                MetricFormat.round2(d.readIops()), MetricFormat.round2(d.writeIops()),
+                MetricFormat.round2(d.readLatencyMs()), MetricFormat.round2(d.writeLatencyMs()),
+                MetricFormat.round2(d.utilizationPercent()));
     }
 
     // ── 시계열 ──────────────────────────────────────────────────
@@ -157,9 +158,5 @@ public final class DiskIoPanelAssembler {
             }
         }
         return weight == 0 ? null : weightedSum / weight;
-    }
-
-    private static Double round2(Double value) {
-        return value == null ? null : Math.round(value * 100) / 100.0;
     }
 }

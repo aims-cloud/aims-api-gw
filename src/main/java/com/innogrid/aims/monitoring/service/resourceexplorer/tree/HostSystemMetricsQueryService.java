@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -93,12 +94,12 @@ public class HostSystemMetricsQueryService {
             Double cores = scalar(coreCount(s));
             return new SystemSummary(
                     boot == null ? null : boot.longValue(),
-                    round2(scalar(load(1, s))),
-                    round2(scalar(load(5, s))),
-                    round2(scalar(load(15, s))),
+                    MetricFormat.round2(scalar(load(1, s))),
+                    MetricFormat.round2(scalar(load(5, s))),
+                    MetricFormat.round2(scalar(load(15, s))),
                     cores == null ? null : (int) Math.round(cores),
-                    HostDetailMetricsQueryService.round1(scalar(contextSwitchesPerSec(s, RATE_WINDOW))),
-                    HostDetailMetricsQueryService.round1(scalar(interruptsPerSec(s, RATE_WINDOW))));
+                    MetricFormat.round1(scalar(contextSwitchesPerSec(s, RATE_WINDOW))),
+                    MetricFormat.round1(scalar(interruptsPerSec(s, RATE_WINDOW))));
         } catch (RuntimeException e) {
             log.warn("Thanos System KPI 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
             return SystemSummary.EMPTY;
@@ -148,7 +149,7 @@ public class HostSystemMetricsQueryService {
             for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
                 Double value = sample.value();
                 points.add(new DataPoint(sample.epochSecond(),
-                        load ? round2(value) : HostDetailMetricsQueryService.round1(value)));
+                        load ? MetricFormat.round2(value) : MetricFormat.round1(value)));
             }
             return points;
         } catch (RuntimeException e) {
@@ -161,9 +162,5 @@ public class HostSystemMetricsQueryService {
 
     private Double scalar(String query) {
         return ThanosResults.firstValue(client.queryResults(query));
-    }
-
-    private static Double round2(Double value) {
-        return value == null ? null : Math.round(value * 100) / 100.0;
     }
 }

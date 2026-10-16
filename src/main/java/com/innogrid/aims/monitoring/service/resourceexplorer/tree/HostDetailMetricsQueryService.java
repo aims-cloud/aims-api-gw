@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -27,8 +28,6 @@ import org.springframework.stereotype.Component;
 public class HostDetailMetricsQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(HostDetailMetricsQueryService.class);
-    private static final double GB = 1024.0 * 1024 * 1024;
-    private static final double MB_TO_GB = 1024.0;
     private static final String RATE_WINDOW = "5m";
     static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
     static final String NET_FILTER = "device!~\"lo|veth.*|docker.*|br.*|virbr.*\"";
@@ -129,7 +128,7 @@ public class HostDetailMetricsQueryService {
             Integer cores = null;
             if (node != null) {
                 cpu = scalar(cpuPercent(node, RATE_WINDOW));
-                cores = toInt(scalar(coreCount(node)));
+                cores = MetricFormat.toInt(scalar(coreCount(node)));
                 memTotal = scalar(memoryTotalBytes(node));
                 memAvail = scalar(memoryAvailableBytes(node));
                 fsSize = scalar(fileSystemSizeBytes(node));
@@ -142,18 +141,18 @@ public class HostDetailMetricsQueryService {
             Integer gpus = null;
             if (dcgm != null) {
                 gpu = scalar(gpuPercent(dcgm));
-                gpus = toInt(scalar(gpuCount(dcgm)));
+                gpus = MetricFormat.toInt(scalar(gpuCount(dcgm)));
                 vramUsed = scalar(vramUsedMb(dcgm));
                 vramFree = scalar(vramFreeMb(dcgm));
             }
             return new HostSummaryMetrics(
-                    round1(cpu), cores,
-                    memTotal == null || memAvail == null ? null : round1((memTotal - memAvail) / GB), gb(memTotal),
-                    fsSize == null || fsAvail == null ? null : round1((fsSize - fsAvail) / GB), gb(fsSize),
-                    round1(rx), round1(tx),
-                    round1(gpu), gpus,
-                    vramUsed == null ? null : round1(vramUsed / MB_TO_GB),
-                    vramUsed == null || vramFree == null ? null : round1((vramUsed + vramFree) / MB_TO_GB),
+                    MetricFormat.round1(cpu), cores,
+                    memTotal == null || memAvail == null ? null : MetricFormat.bytesToGb(memTotal - memAvail), MetricFormat.bytesToGb(memTotal),
+                    fsSize == null || fsAvail == null ? null : MetricFormat.bytesToGb(fsSize - fsAvail), MetricFormat.bytesToGb(fsSize),
+                    MetricFormat.round1(rx), MetricFormat.round1(tx),
+                    MetricFormat.round1(gpu), gpus,
+                    MetricFormat.mbToGb(vramUsed),
+                    vramUsed == null || vramFree == null ? null : MetricFormat.mbToGb(vramUsed + vramFree),
                     boot == null ? null : boot.longValue());
         } catch (RuntimeException e) {
             log.warn("Thanos 상세 지표 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
@@ -205,7 +204,7 @@ public class HostDetailMetricsQueryService {
 
             List<DailyMax> rows = new ArrayList<>();
             for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) {
-                rows.add(new DailyMax(d, round1(cpu.get(d)), round1(memory.get(d)), round1(fs.get(d))));
+                rows.add(new DailyMax(d, MetricFormat.round1(cpu.get(d)), MetricFormat.round1(memory.get(d)), MetricFormat.round1(fs.get(d))));
             }
             return rows;
         } catch (RuntimeException e) {
@@ -255,7 +254,7 @@ public class HostDetailMetricsQueryService {
         }
         List<DataPoint> points = new ArrayList<>();
         for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
-            points.add(new DataPoint(sample.epochSecond(), round1(sample.value())));
+            points.add(new DataPoint(sample.epochSecond(), MetricFormat.round1(sample.value())));
         }
         return points.isEmpty() ? List.of() : List.of(new Series(name, points));
     }
@@ -277,17 +276,5 @@ public class HostDetailMetricsQueryService {
     /** 즉시 쿼리의 첫 벡터 값. 결과가 없거나 비수치면 null(미수집). */
     private Double scalar(String query) {
         return ThanosResults.firstValue(client.queryResults(query));
-    }
-
-    private static Integer toInt(Double value) {
-        return value == null ? null : (int) Math.round(value);
-    }
-
-    private static Double gb(Double bytes) {
-        return bytes == null ? null : round1(bytes / GB);
-    }
-
-    static Double round1(Double value) {
-        return value == null ? null : Math.round(value * 10) / 10.0;
     }
 }

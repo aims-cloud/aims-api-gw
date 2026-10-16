@@ -45,10 +45,10 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetrics
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import org.springframework.stereotype.Service;
 
-import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.gb;
+import static com.innogrid.aims.common.util.MetricFormat.mbToGb;
+import static com.innogrid.aims.common.util.MetricFormat.round1;
+import static com.innogrid.aims.common.util.MetricFormat.toOffsetDateTime;
 import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.gpuName;
-import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.round1;
-import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.toOffsetDateTime;
 
 /**
  * 자원 탐색기 노드 GPU 카테고리 패널 조회 서비스.
@@ -115,8 +115,8 @@ public class ResourceExplorerNodeGpuService {
         return new GpuGroupSummaryResponse(
                 gpus.size(),
                 round1(vramPercent),
-                gb(usedMb),
-                gb(totalMb),
+                mbToGb(usedMb),
+                mbToGb(totalMb),
                 round1(sum(collecting, GpuSample::powerWatts)),
                 round1(max(collecting, GpuSample::powerWatts)),
                 round1(max(collecting, GpuSample::temperatureC)));
@@ -312,8 +312,8 @@ public class ResourceExplorerNodeGpuService {
                 round1(g.utilizationAvg()),
                 round1(g.vramPercent()),
                 round1(g.vramPercentAvg()),
-                gb(g.fbUsedMb()),
-                gb(g.fbTotalMb()),
+                mbToGb(g.fbUsedMb()),
+                mbToGb(g.fbTotalMb()),
                 round1(g.temperatureC()),
                 round1(g.powerWatts()),
                 null);

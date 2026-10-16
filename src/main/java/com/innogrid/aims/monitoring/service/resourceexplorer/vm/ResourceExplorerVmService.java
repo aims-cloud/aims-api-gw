@@ -9,6 +9,7 @@ import java.util.Map;
 
 import com.innogrid.aims.cloudbarista.tumblebug.TumblebugClient;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDetailMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeMetricTrendResponse;
@@ -157,8 +158,8 @@ public class ResourceExplorerVmService {
         if (usedGb == null || totalGb == null) {
             return null;
         }
-        double percent = totalGb <= 0 ? 0.0 : round1(usedGb / totalGb * 100);
-        return new CapacityMetricCard(percent, round1(totalGb - usedGb), totalGb);
+        double percent = totalGb <= 0 ? 0.0 : MetricFormat.round1(usedGb / totalGb * 100);
+        return new CapacityMetricCard(percent, MetricFormat.round1(totalGb - usedGb), totalGb);
     }
 
     /** GPU 카드 — 사용률이 있어야 만들고, VRAM Free/Total 은 미수집이면 0 으로 둔다 */
@@ -168,11 +169,7 @@ public class ResourceExplorerVmService {
         }
         double total = m.vramTotalGb() == null ? 0.0 : m.vramTotalGb();
         double used = m.vramUsedGb() == null ? 0.0 : m.vramUsedGb();
-        return new GpuVramCard(m.gpuPercent(), round1(Math.max(0, total - used)), total);
-    }
-
-    private static double round1(double value) {
-        return Math.round(value * 10) / 10.0;
+        return new GpuVramCard(m.gpuPercent(), MetricFormat.round1(Math.max(0, total - used)), total);
     }
 
     // ── Tumblebug 응답 파싱 ─────────────────────────────────────

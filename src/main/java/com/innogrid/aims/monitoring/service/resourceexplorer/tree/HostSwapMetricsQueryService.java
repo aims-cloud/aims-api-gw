@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
@@ -25,7 +26,6 @@ import org.springframework.stereotype.Component;
 public class HostSwapMetricsQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(HostSwapMetricsQueryService.class);
-    private static final double GB = 1024.0 * 1024 * 1024;
     private static final String RATE_WINDOW = "5m";
 
     private final VictoriaMetricsClient client;
@@ -54,10 +54,10 @@ public class HostSwapMetricsQueryService {
 
     static String trendQuery(SwapMetric metric, MetricSelector s, String window) {
         return switch (metric) {
-            case SWAP_USED -> "(" + totalBytes(s) + " - " + freeBytes(s) + ") / " + (long) GB;
+            case SWAP_USED -> "(" + totalBytes(s) + " - " + freeBytes(s) + ") / " + (long) MetricFormat.BYTES_PER_GB;
             case SWAP_USED_PERCENT -> "(1 - " + freeBytes(s) + " / " + totalBytes(s) + ") * 100";
-            case SWAP_FREE -> freeBytes(s) + " / " + (long) GB;
-            case SWAP_TOTAL -> totalBytes(s) + " / " + (long) GB;
+            case SWAP_FREE -> freeBytes(s) + " / " + (long) MetricFormat.BYTES_PER_GB;
+            case SWAP_TOTAL -> totalBytes(s) + " / " + (long) MetricFormat.BYTES_PER_GB;
             case SWAP_IN -> swapInPerSec(s, window);
             case SWAP_OUT -> swapOutPerSec(s, window);
         };
@@ -75,8 +75,8 @@ public class HostSwapMetricsQueryService {
 
             Double used = total == null || free == null ? null : Math.max(0.0, total - free);
             Double usedPercent = total == null || free == null || total <= 0 ? null : (1 - free / total) * 100;
-            return new SwapSummaryResponse(gb(total), gb(used), gb(free),
-                    HostDetailMetricsQueryService.round1(usedPercent), round2(in), round2(out));
+            return new SwapSummaryResponse(MetricFormat.bytesToGb(total), MetricFormat.bytesToGb(used), MetricFormat.bytesToGb(free),
+                    MetricFormat.round1(usedPercent), MetricFormat.round2(in), MetricFormat.round2(out));
         } catch (RuntimeException e) {
             log.warn("Thanos Swap KPI 조회 실패 — 카드를 미수집으로 표시합니다: {}", e.getMessage());
             return new SwapSummaryResponse(null, null, null, null, null, null);
@@ -96,7 +96,7 @@ public class HostSwapMetricsQueryService {
             for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
                 Double value = sample.value();
                 points.add(new DataPoint(sample.epochSecond(),
-                        fine ? round2(value) : HostDetailMetricsQueryService.round1(value)));
+                        fine ? MetricFormat.round2(value) : MetricFormat.round1(value)));
             }
             return points;
         } catch (RuntimeException e) {
@@ -109,13 +109,5 @@ public class HostSwapMetricsQueryService {
 
     private Double scalar(String query) {
         return ThanosResults.firstValue(client.queryResults(query));
-    }
-
-    private static Double gb(Double bytes) {
-        return bytes == null ? null : HostDetailMetricsQueryService.round1(bytes / GB);
-    }
-
-    private static Double round2(Double value) {
-        return value == null ? null : Math.round(value * 100) / 100.0;
     }
 }

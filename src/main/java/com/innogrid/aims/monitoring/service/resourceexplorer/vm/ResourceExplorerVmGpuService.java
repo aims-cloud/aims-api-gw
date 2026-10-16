@@ -25,9 +25,9 @@ import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbNode;
 import org.springframework.stereotype.Service;
 
-import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.gb;
-import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.round1;
-import static com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler.toOffsetDateTime;
+import static com.innogrid.aims.common.util.MetricFormat.mbToGb;
+import static com.innogrid.aims.common.util.MetricFormat.round1;
+import static com.innogrid.aims.common.util.MetricFormat.toOffsetDateTime;
 
 /**
  * 자원 탐색기 VM GPU 카테고리 패널 조회 서비스.
@@ -127,8 +127,8 @@ public class ResourceExplorerVmGpuService {
                 node.name(),
                 allocationType(metrics.migUuids(selector).contains(gpu.uuid())),
                 null,
-                gb(gpu.fbTotalMb()),
-                gb(gpu.fbUsedMb()),
+                mbToGb(gpu.fbTotalMb()),
+                mbToGb(gpu.fbUsedMb()),
                 round1(gpu.vramPercent()),
                 null);
     }
@@ -179,8 +179,8 @@ public class ResourceExplorerVmGpuService {
                 round1(g.utilizationAvg()),
                 round1(g.vramPercent()),
                 round1(g.vramPercentAvg()),
-                gb(g.fbUsedMb()),
-                gb(g.fbTotalMb()),
+                mbToGb(g.fbUsedMb()),
+                mbToGb(g.fbTotalMb()),
                 GpuPanelAssembler.collectStatus(g),
                 null);
     }

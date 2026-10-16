@@ -1,11 +1,10 @@
 package com.innogrid.aims.monitoring.service.resourceexplorer.tree;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemInfoResponse;
@@ -50,9 +49,9 @@ public final class SystemPanelAssembler {
         }
         SystemInfo i = info.get();
         return new SystemInfoResponse(i.hostname(), i.osName(), i.osVersion(), i.kernelRelease(), i.architecture(),
-                i.bootTimeSeconds() == null ? null : toOffsetDateTime(Instant.ofEpochSecond(i.bootTimeSeconds())),
+                i.bootTimeSeconds() == null ? null : MetricFormat.toOffsetDateTime(Instant.ofEpochSecond(i.bootTimeSeconds())),
                 MonitoringStatus.COLLECTING.name(),
-                toOffsetDateTime(i.collectedAt()));
+                MetricFormat.toOffsetDateTime(i.collectedAt()));
     }
 
     /** 값 없는 시스템 정보 표 — exporter 미등록(NOT_CONFIGURED) 또는 표본 없음(UNAVAILABLE) */
@@ -76,9 +75,5 @@ public final class SystemPanelAssembler {
             return null;
         }
         return Math.max(0L, Instant.now().getEpochSecond() - bootTimeSeconds);
-    }
-
-    private static OffsetDateTime toOffsetDateTime(Instant instant) {
-        return instant == null ? null : instant.atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 }

@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
@@ -36,7 +37,6 @@ import org.springframework.stereotype.Component;
 public class HostMetricsQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(HostMetricsQueryService.class);
-    private static final double GB = 1024.0 * 1024 * 1024;
     private static final String FS_FILTER = "fstype!~\"tmpfs|overlay\"";
 
     /** 물리 호스트 그룹 — instance 라벨, 필터 없음 */
@@ -130,13 +130,13 @@ public class HostMetricsQueryService {
                 Double avail = fsAvail.get(key);
                 Double size = fsSize.get(key);
                 Double fsUtil = avail == null || size == null ? null
-                        : size <= 0 ? 0.0 : round1((1 - avail / size) * 100);
+                        : size <= 0 ? 0.0 : MetricFormat.round1((1 - avail / size) * 100);
                 result.put(key, new HostUtilization(
-                        round1(cpu.get(key)),
-                        round1(memory.get(key)),
+                        MetricFormat.round1(cpu.get(key)),
+                        MetricFormat.round1(memory.get(key)),
                         fsUtil,
-                        avail == null ? null : round1(avail / GB),
-                        size == null ? null : round1(size / GB)));
+                        MetricFormat.bytesToGb(avail),
+                        MetricFormat.bytesToGb(size)));
             }
             return result;
         } catch (RuntimeException e) {
@@ -166,9 +166,5 @@ public class HostMetricsQueryService {
             }
         }
         return result;
-    }
-
-    private static Double round1(Double value) {
-        return value == null ? null : Math.round(value * 10) / 10.0;
     }
 }

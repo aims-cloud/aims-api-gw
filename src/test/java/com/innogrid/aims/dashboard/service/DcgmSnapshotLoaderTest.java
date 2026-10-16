@@ -74,6 +74,22 @@ class DcgmSnapshotLoaderTest {
         assertThat(snapshot.collectingInstances()).isEmpty();
     }
 
+    @Test void infiniteAndNonNumericValuesAreNotCollected() {
+        Map<String, String> gpu = Map.of("instance", "n:9400", "UUID", "GPU-i", "gpu", "0");
+        when(metrics.queryResultsAt(eq(DcgmSnapshotLoader.SEEN), any())).thenReturn(List.of(row(gpu, "1")));
+        when(metrics.queryResultsAt(startsWith("avg_over_time(DCGM_FI_DEV_GPU_UTIL"), any()))
+                .thenReturn(List.of(row(gpu, "+Inf")));                                 // NaN 처럼 값으로 치지 않는다
+        when(metrics.queryResultsAt(startsWith("avg_over_time(DCGM_FI_DEV_GPU_TEMP"), any()))
+                .thenReturn(List.of(row(gpu, "abc")));
+
+        DcgmSnapshot snapshot = loader.load(GpuWindow.of(null, null, clock));
+
+        assertThat(snapshot.units()).singleElement().satisfies(u -> {
+            assertThat(u.utilization()).isNull();
+            assertThat(u.temperatureC()).isNull();
+        });
+    }
+
     @Test void sameWindowIsCachedForTtlAndDifferentWindowsAreSeparate() {
         GpuWindow recent = GpuWindow.of(null, null, clock);
         loader.load(recent);

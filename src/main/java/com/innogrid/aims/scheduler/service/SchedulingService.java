@@ -418,7 +418,8 @@ public class SchedulingService {
     /**
      * 워크로드의 실행 상태를 전이한다.
      * 배치 이후의 흐름(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
-     * 상태가 종료되면 예약 회계에서 빠져 노드 자원이 풀린다.
+     * 상태가 종료되면 예약 회계에서 빠져 노드 자원이 풀리고, 현재 결정의 전달 기록이 열려 있으면 같은 끝 상태로
+     * 마감한다({@link PlacementDispatchService#closeCurrent}).
      */
     @Transactional
     public Workload changeStatus(Long workloadId, Workload.WorkloadStatus target) {
@@ -430,6 +431,10 @@ public class SchedulingService {
             throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
                     "허용되지 않는 상태 전이입니다: %s → %s", workload.getStatus(), target));
         }
+        if (dispatchService != null
+                && (target == Workload.WorkloadStatus.COMPLETED || target == Workload.WorkloadStatus.FAILED)) {
+            dispatchService.closeCurrent(workload, target);
+        }
         return workloadRepository.save(workload);
     }
 
@@ -437,7 +442,7 @@ public class SchedulingService {
      * 배치 예약을 취소한다 — SCHEDULED 워크로드를 대기로 되돌리고 배정을 풀며, 현재 결정의 전달 기록을 마감한다.
      *
      * <p>상태 변경 API 의 SCHEDULED→FAILED→PENDING 조합과 다른 점: 배정 컬럼이 남지 않고, 재시도 회계를 지우지 않으며,
-     * 중간 FAILED 가 드러나지 않고, 전달 기록이 ACCEPTED 로 방치되지 않는다. 배치 이력은 연구 근거라 건드리지 않는다.
+     * 중간 FAILED 가 드러나지 않는다(전달 기록은 두 경로 모두 FAILED 로 마감되며 비고 표지가 다르다). 배치 이력은 연구 근거라 건드리지 않는다.
      * 노드 예약은 워크로드 행에서 매번 다시 계산하므로 PENDING 이 되면 다음 컨텍스트부터 저절로 빠진다.</p>
      *
      * @return 취소 뒤 워크로드 · 풀린 배정 · 마감된(또는 없는) 전달 기록

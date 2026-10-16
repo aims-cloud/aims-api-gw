@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.innogrid.aims.monitoring.ResourceExplorerProperties;
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import org.slf4j.Logger;
@@ -243,30 +244,30 @@ public class MonitoringCapabilityResolver {
         try {
             Map<String, Boolean> up = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(UP_QUERY)) {
-                String instance = label(row, "instance");
+                String instance = ThanosResults.label(row, "instance");
                 if (instance != null) {
                     up.put(instance, "1".equals(value(row)));
                 }
             }
             Map<String, List<GpuDevice>> gpus = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(gpuDeviceQuery(window))) {
-                String instance = label(row, "instance");
-                String uuid = label(row, "UUID");
+                String instance = ThanosResults.label(row, "instance");
+                String uuid = ThanosResults.label(row, "UUID");
                 if (instance != null && uuid != null) {
-                    gpus.computeIfAbsent(instance, k -> new ArrayList<>()).add(new GpuDevice(uuid, label(row, "gpu")));
+                    gpus.computeIfAbsent(instance, k -> new ArrayList<>()).add(new GpuDevice(uuid, ThanosResults.label(row, "gpu")));
                 }
             }
             Map<String, Set<String>> ipmi = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(ipmiMetricQuery(window))) {
-                String instance = label(row, "instance");
-                String name = label(row, "metric");
+                String instance = ThanosResults.label(row, "instance");
+                String name = ThanosResults.label(row, "metric");
                 if (instance != null && name != null) {
                     ipmi.computeIfAbsent(instance, k -> new HashSet<>()).add(name);
                 }
             }
             Map<String, Boolean> power = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(CHASSIS_POWER_QUERY)) {
-                String instance = label(row, "instance");
+                String instance = ThanosResults.label(row, "instance");
                 if (instance != null) {
                     power.put(instance, "1".equals(value(row)));
                 }
@@ -288,15 +289,15 @@ public class MonitoringCapabilityResolver {
             Map<String, List<GpuDevice>> tbGpus = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(tbGpuDeviceQuery(window))) {
                 String key = tbKey(row);
-                String uuid = label(row, "UUID");
+                String uuid = ThanosResults.label(row, "UUID");
                 if (key != null && uuid != null) {
-                    tbGpus.computeIfAbsent(key, k -> new ArrayList<>()).add(new GpuDevice(uuid, label(row, "gpu")));
+                    tbGpus.computeIfAbsent(key, k -> new ArrayList<>()).add(new GpuDevice(uuid, ThanosResults.label(row, "gpu")));
                 }
             }
             Map<String, Set<String>> nodeMetrics = new HashMap<>();
             Map<String, Set<String>> tbNodeMetrics = new HashMap<>();
             for (Map<String, Object> row : client.queryResults(nodeMetricQuery(window))) {
-                String name = label(row, "metric");
+                String name = ThanosResults.label(row, "metric");
                 if (name != null) {
                     addNodeMetric(row, name, nodeMetrics, tbNodeMetrics);
                 }
@@ -329,8 +330,8 @@ public class MonitoringCapabilityResolver {
                                       String metricName,
                                       Map<String, Set<String>> byInstance,
                                       Map<String, Set<String>> byTbNode) {
-        String instance = label(row, "instance");
-        if (instance != null && !instance.isBlank()) {
+        String instance = ThanosResults.label(row, "instance");
+        if (instance != null) {
             byInstance.computeIfAbsent(instance, k -> new HashSet<>()).add(metricName);
         }
         String tbKey = tbKey(row);
@@ -351,10 +352,10 @@ public class MonitoringCapabilityResolver {
     }
 
     private static String tbKey(Map<String, Object> row) {
-        String ns = label(row, "tb_ns");
-        String infra = label(row, "tb_infra");
-        String node = label(row, "tb_node");
-        if (ns == null || infra == null || node == null || ns.isBlank() || infra.isBlank() || node.isBlank()) {
+        String ns = ThanosResults.label(row, "tb_ns");
+        String infra = ThanosResults.label(row, "tb_infra");
+        String node = ThanosResults.label(row, "tb_node");
+        if (ns == null || infra == null || node == null) {
             return null;
         }
         return Snapshot.tbKey(ns, infra, node);
@@ -377,16 +378,6 @@ public class MonitoringCapabilityResolver {
         } catch (NumberFormatException e) {
             return false;
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static String label(Map<String, Object> row, String name) {
-        Object metric = row.get("metric");
-        if (!(metric instanceof Map<?, ?> labels)) {
-            return null;
-        }
-        Object v = ((Map<String, Object>) labels).get(name);
-        return v == null ? null : v.toString();
     }
 
     private static String value(Map<String, Object> row) {

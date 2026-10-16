@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
@@ -181,15 +182,15 @@ public class HostCategoryMetricsQueryService {
         try {
             List<Map<String, Object>> info = client.queryResults(cpuInfoQuery(s));
             if (!info.isEmpty()) {
-                return new CpuInventory(fromCpuInfo(info), sampleTime(info.get(0)));
+                return new CpuInventory(fromCpuInfo(info), ThanosResults.sampleTime(info.get(0)));
             }
             List<Map<String, Object>> count = client.queryResults(cpuCountQuery(s));
-            Double logical = firstValue(count);
+            Double logical = ThanosResults.firstValue(count);
             if (logical == null || logical <= 0) {
                 return CpuInventory.EMPTY;
             }
             int n = (int) Math.round(logical);
-            return new CpuInventory(List.of(new CpuDevice(0, null, null, n, n)), sampleTime(count.get(0)));
+            return new CpuInventory(List.of(new CpuDevice(0, null, null, n, n)), ThanosResults.sampleTime(count.get(0)));
         } catch (RuntimeException e) {
             log.warn("Thanos CPU 목록 조회 실패 — 빈 목록을 돌려줍니다: {}", e.getMessage());
             return CpuInventory.EMPTY;
@@ -234,8 +235,8 @@ public class HostCategoryMetricsQueryService {
         Map<Integer, Set<String>> cores = new HashMap<>();
         Map<Integer, Set<String>> threads = new HashMap<>();
         for (Map<String, Object> r : results) {
-            Object m = r.get("metric");
-            if (!(m instanceof Map<?, ?> labels)) {
+            Map<String, String> labels = ThanosResults.labels(r);
+            if (labels.isEmpty()) {
                 continue;
             }
             int socket = parseInt(labels.get("package"));
@@ -257,8 +258,8 @@ public class HostCategoryMetricsQueryService {
                 return List.of();
             }
             List<DataPoint> points = new ArrayList<>();
-            for (Object[] pair : HostDetailMetricsQueryService.values(results.get(0))) {
-                points.add(new DataPoint(((Number) pair[0]).longValue(), round1((Double) pair[1])));
+            for (ThanosResults.Sample sample : ThanosResults.values(results.get(0))) {
+                points.add(new DataPoint(sample.epochSecond(), round1(sample.value())));
             }
             return points;
         } catch (RuntimeException e) {
@@ -268,28 +269,7 @@ public class HostCategoryMetricsQueryService {
     }
 
     private Double scalar(String query) {
-        return firstValue(client.queryResults(query));
-    }
-
-    /** 즉시 쿼리 결과의 첫 벡터 값 — 없거나 비수치면 null */
-    private static Double firstValue(List<Map<String, Object>> results) {
-        if (results.isEmpty()) {
-            return null;
-        }
-        Object value = results.get(0).get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
-    }
-
-    /** 즉시 쿼리 결과 1개의 표본 시각(value[0], epoch 초) — 없으면 null */
-    private static Instant sampleTime(Map<String, Object> result) {
-        Object value = result.get("value");
-        if (value instanceof List<?> pair && !pair.isEmpty() && pair.get(0) instanceof Number ts) {
-            return Instant.ofEpochSecond(ts.longValue());
-        }
-        return null;
+        return ThanosResults.firstValue(client.queryResults(query));
     }
 
     private static Double round1(Double value) {

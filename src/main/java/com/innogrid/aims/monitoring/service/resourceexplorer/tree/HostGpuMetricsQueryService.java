@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
+import com.innogrid.aims.monitoring.ThanosResults;
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
@@ -184,9 +185,9 @@ public class HostGpuMetricsQueryService {
         try {
             Map<String, Builder> gpus = new LinkedHashMap<>();
             for (Map<String, Object> row : client.queryResults(presenceQuery(s))) {
-                Map<String, String> labels = labels(row);
+                Map<String, String> labels = ThanosResults.labels(row);
                 String uuid = labels.get("UUID");
-                Double seconds = value(row);
+                Double seconds = ThanosResults.value(row);
                 if (uuid == null || seconds == null) {
                     continue;
                 }
@@ -205,7 +206,7 @@ public class HostGpuMetricsQueryService {
                 return List.of();
             }
             for (Map<String, Object> row : client.queryResults(collectedQuery(s))) {
-                Map<String, String> labels = labels(row);
+                Map<String, String> labels = ThanosResults.labels(row);
                 Builder b = gpus.get(labels.get("UUID"));
                 if (b != null && labels.get("__name__") != null) {
                     b.collected.add(labels.get("__name__"));
@@ -278,11 +279,11 @@ public class HostGpuMetricsQueryService {
         try {
             List<GpuSeries> out = new ArrayList<>();
             for (Map<String, Object> result : client.queryRangeResults(query, from, to, step)) {
-                Map<String, String> labels = labels(result);
+                Map<String, String> labels = ThanosResults.labels(result);
                 List<DataPoint> points = new ArrayList<>();
-                for (Object[] pair : HostDetailMetricsQueryService.values(result)) {
-                    points.add(new DataPoint(((Number) pair[0]).longValue(),
-                            HostDetailMetricsQueryService.round1((Double) pair[1])));
+                for (ThanosResults.Sample sample : ThanosResults.values(result)) {
+                    points.add(new DataPoint(sample.epochSecond(),
+                            HostDetailMetricsQueryService.round1(sample.value())));
                 }
                 if (!points.isEmpty()) {
                     out.add(new GpuSeries(labels.get("UUID"), labels.get("gpu"), points));
@@ -326,8 +327,8 @@ public class HostGpuMetricsQueryService {
     private Map<String, Double> byUuid(String query) {
         Map<String, Double> out = new HashMap<>();
         for (Map<String, Object> row : client.queryResults(query)) {
-            String uuid = labels(row).get("UUID");
-            Double v = value(row);
+            String uuid = ThanosResults.labels(row).get("UUID");
+            Double v = ThanosResults.value(row);
             if (uuid != null && v != null) {
                 out.putIfAbsent(uuid, v);
             }
@@ -337,26 +338,12 @@ public class HostGpuMetricsQueryService {
 
     private void merge(Map<String, Builder> gpus, String query, BiConsumer<Builder, Double> setter) {
         for (Map<String, Object> row : client.queryResults(query)) {
-            Builder b = gpus.get(labels(row).get("UUID"));
-            Double v = value(row);
+            Builder b = gpus.get(ThanosResults.labels(row).get("UUID"));
+            Double v = ThanosResults.value(row);
             if (b != null && v != null) {
                 setter.accept(b, v);
             }
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, String> labels(Map<String, Object> row) {
-        Object metric = row.get("metric");
-        return metric instanceof Map<?, ?> m ? (Map<String, String>) m : new HashMap<>();
-    }
-
-    private static Double value(Map<String, Object> row) {
-        Object value = row.get("value");
-        if (value instanceof List<?> pair && pair.size() >= 2) {
-            return HostDetailMetricsQueryService.parse(pair.get(1));
-        }
-        return null;
     }
 
     private static final class Builder {

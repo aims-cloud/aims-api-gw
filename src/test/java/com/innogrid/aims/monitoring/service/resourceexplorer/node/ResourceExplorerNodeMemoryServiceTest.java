@@ -12,6 +12,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.memory.MemoryMetricTrendResponse;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -46,7 +47,7 @@ class ResourceExplorerNodeMemoryServiceTest {
     HostCategoryMetricsQueryService metrics = mock(HostCategoryMetricsQueryService.class);
 
     ResourceExplorerNodeMemoryService service = new ResourceExplorerNodeMemoryService(
-            new NodeAccessService(scopeService, assetRepository), metrics);
+            new NodeAccessService(scopeService, assetRepository, mock(MonitoringTargetRepository.class)), metrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
 

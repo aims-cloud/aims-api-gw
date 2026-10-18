@@ -82,7 +82,7 @@ class ResourceExplorerNodeGpuServiceTest {
     HostGpuMetricsQueryService metrics = mock(HostGpuMetricsQueryService.class);
 
     ResourceExplorerNodeGpuService service = new ResourceExplorerNodeGpuService(
-            new NodeAccessService(scopeService, assetRepository), targetRepository, metrics);
+            new NodeAccessService(scopeService, assetRepository, targetRepository), metrics);
 
     static final MetricSelector DCGM_SEL = MetricSelector.instance("10.0.0.1:9400");
     static final Instant NOW = Instant.ofEpochSecond(1_700_000_000L);

@@ -26,9 +26,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryRespons
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse.GpuCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeSummaryResponse.NetworkTrafficCard;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResponse;
-import com.innogrid.aims.monitoring.entity.MonitoringTarget;
-import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
-import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService;
@@ -79,18 +76,15 @@ public class ResourceExplorerNodeService {
     static final NodeMetricInterval VM_LIST_INTERVAL = NodeMetricInterval.LAST_10M;
 
     private final NodeAccessService nodeAccess;
-    private final MonitoringTargetRepository monitoringTargetRepository;
     private final Sebu1VirtualResourceProvider virtualResourceProvider;
     private final HostDetailMetricsQueryService detailMetrics;
     private final HostMetricsQueryService hostMetrics;
 
     public ResourceExplorerNodeService(NodeAccessService nodeAccess,
-                                       MonitoringTargetRepository monitoringTargetRepository,
                                        Sebu1VirtualResourceProvider virtualResourceProvider,
                                        HostDetailMetricsQueryService detailMetrics,
                                        HostMetricsQueryService hostMetrics) {
         this.nodeAccess = nodeAccess;
-        this.monitoringTargetRepository = monitoringTargetRepository;
         this.virtualResourceProvider = virtualResourceProvider;
         this.detailMetrics = detailMetrics;
         this.hostMetrics = hostMetrics;
@@ -202,17 +196,7 @@ public class ResourceExplorerNodeService {
         NodeAccessService.AccessibleNode accessible = nodeAccess.require(nodeId);
         ScopedHost host = accessible.host();
         Asset asset = accessible.asset();
-        long assetId = host.assetId();
-        String dcgmInstance = monitoringTargetRepository.findByAsset_IdIn(List.of(assetId)).stream()
-                .filter(t -> t.getExporterType() == ExporterType.DCGM_EXPORTER)
-                .map(MonitoringTarget::getScrapeEndpoint)
-                .findFirst()
-                .orElse(null);
-        return new NodeContext(asset, host, selector(host.instance()), selector(dcgmInstance));
-    }
-
-    private static MetricSelector selector(String instance) {
-        return instance == null ? null : MetricSelector.instance(instance);
+        return new NodeContext(asset, host, NodeAccessService.selectorOf(host), nodeAccess.dcgmSelectorOf(host));
     }
 
     // ── 행·카드 구성 ────────────────────────────────────────────

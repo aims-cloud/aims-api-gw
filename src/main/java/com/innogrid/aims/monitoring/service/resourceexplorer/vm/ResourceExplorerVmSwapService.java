@@ -36,13 +36,13 @@ public class ResourceExplorerVmSwapService {
 
     /** 개요 탭 KPI 카드 6종 — Total / Used / Free (GB), 사용률(%), 스왑 인·아웃(pages/s, 최근 5분). 미수집은 null */
     public SwapSummaryResponse getSwapSummary(String roleName, String nsId, String infraId, String vmId) {
-        return metrics.summary(selector(roleName, nsId, infraId, vmId));
+        return metrics.summary(support.selector(roleName, nsId, infraId, vmId));
     }
 
     /** 모니터링 탭 차트 — 지표별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public SwapMetricTrendResponse getSwapMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                       SwapMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -50,11 +50,5 @@ public class ResourceExplorerVmSwapService {
         List<DataPoint> points = metrics.trend(metric, sel, from, to, step);
         return new SwapMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("swap", points)));
-    }
-
-    /** 스코프·존재 검증(404) 뒤 tb_* 라벨 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 }

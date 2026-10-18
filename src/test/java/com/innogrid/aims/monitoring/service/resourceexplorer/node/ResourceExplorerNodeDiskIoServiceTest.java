@@ -15,6 +15,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoDevic
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.diskio.DiskIoSummaryResponse;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -51,7 +52,7 @@ class ResourceExplorerNodeDiskIoServiceTest {
     HostDiskIoMetricsQueryService metrics = mock(HostDiskIoMetricsQueryService.class);
 
     ResourceExplorerNodeDiskIoService service = new ResourceExplorerNodeDiskIoService(
-            new NodeAccessService(scopeService, assetRepository), metrics);
+            new NodeAccessService(scopeService, assetRepository, mock(MonitoringTargetRepository.class)), metrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
 

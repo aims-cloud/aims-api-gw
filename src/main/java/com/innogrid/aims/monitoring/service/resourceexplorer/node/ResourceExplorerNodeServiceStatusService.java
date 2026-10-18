@@ -38,7 +38,7 @@ public class ResourceExplorerNodeServiceStatusService {
 
     /** 개요 탭 KPI 카드 — 전체·상태별 유닛 수. systemd 콜렉터가 없어 표본이 없으면 전부 null */
     public ServiceStatusSummaryResponse getServiceStatusSummary(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         return ServiceStatusPanelAssembler.summary(selector == null ? List.of() : metrics.units(selector));
     }
 
@@ -46,21 +46,15 @@ public class ResourceExplorerNodeServiceStatusService {
     public PageResponse<ServiceUnitListItemResponse> getServiceUnits(String nodeId, ServiceUnitState state, String keyword,
                                                                      int page, int size, String sort) {
         Comparator<ServiceUnitListItemResponse> comparator = ServiceStatusPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         List<Unit> units = selector == null ? List.of() : metrics.units(selector);
         return ServiceStatusPanelAssembler.unitPage(units, state, keyword, comparator, page, size);
     }
 
     /** 모니터링 탭 차트 — 상태별 유닛 수 시계열. 미수집이면 빈 시리즈 */
     public ServiceStatusMetricTrendResponse getServiceStatusMetricTrend(String nodeId, ServiceStatusMetric metric, NodeMetricInterval interval) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         return ServiceStatusPanelAssembler.trend(metric, interval, (from, to, step) ->
                 selector == null ? List.of() : metrics.trend(metric, selector, from, to, step));
-    }
-
-    /** 스코프 검증(404) 뒤 node_exporter 선택자. exporter 타겟이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector selector(String nodeId) {
-        String instance = nodeAccess.require(nodeId).host().instance();
-        return instance == null ? null : MetricSelector.instance(instance);
     }
 }

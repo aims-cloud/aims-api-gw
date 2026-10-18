@@ -35,7 +35,7 @@ public class ResourceExplorerNodeSwapService {
 
     /** 개요 탭 KPI 카드 6종 — Total / Used / Free (GB), 사용률(%), 스왑 인·아웃(pages/s, 최근 5분). 미수집은 null */
     public SwapSummaryResponse getSwapSummary(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         if (selector == null) {
             return new SwapSummaryResponse(null, null, null, null, null, null);
         }
@@ -44,7 +44,7 @@ public class ResourceExplorerNodeSwapService {
 
     /** 모니터링 탭 차트 — 지표별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public SwapMetricTrendResponse getSwapMetricTrend(String nodeId, SwapMetric metric, NodeMetricInterval interval) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -52,11 +52,5 @@ public class ResourceExplorerNodeSwapService {
         List<DataPoint> points = selector == null ? List.of() : metrics.trend(metric, selector, from, to, step);
         return new SwapMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("swap", points)));
-    }
-
-    /** 스코프 검증(404) 뒤 node_exporter 선택자. exporter 타겟이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector selector(String nodeId) {
-        String instance = nodeAccess.require(nodeId).host().instance();
-        return instance == null ? null : MetricSelector.instance(instance);
     }
 }

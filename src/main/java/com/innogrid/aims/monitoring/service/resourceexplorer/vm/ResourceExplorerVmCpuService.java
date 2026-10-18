@@ -51,7 +51,7 @@ public class ResourceExplorerVmCpuService {
 
     /** 개요 탭 KPI 카드 4종 — Used / I/O Wait / System / Steal (%). 미수집은 null */
     public CpuSummaryResponse getCpuSummary(String roleName, String nsId, String infraId, String vmId) {
-        return metrics.cpuSummary(selector(roleName, nsId, infraId, vmId));
+        return metrics.cpuSummary(support.selector(roleName, nsId, infraId, vmId));
     }
 
     /**
@@ -61,7 +61,7 @@ public class ResourceExplorerVmCpuService {
     public PageResponse<VmCpuListItemResponse> getCpuDevices(String roleName, String nsId, String infraId, String vmId,
                                                              int page, int size, String sort) {
         Comparator<VmCpuListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        List<VmCpuListItemResponse> rows = metrics.cpuDevices(selector(roleName, nsId, infraId, vmId)).stream()
+        List<VmCpuListItemResponse> rows = metrics.cpuDevices(support.selector(roleName, nsId, infraId, vmId)).stream()
                 .map(ResourceExplorerVmCpuService::row)
                 .sorted(comparator)
                 .toList();
@@ -71,18 +71,13 @@ public class ResourceExplorerVmCpuService {
     /** 모니터링 탭 차트 — CPU mode 별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public VmCpuMetricTrendResponse getCpuMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                       VmCpuMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
         var points = metrics.cpuTrend(metric, sel, from, to, step);
         return new VmCpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("cpu", points)));
-    }
-
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 
     private static VmCpuListItemResponse row(CpuDevice d) {

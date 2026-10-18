@@ -38,14 +38,14 @@ public class ResourceExplorerNodeDiskIoService {
 
     /** 개요 탭 KPI 카드 — 장치 수, 읽기·쓰기 B/s·IOPS·지연(IOPS 가중)·평균 사용률. 장치가 없으면 장치 수 0 에 값 전부 null */
     public DiskIoSummaryResponse getDiskIoSummary(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         return DiskIoPanelAssembler.summary(selector == null ? List.of() : metrics.devices(selector));
     }
 
     /** 개요 탭 장치 목록 — 장치별 읽기·쓰기 B/s·IOPS·지연·사용률, 페이징(1부터)·컬럼 정렬 */
     public PageResponse<DiskIoDeviceListItemResponse> getDiskIoDevices(String nodeId, int page, int size, String sort) {
         Comparator<DiskIoDeviceListItemResponse> comparator = DiskIoPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         List<DeviceIo> devices = selector == null ? List.of() : metrics.devices(selector);
         return DiskIoPanelAssembler.devicePage(devices, comparator, page, size);
     }
@@ -53,14 +53,8 @@ public class ResourceExplorerNodeDiskIoService {
     /** 모니터링 탭 차트 — device 를 주면 그 장치만, 없으면 장치 전체 합산(지연은 가중, 사용률은 평균) */
     public DiskIoMetricTrendResponse getDiskIoMetricTrend(String nodeId, DiskIoMetric metric, String device, NodeMetricInterval interval) {
         String selectedDevice = DiskIoPanelAssembler.normalizeDevice(device);
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         return DiskIoPanelAssembler.trend(metric, selectedDevice, interval, (from, to, step) ->
                 selector == null ? List.of() : metrics.trend(metric, selector, selectedDevice, from, to, step));
-    }
-
-    /** 스코프 검증(404) 뒤 node_exporter 선택자. exporter 타겟이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector selector(String nodeId) {
-        String instance = nodeAccess.require(nodeId).host().instance();
-        return instance == null ? null : MetricSelector.instance(instance);
     }
 }

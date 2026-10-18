@@ -35,9 +35,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.GpuCounter;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.TrendSeries;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuXidErrorsResponse;
-import com.innogrid.aims.monitoring.entity.MonitoringTarget;
-import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
-import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.GpuPanelAssembler;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostGpuMetricsQueryService.GpuHealth;
@@ -90,14 +87,10 @@ public class ResourceExplorerNodeGpuService {
     private static final Duration PCIE_TREND_WINDOW = Duration.ofHours(24);
 
     private final NodeAccessService nodeAccess;
-    private final MonitoringTargetRepository monitoringTargetRepository;
     private final HostGpuMetricsQueryService metrics;
 
-    public ResourceExplorerNodeGpuService(NodeAccessService nodeAccess,
-                                          MonitoringTargetRepository monitoringTargetRepository,
-                                          HostGpuMetricsQueryService metrics) {
+    public ResourceExplorerNodeGpuService(NodeAccessService nodeAccess, HostGpuMetricsQueryService metrics) {
         this.nodeAccess = nodeAccess;
-        this.monitoringTargetRepository = monitoringTargetRepository;
         this.metrics = metrics;
     }
 
@@ -105,7 +98,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** 그룹 개요 KPI 카드 4종 — 총 GPU 수 / VRAM Util(사용·전체) / Power(합산·Peak) / 최대 온도. 수집 중인 GPU 가 없으면 값은 null */
     public GpuGroupSummaryResponse getGroupSummary(String nodeId) {
-        List<GpuSample> gpus = devices(dcgmSelector(nodeId));
+        List<GpuSample> gpus = devices(nodeAccess.dcgmSelector(nodeId));
         List<GpuSample> collecting = gpus.stream().filter(GpuSample::collecting).toList();
         // VRAM 은 사용·여유가 둘 다 있는 GPU 만 — 한쪽만 있으면 사용률 분자·분모가 어긋난다
         List<GpuSample> withVram = collecting.stream().filter(g -> g.fbTotalMb() != null).toList();
@@ -124,7 +117,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** 그룹 상태 요약 — 이상 감지 배너 + 수집 상태/ECC DBE/PCIe Replay/Clocks Event 카드 */
     public GpuHealthSummaryResponse getGroupHealth(String nodeId) {
-        MetricSelector selector = dcgmSelector(nodeId);
+        MetricSelector selector = nodeAccess.dcgmSelector(nodeId);
         Map<String, GpuHealth> health = health(selector);
         return healthSummary(devices(selector).stream().map(g -> judge(g, health.get(g.uuid()))).toList(), false);
     }
@@ -133,7 +126,7 @@ public class ResourceExplorerNodeGpuService {
     public PageResponse<GpuDeviceListItemResponse> getDevices(String nodeId,
                                                               int page, int size, String sort) {
         Comparator<GpuDeviceListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        List<GpuDeviceListItemResponse> rows = devices(dcgmSelector(nodeId)).stream()
+        List<GpuDeviceListItemResponse> rows = devices(nodeAccess.dcgmSelector(nodeId)).stream()
                 .map(ResourceExplorerNodeGpuService::row)
                 .sorted(comparator)
                 .toList();
@@ -155,7 +148,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** 개별 GPU 상태 요약 — 그룹과 동일 구조, 해당 GPU 1장 기준 */
     public GpuHealthSummaryResponse getDeviceHealth(String nodeId, String gpuId) {
-        MetricSelector selector = dcgmSelector(nodeId);
+        MetricSelector selector = nodeAccess.dcgmSelector(nodeId);
         GpuSample gpu = requireDevice(selector, gpuId);
         return healthSummary(List.of(judge(gpu, health(selector).get(gpu.uuid()))), true);
     }
@@ -186,7 +179,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** 수집 상태 상세 (그룹) — 요약 표 + GPU별 수집 상태 카드 (HEALTHY/FAILED) */
     public GpuCollectStatusResponse getCollectStatus(String nodeId) {
-        List<GpuSample> gpus = devices(dcgmSelector(nodeId));
+        List<GpuSample> gpus = devices(nodeAccess.dcgmSelector(nodeId));
         int total = HostGpuMetricsQueryService.EXPECTED_METRICS.size();
         List<GpuCollectStatus> cards = gpus.stream()
                 .map(g -> new GpuCollectStatus(g.uuid(), g.displayName(), g.model(), state(g),
@@ -219,7 +212,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** PCIe Replay Counter 상세 — GPU별 누적/1h/24h 증가와 최근 24시간 증가 추이(회/h). gpuId 미지정 시 그룹 전체 */
     public GpuPcieReplayResponse getPcieReplay(String nodeId, String gpuId) {
-        MetricSelector selector = dcgmSelector(nodeId);
+        MetricSelector selector = nodeAccess.dcgmSelector(nodeId);
         List<GpuSample> gpus = targets(selector, gpuId);
         Map<String, GpuHealth> health = health(selector);
         List<GpuCounter> counters = gpus.stream().map(g -> {
@@ -240,7 +233,7 @@ public class ResourceExplorerNodeGpuService {
 
     /** Clocks Event Reasons 상세 — GPU별 활성 이벤트와 안내 텍스트. gpuId 미지정 시 그룹 전체, 지표가 없으면 activeReasons null */
     public GpuClocksEventsResponse getClocksEvents(String nodeId, String gpuId) {
-        MetricSelector selector = dcgmSelector(nodeId);
+        MetricSelector selector = nodeAccess.dcgmSelector(nodeId);
         List<GpuSample> gpus = targets(selector, gpuId);
         Map<String, GpuHealth> health = health(selector);
         return new GpuClocksEventsResponse(gpus.stream().map(g -> {
@@ -257,17 +250,6 @@ public class ResourceExplorerNodeGpuService {
 
     // ── 조회 대상 ───────────────────────────────────────────────
 
-    /** 스코프 검증(404) 뒤 노드 dcgm_exporter 선택자. 등록된 수집 대상이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector dcgmSelector(String nodeId) {
-        long assetId = nodeAccess.require(nodeId).host().assetId();
-        return monitoringTargetRepository.findByAsset_IdIn(List.of(assetId)).stream()
-                .filter(t -> t.getExporterType() == ExporterType.DCGM_EXPORTER)
-                .map(MonitoringTarget::getScrapeEndpoint)
-                .findFirst()
-                .map(MetricSelector::instance)
-                .orElse(null);
-    }
-
     private List<GpuSample> devices(MetricSelector selector) {
         return selector == null ? List.of() : metrics.devices(selector);
     }
@@ -282,7 +264,7 @@ public class ResourceExplorerNodeGpuService {
     }
 
     private GpuSample requireDevice(String nodeId, String gpuId) {
-        return requireDevice(dcgmSelector(nodeId), gpuId);
+        return requireDevice(nodeAccess.dcgmSelector(nodeId), gpuId);
     }
 
     /** 최근 24시간 안에 수집된 GPU 만 개별 패널을 연다 — dcgm_exporter 가 없거나 해당 UUID 가 없으면 404 */
@@ -295,7 +277,7 @@ public class ResourceExplorerNodeGpuService {
         if (!from.isBefore(to)) {
             throw BusinessException.badRequest("조회 시작 시각은 종료 시각보다 앞서야 합니다.");
         }
-        MetricSelector selector = dcgmSelector(nodeId);
+        MetricSelector selector = nodeAccess.dcgmSelector(nodeId);
         List<Series> series = selector == null ? List.of()
                 : GpuPanelAssembler.series(metrics.trend(metric, selector, gpuId, from, to, step));
         return new GpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step, series);

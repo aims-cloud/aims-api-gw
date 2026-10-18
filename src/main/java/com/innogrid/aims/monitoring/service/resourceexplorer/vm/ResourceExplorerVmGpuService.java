@@ -77,7 +77,7 @@ public class ResourceExplorerVmGpuService {
 
     /** 그룹 개요 KPI 카드 6종 — 총 GPU 수 / 최대·평균 GPU Util / 평균·최대 VRAM 사용률 / 최근 알람 수(null). 수집 중인 GPU 가 없으면 값은 null */
     public VmGpuGroupSummaryResponse getGroupSummary(String roleName, String nsId, String infraId, String vmId) {
-        List<GpuSample> gpus = metrics.devices(selector(roleName, nsId, infraId, vmId));
+        List<GpuSample> gpus = metrics.devices(support.selector(roleName, nsId, infraId, vmId));
         List<GpuSample> collecting = gpus.stream().filter(GpuSample::collecting).toList();
         return new VmGpuGroupSummaryResponse(
                 gpus.size(),
@@ -92,7 +92,7 @@ public class ResourceExplorerVmGpuService {
     public PageResponse<VmGpuInstanceListItemResponse> getInstances(String roleName, String nsId, String infraId, String vmId,
                                                                     int page, int size, String sort) {
         Comparator<VmGpuInstanceListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        MetricSelector selector = selector(roleName, nsId, infraId, vmId);
+        MetricSelector selector = support.selector(roleName, nsId, infraId, vmId);
         Set<String> mig = metrics.migUuids(selector);
         List<VmGpuInstanceListItemResponse> rows = metrics.devices(selector).stream()
                 .map(g -> row(g, mig.contains(g.uuid())))
@@ -104,7 +104,7 @@ public class ResourceExplorerVmGpuService {
     /** 그룹 모니터링 차트 — 인스턴스별 분해 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public GpuMetricTrendResponse getGroupMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                       GpuMetric metric, NodeMetricInterval interval) {
-        return trend(selector(roleName, nsId, infraId, vmId), null, metric, interval);
+        return trend(support.selector(roleName, nsId, infraId, vmId), null, metric, interval);
     }
 
     // ── 개별 GPU 인스턴스 (트리에서 GPU 장치 선택) ──────────────
@@ -112,7 +112,7 @@ public class ResourceExplorerVmGpuService {
     /** 인스턴스 개요 KPI 카드 6종 — Util / VRAM 사용률 / VRAM 사용·할당 / Power / 온도 / Fan. 노드 GPU 카드와 같은 구조 */
     public GpuDeviceSummaryResponse getInstanceSummary(String roleName, String nsId, String infraId, String vmId,
                                                        String instanceId) {
-        return GpuPanelAssembler.deviceSummary(requireInstance(selector(roleName, nsId, infraId, vmId), instanceId));
+        return GpuPanelAssembler.deviceSummary(requireInstance(support.selector(roleName, nsId, infraId, vmId), instanceId));
     }
 
     /** 인스턴스 가상머신 할당 정보 표 — VM 안에서 알 수 있는 값(이름·VM·MIG 여부·VRAM)만, 물리 GPU·라이선스는 null */
@@ -136,7 +136,7 @@ public class ResourceExplorerVmGpuService {
     /** 인스턴스 GPU 기본 정보 표 — 모델/UUID/드라이버 버전/수집 상태/마지막 수집. CUDA 버전은 수집 항목에 없어 null */
     public VmGpuInstanceInfoResponse getInstanceInfo(String roleName, String nsId, String infraId, String vmId,
                                                      String instanceId) {
-        GpuSample gpu = requireInstance(selector(roleName, nsId, infraId, vmId), instanceId);
+        GpuSample gpu = requireInstance(support.selector(roleName, nsId, infraId, vmId), instanceId);
         return new VmGpuInstanceInfoResponse(gpu.model(), gpu.uuid(), null, gpu.driverVersion(),
                 GpuPanelAssembler.collectStatus(gpu), toOffsetDateTime(gpu.lastCollectedAt()));
     }
@@ -144,16 +144,10 @@ public class ResourceExplorerVmGpuService {
     /** 인스턴스 모니터링 차트 — 해당 인스턴스 시계열 */
     public GpuMetricTrendResponse getInstanceMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                          String instanceId, GpuMetric metric, NodeMetricInterval interval) {
-        return trend(selector(roleName, nsId, infraId, vmId), instanceId, metric, interval);
+        return trend(support.selector(roleName, nsId, infraId, vmId), instanceId, metric, interval);
     }
 
     // ── 조회 대상 ───────────────────────────────────────────────
-
-    /** 스코프 검증(404) 뒤 VM 의 tb_* 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
-    }
 
     private GpuSample requireInstance(MetricSelector selector, String instanceId) {
         return GpuPanelAssembler.requireDevice(metrics.devices(selector), instanceId);

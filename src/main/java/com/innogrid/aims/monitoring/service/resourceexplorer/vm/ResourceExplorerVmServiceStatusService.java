@@ -36,7 +36,7 @@ public class ResourceExplorerVmServiceStatusService {
 
     /** 개요 탭 KPI 카드 — 전체·상태별 유닛 수. systemd 콜렉터가 없어 표본이 없으면 전부 null */
     public ServiceStatusSummaryResponse getServiceStatusSummary(String roleName, String nsId, String infraId, String vmId) {
-        return ServiceStatusPanelAssembler.summary(metrics.units(selector(roleName, nsId, infraId, vmId)));
+        return ServiceStatusPanelAssembler.summary(metrics.units(support.selector(roleName, nsId, infraId, vmId)));
     }
 
     /** 개요 탭 유닛 목록 — 상태 필터·유닛명 키워드(부분 일치, 대소문자 무시)·컬럼 정렬·페이징(1부터) */
@@ -44,20 +44,14 @@ public class ResourceExplorerVmServiceStatusService {
                                                                      ServiceUnitState state, String keyword,
                                                                      int page, int size, String sort) {
         Comparator<ServiceUnitListItemResponse> comparator = ServiceStatusPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        return ServiceStatusPanelAssembler.unitPage(metrics.units(selector(roleName, nsId, infraId, vmId)),
+        return ServiceStatusPanelAssembler.unitPage(metrics.units(support.selector(roleName, nsId, infraId, vmId)),
                 state, keyword, comparator, page, size);
     }
 
     /** 모니터링 탭 차트 — 상태별 유닛 수 시계열. 미수집이면 빈 시리즈 */
     public ServiceStatusMetricTrendResponse getServiceStatusMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                                         ServiceStatusMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         return ServiceStatusPanelAssembler.trend(metric, interval, (from, to, step) -> metrics.trend(metric, sel, from, to, step));
-    }
-
-    /** 스코프·존재 검증(404) 뒤 tb_* 라벨 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 }

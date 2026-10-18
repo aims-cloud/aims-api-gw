@@ -33,24 +33,18 @@ public class ResourceExplorerVmSystemService {
 
     /** 개요 탭 KPI 카드 — 가동 시간(초), 부하 1/5/15, 코어 수, 컨텍스트 스위치·인터럽트 /s(최근 5분). 미수집은 null */
     public SystemSummaryResponse getSystemSummary(String roleName, String nsId, String infraId, String vmId) {
-        return SystemPanelAssembler.summary(metrics.summary(selector(roleName, nsId, infraId, vmId)));
+        return SystemPanelAssembler.summary(metrics.summary(support.selector(roleName, nsId, infraId, vmId)));
     }
 
     /** 개요 탭 시스템 정보 표 — 게스트 OS 호스트명·OS·커널·아키텍처·부팅 시각. 표본 없으면 UNAVAILABLE */
     public SystemInfoResponse getSystemInfo(String roleName, String nsId, String infraId, String vmId) {
-        return SystemPanelAssembler.info(metrics.info(selector(roleName, nsId, infraId, vmId)));
+        return SystemPanelAssembler.info(metrics.info(support.selector(roleName, nsId, infraId, vmId)));
     }
 
     /** 모니터링 탭 차트 — 지표별 시계열. 미수집이면 빈 시리즈 */
     public SystemMetricTrendResponse getSystemMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                           SystemMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         return SystemPanelAssembler.trend(metric, interval, (from, to, step) -> metrics.trend(metric, sel, from, to, step));
-    }
-
-    /** 스코프·존재 검증(404) 뒤 tb_* 라벨 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 }

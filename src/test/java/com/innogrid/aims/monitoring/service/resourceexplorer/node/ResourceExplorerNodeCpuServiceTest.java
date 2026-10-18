@@ -17,6 +17,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuDeviceListI
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -53,7 +54,7 @@ class ResourceExplorerNodeCpuServiceTest {
     HostCategoryMetricsQueryService metrics = mock(HostCategoryMetricsQueryService.class);
 
     ResourceExplorerNodeCpuService service = new ResourceExplorerNodeCpuService(
-            new NodeAccessService(scopeService, assetRepository), metrics);
+            new NodeAccessService(scopeService, assetRepository, mock(MonitoringTargetRepository.class)), metrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
     static final Instant SAMPLE_AT = Instant.ofEpochSecond(1_700_000_000L);

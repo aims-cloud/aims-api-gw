@@ -16,6 +16,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemInfoR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemSummaryResponse;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -52,7 +53,7 @@ class ResourceExplorerNodeSystemServiceTest {
     HostSystemMetricsQueryService metrics = mock(HostSystemMetricsQueryService.class);
 
     ResourceExplorerNodeSystemService service = new ResourceExplorerNodeSystemService(
-            new NodeAccessService(scopeService, assetRepository), metrics);
+            new NodeAccessService(scopeService, assetRepository, mock(MonitoringTargetRepository.class)), metrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
 

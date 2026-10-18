@@ -12,6 +12,7 @@ import com.innogrid.aims.infra.entity.RoleNamespace;
 import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatusSummary;
+import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugStatusMapper;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.TumblebugTreeBuilder.TbInfra;
@@ -97,6 +98,12 @@ public class TumblebugPanelSupport {
                 .filter(n -> n.id().equals(vmId))
                 .findFirst()
                 .orElseThrow(() -> BusinessException.notFound("가상머신을 찾을 수 없습니다: " + vmId));
+    }
+
+    /** 스코프 검증(404) 뒤 VM 1대의 지표 선택자 — tb_ns·tb_infra·tb_node 라벨 */
+    public MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
+        accessibleNode(roleName, nsId, infraId, vmId);
+        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 
     /** Node(VM) 목록의 §6.1 상태 버킷 */

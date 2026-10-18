@@ -64,7 +64,7 @@ public class ResourceExplorerNodeCpuService {
 
     /** 개요 탭 KPI 카드 4종 — Used / I/O Wait / System / Steal (%, 최근 5분 rate). 미수집은 null */
     public CpuSummaryResponse getCpuSummary(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         if (selector == null) {
             return new CpuSummaryResponse(null, null, null, null);
         }
@@ -77,7 +77,7 @@ public class ResourceExplorerNodeCpuService {
      */
     public PageResponse<CpuDeviceListItemResponse> getCpuDevices(String nodeId, int page, int size, String sort) {
         Comparator<CpuDeviceListItemResponse> comparator = SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         if (selector == null) {
             return PageResponse.of(List.of(), page, size);
         }
@@ -93,7 +93,7 @@ public class ResourceExplorerNodeCpuService {
 
     /** 모니터링 탭 차트 — CPU mode 별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public CpuMetricTrendResponse getCpuMetricTrend(String nodeId, CpuMetric metric, NodeMetricInterval interval) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -104,12 +104,6 @@ public class ResourceExplorerNodeCpuService {
     }
 
     // ── 조회 대상 ───────────────────────────────────────────────
-
-    /** 스코프 검증(404) 뒤 node_exporter 선택자. exporter 타겟이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector selector(String nodeId) {
-        String instance = nodeAccess.require(nodeId).host().instance();
-        return instance == null ? null : MetricSelector.instance(instance);
-    }
 
     // ── 행 구성 ─────────────────────────────────────────────────
 

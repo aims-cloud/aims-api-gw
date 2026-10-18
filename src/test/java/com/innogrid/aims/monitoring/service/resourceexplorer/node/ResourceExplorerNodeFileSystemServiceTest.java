@@ -19,6 +19,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSys
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountSummaryResponse;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -56,7 +57,7 @@ class ResourceExplorerNodeFileSystemServiceTest {
     HostFileSystemMetricsQueryService metrics = mock(HostFileSystemMetricsQueryService.class);
 
     ResourceExplorerNodeFileSystemService service = new ResourceExplorerNodeFileSystemService(
-            new NodeAccessService(scopeService, assetRepository), metrics);
+            new NodeAccessService(scopeService, assetRepository, mock(MonitoringTargetRepository.class)), metrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
     static final double GB = 1024.0 * 1024 * 1024;

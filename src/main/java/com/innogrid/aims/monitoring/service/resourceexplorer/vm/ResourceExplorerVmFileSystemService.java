@@ -40,20 +40,20 @@ public class ResourceExplorerVmFileSystemService {
 
     /** 그룹 개요 KPI 카드 8종 — Total Mounts / Near Full / Max Used(%·GB) / Total Size·Used·Free / Max Inode */
     public FileSystemGroupSummaryResponse getGroupSummary(String roleName, String nsId, String infraId, String vmId) {
-        return FileSystemPanelAssembler.groupSummary(metrics.mounts(selector(roleName, nsId, infraId, vmId)));
+        return FileSystemPanelAssembler.groupSummary(metrics.mounts(support.selector(roleName, nsId, infraId, vmId)));
     }
 
     /** 그룹 개요 File System 목록 — 마운트별 용량·사용률, 페이징(1부터)·컬럼 정렬 */
     public PageResponse<FileSystemMountListItemResponse> getMounts(String roleName, String nsId, String infraId, String vmId,
                                                                    int page, int size, String sort) {
         Comparator<FileSystemMountListItemResponse> comparator = FileSystemPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        return FileSystemPanelAssembler.mountPage(metrics.mounts(selector(roleName, nsId, infraId, vmId)), comparator, page, size);
+        return FileSystemPanelAssembler.mountPage(metrics.mounts(support.selector(roleName, nsId, infraId, vmId)), comparator, page, size);
     }
 
     /** 그룹 모니터링 차트 — 마운트 전체 합산 시계열 */
     public FileSystemMetricTrendResponse getGroupMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                              FileSystemMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         return FileSystemPanelAssembler.trend(metric, interval, (from, to, step) -> metrics.groupTrend(metric, sel, from, to, step));
     }
 
@@ -61,31 +61,25 @@ public class ResourceExplorerVmFileSystemService {
 
     /** 개별 마운트 개요 KPI 카드 6종 — Total / Used % / Used / Free / Growth(24h) / Inode. 표본 없는 마운트는 404 */
     public FileSystemMountSummaryResponse getMountSummary(String roleName, String nsId, String infraId, String vmId, String mountPath) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         MountUsage mount = requireMount(sel, mountPath);
         return FileSystemPanelAssembler.mountSummary(mount, metrics.growth24hGb(sel, mountPath));
     }
 
     /** 개별 마운트 정보 표 — 마운트 경로 / 종류 / 수집 상태 / 마지막 수집. 표본 없는 마운트는 404 */
     public FileSystemMountInfoResponse getMountInfo(String roleName, String nsId, String infraId, String vmId, String mountPath) {
-        return FileSystemPanelAssembler.mountInfo(requireMount(selector(roleName, nsId, infraId, vmId), mountPath));
+        return FileSystemPanelAssembler.mountInfo(requireMount(support.selector(roleName, nsId, infraId, vmId), mountPath));
     }
 
     /** 개별 마운트 모니터링 차트 — 해당 마운트 시계열. 미수집이면 빈 시리즈 */
     public FileSystemMetricTrendResponse getMountMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                              String mountPath, FileSystemMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         return FileSystemPanelAssembler.trend(metric, interval, (from, to, step) ->
                 metrics.mountTrend(metric, sel, mountPath, from, to, step));
     }
 
     // ── 조회 대상 ───────────────────────────────────────────────
-
-    /** 스코프·존재 검증(404) 뒤 tb_* 라벨 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
-    }
 
     /** 표본이 있는 마운트만 개별 패널을 연다 — Thanos 에 mountpoint 가 없으면 404 */
     private MountUsage requireMount(MetricSelector sel, String mountPath) {

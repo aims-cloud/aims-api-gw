@@ -38,7 +38,7 @@ public class ResourceExplorerVmProcessService {
 
     /** 개요 탭 KPI 카드 — 실행 중·블록·전체 프로세스·스레드 수, fork /s(최근 5분), 상태별 개수. 미수집은 null/빈 목록 */
     public ProcessSummaryResponse getProcessSummary(String roleName, String nsId, String infraId, String vmId) {
-        ProcessSummary summary = metrics.summary(selector(roleName, nsId, infraId, vmId));
+        ProcessSummary summary = metrics.summary(support.selector(roleName, nsId, infraId, vmId));
         return new ProcessSummaryResponse(
                 summary.running(), summary.blocked(), summary.processes(), summary.threads(), summary.forksPerSec(),
                 summary.byState().stream().map(s -> new StateCount(s.state(), s.count())).toList());
@@ -47,7 +47,7 @@ public class ResourceExplorerVmProcessService {
     /** 모니터링 탭 차트 — 지표별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public ProcessMetricTrendResponse getProcessMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                             ProcessMetric metric, NodeMetricInterval interval) {
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -55,11 +55,5 @@ public class ResourceExplorerVmProcessService {
         List<DataPoint> points = metrics.trend(metric, sel, from, to, step);
         return new ProcessMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("process", points)));
-    }
-
-    /** 스코프·존재 검증(404) 뒤 tb_* 라벨 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 }

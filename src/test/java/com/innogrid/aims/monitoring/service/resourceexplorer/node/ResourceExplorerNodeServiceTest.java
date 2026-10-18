@@ -68,7 +68,7 @@ class ResourceExplorerNodeServiceTest {
     HostMetricsQueryService hostMetrics = mock(HostMetricsQueryService.class);
 
     ResourceExplorerNodeService service = new ResourceExplorerNodeService(
-            new NodeAccessService(scopeService, assetRepository), targetRepository, vmProvider, detailMetrics, hostMetrics);
+            new NodeAccessService(scopeService, assetRepository, targetRepository), vmProvider, detailMetrics, hostMetrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
     static final MetricSelector DCGM_SEL = MetricSelector.instance("10.0.0.1:9400");

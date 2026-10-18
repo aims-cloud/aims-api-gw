@@ -16,6 +16,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.Serv
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceStatusSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceUnitListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.servicestatus.ServiceUnitState;
+import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
@@ -51,7 +52,7 @@ class ResourceExplorerNodeServiceStatusServiceTest {
     HostServiceStatusMetricsQueryService metrics = mock(HostServiceStatusMetricsQueryService.class);
 
     ResourceExplorerNodeServiceStatusService service = new ResourceExplorerNodeServiceStatusService(
-            new NodeAccessService(scopeService, assetRepository), metrics);
+            new NodeAccessService(scopeService, assetRepository, mock(MonitoringTargetRepository.class)), metrics);
 
     static final MetricSelector NODE_SEL = MetricSelector.instance("10.0.0.1:9100");
 

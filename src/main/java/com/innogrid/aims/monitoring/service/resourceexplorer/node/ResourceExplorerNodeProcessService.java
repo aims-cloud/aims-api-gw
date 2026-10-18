@@ -37,7 +37,7 @@ public class ResourceExplorerNodeProcessService {
 
     /** 개요 탭 KPI 카드 — 실행 중·블록·전체 프로세스·스레드 수, fork /s(최근 5분), 상태별 개수. 미수집은 null/빈 목록 */
     public ProcessSummaryResponse getProcessSummary(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         ProcessSummary summary = selector == null ? ProcessSummary.EMPTY : metrics.summary(selector);
         return new ProcessSummaryResponse(
                 summary.running(), summary.blocked(), summary.processes(), summary.threads(), summary.forksPerSec(),
@@ -46,7 +46,7 @@ public class ResourceExplorerNodeProcessService {
 
     /** 모니터링 탭 차트 — 지표별 시계열. 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep */
     public ProcessMetricTrendResponse getProcessMetricTrend(String nodeId, ProcessMetric metric, NodeMetricInterval interval) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
@@ -54,11 +54,5 @@ public class ResourceExplorerNodeProcessService {
         List<DataPoint> points = selector == null ? List.of() : metrics.trend(metric, selector, from, to, step);
         return new ProcessMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("process", points)));
-    }
-
-    /** 스코프 검증(404) 뒤 node_exporter 선택자. exporter 타겟이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector selector(String nodeId) {
-        String instance = nodeAccess.require(nodeId).host().instance();
-        return instance == null ? null : MetricSelector.instance(instance);
     }
 }

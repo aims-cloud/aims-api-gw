@@ -36,13 +36,13 @@ public class ResourceExplorerNodeSystemService {
 
     /** 개요 탭 KPI 카드 — 가동 시간(초), 부하 1/5/15, 코어 수, 컨텍스트 스위치·인터럽트 /s(최근 5분). 미수집은 null */
     public SystemSummaryResponse getSystemSummary(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         return SystemPanelAssembler.summary(selector == null ? SystemSummary.EMPTY : metrics.summary(selector));
     }
 
     /** 개요 탭 시스템 정보 표 — 호스트명·OS·커널·아키텍처·부팅 시각. exporter 없으면 NOT_CONFIGURED, 표본 없으면 UNAVAILABLE */
     public SystemInfoResponse getSystemInfo(String nodeId) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         if (selector == null) {
             return SystemPanelAssembler.emptyInfo(MonitoringStatus.NOT_CONFIGURED);
         }
@@ -51,14 +51,8 @@ public class ResourceExplorerNodeSystemService {
 
     /** 모니터링 탭 차트 — 지표별 시계열. 미수집이면 빈 시리즈 */
     public SystemMetricTrendResponse getSystemMetricTrend(String nodeId, SystemMetric metric, NodeMetricInterval interval) {
-        MetricSelector selector = selector(nodeId);
+        MetricSelector selector = nodeAccess.selector(nodeId);
         return SystemPanelAssembler.trend(metric, interval, (from, to, step) ->
                 selector == null ? List.of() : metrics.trend(metric, selector, from, to, step));
-    }
-
-    /** 스코프 검증(404) 뒤 node_exporter 선택자. exporter 타겟이 없으면 null — 호출 측은 조회 없이 미수집으로 처리한다 */
-    private MetricSelector selector(String nodeId) {
-        String instance = nodeAccess.require(nodeId).host().instance();
-        return instance == null ? null : MetricSelector.instance(instance);
     }
 }

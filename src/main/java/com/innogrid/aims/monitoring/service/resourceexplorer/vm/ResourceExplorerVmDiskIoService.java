@@ -35,28 +35,22 @@ public class ResourceExplorerVmDiskIoService {
 
     /** 개요 탭 KPI 카드 — 장치 수, 읽기·쓰기 B/s·IOPS·지연(IOPS 가중)·평균 사용률. 장치가 없으면 장치 수 0 에 값 전부 null */
     public DiskIoSummaryResponse getDiskIoSummary(String roleName, String nsId, String infraId, String vmId) {
-        return DiskIoPanelAssembler.summary(metrics.devices(selector(roleName, nsId, infraId, vmId)));
+        return DiskIoPanelAssembler.summary(metrics.devices(support.selector(roleName, nsId, infraId, vmId)));
     }
 
     /** 개요 탭 장치 목록 — 장치별 읽기·쓰기 B/s·IOPS·지연·사용률, 페이징(1부터)·컬럼 정렬 */
     public PageResponse<DiskIoDeviceListItemResponse> getDiskIoDevices(String roleName, String nsId, String infraId, String vmId,
                                                                        int page, int size, String sort) {
         Comparator<DiskIoDeviceListItemResponse> comparator = DiskIoPanelAssembler.SORT.comparator(sort);   // 미지원 필드는 조회 전에 400
-        return DiskIoPanelAssembler.devicePage(metrics.devices(selector(roleName, nsId, infraId, vmId)), comparator, page, size);
+        return DiskIoPanelAssembler.devicePage(metrics.devices(support.selector(roleName, nsId, infraId, vmId)), comparator, page, size);
     }
 
     /** 모니터링 탭 차트 — device 를 주면 그 장치만, 없으면 장치 전체 합산(지연은 가중, 사용률은 평균) */
     public DiskIoMetricTrendResponse getDiskIoMetricTrend(String roleName, String nsId, String infraId, String vmId,
                                                           DiskIoMetric metric, String device, NodeMetricInterval interval) {
         String selectedDevice = DiskIoPanelAssembler.normalizeDevice(device);
-        MetricSelector sel = selector(roleName, nsId, infraId, vmId);
+        MetricSelector sel = support.selector(roleName, nsId, infraId, vmId);
         return DiskIoPanelAssembler.trend(metric, selectedDevice, interval, (from, to, step) ->
                 metrics.trend(metric, sel, selectedDevice, from, to, step));
-    }
-
-    /** 스코프·존재 검증(404) 뒤 tb_* 라벨 선택자 */
-    private MetricSelector selector(String roleName, String nsId, String infraId, String vmId) {
-        support.accessibleNode(roleName, nsId, infraId, vmId);
-        return MetricSelector.tumblebugNode(nsId, infraId, vmId);
     }
 }

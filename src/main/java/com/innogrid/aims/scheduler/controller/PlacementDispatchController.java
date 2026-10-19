@@ -59,7 +59,8 @@ public class PlacementDispatchController {
 
     @Operation(summary = "실행 결과 콜백",
                description = "실행 계층이 진행 결과를 알립니다. status 는 RUNNING | COMPLETED | FAILED. 같은 상태 재보고는 200 무변경, "
-                       + "전이표(ACCEPTED→RUNNING/FAILED, RUNNING→COMPLETED/FAILED) 밖이면 409. 워크로드 상태도 함께 바뀝니다.")
+                       + "전이표(ACCEPTED→RUNNING/FAILED, RUNNING→COMPLETED/FAILED) 밖이면 409. 현재 결정의 기록이면 워크로드 상태도 "
+                       + "함께 바뀌고, 옛 결정의 기록이면 기록만 바뀌며 message 뒤에 표지가 붙습니다.")
     @PostMapping("/dispatches/{dispatchId}/result")
     public ApiResponse<PlacementDispatchResponse> result(@PathVariable Long dispatchId,
                                                          @RequestBody(required = false) DispatchResultRequest request) {

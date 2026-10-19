@@ -21,9 +21,11 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 import com.innogrid.aims.scheduler.service.NodeResourceCollector;
+import com.innogrid.aims.scheduler.service.PlacementDispatchService;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -57,6 +59,7 @@ class PlacementDispatchApiTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired WorkloadRepository workloadRepository;
     @Autowired PlacementDispatchRepository dispatchRepository;
+    @Autowired PlacementDispatchService dispatchService;
     @MockitoBean NodeResourceCollector collector;
 
     @AfterEach
@@ -211,5 +214,29 @@ class PlacementDispatchApiTest {
         mockMvc.perform(get(BASE + "/dispatches").with(anonymous())).andExpect(status().isForbidden());
         mockMvc.perform(post(BASE + "/dispatches/" + ids[1] + "/result").with(anonymous())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RUNNING\"}")).andExpect(status().isForbidden());
+    }
+
+    @DisplayName("옛 결정의 열린 기록에 온 콜백은 200 으로 기록만 바꾸고 표지를 남기며 워크로드는 SCHEDULED 그대로다")
+    @Test
+    void callback_on_old_decision_is_200_and_keeps_workload() throws Exception {
+        bigNode();
+        long[] ids = placed("dpapi-old-decision");
+        PlacementDispatch old = dispatchRepository.findById(ids[1]).orElseThrow();
+        Workload w = workloadRepository.findById(ids[0]).orElseThrow();
+        do {
+            w.assignTo("mdc-01", "big:9100", 0.6, "재배치");
+        } while (!w.getScheduledAt().isAfter(old.getRequestedAt().plusNanos(2_000_000)));
+        w = workloadRepository.saveAndFlush(w);
+        PlacementDispatch current = dispatchService.afterPlacement(w,
+                new SchedulingResult(true, "mdc-01", "big:9100", 0.6, "재배치", List.of()), null);
+        assertNotEquals(old.getId(), current.getId());
+
+        JsonNode d = data(mockMvc.perform(post(BASE + "/dispatches/" + old.getId() + "/result").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"RUNNING\"}")).andExpect(status().isOk()).andReturn());
+        assertEquals(FIELDS, new TreeSet<>(d.propertyNames()));
+        assertEquals("RUNNING", d.get("status").asString());
+        assertTrue(d.get("message").asString().contains(PlacementDispatchService.OLD_DECISION_NOTE), d.get("message").asString());
+        mockMvc.perform(get(BASE + "/workloads/" + ids[0])).andExpect(jsonPath("$.data.status").value("SCHEDULED"));
+        mockMvc.perform(get(BASE + "/dispatches/" + current.getId())).andExpect(jsonPath("$.data.status").value("ACCEPTED"));
     }
 }

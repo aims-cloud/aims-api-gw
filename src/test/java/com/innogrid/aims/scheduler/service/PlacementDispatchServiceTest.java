@@ -478,4 +478,110 @@ class PlacementDispatchServiceTest {
         assertTrue(workloadRepository.findByStatusIn(List.of(Workload.WorkloadStatus.SCHEDULED, Workload.WorkloadStatus.RUNNING))
                 .stream().noneMatch(x -> x.getId().equals(w.getId())), "예약 장부(SCHEDULED·RUNNING 행)에서 빠진다");
     }
+
+    // ── 옛 결정의 기록에 온 콜백 ─────────────────────────────────────────
+
+    /** 옛 결정(ACCEPTED 기록)을 남긴 채 같은 워크로드를 다시 배정해 현재 결정의 기록을 만든다. 반환은 [옛 기록, 현재 기록]. */
+    private PlacementDispatch[] oldAndCurrent(String name) {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned(name);
+        PlacementDispatch old = service.afterPlacement(w, ok(), null);
+        // 옛 기록의 요청 시각은 배정 시각보다 몇 ms 뒤에 찍히므로, 새 배정 시각이 그보다 확실히 뒤가 될 때까지 반복한다
+        do {
+            w.assignTo("mdc-01", "n2", 0.6, "재배치");
+        } while (!w.getScheduledAt().isAfter(old.getRequestedAt().plusNanos(2_000_000)));
+        w = workloadRepository.saveAndFlush(w);
+        PlacementDispatch current = service.afterPlacement(w, ok(), null);
+        assertNotEquals(old.getId(), current.getId());
+        return new PlacementDispatch[] {old, current};
+    }
+
+    private Workload reload(PlacementDispatch d) {
+        return workloadRepository.findById(d.getWorkloadId()).orElseThrow();
+    }
+
+    @DisplayName("옛 결정의 열린 기록에 온 RUNNING·COMPLETED 콜백은 기록만 바꾸고 표지를 남기며 워크로드는 SCHEDULED 그대로다")
+    @Test
+    void late_running_callback_on_old_open_dispatch_updates_record_only() {
+        PlacementDispatch[] d = oldAndCurrent("dps-old-running");
+        PlacementDispatch old = d[0], current = d[1];
+
+        PlacementDispatch r = service.applyResult(old.getId(), "RUNNING", "job-old", null);
+        assertEquals(DispatchStatus.RUNNING, r.getStatus(), "실행 계층이 말한 사실은 기록에 남는다");
+        assertTrue(r.getMessage().contains(PlacementDispatchService.OLD_DECISION_NOTE), r.getMessage());
+        Workload w = reload(old);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, w.getStatus(), "옛 결정의 콜백은 워크로드를 옮기지 않는다");
+        assertEquals("n2", w.getAssignedNodeId(), "현재 결정의 배정 그대로");
+        assertEquals(0, w.resolveRetryCount());
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(current.getId()).orElseThrow().getStatus());
+
+        assertEquals(DispatchStatus.RUNNING, service.applyResult(old.getId(), "RUNNING", null, null).getStatus(), "같은 상태 재보고는 무변경");
+        assertEquals(DispatchStatus.COMPLETED, service.applyResult(old.getId(), "COMPLETED", null, null).getStatus());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, reload(old).getStatus(), "옛 기록이 끝나도 워크로드는 그대로");
+    }
+
+    @DisplayName("옛 결정의 열린 기록에 온 FAILED 콜백은 워크로드의 재시도 회계와 배정을 건드리지 않고, 현재 결정의 콜백은 여전히 워크로드를 옮긴다")
+    @Test
+    void late_failed_callback_on_old_open_dispatch_keeps_retry_accounting() {
+        PlacementDispatch[] d = oldAndCurrent("dps-old-failed");
+        PlacementDispatch old = d[0], current = d[1];
+
+        PlacementDispatch r = service.applyResult(old.getId(), "FAILED", null, "이미지 없음");
+        assertEquals(DispatchStatus.FAILED, r.getStatus());
+        assertEquals("이미지 없음 / " + PlacementDispatchService.OLD_DECISION_NOTE, r.getMessage(), "사유 뒤에 표지");
+        Workload w = reload(old);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, w.getStatus());
+        assertEquals(0, w.resolveRetryCount(), "옛 결정의 실패는 재시도 횟수를 올리지 않는다");
+        assertNull(w.getLastFailedAt());
+        assertEquals("재배치", w.getSchedulingReason());
+        assertEquals("n2", w.getAssignedNodeId());
+
+        service.applyResult(current.getId(), "RUNNING", null, null);
+        assertEquals(Workload.WorkloadStatus.RUNNING, reload(current).getStatus(), "현재 결정의 콜백은 전처럼 워크로드를 옮긴다");
+    }
+
+    @DisplayName("실행 중 워크로드에 옛 결정의 기록으로 온 COMPLETED 콜백은 워크로드를 완료로 옮기지 않고 예약 장부에도 남긴다")
+    @Test
+    void late_completed_callback_on_old_dispatch_keeps_running_workload() {
+        PlacementDispatch[] d = oldAndCurrent("dps-old-completed");
+        PlacementDispatch old = d[0], current = d[1];
+        service.applyResult(current.getId(), "RUNNING", null, null);
+        assertEquals(Workload.WorkloadStatus.RUNNING, reload(current).getStatus());
+
+        service.applyResult(old.getId(), "RUNNING", null, null);
+        assertEquals(Workload.WorkloadStatus.RUNNING, reload(old).getStatus());
+        PlacementDispatch r = service.applyResult(old.getId(), "COMPLETED", null, null);
+        assertEquals(DispatchStatus.COMPLETED, r.getStatus());
+        Workload w = reload(old);
+        assertEquals(Workload.WorkloadStatus.RUNNING, w.getStatus(), "옛 결정의 완료 콜백이 실행 중 워크로드를 끝내면 안 된다");
+        assertEquals(0, w.resolveRetryCount());
+        assertTrue(workloadRepository.findByStatusIn(List.of(Workload.WorkloadStatus.SCHEDULED, Workload.WorkloadStatus.RUNNING))
+                .stream().anyMatch(x -> x.getId().equals(w.getId())), "예약 장부에 남는다");
+        assertEquals(DispatchStatus.RUNNING, dispatchRepository.findById(current.getId()).orElseThrow().getStatus());
+    }
+
+    @DisplayName("엔진 실패로 실패한 뒤 되살려 다시 배치한 워크로드는 옛 결정의 열린 기록에 온 콜백으로 옮겨지지 않는다")
+    @Test
+    void revived_after_engine_failure_ignores_callback_on_old_open_dispatch() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-old-revive");
+        PlacementDispatch old = service.afterPlacement(w, ok(), null);
+        w = workloadRepository.findById(w.getId()).orElseThrow();
+        w.markFailed("엔진 실패");                       // 단건 배치의 엔진 실패 — 배정 시각은 그대로, 기록은 열린 채
+        workloadRepository.saveAndFlush(w);
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.PENDING);
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(old.getId()).orElseThrow().getStatus(), "되살리기는 기록을 닫지 않는다");
+        w = workloadRepository.findById(w.getId()).orElseThrow();
+        do {
+            w.assignTo("mdc-01", "n2", 0.6, "재배치");
+        } while (!w.getScheduledAt().isAfter(old.getRequestedAt().plusNanos(2_000_000)));
+        w = workloadRepository.saveAndFlush(w);
+        PlacementDispatch current = service.afterPlacement(w, ok(), null);
+
+        PlacementDispatch r = service.applyResult(old.getId(), "RUNNING", null, null);
+        assertEquals(DispatchStatus.RUNNING, r.getStatus());
+        assertTrue(r.getMessage().contains(PlacementDispatchService.OLD_DECISION_NOTE));
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, reload(old).getStatus());
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(current.getId()).orElseThrow().getStatus());
+    }
 }

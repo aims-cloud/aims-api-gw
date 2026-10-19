@@ -158,9 +158,13 @@ public class PlacementDispatchService {
      * status 없음·모르는 값    → 400 (RUNNING·COMPLETED·FAILED 만)
      * 같은 상태 재보고         → 200 무변경 (멱등)
      * 전이표 밖               → 409
+     * 옛 결정의 기록           → 200 · 기록만 전이표대로 갱신(비고 표지 "옛 결정의 기록 — 워크로드는 바꾸지 않음") · 워크로드 불변
      * </pre>
      * 워크로드 전이는 기존 전이표({@link Workload#transitionTo})를 쓴다. 디스패치는 바뀌는데 워크로드가 이미 다른 상태라
      * 전이가 안 되면(워크로드가 다른 경로로 먼저 바뀐 경우) 디스패치만 갱신하고 그 사실을 message 에 남긴다.
+     * 기록이 워크로드의 <b>현재 결정</b>이 아니면({@link #isCurrentDecision} — 요청 시각이 배정 시각보다 앞서면 옛 결정)
+     * 실행 계층이 말한 사실은 기록에 남기되 워크로드·재시도 회계·배정은 건드리지 않는다. 옛 결정의 열린 기록은 단건 재배치나
+     * 되살려 다시 배치한 워크로드에 남는데, 전에는 그 기록에 늦게 온 콜백이 현재 결정의 워크로드를 옮기고 재시도 횟수를 올렸다.
      */
     @Transactional
     public PlacementDispatch applyResult(Long dispatchId, String rawStatus, String externalRef, String message) {
@@ -191,6 +195,12 @@ public class PlacementDispatchService {
             default -> Workload.WorkloadStatus.FAILED;
         };
         workloadRepository.findById(dispatch.getWorkloadId()).ifPresent(w -> {
+            if (!isCurrentDecision(dispatch, w)) {
+                dispatch.note(OLD_DECISION_NOTE);
+                log.info("옛 결정의 콜백: dispatch={} workload={} {} — 워크로드({})는 바꾸지 않음",
+                        dispatch.getId(), w.getId(), target, w.getStatus());
+                return;
+            }
             if (w.getStatus() == workloadTarget) return;
             if (w.transitionTo(workloadTarget)) {
                 if (workloadTarget == Workload.WorkloadStatus.FAILED) {
@@ -289,6 +299,20 @@ public class PlacementDispatchService {
     /** 재시작 때 전달 중이던 기록을 닫으며 비고 앞에 두는 표지. */
     public static final String RESTART_NOTE = "재시작 — 전달 결과 모름";
 
+    /** 옛 결정의 기록에 온 콜백을 기록에만 반영했음을 비고 뒤에 남기는 표지. */
+    public static final String OLD_DECISION_NOTE = "옛 결정의 기록 — 워크로드는 바꾸지 않음";
+
+    /**
+     * 기록이 워크로드의 <b>현재 결정</b>인지 — 기록의 요청 시각이 워크로드의 배정 시각보다 앞서지 않으면 현재 결정이다.
+     * 기록은 배치가 커밋된 뒤에 만들어지므로 현재 결정이면 항상 성립하고, 옛 결정의 기록(단건 재배치·되살려 다시 배치한 뒤
+     * 남은 것)은 배정 시각보다 앞선다. DB 의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다. 멱등키(밀리초)는 같은
+     * 반올림으로 1ms 어긋날 수 있어 쓰지 않는다. 배정 시각이 없는 워크로드는 코드상 기록이 생기지 않으므로 현재 결정이
+     * 아닌 것으로 본다. 결과 콜백과 재시작 정리가 함께 쓴다.
+     */
+    static boolean isCurrentDecision(PlacementDispatch dispatch, Workload workload) {
+        return workload.getScheduledAt() != null && !dispatch.getRequestedAt().isBefore(workload.getScheduledAt());
+    }
+
     /**
      * 재시작 뒤 중단된 실행이 배치한 워크로드 하나를 <b>전달 기록에 맞춰</b> 정리한다 — 워크로드 1건이 트랜잭션 1개다.
      *
@@ -310,8 +334,7 @@ public class PlacementDispatchService {
             if (workload == null || workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) return RestartRecovery.SKIPPED;
             List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDesc(workloadId);
             PlacementDispatch latest = rows.isEmpty() ? null : rows.get(0);
-            boolean current = latest != null && workload.getScheduledAt() != null
-                    && !latest.getRequestedAt().isBefore(workload.getScheduledAt());
+            boolean current = latest != null && isCurrentDecision(latest, workload);
             if (current && !latest.getStatus().terminal()) {
                 if (latest.getStatus() != DispatchStatus.REQUESTED) return RestartRecovery.KEPT;
                 latest.close(DispatchStatus.UNAVAILABLE, RESTART_NOTE);

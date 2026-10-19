@@ -102,6 +102,8 @@ public class ScheduleExecutionService {
     private final EngineRegistry engineRegistry;
     private final SchedulerProperties properties;
     private final RunClusterSnapshot clusterSnapshot;
+    /** 재시작 정리에서 전달 기록을 보는 데 쓴다. 생성자로 직접 조립해 null 을 넣으면(지금은 그런 조립이 없다) 전달 기록 없이 전부 실패로 돌린다. */
+    private final PlacementDispatchService dispatchService;
 
     public ScheduleExecutionService(ScheduleRepository scheduleRepository,
                                     ScheduleRunRepository runRepository,
@@ -113,7 +115,8 @@ public class ScheduleExecutionService {
                                     ScheduleService scheduleService,
                                     EngineRegistry engineRegistry,
                                     SchedulerProperties properties,
-                                    RunClusterSnapshot clusterSnapshot) {
+                                    RunClusterSnapshot clusterSnapshot,
+                                    PlacementDispatchService dispatchService) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
@@ -125,6 +128,7 @@ public class ScheduleExecutionService {
         this.engineRegistry = engineRegistry;
         this.properties = properties;
         this.clusterSnapshot = clusterSnapshot;
+        this.dispatchService = dispatchService;
     }
 
     /**
@@ -639,6 +643,10 @@ public class ScheduleExecutionService {
      *
      * <p>스케줄 하나가 실패해도 나머지는 회수한다 — 앱 기동을 막으면 안 되므로 호출자가 다시 감싼다.</p>
      *
+     * <p><b>중단된 실행이 배치한 워크로드는 전달 기록을 보고 가른다.</b> 실행 계층이 이미 받은 것(기록 ACCEPTED·RUNNING)은
+     * 그대로 두고, 전달 중이던 것(REQUESTED)은 기록을 닫으며 실패로 돌리고, 기록이 없거나 옛 결정의 기록뿐이거나 이미 끝난 기록이면 실패로
+     * 돌린다({@link PlacementDispatchService#recoverAfterRestart}). 실행 이력과 실행 권한 정리는 이와 무관하게 그대로다.</p>
+     *
      * <p><b>한계 — 앱이 한 대라는 전제 위에 있다.</b> 두 대가 떠 있으면 한쪽의 기동이 다른 쪽에서 <b>실제로 돌고 있는
      * 실행</b>을 중단된 것으로 보고 실패 처리한다. 무중단 배포나 다중 인스턴스로 가면 "이 프로세스가 잡은 실행"을
      * 구분할 표식(인스턴스 식별자)이 먼저 필요하다.</p>
@@ -670,7 +678,10 @@ public class ScheduleExecutionService {
         return recovered;
     }
 
-    /** 중단된 실행이 배치한 워크로드의 예약을 풀어 다시 시도할 수 있게 한다. */
+    /**
+     * 중단된 실행이 배치한 워크로드를 전달 기록에 맞춰 정리한다 — 실행 계층이 이미 받은 것은 그대로 두고, 그 밖은
+     * 예약을 풀어 다시 시도할 수 있게 한다. 전달 서비스 없이 직접 조립했을 때는(지금은 없다) 전부 실패로 돌린다.
+     */
     private void recoverStuckWorkloads(List<ScheduleRun> runs) {
         if (runs.isEmpty()) return;
         try {
@@ -680,15 +691,27 @@ public class ScheduleExecutionService {
                     .map(SchedulingHistory::getWorkloadId)
                     .filter(Objects::nonNull)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-            List<Workload> recovered = new ArrayList<>();
+            int kept = 0, closed = 0, failed = 0;
+            List<Workload> fallback = new ArrayList<>();
             for (Workload workload : workloadRepository.findAllById(workloadIds)) {
                 if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) continue;
-                workload.failDispatch(RECOVERED_MESSAGE);
-                recovered.add(workload);
+                if (dispatchService == null) {
+                    workload.failDispatch(RECOVERED_MESSAGE);
+                    fallback.add(workload);
+                    failed++;
+                    continue;
+                }
+                switch (dispatchService.recoverAfterRestart(workload.getId(), RECOVERED_MESSAGE)) {
+                    case KEPT -> kept++;
+                    case CLOSED_AND_FAILED -> closed++;
+                    case FAILED -> failed++;
+                    default -> { }
+                }
             }
-            workloadRepository.saveAll(recovered);
-            if (!recovered.isEmpty()) {
-                log.warn("기동 회수: 중단된 실행에 배치된 워크로드 {}건을 실패로 되돌렸습니다", recovered.size());
+            if (!fallback.isEmpty()) workloadRepository.saveAll(fallback);
+            if (kept + closed + failed > 0) {
+                log.warn("기동 회수: 중단된 실행에 배치된 워크로드 — 실행 계층이 받은 {}건은 그대로 두고, 전달 중이던 {}건과 현재 결정의 열린 전달 기록이 없는 {}건은 실패로 되돌렸습니다",
+                        kept, closed, failed);
             }
         } catch (RuntimeException e) {
             log.error("중단된 실행의 워크로드 복구 실패(실행 이력과 스케줄 권한 회수는 계속한다)", e);

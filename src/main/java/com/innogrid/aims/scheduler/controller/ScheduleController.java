@@ -109,7 +109,8 @@ public class ScheduleController {
                     + "resourceType·placementOrder 는 비울 수 없습니다(배치 순서를 기본으로 되돌리려면 age). "
                     + "상세 조회 응답을 그대로 보내면 아무것도 바뀌지 않습니다. "
                     + "본문이 없으면 400, 스케줄 ID 가 다르면 400, 칸 검증은 생성과 같은 규칙이며 한 칸이라도 400 이면 아무것도 바뀌지 않습니다. "
-                    + "실행 주기나 사용 여부를 바꾸면 다음 실행 예정 시각이 현재 기준으로 다시 계산됩니다.")
+                    + "실행 주기나 사용 여부를 바꾸면 다음 실행 예정 시각이 현재 기준으로 다시 계산됩니다. "
+                    + "실행 중에도 편집할 수 있으며 최근 실행 상태·시각·메시지 칸은 편집이 쓰지 않습니다(편집 응답의 그 칸은 편집 시점 값).")
     @PutMapping("/{id}")
     public ApiResponse<ScheduleResponse> updateSchedule(@PathVariable Long id,
                                                         @RequestBody(required = false) ScheduleUpdateRequest request) {

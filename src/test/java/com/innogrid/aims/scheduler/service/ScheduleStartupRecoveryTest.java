@@ -9,10 +9,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch.DispatchStatus;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
+import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
@@ -37,9 +41,14 @@ class ScheduleStartupRecoveryTest {
     @Autowired SchedulingHistoryRepository historyRepository;
     @Autowired WorkloadRepository workloadRepository;
     @Autowired ScheduleService scheduleService;
+    @Autowired PlacementDispatchService dispatchService;
+    @Autowired PlacementDispatchRepository dispatchRepository;
 
     @AfterEach
     void clean() {
+        dispatchRepository.findAll().stream()
+                .filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith("rec-"))
+                .forEach(dispatchRepository::delete);
         historyRepository.findAll().stream()
                 .filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith("rec-"))
                 .forEach(historyRepository::delete);
@@ -66,6 +75,27 @@ class ScheduleStartupRecoveryTest {
 
     private Schedule reload(Schedule schedule) {
         return scheduleRepository.findById(schedule.getId()).orElseThrow();
+    }
+
+    /** 중단된 실행이 배치한 워크로드 — 배정 상태로 저장하고 그 실행의 성공 이력에 연결한다. */
+    private Workload placedBy(ScheduleRun run, String name) {
+        Workload workload = new Workload(name, 2, 1024);
+        workload.assignTo("mdc-01", "node-1", 0.8, "배치 성공");
+        workload = workloadRepository.save(workload);
+        SchedulingHistory history = new SchedulingHistory(workload.getId(), workload.getName(),
+                "mdc-01", "node-1", 0.8, "배치 성공", "weighted", "default");
+        history.linkToRun(run.getId(), true);
+        historyRepository.save(history);
+        return workload;
+    }
+
+    private ScheduleRun danglingRun(Schedule schedule) {
+        return runRepository.save(new ScheduleRun(schedule.getId(), schedule.getScheduleId(),
+                ScheduleRun.TriggerType.AUTO, "system"));
+    }
+
+    private static SchedulingResult ok() {
+        return new SchedulingResult(true, "mdc-01", "node-1", 0.8, "배치 성공", List.of());
     }
 
     @DisplayName("남아 있던 실행 권한을 회수해 실패로 기록하고 다음 실행 시각을 되살린다")
@@ -117,7 +147,7 @@ class ScheduleStartupRecoveryTest {
         assertNotNull(after.getFinishedAt());
     }
 
-    @DisplayName("중단된 실행이 배치한 워크로드도 실패로 되돌려 다음 재시도에서 회수한다")
+    @DisplayName("전달 기록이 없는 배치 워크로드는 중단된 실행과 함께 실패로 되돌려 다음 재시도에서 회수한다")
     @Test
     void recovers_workload_placed_by_dangling_run() {
         Schedule schedule = stuck("rec-workload");
@@ -141,6 +171,68 @@ class ScheduleStartupRecoveryTest {
         assertEquals(1, after.resolveRetryCount());
         assertNotNull(after.getLastFailedAt());
         assertEquals(ScheduleExecutionService.RECOVERED_MESSAGE, after.getSchedulingReason());
+    }
+
+    @DisplayName("실행 계층이 이미 받은 워크로드는 재시작 뒤에도 배정을 그대로 둔다")
+    @Test
+    void keeps_workload_already_accepted_by_executor() {
+        Schedule schedule = stuck("rec-keep");
+        ScheduleRun dangling = danglingRun(schedule);
+        Workload workload = placedBy(dangling, "rec-keep-workload");
+        PlacementDispatch accepted = dispatchService.afterPlacement(workload, ok(), dangling.getId());
+        assertEquals(DispatchStatus.ACCEPTED, accepted.getStatus());
+
+        executionService.recoverStuckRuns();
+
+        Workload after = workloadRepository.findById(workload.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus(), "실행 계층이 받은 워크로드를 실패로 돌리면 두 번 배치된다");
+        assertEquals("node-1", after.getAssignedNodeId());
+        assertEquals(0, after.resolveRetryCount());
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(accepted.getId()).orElseThrow().getStatus());
+        assertEquals(ScheduleRun.RunStatus.FAILED, runRepository.findById(dangling.getId()).orElseThrow().getStatus(),
+                "실행 이력 정리는 전과 같다");
+    }
+
+    @DisplayName("전달 중이던 워크로드는 기록을 UNAVAILABLE 로 닫고 실패로 되돌린다")
+    @Test
+    void closes_requested_dispatch_and_fails_workload() {
+        Schedule schedule = stuck("rec-requested");
+        ScheduleRun dangling = danglingRun(schedule);
+        Workload workload = placedBy(dangling, "rec-requested-workload");
+        PlacementDispatch requested = dispatchRepository.saveAndFlush(new PlacementDispatch(workload, dangling.getId(), "SYSTEM"));
+        assertEquals(DispatchStatus.REQUESTED, requested.getStatus());
+
+        executionService.recoverStuckRuns();
+
+        PlacementDispatch closed = dispatchRepository.findById(requested.getId()).orElseThrow();
+        assertEquals(DispatchStatus.UNAVAILABLE, closed.getStatus());
+        assertTrue(closed.getMessage().startsWith(PlacementDispatchService.RESTART_NOTE), closed.getMessage());
+        Workload after = workloadRepository.findById(workload.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertNull(after.getAssignedNodeId());
+        assertEquals(1, after.resolveRetryCount());
+    }
+
+    @DisplayName("옛 결정의 기록만 있는 워크로드는 전달 기록이 없는 것과 같이 실패로 되돌린다")
+    @Test
+    void fails_workload_whose_only_dispatch_is_from_an_older_decision() {
+        Schedule schedule = stuck("rec-old-row");
+        ScheduleRun dangling = danglingRun(schedule);
+        Workload workload = placedBy(dangling, "rec-old-row-workload");
+        PlacementDispatch old = dispatchService.afterPlacement(workload, ok(), dangling.getId());
+        // 같은 워크로드를 다시 배정해 옛 기록보다 확실히 뒤의 결정을 만든다 — 새 기록은 만들지 않는다
+        // (옛 기록의 요청 시각은 배정 시각보다 몇 ms 뒤에 찍히므로, 배정 시각이 그보다 확실히 뒤가 될 때까지 반복한다)
+        do {
+            workload.assignTo("mdc-01", "node-2", 0.6, "재배치");
+        } while (!workload.getScheduledAt().isAfter(old.getRequestedAt().plusNanos(2_000_000)));
+        workloadRepository.saveAndFlush(workload);
+
+        executionService.recoverStuckRuns();
+
+        Workload after = workloadRepository.findById(workload.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus(), "현재 결정의 기록이 없으면 실행 계층이 받은 것이 아니다");
+        assertNull(after.getAssignedNodeId());
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(old.getId()).orElseThrow().getStatus(), "옛 결정의 기록은 손대지 않는다");
     }
 
     @DisplayName("중단된 실행과 관계없는 배치 워크로드는 기동 회수가 건드리지 않는다")

@@ -274,6 +274,58 @@ public class PlacementDispatchService {
         return repository.save(current);
     }
 
+    /** 재시작 뒤 중단된 실행이 배치한 워크로드 하나를 전달 기록에 맞춰 정리한 결과. */
+    public enum RestartRecovery {
+        /** 실행 계층이 이미 받았다(ACCEPTED·RUNNING) — 워크로드를 그대로 둔다. */
+        KEPT,
+        /** 전달 중(REQUESTED)이었다 — 기록을 UNAVAILABLE 로 닫고 워크로드를 실패로 돌린다. */
+        CLOSED_AND_FAILED,
+        /** 현재 결정의 기록이 없거나 이미 끝났다 — 워크로드를 실패로 돌린다. */
+        FAILED,
+        /** 다시 읽었을 때 배치 상태가 아니었다 — 손대지 않는다. */
+        SKIPPED
+    }
+
+    /** 재시작 때 전달 중이던 기록을 닫으며 비고 앞에 두는 표지. */
+    public static final String RESTART_NOTE = "재시작 — 전달 결과 모름";
+
+    /**
+     * 재시작 뒤 중단된 실행이 배치한 워크로드 하나를 <b>전달 기록에 맞춰</b> 정리한다 — 워크로드 1건이 트랜잭션 1개다.
+     *
+     * <pre>
+     * 현재 결정의 기록이 ACCEPTED·RUNNING  → 워크로드 유지(배정·재시도 그대로). 실행 계층이 이미 받았으니 실패로 돌리면 두 번 배치된다
+     * 현재 결정의 기록이 REQUESTED         → 기록 UNAVAILABLE(비고 "재시작 — 전달 결과 모름") + 워크로드 실패·배정 해제
+     * 기록 없음 · 옛 결정의 기록 · 끝난 기록 → 워크로드 실패·배정 해제(전과 같음)
+     * </pre>
+     * 현재 결정은 <b>요청 시각이 가장 늦은 기록</b>이 워크로드의 배정 시각보다 앞서지 않는 것으로 본다 — 기록은 배치가
+     * 커밋된 뒤에 만들어지므로 현재 결정이면 항상 성립하고, 옛 결정의 기록(단건 재배치·이전 실패 처리로 남은 것)은
+     * 배정 시각보다 앞선다. DB 의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다.
+     * 디스패처 취소 훅은 부르지 않는다 — 기동 정리는 실행 계층에 명령하는 경로가 아니다.
+     *
+     * @param reason 실패로 돌릴 때 워크로드에 남길 사유
+     */
+    public RestartRecovery recoverAfterRestart(Long workloadId, String reason) {
+        return tx.execute(status -> {
+            Workload workload = workloadRepository.findById(workloadId).orElse(null);
+            if (workload == null || workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) return RestartRecovery.SKIPPED;
+            List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDesc(workloadId);
+            PlacementDispatch latest = rows.isEmpty() ? null : rows.get(0);
+            boolean current = latest != null && workload.getScheduledAt() != null
+                    && !latest.getRequestedAt().isBefore(workload.getScheduledAt());
+            if (current && !latest.getStatus().terminal()) {
+                if (latest.getStatus() != DispatchStatus.REQUESTED) return RestartRecovery.KEPT;
+                latest.close(DispatchStatus.UNAVAILABLE, RESTART_NOTE);
+                repository.save(latest);
+                workload.failDispatch(reason);
+                workloadRepository.save(workload);
+                return RestartRecovery.CLOSED_AND_FAILED;
+            }
+            workload.failDispatch(reason);
+            workloadRepository.save(workload);
+            return RestartRecovery.FAILED;
+        });
+    }
+
     // ── 조회 ────────────────────────────────────────────────────
 
     public PlacementDispatch require(Long id) {

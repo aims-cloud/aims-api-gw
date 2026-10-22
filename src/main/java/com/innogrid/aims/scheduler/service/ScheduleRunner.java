@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.service;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ConcurrentHashMap;
@@ -147,6 +148,9 @@ public class ScheduleRunner implements SmartLifecycle {
      * <b>정상 실행</b>된다. 그래서 넘긴 스케줄을 기억해 두고 실행이 끝날 때까지 다시 넘기지 않는다.</p>
      *
      * <p>이 기억은 프로세스 안에만 있다 — 재기동하면 비고, 그때는 DB 쪽(실행 중 표시)과 기동 회수가 맡는다.</p>
+     *
+     * <p>폴링 목록은 <b>누구를 돌릴지</b>만 정한다. 넘긴 엔티티는 큐에서 차례를 기다리는 동안 낡으므로
+     * 워커가 시작 직전에 다시 읽어 그 시점 값으로 돈다({@link #executeQuietly}).</p>
      */
     private void runDueSchedules() {
         List<Schedule> due = scheduleRepository
@@ -175,9 +179,27 @@ public class ScheduleRunner implements SmartLifecycle {
      * 사흘치를 몰아서 돌리지 않는다 — 배치 결과는 최신 노드 상태에 따라 달라지므로
      * 지난 시각의 실행을 뒤늦게 재현하는 것은 의미가 없다. 다음 예정 시각은 실행이
      * 끝날 때 현재 기준으로 다시 계산된다.</p>
+     *
+     * <p><b>시작 직전에 스케줄을 다시 읽는다.</b> 넘겨받은 것은 폴링 때의 사본이라 큐에서 기다리는 사이
+     * 편집·삭제가 끼면 낡는다. 그 사이 지워졌거나 사용 여부·자동 실행이 꺼졌으면 이 회차는 돌지 않고
+     * 아무것도 남기지 않으며(실행 이력·최근 실행 기록·다음 예정 시각 모두 그대로), 리소스 종류·배치 순서·정책·
+     * 엔진·상한을 바꿨으면 바뀐 값으로 돈다. 건너뛴 스케줄은 지워졌거나 사용 여부·자동 실행이 꺼진 것이라 폴링
+     * 조건에서 빠져 다음 폴링이 다시 집지 않는다. 다시 읽기는 try 안에 둔다 — 밖에 두면 DB 예외가 워커의 Future 에 삼켜져 로그 없이
+     * 사라진다. 같은 패키지의 테스트가 폴링 사본을 들고 직접 부른다.</p>
      */
-    private void executeQuietly(Schedule schedule) {
+    void executeQuietly(Schedule polled) {
         try {
+            Optional<Schedule> fresh = scheduleRepository.findById(polled.getId());
+            if (fresh.isEmpty()) {
+                log.info("자동 실행 건너뜀 — 차례를 기다리는 사이 삭제됨: schedule={}", polled.getScheduleId());
+                return;
+            }
+            Schedule schedule = fresh.get();
+            if (!schedule.isAutoRunnable()) {
+                log.info("자동 실행 건너뜀 — 차례를 기다리는 사이 사용 안 함 또는 자동 실행 해제: schedule={}",
+                        schedule.getScheduleId());
+                return;
+            }
             ScheduleRun run = executionService.execute(
                     schedule, ScheduleRun.TriggerType.AUTO, ScheduleActorResolver.SYSTEM);
             if (run == null) {
@@ -189,7 +211,7 @@ public class ScheduleRunner implements SmartLifecycle {
         } catch (Exception e) {
             // 실행 서비스가 이미 상태를 정리하고 이력에 사유를 남긴다. 여기서는 기록만 한다.
             log.warn("자동 실행 실패: schedule={}, reason={}",
-                    schedule.getScheduleId(), e.getMessage());
+                    polled.getScheduleId(), e.getMessage());
         }
     }
 

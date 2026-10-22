@@ -469,12 +469,17 @@ public class SchedulingService {
 
     /**
      * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.
-     * 오래 남아 있는 워크로드가 자원을 영구히 묶지 않도록 TTL 을 넘긴 것은 제외한다.
+     * 오래 남아 있는 워크로드가 자원을 계속 묶지 않도록 TTL 을 넘긴 것은 제외한다(실행 중 워크로드의 GPU 개수는 아래 예외).
      *
      * <p><b>실행 중인 워크로드는 메트릭에 잡힌 뒤부터 예약에서 뺀다.</b> 그러지 않으면 같은
      * 워크로드가 노드 사용률 메트릭에 한 번, 예약으로 또 한 번 계산된다. 이 클래스의 예약은
      * "배치됐지만 아직 메트릭에 없는 것"을 뜻하므로, 메트릭 지연 시간이 지난 RUNNING 은
      * 정의상 예약이 아니다.</p>
+     *
+     * <p><b>단, GPU 개수는 끝 상태가 될 때까지 예약으로 남긴다.</b> 가용 GPU 는 총 개수에서 예약만 뺀 값이고 카드 점유는
+     * 사용률 메트릭에 드러나지 않는다. 실행 중인 워크로드의 GPU 까지 빼면 쓰고 있는 카드가 비어 보여 다음 GPU 워크로드가
+     * 같은 카드에 배정된다. 그래서 메트릭 지연이나 TTL 을 넘긴 RUNNING 은 CPU·메모리·디스크만 빼고 GPU 는 남긴다.
+     * TTL 은 실행 전 배치(SCHEDULED)를 거르는 장치로 남는다.</p>
      */
     private void applyReservations(PlacementContext context) {
         if (context.isEmpty()) return;
@@ -484,12 +489,20 @@ public class SchedulingService {
         OffsetDateTime metricCutoff = now.minusMinutes(properties.getMetricLagMinutes());
 
         for (Workload workload : workloadRepository.findByStatusIn(RESERVED_STATUSES)) {
-            if (workload.getAssignedNodeId() == null) continue;
-            if (workload.getScheduledAt() != null && workload.getScheduledAt().isBefore(cutoff)) continue;
-            if (alreadyInMetrics(workload, metricCutoff)) continue;
-
-            context.reserve(workload.getAssignedNodeId(), workload);
+            String nodeId = workload.getAssignedNodeId();
+            if (nodeId == null) continue;
+            boolean expired = workload.getScheduledAt() != null && workload.getScheduledAt().isBefore(cutoff);
+            if (!expired && !alreadyInMetrics(workload, metricCutoff)) {
+                context.reserve(nodeId, workload);
+            } else if (workload.getStatus() == Workload.WorkloadStatus.RUNNING) {
+                reserveGpuOnly(context, nodeId, workload);
+            }
         }
+    }
+
+    /** 실행 중인 워크로드의 GPU 개수만 예약으로 잡는다 — CPU·메모리·디스크는 이미 사용률 메트릭에 있다. 없는 노드는 무시한다. */
+    private static void reserveGpuOnly(PlacementContext context, String nodeId, Workload workload) {
+        context.node(nodeId).ifPresent(n -> n.reserve(0, 0, workload.getRequiredGpu(), 0));
     }
 
     /**

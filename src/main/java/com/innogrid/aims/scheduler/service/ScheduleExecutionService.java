@@ -46,7 +46,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 대상     리소스 종류 일치 + 상태 PENDING·FAILED + 재시도 여유 있음
  *          우선순위 CRITICAL→LOW, 같으면 등록 순, 1회 최대 500건
  *
- * 수행     노드 스냅샷 1회 → 예약 반영 → 워크로드마다 제약→엔진→배치→예약 누적
+ * 수행     노드 스냅샷 1회 → 예약 반영 → 워크로드마다 배치 직전 다시 읽기(지워졌거나 대기·실패가 아니면
+ *          건너뜀 — 실패로 셈) → 제약→엔진→배치 → 커밋 뒤 예약 누적
  *
  * 판정     대상 0건 · AUTO      → 실행 이력을 만들지 않고 최근 실행 정보만 갱신
  *          대상 0건 · MANUAL    → 소진이면 FAILED(사유에 일괄 재개 필요), 아니면 COMPLETED "대상 없음"
@@ -196,8 +197,24 @@ public class ScheduleExecutionService {
             int attempted = 0;
             String firstFailure = null;
             try {
-                for (Workload workload : targets) {
+                for (Workload polled : targets) {
+                    // 대상은 실행 시작 때 읽은 사본이라 노드 수집과 앞 워크로드의 배치·전달을 도는 사이 낡는다.
+                    // 그 사본으로 저장하면 그 사이 커밋된 편집·되살리기가 지워지고, 지운 워크로드는 회차를 끊는다.
+                    // 그래서 배치 직전에 다시 읽어, 지워졌거나 대기·실패가 아니면 이번 회차에서 건너뛴다.
+                    Workload workload = workloadRepository.findById(polled.getId()).orElse(null);
+                    String skip = skipReasonOf(workload);
+                    if (skip != null) {
+                        placementService.recordSkip(polled, context, engineId, run.getId(), skip);
+                        attempted++;
+                        if (firstFailure == null) firstFailure = skip;
+                        continue;
+                    }
                     SchedulingResult placed = placementService.place(workload, context, engineId, run.getId());
+                    if (placed.success()) {
+                        // 예약은 결정이 커밋된 뒤에 잡는다 — 배치 안에서 잡으면 저장·커밋이 실패해도 예약이 남아
+                        // 그 예외로 루프가 끝난 뒤 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.
+                        context.reserve(placed.selectedNodeId(), workload);
+                    }
                     SchedulingResult result = schedulingService.dispatch(workload, placed, run.getId());
                     if (placed.success() && !result.success()) {
                         // 실행 계층이 받지 않은 배치 — DB 쪽은 디스패치가 이미 FAILED 로 돌렸지만, 이 실행의 컨텍스트에
@@ -245,6 +262,19 @@ public class ScheduleExecutionService {
         }
     }
 
+    /**
+     * 배치 직전에 다시 읽은 워크로드를 이번 회차에서 건너뛸 사유. 지워졌으면 삭제 사유, 상태가 대기·실패가 아니면
+     * (다른 경로로 배치됐거나 실행 중·완료로 바뀜) 상태 사유, 배치해도 되면 {@code null}. 건너뛴 건은 실패로 세고
+     * 워크로드는 쓰지 않는다(재시도 횟수를 올리지 않음).
+     */
+    static String skipReasonOf(Workload fresh) {
+        if (fresh == null) return "배치 건너뜀 — 대상 조회 뒤 삭제됨";
+        if (!TARGET_STATUSES.contains(fresh.getStatus())) {
+            return "배치 건너뜀 — 대상 조회 뒤 상태가 " + fresh.getStatus() + " 로 바뀜";
+        }
+        return null;
+    }
+
     /** 배치 루프가 끝난 실행이 남기는 문구 — 모의 실행도 같은 함수를 써서 글자 단위로 같다. */
     static String resultMessage(int targets, int success, boolean truncated, String firstFailure) {
         if (success == 0) {
@@ -260,7 +290,7 @@ public class ScheduleExecutionService {
      * 스케줄을 지금 실행하면 어떻게 배치될지를 <b>저장 없이</b> 돌려준다.
      *
      * <p>실행과 같은 코드로 정책·엔진·대상·순서·상한·전력 상한을 해석하고, 컨텍스트 하나 위에 대상을 차례로 놓아 본다 —
-     * 성공한 건의 요구량을 예약으로 누적하므로 앞 건이 뒤 건에 보인다(실행의 {@code place} 가 하는 것과 같은 입력).
+     * 성공한 건의 요구량을 예약으로 누적하므로 앞 건이 뒤 건에 보인다(실행의 배치 루프가 {@code place} 에 넘기는 것과 같은 입력).
      * 실행 권한을 잡지 않고(실행 중·사용 안 함 스케줄도 200), 실행 계층에 전달하지 않으며(전부 받는다고 본다), 워크로드·
      * 배치 이력·전달·실행 이력·{@code default} 정책 어느 행도 쓰지 않는다. 트랜잭션은 두지 않는다 — 메트릭 수집이 길다.</p>
      *

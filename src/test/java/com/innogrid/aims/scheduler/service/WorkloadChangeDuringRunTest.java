@@ -1,0 +1,266 @@
+package com.innogrid.aims.scheduler.service;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.scheduler.dispatch.DispatcherRegistry;
+import com.innogrid.aims.scheduler.dispatch.PlacementDispatcher;
+import com.innogrid.aims.scheduler.dispatch.RecordingPlacementDispatcher;
+import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.WorkloadUpdateRequest;
+import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.entity.ScheduleRun;
+import com.innogrid.aims.scheduler.entity.SchedulingHistory;
+import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
+import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
+import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
+import com.innogrid.aims.scheduler.repository.WorkloadRepository;
+
+import tools.jackson.databind.ObjectMapper;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.when;
+
+/**
+ * 스케줄 실행이 대상을 읽은 뒤 바뀐 워크로드를 배치가 어떻게 다루는가.
+ *
+ * <p>실행은 대상 워크로드를 시작 때 한 번 읽고(트랜잭션 밖이라 분리된 사본), 노드를 모으고 앞 워크로드를 배치·전달하는
+ * 동안 그 사본을 들고 있다. 여기서는 노드 수집 대역의 첫 호출(대상 조회 뒤 · 배치 루프 앞)이나 전달 대역 안에서 편집·
+ * 되살리기·삭제·다른 배치를 자기 트랜잭션으로 커밋해, 그 창을 스레드 없이 재현한다.</p>
+ *
+ * <pre>
+ * 노드      8코어 1대, CPU 10% → 가용 7.2코어 (저장 실패 테스트만 CPU 1% — 가동 노드 0 에서 시작)
+ * 워크로드  NPU 종류(다른 테스트가 적게 쓰는 종류) · 이름 접두사로 정리
+ * 디스패처  기록형(수락)
+ * </pre>
+ *
+ * <p><b>이 클래스는 {@code @Transactional} 을 쓰지 않는다.</b> 커밋된 값을 다시 읽어 확인한다.</p>
+ */
+@SpringBootTest
+class WorkloadChangeDuringRunTest {
+
+    private static final String PREFIX = "wcd-";
+    private static final String NODE = "wcd-n8:9100";
+
+    @Autowired ScheduleService scheduleService;
+    @Autowired ScheduleExecutionService executionService;
+    @Autowired WorkloadService workloadService;
+    @Autowired SchedulingService schedulingService;
+    @Autowired ScheduleRepository scheduleRepository;
+    @Autowired ScheduleRunRepository runRepository;
+    @Autowired WorkloadRepository workloadRepository;
+    @Autowired PlacementDispatchRepository dispatchRepository;
+    @Autowired SchedulingHistoryRepository historyRepository;
+    @Autowired PlatformTransactionManager transactionManager;
+    @Autowired ObjectMapper objectMapper;
+    @MockitoBean NodeResourceCollector collector;
+    @MockitoBean DispatcherRegistry registry;
+    @MockitoSpyBean WeightedScoreScheduler weighted;
+
+    @AfterEach
+    void clean() {
+        historyRepository.findAll().stream().filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith(PREFIX)).forEach(historyRepository::delete);
+        dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith(PREFIX)).forEach(dispatchRepository::delete);
+        workloadRepository.findAll().stream().filter(w -> w.getName().startsWith(PREFIX)).forEach(workloadRepository::delete);
+        scheduleRepository.findAll().stream().filter(s -> s.getScheduleId().startsWith(PREFIX)).forEach(s -> scheduleService.delete(List.of(s.getId())));
+    }
+
+    // ── 편집 ─────────────────────────────────────────────────────────────
+
+    @DisplayName("실행이 대상을 읽은 뒤 커밋한 편집은 배치에 반영되고 남는다")
+    @Test
+    void edit_after_target_lookup_is_used_and_kept() {
+        Workload first = save(PREFIX + "edit-a", 1, Workload.WorkloadPriority.HIGH);
+        Workload second = save(PREFIX + "edit-2", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> workloadService.update(first.getId(), body("{\"name\":\"" + PREFIX + "edit-b\",\"requiredCpu\":7}")));
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-edit"), "tester");
+
+        Workload w1 = reload(first);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, w1.getStatus());
+        assertEquals(PREFIX + "edit-b", w1.getName(), "편집한 이름이 배치 저장으로 되돌아가면 안 된다");
+        assertEquals(7, w1.getRequiredCpu(), "편집한 요구량이 남는다");
+        assertNotEquals(Workload.WorkloadStatus.SCHEDULED, reload(second).getStatus(),
+                "편집한 7코어로 예약했으니 남은 0.2코어로는 다음 워크로드가 못 들어간다");
+        assertEquals(1, run.getSuccessCount());
+        assertEquals(1, run.getFailedCount());
+    }
+
+    @DisplayName("앞 워크로드를 배치하는 사이의 편집도 다음 배치에 반영된다")
+    @Test
+    void edit_during_earlier_placement_is_used_for_later_workload() {
+        save(PREFIX + "mid-1", 1, Workload.WorkloadPriority.HIGH);
+        Workload second = save(PREFIX + "mid-2", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            private final PlacementDispatcher recording = new RecordingPlacementDispatcher();
+            @Override public String getMode() { return recording.getMode(); }
+            @Override public Outcome dispatch(Request request) {
+                if ((PREFIX + "mid-1").equals(request.workloadName())) {
+                    workloadService.update(second.getId(), body("{\"requiredCpu\":7}"));
+                }
+                return recording.dispatch(request);
+            }
+        });
+
+        executionService.runNow(schedule(PREFIX + "s-mid"), "tester");
+
+        Workload w2 = reload(second);
+        assertEquals(7, w2.getRequiredCpu(), "앞 배치 중 편집한 요구량이 남는다");
+        assertNotEquals(Workload.WorkloadStatus.SCHEDULED, w2.getStatus(),
+                "앞 배치가 1코어를 잡아 남은 6.2코어로는 편집한 7코어가 못 들어간다 — 워크로드마다 다시 읽는다");
+    }
+
+    // ── 되살리기 ──────────────────────────────────────────────────────────
+
+    @DisplayName("실행이 대상을 읽은 뒤 되살린 워크로드는 재시도 횟수가 0 으로 남는다")
+    @Test
+    void revived_after_target_lookup_keeps_cleared_retry_count() {
+        Workload failed = new Workload(PREFIX + "revive", 1, 64);
+        failed.setResourceType(Workload.ResourceType.NPU);
+        failed.markFailed("앞선 실패 1");
+        failed.markFailed("앞선 실패 2");
+        ReflectionTestUtils.setField(failed, "lastFailedAt", OffsetDateTime.now().minusMinutes(20));   // 재시도 간격이 지났다
+        Workload saved = workloadRepository.saveAndFlush(failed);
+        nodeThen(10, () -> schedulingService.changeStatus(saved.getId(), Workload.WorkloadStatus.PENDING));
+
+        executionService.runNow(schedule(PREFIX + "s-revive"), "tester");
+
+        Workload after = reload(saved);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals(0, after.resolveRetryCount(), "되살리기가 지운 재시도 횟수가 배치 저장으로 되돌아가면 안 된다");
+        assertNull(after.getLastFailedAt());
+    }
+
+    // ── 삭제 ─────────────────────────────────────────────────────────────
+
+    @DisplayName("실행이 대상을 읽은 뒤 지운 워크로드는 건너뛰고 회차는 계속된다")
+    @Test
+    void deleted_after_target_lookup_is_skipped_and_run_continues() {
+        Workload gone = save(PREFIX + "del-1", 1, Workload.WorkloadPriority.HIGH);
+        Workload kept = save(PREFIX + "del-2", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> workloadService.delete(gone.getId()));
+
+        ScheduleRun run = assertDoesNotThrow(() -> executionService.runNow(schedule(PREFIX + "s-del"), "tester"));
+
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus());
+        assertEquals(1, run.getSuccessCount());
+        assertEquals(1, run.getFailedCount(), "건너뛴 건은 실패로 센다");
+        assertTrue(workloadRepository.findById(gone.getId()).isEmpty(), "지운 워크로드가 되살아나면 안 된다");
+        assertTrue(workloadRepository.findAll().stream().noneMatch(w -> (PREFIX + "del-1").equals(w.getName())), "새 행으로도 생기지 않는다");
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(gone.getId()).isEmpty(), "전달 기록도 없다");
+        List<SchedulingHistory> skipped = historiesOf(run, gone.getId());
+        assertEquals(1, skipped.size(), "결정 목록에 건너뜀 한 건");
+        assertFalse(skipped.get(0).getSuccess());
+        assertTrue(skipped.get(0).getReason().contains("삭제됨"), skipped.get(0).getReason());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, reload(kept).getStatus(), "다음 워크로드는 배치된다");
+    }
+
+    // ── 다른 경로의 배치 ───────────────────────────────────────────────────
+
+    @DisplayName("실행이 대상을 읽은 뒤 다른 경로로 배치된 워크로드는 다시 배치하지 않는다")
+    @Test
+    void placed_elsewhere_after_target_lookup_is_not_placed_again() {
+        Workload target = save(PREFIX + "else", 1, Workload.WorkloadPriority.NORMAL);
+        Workload[] afterHook = new Workload[1];
+        nodeThen(10, () -> {
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                Workload w = workloadRepository.findById(target.getId()).orElseThrow();
+                w.assignTo("mdc-02", "other-node:9100", 0.5, "다른 경로의 배치");
+                workloadRepository.saveAndFlush(w);
+            });
+            afterHook[0] = workloadRepository.findById(target.getId()).orElseThrow();   // DB 에 저장된 값(시각 반올림 뒤)
+        });
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-else"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals("other-node:9100", after.getAssignedNodeId(), "다른 경로의 배정이 덮이면 안 된다");
+        assertEquals(afterHook[0].getScheduledAt().toInstant(), after.getScheduledAt().toInstant(), "배정 시각도 그대로");
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(target.getId()).isEmpty(), "이 회차가 전달하지 않는다");
+        List<SchedulingHistory> histories = historiesOf(run, target.getId());
+        assertEquals(1, histories.size());
+        assertFalse(histories.get(0).getSuccess());
+        assertTrue(histories.get(0).getReason().contains("SCHEDULED"), histories.get(0).getReason());
+    }
+
+    // ── 저장 실패와 예약 ──────────────────────────────────────────────────
+
+    @DisplayName("배치 저장이 실패하면 그 건의 예약이 실행 후 스냅샷에 남지 않는다")
+    @Test
+    void failed_save_leaves_no_reservation_in_after_snapshot() {
+        save(PREFIX + "save-fail", 5, Workload.WorkloadPriority.NORMAL);
+        nodeThen(1, () -> { });   // CPU 1% — 5코어를 예약하면 가동 노드가 0 → 1 이 된다
+        // 엔진은 성공하지만 사유가 이력 열(500자)보다 길어 이력 저장이 실패한다.
+        doReturn(new SchedulingResult(true, "mdc-01", NODE, 0.9, "가".repeat(600), List.of()))
+                .when(weighted).schedule(any(Workload.class), any(PlacementContext.class));
+
+        long scheduleId = schedule(PREFIX + "s-save");
+        assertThrows(BusinessException.class, () -> executionService.runNow(scheduleId, "tester"));
+
+        ScheduleRun run = runRepository.findByScheduleId(scheduleId).get(0);
+        assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus());
+        assertEquals(run.getSnapshotActiveNodesBefore(), run.getSnapshotActiveNodesAfter(),
+                "저장에 실패한 배치의 예약이 실행 후 스냅샷에 남으면 안 된다");
+    }
+
+    // ── 헬퍼 ─────────────────────────────────────────────────────────────
+
+    /** 노드 수집 대역 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between} 을 커밋한다. */
+    private void nodeThen(double cpuPercent, Runnable between) {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        AtomicBoolean once = new AtomicBoolean(true);
+        when(collector.collect()).thenAnswer(inv -> {
+            if (once.getAndSet(false)) between.run();
+            return new NodeResourceCollector.Snapshot(
+                    List.of(new NodeResource("mdc-01", NODE, 8, 65536, 0, cpuPercent, 20, 0, 0, 500, 0, 0, 0)), List.of());
+        });
+    }
+
+    private Workload save(String name, int cpu, Workload.WorkloadPriority priority) {
+        Workload w = new Workload(name, cpu, 64);
+        w.setResourceType(Workload.ResourceType.NPU);
+        w.setPriority(priority);
+        return workloadRepository.saveAndFlush(w);
+    }
+
+    private long schedule(String id) {
+        return scheduleService.create(new ScheduleRequest(id, id, Workload.ResourceType.NPU, "0 0 2 * * ?",
+                false, true, "wcd", "weighted", null, null, null, null)).id();
+    }
+
+    private Workload reload(Workload w) {
+        return workloadRepository.findById(w.getId()).orElseThrow();
+    }
+
+    private WorkloadUpdateRequest body(String json) {
+        return objectMapper.readValue(json, WorkloadUpdateRequest.class);
+    }
+
+    private List<SchedulingHistory> historiesOf(ScheduleRun run, Long workloadId) {
+        return historyRepository.findAll().stream()
+                .filter(h -> run.getId().equals(h.getScheduleRunId()) && workloadId.equals(h.getWorkloadId()))
+                .toList();
+    }
+}

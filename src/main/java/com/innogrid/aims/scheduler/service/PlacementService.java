@@ -58,7 +58,7 @@ public class PlacementService {
 
     /**
      * 컨텍스트를 기준으로 워크로드를 배치한다.
-     * 성공하면 배치분을 컨텍스트에 예약으로 잡아 다음 워크로드가 이를 인지하게 한다.
+     * 컨텍스트에 예약은 잡지 않는다 — 예약이 필요한 호출자(스케줄 실행)가 커밋된 결정만 잡는다(안에서 잡으면 저장·커밋 실패 때 예약이 남는다).
      */
     @Transactional
     public SchedulingResult place(Workload workload, PlacementContext context, String engineId) {
@@ -71,6 +71,10 @@ public class PlacementService {
      * <p>{@code scheduleRunId} 가 있으면 <b>실패한 결정도 이력으로 남긴다.</b> 실행 상세에서
      * 어떤 워크로드가 왜 배치되지 못했는지 보여야 명세 A1(제약 조건 기반 스케줄링)의 근거가
      * 된다. 단건 스케줄링 API 로 부를 때는 기존과 같이 성공한 결정만 남긴다.</p>
+     *
+     * <p>컨텍스트에 예약은 잡지 않는다. 스케줄 실행의 배치 루프가 이 메서드가 정상 반환한 뒤(=결정이 커밋된 뒤)
+     * 예약을 잡는다 — 여기서 잡으면 이력·워크로드 저장이나 커밋이 실패해도 예약이 남아, 그 예외로 루프가 끝난 뒤
+     * 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.</p>
      */
     @Transactional
     public SchedulingResult place(Workload workload, PlacementContext context, String engineId,
@@ -86,7 +90,6 @@ public class PlacementService {
         if (result.success()) {
             workload.assignTo(result.selectedMdcId(), result.selectedNodeId(),
                     result.finalScore(), result.reason());
-            context.reserve(result.selectedNodeId(), workload);
             SchedulingHistory history = toHistory(workload, context, result, engine);
             // 성공 여부는 실행 연결과 무관하게 남긴다 — 예전엔 단건 배치 행이 NULL 로 남아 성공 필터에서 빠졌다.
             // runId 가 없으면 연결만 비고 success 는 기록된다.
@@ -107,6 +110,27 @@ public class PlacementService {
                 workload.getName(), result.success(), result.selectedNodeId());
 
         return result;
+    }
+
+    /**
+     * 스케줄 실행이 배치 직전에 다시 읽어 건너뛴 워크로드를 실패 결정 한 건으로 남긴다.
+     *
+     * <p>워크로드는 쓰지 않는다 — 지워졌거나 다른 경로로 상태가 바뀐 것이라 재시도 횟수를 올리거나 배정을 바꾸면
+     * 안 된다. 실행 결과가 센 대상마다 실행 상세의 결정 목록에 한 행이 있도록 사유와 함께 이력 한 행(후보 0)만 남긴다.
+     * 이력의 워크로드 id·이름은 대상 조회 때의 값이다(지워졌으면 없는 id 를 가리킨다).</p>
+     */
+    @Transactional
+    public SchedulingResult recordSkip(Workload polled, PlacementContext context, String engineId,
+                                       Long scheduleRunId, String reason) {
+        SchedulingEngine engine = engineRegistry.resolve(engineId);
+        SchedulingHistory history = new SchedulingHistory(
+                polled.getId(), polled.getName(), null, null, 0, reason,
+                engine.getId(), context.policy().getName());
+        history.setCandidateCount(0);
+        history.linkToRun(scheduleRunId, false);
+        historyRepository.save(history);
+        log.info("배치 건너뜀: workload={}({}), {}", polled.getName(), polled.getId(), reason);
+        return SchedulingResult.failure(reason, context.policy().getName());
     }
 
     /**

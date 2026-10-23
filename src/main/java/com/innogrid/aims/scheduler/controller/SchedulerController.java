@@ -350,6 +350,8 @@ public class SchedulerController {
 
     @Operation(summary = "냉각 대기 노드",
                description = "임계 온도를 넘겨 일정 시간 배치 대상에서 제외된 노드와 남은 대기 시간입니다. "
+                       + "냉각 대기는 그 대기를 건 임계 온도와 같거나 더 낮은 임계 온도로 평가하는 배치만 막으며, "
+                       + "남은 대기 시간은 그 노드의 냉각 대기가 모두 풀릴 때까지입니다. "
                        + "냉각 대기는 메모리에만 두므로 앱을 다시 시작하면 초기화됩니다.")
     @GetMapping("/thermal/cooldowns")
     public ApiResponse<List<ThermalCooldownResponse>> getThermalCooldowns() {

@@ -45,6 +45,15 @@ class ConstraintsEndpointContractTest {
                 .andExpect(jsonPath("$.data[6].description").value(containsString("실효 전력")));
     }
 
+    @DisplayName("C3 설명은 냉각 대기가 같거나 더 낮은 임계치의 평가에서만 노드를 제외한다고 적는다")
+    @Test
+    void c3_description_says_cooldown_only_for_same_or_lower_limit() throws Exception {
+        mockMvc.perform(get("/api/v1/scheduler/constraints"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[3].code").value("C3"))
+                .andExpect(jsonPath("$.data[3].description").value(containsString("같거나 더 낮은 임계치")));
+    }
+
     @DisplayName("C1 설명은 GPU 를 워크로드가 요구할 때만 본다고 적는다")
     @Test
     void c1_description_says_gpu_checked_only_when_required() throws Exception {

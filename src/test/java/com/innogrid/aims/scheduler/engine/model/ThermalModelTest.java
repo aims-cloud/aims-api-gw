@@ -17,6 +17,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ThermalModelTest {
 
+    /** 냉각 대기를 거는 평가의 온도 상한(기본 정책 값). */
+    private static final double LIMIT = 75.0;
+
     private final ThermalModel model = new ThermalModel(new SchedulerProperties());
 
     @DisplayName("열적 여유는 임계에 가까울수록 낮다")
@@ -97,7 +100,7 @@ class ThermalModelTest {
 
         assertFalse(cooling.isCoolingDown("node-1"));
 
-        cooling.markCritical("node-1");
+        cooling.markCritical("node-1", LIMIT);
         assertTrue(cooling.isCoolingDown("node-1"));
         assertEquals(10, cooling.remainingCooldownMinutes("node-1"));
 
@@ -117,18 +120,38 @@ class ThermalModelTest {
         assertFalse(cooling.anyCoolingDown(), "기록이 없으면 거짓이다");
 
         // 기록 맵은 node-1 을 node-2 보다 먼저 돈다 — 만료 기록을 뒤(node-2)에 두어, 대기 노드에서 멈추는 구현이면 지우지 못한다
-        cooling.markCritical("node-2");
+        cooling.markCritical("node-2", LIMIT);
         clock.advance(Duration.ofMinutes(5));
-        cooling.markCritical("node-1");
+        cooling.markCritical("node-1", LIMIT);
         clock.advance(Duration.ofMinutes(5));                 // node-2 10분(만료) · node-1 5분(대기)
         assertTrue(cooling.anyCoolingDown());
-        cooling.markCritical("node-2");                       // 지워졌으면 지금 시각으로 다시 걸린다
+        cooling.markCritical("node-2", LIMIT);                       // 지워졌으면 지금 시각으로 다시 걸린다
         assertEquals(10, cooling.remainingCooldownMinutes("node-2"), "대기 노드가 있어도 만료 기록을 끝까지 지운다");
 
         clock.advance(Duration.ofMinutes(10));                // 둘 다 만료
         assertFalse(cooling.anyCoolingDown(), "전부 만료면 거짓이다");
-        cooling.markCritical("node-1");
+        cooling.markCritical("node-1", LIMIT);
         assertEquals(10, cooling.remainingCooldownMinutes("node-1"), "전부 만료일 때도 기록을 지운다");
+    }
+
+    @DisplayName("냉각 대기는 상한별로 남고, 상한 없이 묻는 확인은 어느 상한이든 본다")
+    @Test
+    void marks_kept_per_limit_and_limitless_check_sees_any() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-31T00:00:00Z"));
+        ThermalModel cooling = new ThermalModel(new SchedulerProperties(), clock);
+
+        cooling.markCritical("node-1", 70);
+
+        assertFalse(cooling.isCoolingDown("node-1", 75), "70℃ 상한의 대기는 75℃ 상한 평가를 막지 않는다");
+        assertTrue(cooling.isCoolingDown("node-1", 70));
+        assertTrue(cooling.isCoolingDown("node-1", 65));
+        assertTrue(cooling.isCoolingDown("node-1"));
+        assertEquals(0, cooling.remainingCooldownMinutes("node-1", 75));
+        assertEquals(10, cooling.remainingCooldownMinutes("node-1"));
+
+        clock.advance(Duration.ofMinutes(4));
+        cooling.markCritical("node-1", 70);
+        assertEquals(6, cooling.remainingCooldownMinutes("node-1", 70), "같은 상한을 다시 걸어도 첫 시각을 지킨다");
     }
 
     @DisplayName("쿨다운은 수동으로도 해제할 수 있다")
@@ -137,7 +160,7 @@ class ThermalModelTest {
         MutableClock clock = new MutableClock(Instant.parse("2026-08-31T00:00:00Z"));
         ThermalModel cooling = new ThermalModel(new SchedulerProperties(), clock);
 
-        cooling.markCritical("node-1");
+        cooling.markCritical("node-1", LIMIT);
         cooling.clearCritical("node-1");
 
         assertFalse(cooling.isCoolingDown("node-1"));

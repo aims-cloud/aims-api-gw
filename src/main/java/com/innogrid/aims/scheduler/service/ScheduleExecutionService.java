@@ -304,8 +304,8 @@ public class ScheduleExecutionService {
     /**
      * 저장하지 않은 생성 폼으로 같은 모의 실행 — 저장 전 미리보기와 같은 검증을 거친 초안을 그대로 놓아 본다.
      *
-     * <p>온도 상한 칸은 받지 않는다(400). 폼의 온도 상한은 범위 검사가 없어 평가 중 남는 노드 단위 냉각 대기 표시를
-     * 임의 값으로 걸 수 있기 때문이다 — 저장된 스케줄의 모의 실행으로 확인한다. 전력 상한은 폼 값을 그대로 적용한다.</p>
+     * <p>온도 상한 칸은 받지 않는다(400). 폼의 온도 상한은 저장하지 않은 값인데도 평가 중 냉각 대기 표시(그 상한 이하로
+     * 평가하는 배치를 막음)를 남기기 때문이다 — 저장된 스케줄의 모의 실행으로 확인한다. 전력 상한은 폼 값을 그대로 적용한다.</p>
      */
     public ScheduleDryRunResponse dryRunDraft(ScheduleRequest request) {
         Schedule draft = scheduleService.draft(request);

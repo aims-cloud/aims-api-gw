@@ -6,8 +6,9 @@ package com.innogrid.aims.scheduler.model;
  * 스케줄링 엔진이 이 데이터를 기반으로 배치를 결정한다.
  *
  * <p>메트릭 사용률은 "이미 실행 중인" 부하만 반영하므로, 배치는 되었으나 아직 메트릭에
- * 드러나지 않은 워크로드는 {@code reserved*} 로 따로 차감한다. 그래야 한 번의 스케줄링
- * 실행 안에서 같은 노드에 과도하게 배치되는 것을 막을 수 있다.</p>
+ * 드러나지 않은 워크로드(배치 대기, 그리고 시작한 지 메트릭 지연 시간이 지나지 않은 실행 중)는 {@code reserved*} 로
+ * 따로 차감한다. 그래야 한 번의 스케줄링 실행 안에서 같은 노드에 과도하게 배치되는 것을 막을 수 있다. GPU 개수는
+ * 사용률에 드러나지 않으므로 실행 중 워크로드의 것도 끝 상태가 될 때까지 {@code reservedGpu} 에 남는다.</p>
  */
 public class NodeResource {
 
@@ -38,7 +39,7 @@ public class NodeResource {
     private double gpuTemperatureCelsius;
     private double gpuPowerWatts;
 
-    // ── 예약분 (배치 확정됐으나 메트릭에 아직 반영되지 않은 워크로드) ──
+    // ── 예약분 (배치 확정됐으나 메트릭에 아직 반영되지 않은 워크로드 · GPU 는 실행 중 워크로드의 카드도 포함) ──
     private int reservedCpu;
     private long reservedMemoryMb;
     private int reservedGpu;

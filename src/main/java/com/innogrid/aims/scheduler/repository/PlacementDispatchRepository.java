@@ -1,5 +1,6 @@
 package com.innogrid.aims.scheduler.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,9 @@ public interface PlacementDispatchRepository extends JpaRepository<PlacementDisp
     List<PlacementDispatch> findByWorkloadIdOrderByRequestedAtDesc(Long workloadId);
 
     List<PlacementDispatch> findByScheduleRunIdOrderByRequestedAtAsc(Long scheduleRunId);
+
+    /** 여러 워크로드의 기록 가운데 한 상태인 것 — 예약 반영이 실행 중 워크로드의 시작 시각을 한 번에 읽는다. */
+    List<PlacementDispatch> findByWorkloadIdInAndStatus(Collection<Long> workloadIds, PlacementDispatch.DispatchStatus status);
 
     long deleteByWorkloadId(Long workloadId);
 }

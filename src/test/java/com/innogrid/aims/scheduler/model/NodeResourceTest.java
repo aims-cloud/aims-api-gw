@@ -57,6 +57,30 @@ class NodeResourceTest {
         assertTrue(node.canAccommodate(1, 1024, 0));
     }
 
+    @DisplayName("예약 GPU 가 총 카드보다 많아도 GPU 를 요구하지 않는 워크로드는 받는다")
+    @Test
+    void gpu_free_workload_fits_when_gpu_over_reserved() {
+        NodeResource node = node(8, 16384, 0, 0, 0);
+
+        node.reserve(0, 0, 1);
+
+        assertEquals(-1, node.availableGpu(), "가용 GPU 는 음수 그대로 — 과예약 신호");
+        assertTrue(node.canAccommodate(1, 1024, 0));
+    }
+
+    @DisplayName("예약 GPU 가 총 카드보다 많은 노드는 GPU 를 요구하는 워크로드를 받지 않는다")
+    @Test
+    void gpu_workload_still_blocked_when_gpu_over_reserved() {
+        NodeResource lost = node(8, 16384, 0, 0, 0);       // 수집이 카드를 0장으로 잡은 노드
+        lost.reserve(0, 0, 1);
+        NodeResource doubled = node(8, 16384, 2, 0, 0);    // 같은 카드에 겹쳐 배정된 노드
+        doubled.reserve(0, 0, 3);
+
+        assertFalse(lost.canAccommodate(1, 1024, 1));
+        assertFalse(doubled.canAccommodate(1, 1024, 1));
+        assertFalse(doubled.canAccommodate(1, 1024, 2));
+    }
+
     @DisplayName("전력 여유율은 용량 대비로 계산한다")
     @Test
     void power_headroom_vs_capacity() {

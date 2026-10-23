@@ -73,6 +73,28 @@ class ConstraintEvaluatorTest {
         assertNotNull(evaluate(second, node), "예약분을 빼면 두 번째는 들어갈 수 없다");
     }
 
+    @DisplayName("예약 GPU 가 총 카드보다 많아도 GPU 를 요구하지 않는 워크로드는 자원 검사를 통과한다")
+    @Test
+    void gpu_free_workload_passes_resource_check_when_gpu_over_reserved() {
+        NodeResource node = node("node-1", 8, 16384, 0, 0, 0, 200, 50);
+        node.reserve(0, 0, 1);
+
+        assertNull(evaluate(new Workload("job", 2, 4096), node));
+    }
+
+    @DisplayName("예약 GPU 가 총 카드보다 많은 노드에서도 GPU 를 요구하지 않는 워크로드의 CPU 는 그대로 검사한다")
+    @Test
+    void gpu_free_workload_still_checked_for_cpu_when_gpu_over_reserved() {
+        NodeResource node = node("node-1", 8, 16384, 0, 0, 0, 200, 50);
+        node.reserve(0, 0, 1);
+
+        String reason = evaluate(new Workload("big-job", 16, 4096), node);
+
+        assertNotNull(reason);
+        assertTrue(reason.startsWith("자원 부족"), reason);
+        assertTrue(reason.contains("GPU:0") && reason.contains("GPU:-1"), "문장은 요구 GPU 와 가용 GPU 를 그대로 찍는다 — " + reason);
+    }
+
     // ── C2. 사용률 임계 ─────────────────────────────────────────
 
     @DisplayName("CPU 사용률 임계를 넘으면 제외한다")

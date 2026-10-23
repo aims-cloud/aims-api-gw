@@ -1,7 +1,11 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -307,10 +311,34 @@ public class PlacementDispatchService {
      * 기록은 배치가 커밋된 뒤에 만들어지므로 현재 결정이면 항상 성립하고, 옛 결정의 기록(단건 재배치·되살려 다시 배치한 뒤
      * 남은 것)은 배정 시각보다 앞선다. DB 의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다. 멱등키(밀리초)는 같은
      * 반올림으로 1ms 어긋날 수 있어 쓰지 않는다. 배정 시각이 없는 워크로드는 코드상 기록이 생기지 않으므로 현재 결정이
-     * 아닌 것으로 본다. 결과 콜백과 재시작 정리가 함께 쓴다.
+     * 아닌 것으로 본다. 결과 콜백·재시작 정리·시작 시각 조회({@link #runningSince})가 함께 쓴다.
      */
     static boolean isCurrentDecision(PlacementDispatch dispatch, Workload workload) {
         return workload.getScheduledAt() != null && !dispatch.getRequestedAt().isBefore(workload.getScheduledAt());
+    }
+
+    /**
+     * 실행 중 워크로드마다 <b>시작 시각</b> — 현재 결정({@link #isCurrentDecision})의 기록이 RUNNING 이 된 시각, 곧 실행
+     * 계층의 RUNNING 콜백을 받은 서버 시각(응답 시각 칸)이다. 예약 반영이 실행 중 워크로드의 CPU·메모리·디스크 예약을
+     * 언제까지 남길지 정하는 기준이다. 조회는 한 번이다.
+     *
+     * <p>결과에 없는 워크로드: 운영자가 상태 변경 API 로 RUNNING 으로 바꾸고 RUNNING 콜백은 아직 오지 않은 것(기록은 수락
+     * 상태로 남는다) · 옛 결정의 RUNNING 기록만 있는 것 · 응답 시각이 없는 것. 호출자는 이들을 배치 시각으로 대신 본다.</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, OffsetDateTime> runningSince(Collection<Workload> running) {
+        Map<Long, Workload> byId = new HashMap<>();
+        for (Workload w : running) {
+            if (w.getId() != null) byId.put(w.getId(), w);
+        }
+        Map<Long, OffsetDateTime> since = new HashMap<>();
+        if (byId.isEmpty()) return since;
+        for (PlacementDispatch d : repository.findByWorkloadIdInAndStatus(byId.keySet(), DispatchStatus.RUNNING)) {
+            Workload w = byId.get(d.getWorkloadId());
+            if (w == null || d.getRespondedAt() == null || !isCurrentDecision(d, w)) continue;
+            since.merge(w.getId(), d.getRespondedAt(), (a, b) -> a.isAfter(b) ? a : b);
+        }
+        return since;
     }
 
     /**

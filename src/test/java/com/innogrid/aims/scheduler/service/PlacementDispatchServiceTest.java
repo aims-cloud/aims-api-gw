@@ -1,6 +1,8 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dispatch.DispatcherRegistry;
@@ -498,6 +501,61 @@ class PlacementDispatchServiceTest {
 
     private Workload reload(PlacementDispatch d) {
         return workloadRepository.findById(d.getWorkloadId()).orElseThrow();
+    }
+
+    // ── 시작 시각(예약 반영의 기준) ─────────────────────────────────────
+
+    @DisplayName("시작 시각은 현재 결정의 기록이 RUNNING 이 된 시각이다")
+    @Test
+    void running_since_is_callback_time_of_current_record() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-since");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+        // 수락 때의 응답 시각을 요청 3분 전으로 둔다 — RUNNING 콜백이 응답 시각을 새로 찍지 않는 실수를 시계 해상도와 무관하게 가른다
+        PlacementDispatch accepted = dispatchRepository.findById(d.getId()).orElseThrow();
+        ReflectionTestUtils.setField(accepted, "respondedAt", accepted.getRequestedAt().minusMinutes(3));
+        dispatchRepository.saveAndFlush(accepted);
+        service.applyResult(d.getId(), "RUNNING", "job-since", null);
+        PlacementDispatch running = dispatchRepository.findById(d.getId()).orElseThrow();
+        assertFalse(running.getRespondedAt().isBefore(running.getRequestedAt()), "RUNNING 콜백이 응답 시각을 콜백 시각으로 바꾼다");
+        // 요청 시각과 확실히 다르게 둔다 — 응답 시각 대신 요청 시각을 돌려주는 실수를 가른다
+        ReflectionTestUtils.setField(running, "respondedAt", running.getRequestedAt().plusMinutes(7));
+        dispatchRepository.saveAndFlush(running);
+        PlacementDispatch saved = dispatchRepository.findById(d.getId()).orElseThrow();
+        assertEquals(DispatchStatus.RUNNING, saved.getStatus());
+
+        Map<Long, OffsetDateTime> since = service.runningSince(List.of(reload(saved)));
+
+        assertEquals(saved.getRespondedAt().toInstant(), since.get(w.getId()).toInstant());
+        assertNotEquals(saved.getRequestedAt().toInstant(), since.get(w.getId()).toInstant());
+    }
+
+    @DisplayName("옛 결정의 RUNNING 기록은 시작 시각이 되지 않는다")
+    @Test
+    void running_since_ignores_old_decision_record() {
+        PlacementDispatch[] d = oldAndCurrent("dps-since-old");
+        PlacementDispatch old = d[0];
+        service.applyResult(old.getId(), "RUNNING", "job-old", null);
+        schedulingService.changeStatus(old.getWorkloadId(), Workload.WorkloadStatus.RUNNING);
+        Workload running = reload(old);
+        assertEquals(Workload.WorkloadStatus.RUNNING, running.getStatus());
+        assertEquals(DispatchStatus.RUNNING, dispatchRepository.findById(old.getId()).orElseThrow().getStatus());
+
+        assertTrue(service.runningSince(List.of(running)).isEmpty(), "옛 결정의 기록은 지금 실행의 시작을 말하지 않는다");
+    }
+
+    @DisplayName("운영자가 RUNNING 으로 바꾼 워크로드는 기록이 수락 상태라 시작 시각이 없다")
+    @Test
+    void running_since_ignores_accepted_record_of_operator_running() {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned("dps-since-operator");
+        PlacementDispatch d = service.afterPlacement(w, ok(), null);
+        schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.RUNNING);
+        Workload running = workloadRepository.findById(w.getId()).orElseThrow();
+        assertEquals(Workload.WorkloadStatus.RUNNING, running.getStatus());
+        assertEquals(DispatchStatus.ACCEPTED, dispatchRepository.findById(d.getId()).orElseThrow().getStatus());
+
+        assertTrue(service.runningSince(List.of(running)).isEmpty(), "상태 변경은 기록을 건드리지 않는다 — 배치 시각으로 대신한다");
     }
 
     @DisplayName("옛 결정의 열린 기록에 온 RUNNING·COMPLETED 콜백은 기록만 바꾸고 표지를 남기며 워크로드는 SCHEDULED 그대로다")

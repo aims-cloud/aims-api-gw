@@ -24,12 +24,13 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 모의 메트릭 모드에서 실행 중 워크로드의 GPU 예약 — 배치 뒤 메트릭 지연(10분)이 지나도 쓰고 있는 카드는 끝 상태까지 묶인다.
+ * 모의 메트릭 모드에서 실행 중 워크로드의 예약 — 쓰고 있는 GPU 카드는 끝 상태까지 묶이고, 늦게 시작한 워크로드의 CPU 는 시작 직후 남는다.
  *
  * <p>대상 노드는 busan-03(카드 2장 · IPMI 가 없어 전력·온도가 0 이라 그 제약에 걸리지 않음)이다. 다른 GPU 노드 seoul-02 는
  * 전력 사양 원장이 비어 있으면 기본 정격 500W 로 잡혀 전력 여유 부족으로 빠지므로, 카드 2장 배치는 busan-03 으로 간다.
- * 카드 2장을 요구하는 워크로드를 실제로 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각을 30분 앞당겨 메트릭 지연이 지난
- * 상태를 만든다. 기다리지 않으므로 경계와 20분 떨어져 시각에 흔들리지 않는다.</p>
+ * 카드 2장을 요구하는 워크로드를 실제로 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각(과 필요하면 시작 시각 — RUNNING 이 된
+ * 전달 기록의 응답 시각)을 30분 앞당겨 메트릭 지연이 지난 상태를 만든다. 기다리지 않으므로 앞당긴 시각은 경계와 20분, 방금
+ * 시작한 시각은 경계와 약 10분 떨어져 시각에 흔들리지 않는다.</p>
  */
 @SpringBootTest
 @TestPropertySource(properties = "aims.scheduler.mock-enabled=true")
@@ -54,7 +55,7 @@ class RunningGpuReservationScenarioTest {
     @DisplayName("메트릭 지연이 지난 실행중 워크로드의 GPU 카드는 다음 배치에 다시 내주지 않는다")
     @Test
     void running_gpu_cards_are_not_offered_again_after_metric_lag() {
-        Running running = runningGpuWorkloadOnGpuNode();
+        Running running = runningGpuWorkloadOnGpuNode(true);
 
         PlacementContext context = schedulingService.createContext(policy());
         NodeResource node = context.node(NODE).orElseThrow();
@@ -72,7 +73,7 @@ class RunningGpuReservationScenarioTest {
     @DisplayName("실행중 워크로드를 상태 변경으로 끝내면 잡던 GPU 카드가 풀린다")
     @Test
     void operator_completion_frees_running_gpu_cards() {
-        Running running = runningGpuWorkloadOnGpuNode();
+        Running running = runningGpuWorkloadOnGpuNode(true);
 
         schedulingService.changeStatus(running.workload().getId(), Workload.WorkloadStatus.COMPLETED);
 
@@ -83,6 +84,17 @@ class RunningGpuReservationScenarioTest {
         assertTrue(result.success(), result.reason());
     }
 
+    @DisplayName("배치 뒤 늦게 시작한 실행중 워크로드는 시작 직후 CPU 예약이 남는다")
+    @Test
+    void late_started_running_keeps_cpu_reserved_after_start() {
+        Running running = runningGpuWorkloadOnGpuNode(false);
+
+        NodeResource node = schedulingService.createContext(policy()).node(NODE).orElseThrow();
+        assertEquals(running.reservedCpuBefore() + 2, node.getReservedCpu(),
+                "배치 30분 뒤 방금 시작했다 — 아직 사용률에 없으니 CPU 2 를 예약으로 잡는다");
+        assertEquals(2, node.getReservedGpu());
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     private record Running(Workload workload, int reservedCpuBefore) {}
@@ -90,9 +102,10 @@ class RunningGpuReservationScenarioTest {
     /**
      * 카드 2장을 요구하는 워크로드를 busan-03 에 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각을 30분 앞당긴다.
      * 엔티티가 배치 시각을 직접 바꿀 수 없어(배정 때 현재 시각을 넣는다) 필드를 바꿔 저장한다 — 전달 기록의 요청 시각은
-     * 그대로라 현재 결정으로 남는다.
+     * 그대로라 현재 결정으로 남는다. {@code startLongAgo} 면 시작 시각(RUNNING 이 된 전달 기록의 응답 시각)도 30분
+     * 앞당긴다. 콜백 뒤 기록을 다시 읽어 바꾼다 — 콜백 전에 읽은 사본(수락 상태)을 저장하면 상태가 되돌아간다.
      */
-    private Running runningGpuWorkloadOnGpuNode() {
+    private Running runningGpuWorkloadOnGpuNode(boolean startLongAgo) {
         NodeResource before = schedulingService.createContext(policy()).node(NODE).orElseThrow();
         assertEquals(2, before.availableGpu(), "사전조건 — 다른 테스트가 남긴 GPU 예약이 없어야 한다");
         int reservedCpuBefore = before.getReservedCpu();
@@ -108,6 +121,13 @@ class RunningGpuReservationScenarioTest {
         PlacementDispatch dispatch = dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(workload.getId()).get(0);
         assertEquals(PlacementDispatch.DispatchStatus.ACCEPTED, dispatch.getStatus());
         dispatchService.applyResult(dispatch.getId(), "RUNNING", PREFIX + "job", null);
+        if (startLongAgo) {
+            PlacementDispatch started = dispatchRepository.findById(dispatch.getId()).orElseThrow();
+            ReflectionTestUtils.setField(started, "respondedAt", OffsetDateTime.now().minusMinutes(30));
+            dispatchRepository.saveAndFlush(started);
+            assertEquals(PlacementDispatch.DispatchStatus.RUNNING,
+                    dispatchRepository.findById(dispatch.getId()).orElseThrow().getStatus());
+        }
 
         Workload running = workloadRepository.findById(workload.getId()).orElseThrow();
         assertEquals(Workload.WorkloadStatus.RUNNING, running.getStatus());

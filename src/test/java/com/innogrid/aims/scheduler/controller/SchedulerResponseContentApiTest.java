@@ -64,6 +64,8 @@ class SchedulerResponseContentApiTest {
     private static final String BASE = "/api/v1/scheduler";
     private static final String PREFIX = "rsc-";
     private static final String NODE = PREFIX + "node:9100";
+    /** 냉각 대기를 거는 평가의 온도 상한(기본 정책 값). */
+    private static final double LIMIT = 75.0;
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -146,7 +148,7 @@ class SchedulerResponseContentApiTest {
     void thermal_cooldowns_keep_five_values() throws Exception {
         assertEquals(objectMapper.readTree("[]"), data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn()));
 
-        thermalModel.markCritical(NODE);
+        thermalModel.markCritical(NODE, LIMIT);
         String state = data(mockMvc.perform(get(BASE + "/nodes/" + NODE)).andExpect(status().isOk()).andReturn()).get("thermalState").asString();
         JsonNode data = data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn());
         assertEquals(objectMapper.readTree("[{\"mdcId\":\"" + PREFIX + "mdc\",\"nodeId\":\"" + NODE + "\",\"temperatureCelsius\":36.5,"
@@ -159,15 +161,15 @@ class SchedulerResponseContentApiTest {
         long cooldown = properties.getThermal().getCooldownMinutes();
         assertTrue(cooldown > 3, "시험 전제: 냉각 설정값이 3분보다 길다 — " + cooldown);
         // 모델의 시계는 시스템 시계라 돌릴 수 없다 — 표시 시각을 과거로 옮겨 지난 시간을 만든다(분 내림까지 55초 여유)
-        thermalModel.markCritical(NODE);
+        thermalModel.markCritical(NODE, LIMIT);
         @SuppressWarnings("unchecked")
-        Map<String, Instant> since = (Map<String, Instant>) ReflectionTestUtils.getField(thermalModel, "criticalSince");
-        since.put(NODE, Instant.now().minus(Duration.ofMinutes(3)).minusSeconds(5));
+        Map<String, Map<Double, Instant>> since = (Map<String, Map<Double, Instant>>) ReflectionTestUtils.getField(thermalModel, "criticalSince");
+        since.put(NODE, Map.of(LIMIT, Instant.now().minus(Duration.ofMinutes(3)).minusSeconds(5)));
         JsonNode data = data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn());
         assertEquals(1, data.size(), data.toString());
         assertEquals(cooldown - 3, data.get(0).get("remainingCooldownMinutes").asLong());
 
-        since.put(NODE, Instant.now().minus(Duration.ofMinutes(cooldown)).minusSeconds(5));
+        since.put(NODE, Map.of(LIMIT, Instant.now().minus(Duration.ofMinutes(cooldown)).minusSeconds(5)));
         assertEquals(objectMapper.readTree("[]"), data(mockMvc.perform(get(BASE + "/thermal/cooldowns")).andExpect(status().isOk()).andReturn()));
         assertTrue(since.keySet().stream().noneMatch(k -> k.startsWith(PREFIX)), "설정값만큼 지난 항목은 목록 조회가 지운다");
     }

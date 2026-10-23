@@ -37,7 +37,8 @@ public record ConstraintDescriptionResponse(
                 new ConstraintDescriptionResponse("C3", "열 상태",
                         "냉각 대기 중이거나, 현재 온도가 임계치를 넘거나, 워크로드가 지정한 온도 제약을 "
                                 + "넘거나, 배치 후 예상 온도가 임계치를 넘으면 제외한다. "
-                                + "임계 온도를 넘긴 노드는 일정 시간 냉각 대기로 잡아 둔다.",
+                                + "임계 온도를 넘긴 노드는 일정 시간 냉각 대기로 잡아 둔다. "
+                                + "냉각 대기는 그 대기를 건 임계치와 같거나 더 낮은 임계치로 평가할 때만 노드를 제외한다.",
                         "정책의 maxTemperatureCelsius / warningTemperatureCelsius, 워크로드의 maxTemperatureCelsius",
                         true),
                 new ConstraintDescriptionResponse("C4", "전력",

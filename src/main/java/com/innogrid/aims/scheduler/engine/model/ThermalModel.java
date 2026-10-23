@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.engine.model;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,6 +21,11 @@ import com.innogrid.aims.scheduler.model.NodeResource.ThermalState;
  * 그대로 옮기고, 경고/임계 2단 상태와 쿨다운을 추가했다.
  *
  * <p>쿨다운 상태는 인메모리에 둔다. 단일 인스턴스 운영을 전제하며 재기동 시 초기화된다.</p>
+ *
+ * <p>냉각 대기는 (노드, 그 대기를 건 온도 상한) 단위로 든다. 상한 t 의 대기는 「실측 온도가 t 를 넘었다」는 관측이라
+ * 상한이 t 이하인 평가만 막는다 — 상한이 더 높은 평가에는 넘었다는 근거가 없다. 정책 id 가 아니라 상한 값을 쓰는 것은
+ * 스케줄이 상한을 id 없는 정책 사본에 싣기 때문이다. 같은 상한의 대기가 이미 있으면 만료됐더라도 덮지 않는다(만료 삭제는
+ * 확인이 맡는다). 시계는 맵 갱신(compute) 밖에서 읽는다 — 갱신 함수 안에서 같은 맵을 다시 건드리지 않기 위해서다.</p>
  */
 @Component
 public class ThermalModel {
@@ -27,8 +33,8 @@ public class ThermalModel {
     private final SchedulerProperties.Thermal props;
     private final Clock clock;
 
-    /** 노드별 임계 온도 도달 시각. */
-    private final Map<String, Instant> criticalSince = new ConcurrentHashMap<>();
+    /** 노드별 · 그 대기를 건 온도 상한별 임계 온도 도달 시각. 안쪽 맵은 불변이고 통째로 바꾼다. */
+    private final Map<String, Map<Double, Instant>> criticalSince = new ConcurrentHashMap<>();
 
     @Autowired
     public ThermalModel(SchedulerProperties properties) {
@@ -126,30 +132,33 @@ public class ThermalModel {
         return Math.max(0, Math.min(1, ratio));
     }
 
-    /** 노드가 임계 온도에 도달했음을 기록한다. */
-    public void markCritical(String nodeId) {
-        criticalSince.putIfAbsent(nodeId, clock.instant());
+    /** 노드가 그 평가의 온도 상한을 넘었음을 기록한다. 같은 상한의 대기가 이미 있으면 그대로 둔다. */
+    public void markCritical(String nodeId, double limitCelsius) {
+        Instant now = clock.instant();
+        criticalSince.compute(nodeId, (id, marks) -> {
+            if (marks != null && marks.containsKey(limitCelsius)) return marks;
+            Map<Double, Instant> next = marks == null ? new HashMap<>() : new HashMap<>(marks);
+            next.put(limitCelsius, now);
+            return Map.copyOf(next);
+        });
     }
 
-    /** 임계 상태에서 회복된 노드의 기록을 지운다. */
+    /** 임계 상태에서 회복된 노드의 기록을 모두 지운다. */
     public void clearCritical(String nodeId) {
         criticalSince.remove(nodeId);
     }
 
     /**
-     * 쿨다운 중인지 여부.
+     * 상한이 {@code limitCelsius} 인 평가에서 쿨다운 중인지 — 상한이 그 값 이상인 살아 있는 대기가 있으면 참.
      * 온도가 내려가도 설정 시간 동안은 배치를 보류해 진동(hysteresis)을 막는다.
      */
-    public boolean isCoolingDown(String nodeId) {
-        Instant since = criticalSince.get(nodeId);
-        if (since == null) return false;
+    public boolean isCoolingDown(String nodeId, double limitCelsius) {
+        return remaining(nodeId, limitCelsius) > 0;
+    }
 
-        Duration elapsed = Duration.between(since, clock.instant());
-        if (elapsed.toMinutes() >= props.getCooldownMinutes()) {
-            criticalSince.remove(nodeId);
-            return false;
-        }
-        return true;
+    /** 어느 온도 상한으로든 냉각 대기가 걸린 노드인지(목록용 — 배치 판정은 상한별). */
+    public boolean isCoolingDown(String nodeId) {
+        return isCoolingDown(nodeId, Double.NEGATIVE_INFINITY);
     }
 
     /**
@@ -165,11 +174,38 @@ public class ThermalModel {
         return any;
     }
 
-    /** 쿨다운 잔여 시간(분). 제외 사유 메시지에 쓴다. */
+    /** 상한이 {@code limitCelsius} 인 평가를 막는 대기 가운데 가장 늦게 풀리는 것까지 남은 시간(분). 제외 사유 메시지에 쓴다. */
+    public long remainingCooldownMinutes(String nodeId, double limitCelsius) {
+        return remaining(nodeId, limitCelsius);
+    }
+
+    /** 그 노드의 냉각 대기가 모두 풀릴 때까지 남은 시간(분). 목록에 쓴다. */
     public long remainingCooldownMinutes(String nodeId) {
-        Instant since = criticalSince.get(nodeId);
-        if (since == null) return 0;
-        long elapsed = Duration.between(since, clock.instant()).toMinutes();
-        return Math.max(0, props.getCooldownMinutes() - elapsed);
+        return remainingCooldownMinutes(nodeId, Double.NEGATIVE_INFINITY);
+    }
+
+    /**
+     * 만료된 대기를 지운 뒤, 상한이 {@code limit} 이상인 대기의 남은 분 최댓값. 만료 정리는 갱신 함수 안에서 그 순간의 값만
+     * 보고 거르므로, 확인 도중 새로 걸린 대기는 지워지지 않는다.
+     */
+    private long remaining(String nodeId, double limit) {
+        Instant now = clock.instant();
+        long cooldown = props.getCooldownMinutes();
+        Map<Double, Instant> live = criticalSince.computeIfPresent(nodeId, (id, marks) -> unexpired(marks, now, cooldown));
+        if (live == null) return 0;
+        return live.entrySet().stream()
+                .filter(e -> e.getKey() >= limit)
+                .mapToLong(e -> cooldown - Duration.between(e.getValue(), now).toMinutes())
+                .max().orElse(0);
+    }
+
+    /** 만료되지 않은 대기만 남긴 맵. 남는 대기가 없으면 null(키 삭제), 지울 것이 없으면 같은 맵. */
+    private static Map<Double, Instant> unexpired(Map<Double, Instant> marks, Instant now, long cooldown) {
+        Map<Double, Instant> kept = new HashMap<>();
+        marks.forEach((limit, since) -> {
+            if (Duration.between(since, now).toMinutes() < cooldown) kept.put(limit, since);
+        });
+        if (kept.isEmpty()) return null;
+        return kept.size() == marks.size() ? marks : Map.copyOf(kept);
     }
 }

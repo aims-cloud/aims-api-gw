@@ -27,7 +27,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * <pre>
  * C1 자원 가용성 (예약분 반영 — CPU·메모리, GPU 는 요구할 때만, 디스크는 총량을 아는 노드에서만)
  * C2 사용률 임계 (CPU / 메모리)
- * C3 열 상태     (쿨다운, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
+ * C3 열 상태     (쿨다운 — 같거나 높은 상한의 대기만, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
  * C4 전력        (여유율, 워크로드 예산, 배치 후 예상 전력)
  * C5 MDC 링크    (데이터 MDC ↔ 노드 MDC 링크가 DOWN 이면 제외 — 정책 affinityEnabled + 워크로드 dataMdcId 일 때만)
  * C6 MDC 전력 예산 (그 MDC 의 전력 합계가 예산을 넘으면 제외 — 예산 원장에 등록된 MDC 일 때만)
@@ -255,15 +255,16 @@ public class ConstraintEvaluator {
         double maxTemp = policy.getMaxTemperatureCelsius();
 
         if (policy.isTemperatureAwareEnabled()) {
-            if (thermalModel.isCoolingDown(node.getNodeId())) {
+            if (thermalModel.isCoolingDown(node.getNodeId(), maxTemp)) {
                 return of(ExclusionReason.COOLING_DOWN, "냉각 대기 중 (%d분 남음)",
-                        thermalModel.remainingCooldownMinutes(node.getNodeId()));
+                        thermalModel.remainingCooldownMinutes(node.getNodeId(), maxTemp));
             }
             // 냉각 대기는 실제로 뜨거웠던 노드에만 건다. 여기서 실효 온도(예약분 포함)를 쓰면
             // 배치 예정 부하만으로 10분간 배제되는 노드가 생긴다. 예약까지 반영한 판단은
             // 아래 "배치 후 예상 온도"가 맡으며, 그쪽은 이번 배치만 거르고 기록을 남기지 않는다.
+            // 냉각 대기는 이 평가의 상한과 함께 건다 — 상한이 더 높은 평가는 이 대기에 막히지 않는다.
             if (node.getTemperatureCelsius() > maxTemp) {
-                thermalModel.markCritical(node.getNodeId());
+                thermalModel.markCritical(node.getNodeId(), maxTemp);
                 return of(ExclusionReason.TEMPERATURE_EXCEEDED, "온도 초과 (%.1f°C > %.1f°C)",
                         node.getTemperatureCelsius(), maxTemp);
             }
@@ -342,12 +343,12 @@ public class ConstraintEvaluator {
         return configured != null ? configured : thermalModel.defaultWarningCelsius();
     }
 
-    /** 임계 온도를 넘겨 냉각 대기 중인 노드인지. */
+    /** 어느 온도 상한으로든 냉각 대기가 걸린 노드인지(목록용 — 배치 판정은 상한별). */
     public boolean isCoolingDown(String nodeId) {
         return thermalModel.isCoolingDown(nodeId);
     }
 
-    /** 냉각 대기가 풀릴 때까지 남은 시간(분). 대기 중이 아니면 0. */
+    /** 그 노드의 냉각 대기가 모두 풀릴 때까지 남은 시간(분). 대기 중이 아니면 0. */
     public long remainingCooldownMinutes(String nodeId) {
         return thermalModel.remainingCooldownMinutes(nodeId);
     }

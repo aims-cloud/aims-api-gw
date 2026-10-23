@@ -69,6 +69,8 @@ class SchedulerResponseTypeApiTest {
     private static final String BASE = "/api/v1/scheduler";
     private static final String PREFIX = "rst-";
     private static final String NODE = PREFIX + "node:9100";
+    /** 냉각 대기를 거는 평가의 온도 상한(기본 정책 값). */
+    private static final double LIMIT = 75.0;
     private static final String REF = "#/components/schemas/";
     private static final Set<String> METHODS = Set.of("get", "post", "put", "patch", "delete");
     /** 양쪽이 함께 써도 되는 라이브러리 스키마. 공용 타입을 일부러 함께 쓰게 되면 여기에 더한다. */
@@ -163,7 +165,7 @@ class SchedulerResponseTypeApiTest {
                 raw(post(BASE + "/workloads/resume-exhausted").param("resourceType", "NPU")
                         .param("from", "2000-01-01T00:00:00Z").param("to", "2000-01-01T00:00:01Z")));
 
-        thermalModel.markCritical(NODE);
+        thermalModel.markCritical(NODE, LIMIT);
         JsonNode cooldowns = objectMapper.readTree(raw(get(BASE + "/thermal/cooldowns"))).get("data");
         assertEquals(1, cooldowns.size());
         assertEquals(List.of("mdcId", "nodeId", "temperatureCelsius", "thermalState", "remainingCooldownMinutes"), names(cooldowns.get(0)));

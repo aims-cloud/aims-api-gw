@@ -44,4 +44,13 @@ class ConstraintsEndpointContractTest {
                 .andExpect(jsonPath("$.data[6].source").value(containsString("mdc-power-budgets")))
                 .andExpect(jsonPath("$.data[6].description").value(containsString("실효 전력")));
     }
+
+    @DisplayName("C1 설명은 GPU 를 워크로드가 요구할 때만 본다고 적는다")
+    @Test
+    void c1_description_says_gpu_checked_only_when_required() throws Exception {
+        mockMvc.perform(get("/api/v1/scheduler/constraints"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].code").value("C1"))
+                .andExpect(jsonPath("$.data[1].description").value(containsString("요구할 때만")));
+    }
 }

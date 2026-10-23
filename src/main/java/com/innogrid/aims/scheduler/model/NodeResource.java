@@ -90,7 +90,7 @@ public class NodeResource {
         return (long) (totalMemoryMb * (1.0 - memoryUsagePercent / 100.0)) - reservedMemoryMb;
     }
 
-    /** 가용 GPU 개수 (예약분 차감) */
+    /** 가용 GPU 개수 (예약분 차감 · 하한 없음 — 음수면 예약이 총 카드보다 많음) */
     public int availableGpu() {
         return totalGpu - reservedGpu;
     }
@@ -198,11 +198,15 @@ public class NodeResource {
         return (1.0 - powerWatts / powerCapacityWatts) * 100;
     }
 
-    /** 워크로드 수용 가능 여부 */
+    /**
+     * 워크로드 수용 가능 여부. GPU 는 워크로드가 요구할 때만 본다 — 수집이 카드를 실제보다 적게 잡았거나 같은 카드에 겹쳐
+     * 배정된 실행 중 워크로드가 남으면 가용 GPU 가 음수가 되는데, 그 값으로 카드를 쓰지 않는 배치를 막지 않는다. 음수는
+     * 노드 응답에 그대로 내보내는 과예약 신호라 하한을 두지 않는다. CPU·메모리는 요구량이 1 이상이라 그대로 비교한다.
+     */
     public boolean canAccommodate(int requiredCpu, int requiredMemMb, int requiredGpu) {
         return availableCpu() >= requiredCpu
                 && availableMemoryMb() >= requiredMemMb
-                && availableGpu() >= requiredGpu;
+                && (requiredGpu <= 0 || availableGpu() >= requiredGpu);
     }
 
     /**

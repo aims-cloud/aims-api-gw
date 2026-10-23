@@ -26,11 +26,15 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 모의 메트릭 모드에서 실행 중 워크로드의 예약 — 쓰고 있는 GPU 카드는 끝 상태까지 묶이고, 늦게 시작한 워크로드의 CPU 는 시작 직후 남는다.
  *
- * <p>대상 노드는 busan-03(카드 2장 · IPMI 가 없어 전력·온도가 0 이라 그 제약에 걸리지 않음)이다. 다른 GPU 노드 seoul-02 는
+ * <p>카드를 쓰는 세 테스트의 대상 노드는 busan-03(카드 2장 · IPMI 가 없어 전력·온도가 0 이라 그 제약에 걸리지 않음)이다. 다른 GPU 노드 seoul-02 는
  * 전력 사양 원장이 비어 있으면 기본 정격 500W 로 잡혀 전력 여유 부족으로 빠지므로, 카드 2장 배치는 busan-03 으로 간다.
  * 카드 2장을 요구하는 워크로드를 실제로 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각(과 필요하면 시작 시각 — RUNNING 이 된
  * 전달 기록의 응답 시각)을 30분 앞당겨 메트릭 지연이 지난 상태를 만든다. 기다리지 않으므로 앞당긴 시각은 경계와 20분, 방금
  * 시작한 시각은 경계와 약 10분 떨어져 시각에 흔들리지 않는다.</p>
+ *
+ * <p>카드가 0장으로 잡힌 busan-01 에는 카드 1장을 쓰는 실행 중 워크로드를 직접 배정해, 예약 GPU 가 총 카드보다 많은
+ * 상태(GPU 수집이 끊긴 노드)를 만든다. 그 노드가 GPU 를 요구하지 않는 배치를 받는지 본다. 판 전체 평가가 공유 냉각
+ * 상태에 표시를 남기지 않게 온도 인지를 끈 정책으로 평가한다.</p>
  */
 @SpringBootTest
 @TestPropertySource(properties = "aims.scheduler.mock-enabled=true")
@@ -38,6 +42,7 @@ class RunningGpuReservationScenarioTest {
 
     private static final String PREFIX = "gpures-";
     private static final String NODE = "busan-03:9100";
+    private static final String ZERO_CARD_NODE = "busan-01:9100";
 
     @Autowired SchedulingService schedulingService;
     @Autowired PlacementDispatchService dispatchService;
@@ -95,6 +100,38 @@ class RunningGpuReservationScenarioTest {
         assertEquals(2, node.getReservedGpu());
     }
 
+    @DisplayName("카드가 0장으로 잡힌 노드에 실행중 GPU 워크로드가 있어도 GPU 를 요구하지 않는 배치는 받는다")
+    @Test
+    void cpu_only_draft_not_blocked_by_cards_reserved_beyond_total() {
+        SchedulingPolicy policy = policy();
+        policy.setTemperatureAwareEnabled(false);
+        NodeResource before = schedulingService.createContext(policy).node(ZERO_CARD_NODE).orElseThrow();
+        assertEquals(0, before.getReservedGpu(), "사전조건 — 다른 테스트가 남긴 GPU 예약이 없어야 한다");
+        assertEquals(0, before.availableGpu());
+
+        Workload workload = new Workload(PREFIX + "c", 2, 4096);
+        workload.setRequiredGpu(1);
+        workload.setResourceType(Workload.ResourceType.GPU);
+        workload.assignTo("mdc-busan", ZERO_CARD_NODE, 0, "카드가 잡히던 때의 배치");
+        workload = workloadRepository.saveAndFlush(workload);
+        schedulingService.changeStatus(workload.getId(), Workload.WorkloadStatus.RUNNING);
+        Workload running = workloadRepository.findById(workload.getId()).orElseThrow();
+        ReflectionTestUtils.setField(running, "scheduledAt", OffsetDateTime.now().minusMinutes(30));
+        workloadRepository.saveAndFlush(running);
+
+        PlacementContext context = schedulingService.createContext(policy);
+        NodeResource node = context.node(ZERO_CARD_NODE).orElseThrow();
+        assertEquals(1, node.getReservedGpu(), "실행 중 워크로드의 카드 1장이 예약으로 남는다");
+        assertEquals(-1, node.availableGpu(), "수집이 카드를 0장으로 잡아 가용 GPU 가 음수다");
+        assertEquals(before.getReservedCpu(), node.getReservedCpu(), "시작 기록이 없어 배치 시각 기준 — 30분이 지나 CPU 는 예약에 없다");
+
+        SchedulingResult.NodeScore free = scoreOf(schedulingService.evaluateIn(cpuDraft(), "weighted", context), ZERO_CARD_NODE);
+        assertTrue(free.eligible(), free.exclusionReason());
+        SchedulingResult.NodeScore gpu = scoreOf(schedulingService.evaluateIn(draft(), "weighted", context), ZERO_CARD_NODE);
+        assertFalse(gpu.eligible(), "카드를 요구하는 배치는 그대로 막힌다");
+        assertEquals(ExclusionReason.INSUFFICIENT_RESOURCE, gpu.exclusionCode(), gpu.exclusionReason());
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     private record Running(Workload workload, int reservedCpuBefore) {}
@@ -143,12 +180,21 @@ class RunningGpuReservationScenarioTest {
         return draft;
     }
 
+    /** GPU 를 요구하지 않는 저장하지 않은 초안. */
+    private static Workload cpuDraft() {
+        return new Workload(PREFIX + "d", 1, 1024);
+    }
+
     /** 저장하지 않은 정책 — 공유 DB 에 다른 테스트가 남긴 정책이 판정에 끼지 않는다. */
     private static SchedulingPolicy policy() {
         return new SchedulingPolicy(PREFIX + "p", "d");
     }
 
     private static SchedulingResult.NodeScore scoreOf(SchedulingResult result) {
-        return result.candidateScores().stream().filter(s -> NODE.equals(s.nodeId())).findFirst().orElseThrow();
+        return scoreOf(result, NODE);
+    }
+
+    private static SchedulingResult.NodeScore scoreOf(SchedulingResult result, String nodeId) {
+        return result.candidateScores().stream().filter(s -> nodeId.equals(s.nodeId())).findFirst().orElseThrow();
     }
 }

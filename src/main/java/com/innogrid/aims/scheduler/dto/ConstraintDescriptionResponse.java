@@ -28,7 +28,8 @@ public record ConstraintDescriptionResponse(
                 new ConstraintDescriptionResponse("C1", "자원 가용성",
                         "예약분을 뺀 가용 CPU·메모리·GPU 가 워크로드 요구량 이상이어야 한다. "
                                 + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다. "
-                                + "디스크(requiredDiskGb)는 노드의 파일시스템 총량을 알 때만 검사하고, 총량을 모르면 건너뛴다.",
+                                + "디스크(requiredDiskGb)는 노드의 파일시스템 총량을 알 때만 검사하고, 총량을 모르면 건너뛴다. "
+                                + "GPU(requiredGpu)는 워크로드가 요구할 때만 검사한다.",
                         "워크로드의 requiredCpu / requiredMemoryMb / requiredGpu / requiredDiskGb", false),
                 new ConstraintDescriptionResponse("C2", "사용률 임계",
                         "노드의 현재 CPU·메모리 사용률이 정책 임계치를 넘으면 제외한다.",

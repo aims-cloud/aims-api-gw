@@ -13,7 +13,6 @@ import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.MdcPowerBudget;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
-import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
@@ -78,18 +77,20 @@ class MdcBudgetSandboxAndDefaultsTest {
         MdcPowerBudgets budgets = MdcPowerBudgets.of(List.of(new MdcPowerBudget("mdc-01", 4000)));
         PlacementContext base = PlacementContext.of(List.of(n1, n2), policy()).withMdcBudgets(budgets);
 
-        PlacementContext sandbox = service.sandboxWithout(n1, base.nodes(), policy(), base.linkMatrix(), base.mdcBudgets());
+        PlacementContext sandbox = service.sandboxWithout(n1, base);
 
         assertSame(budgets, sandbox.mdcBudgets(), "실제 배치와 같은 예산 스냅샷");
         assertEquals(List.of("n2"), sandbox.nodes().stream().map(NodeResource::getNodeId).toList());
     }
 
-    @DisplayName("예산을 넘기지 않는 옛 호출 형태는 빈 원장이라 제약이 걸리지 않는다")
+    @DisplayName("샌드박스는 기준 컨텍스트의 실행 단위 전력 예산도 잇는다")
     @Test
-    void legacy_sandbox_call_has_no_budget() {
-        NodeResource n1 = node("n1", 400);
-        PlacementContext sandbox = service.sandboxWithout(n1, List.of(n1, node("n2", 400)), policy(), LinkMatrix.EMPTY);
+    void sandbox_inherits_run_power_budget() {
+        NodeResource n1 = node("n1", 400), n2 = node("n2", 400);
+        PlacementContext base = PlacementContext.of(List.of(n1, n2), policy()).withPowerBudget(300.0);
 
-        assertSame(MdcPowerBudgets.EMPTY, sandbox.mdcBudgets());
+        PlacementContext sandbox = service.sandboxWithout(n1, base);
+
+        assertEquals(300.0, sandbox.powerBudgetWatts(), "실제 배치와 같은 실행 단위 전력 예산");
     }
 }

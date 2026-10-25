@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.OptionalDouble;
 
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -36,6 +37,9 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * <p>C6 을 <b>맨 뒤에</b> 둔 이유: C1~C5 는 노드 한 대만 보지만 C6 은 같은 MDC 의 형제 노드를 전부 훑는
  * <b>유일한 교차 노드 검사</b>다. 순서는 동작이 아니라 "먼저 걸린 사유"만 정하므로, 싼 검사부터라는
  * 기존 순서를 지키는 편이 낫다.</p>
+ *
+ * <p>실제로 배치하지 않는 조회(통합 권고)는 {@link #copyWithoutCooldownMarking()} 사본을 쓴다. 사본은 같은 설정과
+ * 같은 냉각 대기 상태로 판정하지만, C3 에서 온도 상한을 넘은 노드에 냉각 대기를 새로 걸지 않는다.</p>
  */
 @Component
 public class ConstraintEvaluator {
@@ -43,9 +47,28 @@ public class ConstraintEvaluator {
     private final PowerModel powerModel;
     private final ThermalModel thermalModel;
 
+    /** C3 에서 온도 상한을 넘은 노드에 냉각 대기를 거는지. 기본은 참, {@link #copyWithoutCooldownMarking()} 사본은 거짓. */
+    private final boolean marksCooldown;
+
+    @Autowired   // 생성자가 둘이라 스프링이 쓸 생성자를 밝힌다(ThermalModel 과 같은 꼴)
     public ConstraintEvaluator(PowerModel powerModel, ThermalModel thermalModel) {
+        this(powerModel, thermalModel, true);
+    }
+
+    private ConstraintEvaluator(PowerModel powerModel, ThermalModel thermalModel, boolean marksCooldown) {
         this.powerModel = powerModel;
         this.thermalModel = thermalModel;
+        this.marksCooldown = marksCooldown;
+    }
+
+    /**
+     * 같은 설정과 같은 냉각 대기 상태를 보되 냉각 대기를 새로 걸지 않는 사본.
+     *
+     * <p>걸린 냉각 대기에는 상한별로 노드를 빼고, 온도 상한을 넘은 노드는 그 평가에서만 뺀다. 실제로 배치하지 않는
+     * 조회(통합 권고)가 쓴다. 만료된 대기 정리는 냉각 대기 목록 조회와 같이 일어난다.</p>
+     */
+    public ConstraintEvaluator copyWithoutCooldownMarking() {
+        return new ConstraintEvaluator(powerModel, thermalModel, false);
     }
 
     /**
@@ -264,7 +287,9 @@ public class ConstraintEvaluator {
             // 아래 "배치 후 예상 온도"가 맡으며, 그쪽은 이번 배치만 거르고 기록을 남기지 않는다.
             // 냉각 대기는 이 평가의 상한과 함께 건다 — 상한이 더 높은 평가는 이 대기에 막히지 않는다.
             if (node.getTemperatureCelsius() > maxTemp) {
-                thermalModel.markCritical(node.getNodeId(), maxTemp);
+                if (marksCooldown) {
+                    thermalModel.markCritical(node.getNodeId(), maxTemp);
+                }
                 return of(ExclusionReason.TEMPERATURE_EXCEEDED, "온도 초과 (%.1f°C > %.1f°C)",
                         node.getTemperatureCelsius(), maxTemp);
             }

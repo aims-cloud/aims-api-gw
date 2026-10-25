@@ -17,8 +17,6 @@ import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
-import com.innogrid.aims.scheduler.model.LinkMatrix;
-import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -29,7 +27,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *
  * <p>"이 노드의 워크로드를 다른 노드로 옮길 수 있는가"를 <b>실제로 배치를 시도해</b> 답한다.
  * 시도는 계산일 뿐이다 — {@link PlacementService#place} 를 부르지 않으므로 워크로드 상태도
- * 배치 이력도 바뀌지 않는다.</p>
+ * 배치 이력도 바뀌지 않는다. 받을 노드는 실제 배치 컨텍스트의 평가기(운영 설정 · 걸린 냉각 대기)로 판정하되,
+ * 냉각 대기를 새로 걸지 않는다({@link PlacementContext#sandbox}).</p>
  *
  * <p><b>유휴 여부를 고정 임계로 정하지 않는다.</b> "CPU 5% 미만이면 유휴" 같은 기준은 64코어의
  * 5%(3.2코어)와 8코어의 5%(0.4코어)를 같게 취급하는 자의적 절벽을 만든다. 대신 <b>순절감</b>을
@@ -86,7 +85,7 @@ public class ConsolidationService {
                         String.format("후보 상한 %d대를 초과했습니다", limit)));
                 continue;
             }
-            candidates.add(evaluate(node, nodes, policy, base));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes 는 오염되지 않는다
+            candidates.add(evaluate(node, base));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes 는 오염되지 않는다
             evaluated++;
         }
 
@@ -111,7 +110,7 @@ public class ConsolidationService {
 
     // ── 2차 판정 — 순절감 ──────────────────────────────────────
 
-    private Candidate evaluate(NodeResource node, List<NodeResource> base, SchedulingPolicy policy, PlacementContext real) {
+    private Candidate evaluate(NodeResource node, PlacementContext real) {
         List<Workload> workloads = workloadsOn(node);
         int perNodeLimit = Math.max(0, props.getMaxRelocationsPerNode());
 
@@ -146,7 +145,8 @@ public class ConsolidationService {
 
         // 이 노드를 뺀 나머지에만 배치를 시도한다. 컨텍스트는 여기서 새로 만든다 —
         // NodeResource 는 가변이라(reserve) 조회용 스냅샷에 예약을 쌓으면 응답이 오염된다.
-        PlacementContext sandbox = sandboxWithout(node, base, policy, real.linkMatrix(), real.mdcBudgets());
+        // 받을 노드는 실제 배치와 같은 평가기로 판정하되, 조회라서 냉각 대기를 새로 걸지 않는다.
+        PlacementContext sandbox = sandboxWithout(node, real);
         if (sandbox.isEmpty()) {
             return blocked(node, workloads.size(), idle, ratio, "옮길 다른 노드가 없습니다");
         }
@@ -192,12 +192,6 @@ public class ConsolidationService {
                         workloads.size(), cost, idle, net));
     }
 
-    /** 예산 원장을 잇지 않는 형태 — MDC 총량 제약이 없던 때와 같다(기존 호출 경로). */
-    PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
-                                    SchedulingPolicy policy, LinkMatrix links) {
-        return sandboxWithout(excluded, base, policy, links, MdcPowerBudgets.EMPTY);
-    }
-
     /**
      * 후보 노드를 제외한 배치 컨텍스트.
      *
@@ -205,15 +199,14 @@ public class ConsolidationService {
      * 판정에 섞이고, 조회용으로 나간 객체까지 오염된다. 메트릭을 다시 수집하지 않는 이유는
      * {@link NodeResource#snapshot()} 주석에 적었다.</p>
      */
-    PlacementContext sandboxWithout(NodeResource excluded, List<NodeResource> base,
-                                    SchedulingPolicy policy, LinkMatrix links, MdcPowerBudgets budgets) {
-        List<NodeResource> others = base.stream()
+    PlacementContext sandboxWithout(NodeResource excluded, PlacementContext real) {
+        List<NodeResource> others = real.nodes().stream()
                 .filter(n -> !n.getNodeId().equals(excluded.getNodeId()))
                 .map(NodeResource::snapshot)
                 .toList();
-        // 링크·예산 스냅샷은 실제 배치 컨텍스트의 것을 그대로 잇는다. 빠뜨리면 시뮬레이션은 "옮길 수 있다"고
-        // 답하고 실제 배치는 C5(링크 단절)나 C6(MDC 예산 초과)으로 막히는 어긋남이 생긴다.
-        return PlacementContext.of(others, policy).withLinkMatrix(links).withMdcBudgets(budgets);
+        // 정책·링크·예산과 평가기는 실제 배치 컨텍스트의 것을 그대로 잇는다. 빠뜨리면 시뮬레이션은 "옮길 수 있다"고
+        // 답하고 실제 배치는 C5(링크 단절)·C6(MDC 예산 초과)이나 운영 설정·냉각 대기로 막히는 어긋남이 생긴다.
+        return real.sandbox(others);
     }
 
     private List<Workload> workloadsOn(NodeResource node) {

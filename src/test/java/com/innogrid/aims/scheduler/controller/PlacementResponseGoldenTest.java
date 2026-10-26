@@ -115,6 +115,14 @@ class PlacementResponseGoldenTest {
             "power", List.of("전력계측", "온도계측", "PEI", "비낭비", "실질한계전력점수", "전력점수", "열점수", "cpu여유", "메모리여유",
                     "네트워크한산도", "실질한계전력W", "배치후예상전력W", "배치후예상온도C", "가동중"),
             "temperature", List.of("온도계측", "열적여유", "열적균형", "냉각점수", "자원여유", "배치후예상온도C", "클러스터평균온도C"));
+    /**
+     * 배치 엔진이 후보 노드마다 매기는 노드 배치 스코어 다섯 필드(cpu · memory · power · temperature · network 순)에 담기는
+     * 엔진별 후보 상세 키. docs/13 3장 「엔진별 노드 배치 스코어의 뜻」 표와 같다 — 대응이 바뀌면 그 표를 같은 PR 에서 고친다.
+     */
+    private static final Map<String, List<String>> SLOT_DETAIL_KEYS = Map.of(
+            "weighted", List.of("cpu여유", "메모리여유", "전력여유", "온도여유", "네트워크한산도"),
+            "power", List.of("cpu여유", "메모리여유", "전력점수", "열점수", "네트워크한산도"),
+            "temperature", List.of("자원여유", "자원여유", "냉각점수", "열적여유", "열적균형"));
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -343,6 +351,21 @@ class PlacementResponseGoldenTest {
             files.forEach(f -> actual.add(f.getFileName().toString()));
         }
         assertEquals(expected, actual);
+    }
+
+    @DisplayName("노드 배치 스코어 다섯 필드가 엔진별로 정한 후보 상세 키와 같은 값이다")
+    @ParameterizedTest(name = "스코어 대응 {0}")
+    @MethodSource("scenarios")
+    void score_slots_equal_engine_detail_keys(Scenario s) {
+        // 기준 파일과 따로 본다 — 기준 파일을 다시 만들어도 스코어 필드와 상세 키의 대응이 바뀐 것은 여기서 드러난다
+        SchedulingResult result = engine(s.engine()).schedule(s.workload().get(), s.nodes().get(), s.policy().get());
+        List<String> keys = SLOT_DETAIL_KEYS.get(s.engine());
+        assertFalse(result.candidateScores().isEmpty(), "후보가 있어야 스코어를 견줄 수 있다");
+        for (SchedulingResult.NodeScore c : result.candidateScores()) {
+            List<Double> slots = List.of(c.cpuScore(), c.memoryScore(), c.powerScore(), c.temperatureScore(), c.networkScore());
+            List<Double> details = keys.stream().map(c.details()::get).toList();
+            assertEquals(details, slots, c.nodeId() + " — 대응이 바뀌면 docs/13 3장 「엔진별 노드 배치 스코어의 뜻」 표를 같은 PR 에서 고친다");
+        }
     }
 
     /** 쌍둥이 노드 — 입력 순서 b(mdc-2) → a(mdc-1). a 는 메모리 사용률만 0.0001%p 낮아 반올림 전 총점이 아주 조금 높고 반올림한 총점은 같다. */

@@ -2,15 +2,9 @@ package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -22,13 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.innogrid.aims.common.exception.BusinessException;
-import com.innogrid.aims.scheduler.benchmark.BaselinePlacers;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkContexts;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkEngineConfigs;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkLinks;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
-import com.innogrid.aims.scheduler.benchmark.BenchmarkPolicies;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
@@ -41,32 +29,17 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Cell;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.EngineConfigSnapshot;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.IdleGap;
-import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
-import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.NetworkKnobs;
-import com.innogrid.aims.scheduler.model.LinkMatrix;
-import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PolicySnapshot;
-import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.PowerKnobs;
-import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult;
-import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalKnobs;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalRiseScale;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WakeupReconstruction;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WorkloadClassShare;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
-import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
-import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
-import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.NodeResource.PowerSource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
-import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 /**
  * 배치 전략 비교 하네스 — 우리 엔진과 대조군을 <b>같은 판·같은 워크로드·같은 제약</b>에서 돌린다.
@@ -101,56 +74,27 @@ public class PlacementBenchmarkService {
             UNIFORM, "classpath:scheduler/benchmark-workloads-uniform.yml");
 
     /**
-     * 대조군의 순서. 응답 열 순서가 실행마다 바뀌면 표를 견줄 수 없다.
-     *
-     * <p>{@link #strategies()} 가 이 목록과 구현 맵의 <b>키 집합이 같은지</b> 검사한다 — 목록에만 있으면 null 이
-     * 담겨 한참 뒤 NPE 로 죽고, 맵에만 있으면 열 하나가 <b>조용히</b> 사라진 채 응답은 정상이다. 둘 다 여기서
-     * 크게 실패하게 한다. 테스트가 같은 패키지에서 이 목록을 읽는다.</p>
+     * 대조군의 순서 — 정의는 {@link BenchmarkColumns#BASELINE_ORDER}. 같은 패키지의 테스트가 이 이름으로 읽어 별칭을 남긴다.
      */
-    static final List<String> BASELINE_ORDER =
-            List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "coolest-first", "random");
+    static final List<String> BASELINE_ORDER = BenchmarkColumns.BASELINE_ORDER;
 
-    /**
-     * 엔진 쪽 변종 열의 순서 — 대조군의 {@link #BASELINE_ORDER} 와 같은 역할. 운영 엔진 전량(레지스트리 정렬) 뒤, 대조군 앞에
-     * 이 순서로 선다. {@link #engineVariants()} 가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
-     * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
-     */
-    static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
-            BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
-            BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "250", BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "1000",
-            BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "0", BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN);
+    /** 엔진 쪽 변종 열의 순서 — 정의는 {@link BenchmarkColumns#ENGINE_VARIANT_ORDER}. 테스트가 이 이름으로 읽는다. */
+    static final List<String> ENGINE_VARIANT_ORDER = BenchmarkColumns.ENGINE_VARIANT_ORDER;
 
-    /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
-    private static final String RANDOM_ID = "random";
-
-    /**
-     * 엔진 쪽 변종 열 하나 — 전략과, 그 열만 다르게 준 노브(이름 → 값). 노브는 응답의 {@code engineConfigOverride} 와 설정
-     * 다이제스트의 {@code overrides=} 세그먼트에 같은 값으로 실린다. {@code believedCostModel} 은 "엔진이 믿은 비용" 을 재는
-     * 전력 모델 — 노브가 전력 모델 형태를 바꾸는 열은 자기 모델로 재야 그 열이 믿은 값이 된다.
-     */
-    private record EngineVariant(PlacementStrategy strategy, Map<String, String> override, PowerModel believedCostModel) {}
-
-    /**
-     * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 전력식을 공유하는 ΔP 단독 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
-     * 값이 없다. 테스트 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
-     */
-    private static final String PABFD_ID = "pabfd";
-
-    private final EngineRegistry engineRegistry;
     private final SchedulerProperties properties;
     private final BenchmarkClusters clusters;
 
+    /** 비교 전략 목록 · 정책 사본 · 설정 스냅샷을 조립한다. 호출할 때마다 다시 조립한다. */
+    private final BenchmarkColumns columns;
+
+    /** 시각 지점 하나에서 전 전략을 배치한다. */
+    private final BenchmarkPointRunner runner;
+
+    /** 시각 지점 결과를 셀(결과 표 한 칸)로 조립한다. */
+    private final BenchmarkCellAssembler assembler;
+
     /** 상태가 없는 모델이라 그대로 쓴다 — 엔진이 믿은 비용이 운영과 같은 설정에서 나와야 한다. */
     private final PowerModel powerModel;
-
-    /**
-     * 경고 온도 기본값 하나만 쓴다. <b>온도 값 계산에는 쓰지 않는다</b> — 엔진의 열관성 가정으로 지표를
-     * 재면 열 엔진이 자기 가정으로 채점받는다. 온도는 {@link GroundTruthOracle} 이 생성식으로 낸다.
-     */
-    private final ThermalModel thermalModel;
-
-    /** 이 실행이 비교에 넣는 대조군 순서. 운영은 항상 {@link #BASELINE_ORDER} 다. */
-    private final List<String> baselineOrder;
 
     /**
      * 순수성 캐시 — 키는 {@link #CACHE_AXES} 순서의 {@code 판|분포|판 파일 다이제스트|워크로드 파일 다이제스트|엔진 설정 다이제스트|규칙 축 다이제스트}.
@@ -195,12 +139,12 @@ public class PlacementBenchmarkService {
     PlacementBenchmarkService(EngineRegistry engineRegistry, SchedulerProperties properties,
                              BenchmarkClusters clusters, PowerModel powerModel, ThermalModel thermalModel,
                              List<String> baselineOrder) {
-        this.engineRegistry = engineRegistry;
         this.properties = properties;
         this.clusters = clusters;
         this.powerModel = powerModel;
-        this.thermalModel = thermalModel;
-        this.baselineOrder = List.copyOf(baselineOrder);
+        this.columns = new BenchmarkColumns(engineRegistry, properties, powerModel, thermalModel, baselineOrder);
+        this.runner = new BenchmarkPointRunner(properties, powerModel, thermalModel, columns);
+        this.assembler = new BenchmarkCellAssembler(columns);
     }
 
     // ── 진입점 ───────────────────────────────────────────────
@@ -326,12 +270,12 @@ public class PlacementBenchmarkService {
 
         for (int loadRatio : BenchmarkRules.LOAD_RATIOS) {
             // 한 부하율의 배치를 한 번만 돌리고, 같은 결정을 전원 상태 두 가정으로 회계한다.
-            List<PointOutcome> points = new ArrayList<>(sweep.size());
+            List<BenchmarkPointRunner.PointOutcome> points = new ArrayList<>(sweep.size());
             for (long t : sweep) {
-                points.add(runPoint(cluster, workloads, loadRatio, t, oracle));
+                points.add(runner.runPoint(cluster, workloads, loadRatio, t, oracle));
             }
             for (PowerControl mode : PowerControl.values()) {
-                cells.add(cell(loadRatio, mode, points, oracle));
+                cells.add(assembler.cell(loadRatio, mode, points, oracle));
             }
         }
 
@@ -421,732 +365,39 @@ public class PlacementBenchmarkService {
         return rowsOut;
     }
 
-    // ── 시각 지점 하나 ────────────────────────────────────────
-
-    /** 한 시각 지점의 전 전략 결과. 배치 결정은 여기서 끝나고, 전원 상태 회계는 뒤에서 붙는다. */
-    private record PointOutcome(double headroomCores, int requestedWorkloads, double requestedCores,
-                                Map<String, Double> cpuBeforeByNode, Set<String> activeBefore,
-                                int activeCountBefore, int measuredNodeCount,
-                                Map<String, String> probeExclusions,
-                                Map<String, Placement> byStrategy) {
-    }
-
-    /** 전략 하나가 한 시각 지점에서 낸 배치 결과. */
-    private record Placement(PlacementStrategy strategy, int placed, int requested,
-                             double engineBelievedCostW, Set<String> usedNodes,
-                             Map<String, Double> cpuAfterByNode, int unmeasuredPlacements,
-                             int thermalExclusions, int activeCountAfter,
-                             double measuredTempStdDev, int warnZoneNodes,
-                             boolean temperatureGated, boolean powerGated) {
-    }
-
-    private PointOutcome runPoint(SyntheticCluster cluster, BenchmarkWorkloads workloads,
-                                  int loadRatio, long t, GroundTruthOracle oracle) {
-        SchedulingPolicy basePolicy = baseline();
-        List<NodeResource> snapshot = nodesAt(cluster, t);
-
-        double headroom = headroomCores(snapshot, basePolicy);
-        List<Workload> sampled = workloads.sample(headroom * loadRatio / 100.0);
-        assignDataMdc(sampled, cluster);
-        assignRequiredBandwidth(sampled, cluster);
-        LinkMatrix links = BenchmarkLinks.matrixOf(cluster);
-        double requestedCores = sampled.stream().mapToInt(Workload::getRequiredCpu).sum();
-
-        Map<String, Double> cpuBefore = new LinkedHashMap<>();
-        Set<String> activeBefore = new LinkedHashSet<>();
-        int measuredNodes = 0;
-        for (NodeResource node : snapshot) {
-            cpuBefore.put(node.getNodeId(), node.effectiveCpuUsagePercent());
-            if (poweredOn(node)) activeBefore.add(node.getNodeId());
-            if (node.getTemperatureCelsius() > 0) measuredNodes++;
-        }
-
-        // 이 판이 왜 막히는지 한 번만 재 본다. 표본 첫 워크로드를 프로브로 쓰고 전용 평가기를 준다 —
-        // 전략이 쓰는 평가기로 재면 그 측정 자체가 전략의 판정을 건드린다.
-        Map<String, String> probe = Map.of();
-        if (!sampled.isEmpty()) {
-            ConstraintEvaluator probeEvaluator = BenchmarkContexts.freshEvaluator(properties);
-            // 프로브도 전략과 같은 링크 행렬을 본다 — 전 전략 입력 동일성은 프로브까지 포함한다
-            probe = BenchmarkContexts.exclusions(sampled.get(0),
-                    BenchmarkContexts.copyOf(snapshot, basePolicy, probeEvaluator, links));
-        }
-
-        Map<String, Placement> byStrategy = new LinkedHashMap<>();
-        Map<String, EngineVariant> variants = new LinkedHashMap<>();
-        for (EngineVariant v : engineVariants()) variants.put(v.strategy().id(), v);
-        for (PlacementStrategy strategy : strategies()) {
-            EngineVariant v = variants.get(strategy.id());
-            byStrategy.put(strategy.id(), run(strategy, sampled, snapshot, cluster, oracle, links,
-                    v == null ? powerModel : v.believedCostModel(), v == null ? Map.of() : v.override()));
-        }
-
-        return new PointOutcome(headroom, sampled.size(), requestedCores,
-                cpuBefore, activeBefore, activeBefore.size(), measuredNodes, probe, byStrategy);
-    }
-
-    /**
-     * 전략 하나를 한 시각 지점에서 돌린다.
-     *
-     * <p>무작위 전략은 <b>사전 등록된 시드 전부</b>를 돌려 중앙 표본을 쓴다. 시드 하나는 표본 1개라
-     * 그 값이 좋았는지 나빴는지 말할 수 없다.</p>
-     */
-    private Placement run(PlacementStrategy strategy, List<Workload> sampled,
-                          List<NodeResource> snapshot, SyntheticCluster cluster,
-                          GroundTruthOracle oracle, LinkMatrix links, PowerModel believedCostModel,
-                          Map<String, String> override) {
-        if (!RANDOM_ID.equals(strategy.id())) {
-            return runOnce(strategy, sampled, snapshot, cluster, oracle, links, believedCostModel, override);
-        }
-
-        List<Placement> draws = new ArrayList<>(BenchmarkRules.RANDOM_SEEDS.size());
-        for (long seed : BenchmarkRules.RANDOM_SEEDS) {
-            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle, links, believedCostModel, override));
-        }
-        return medianDraw(draws);
-    }
-
-    private Placement runOnce(PlacementStrategy strategy, List<Workload> sampled,
-                              List<NodeResource> snapshot, SyntheticCluster cluster,
-                              GroundTruthOracle oracle, LinkMatrix links, PowerModel believedCostModel,
-                              Map<String, String> override) {
-        SchedulingPolicy policy = policyFor(strategy, override);
-        ConstraintEvaluator evaluator = BenchmarkContexts.freshEvaluator(properties);
-        PlacementContext ctx = BenchmarkContexts.copyOf(snapshot, policy, evaluator, links);
-
-        List<Workload> ordered = strategy.usesArrivalOrder()
-                ? sampled
-                : sampled.stream().sorted(strategy.workloadOrder()).toList();
-
-        Set<String> unmeasuredNodes = unmeasuredNodeIds(cluster);
-        Set<String> used = new LinkedHashSet<>();
-        int placed = 0;
-        int unmeasured = 0;
-        int thermal = 0;
-        double believedCost = 0;
-
-        for (Workload workload : ordered) {
-            SchedulingResult result = strategy.placer().place(workload, ctx);
-            thermal += countThermalExclusions(result);
-            if (!result.success()) continue;
-
-            String nodeId = result.selectedNodeId();
-            NodeResource node = ctx.node(nodeId).orElseThrow(() -> new IllegalStateException(
-                    "전략 " + strategy.id() + " 가 판에 없는 노드를 골랐다: " + nodeId));
-
-            // 엔진이 믿은 비용은 배치 직전 상태에서 재야 한다 — 예약을 잡은 뒤에는 다른 값이 된다.
-            believedCost += believedCostModel.realMarginalPower(node, workload.getRequiredCpu());
-
-            ctx.reserve(nodeId, workload);
-            used.add(nodeId);
-            placed++;
-            if (unmeasuredNodes.contains(nodeId)) unmeasured++;
-        }
-
-        Map<String, Double> cpuAfter = new LinkedHashMap<>();
-        for (NodeResource node : ctx.nodes()) {
-            cpuAfter.put(node.getNodeId(), node.effectiveCpuUsagePercent());
-        }
-
-        return new Placement(strategy, placed, ordered.size(), believedCost, used, cpuAfter,
-                unmeasured, thermal, ctx.activeNodeCount(BenchmarkRules.POWERED_ON_CPU_PERCENT),
-                measuredTempStdDev(ctx, oracle), warnZoneNodes(ctx, policy, oracle),
-                policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled());
-    }
-
-    /**
-     * 무작위 시드들의 중앙 표본.
-     *
-     * <p>지표별로 따로 중앙값을 내지 않고 <b>뽑기 하나를 고른다</b> — 지표마다 다른 뽑기의 값을 섞으면
-     * 어느 뽑기에서도 실제로 일어나지 않은 조합이 나온다(전력은 A 의 값, 성공률은 B 의 값).</p>
-     *
-     * <p><b>정렬 기준에 지표를 쓰지 않는다.</b> 전력이든 엔진이 믿은 비용이든, 어떤 목적 함수로 중앙을
-     * 고르면 그 함수에 대해 무작위 대조군이 "중간쯤 하는" 전략으로 다듬어진다 — 하한선이어야 하는 것이
-     * 하한선이 아니게 된다. 그래서 <b>구조</b>로만 정렬한다: 배치 건수 → 쓴 노드 수 → 쓴 노드 식별자.
-     * 어느 것도 좋고 나쁨을 뜻하지 않으므로 중앙 표본이 특정 지표에 유리해질 길이 없다.</p>
-     */
-    private static Placement medianDraw(List<Placement> draws) {
-        List<Placement> sorted = draws.stream()
-                .sorted(Comparator.comparingInt(Placement::placed)
-                        .thenComparingInt((Placement d) -> d.usedNodes().size())
-                        .thenComparing(PlacementBenchmarkService::usedNodeKey))
-                .toList();
-        return sorted.get(sorted.size() / 2);
-    }
-
-    /** 쓴 노드 집합을 정렬 가능한 문자열로. 좋고 나쁨과 무관한 순서라 중앙 고르기를 왜곡하지 않는다. */
-    private static String usedNodeKey(Placement draw) {
-        return String.join(",", new TreeSet<>(draw.usedNodes()));
-    }
-
-    // ── 셀 조립 ──────────────────────────────────────────────
-
-    private Cell cell(int loadRatio, PowerControl mode, List<PointOutcome> points, GroundTruthOracle oracle) {
-        List<String> strategyIds = List.copyOf(points.get(0).byStrategy().keySet());
-
-        Map<String, Map<String, List<Double>>> samples = new LinkedHashMap<>();
-        for (String id : strategyIds) samples.put(id, new LinkedHashMap<>());
-
-        // 총량 비교는 시각 지점마다 짝짓는다. 어떤 지점에서 기준 집합(override 없는 기본 설정 열) 전부의 배치 건수가 같다면
-        // 그 지점의 총량은 견줄 수 있다 — 다른 지점이 어긋났다는 이유로 그 지점까지 버리면 쓸 수 있는 짝을 통째로
-        // 잃고 주 지표가 중부하 이상에서 사라진다. 대신 몇 곳을 썼는지 밝힌다. override 열을 기준 집합에 넣지 않는 이유는
-        // BenchmarkRules.PAIRING_RULE — 열을 더하는 것만으로 기존 열의 값이 바뀌면 안 된다.
-        Map<String, Map<String, String>> overrides = overrides();
-        List<String> coreIds = strategyIds.stream().filter(id -> !overrides.containsKey(id)).toList();
-        int usablePoints = 0;
-        Map<String, Integer> mismatchExample = Map.of();
-        // override 열이 기준 집합과 건수가 달라 총량을 내지 못한 지점 수 — PAIRING_RULE 이 응답 표기를 요구한다
-        Map<String, Integer> droppedByRow = new LinkedHashMap<>();
-
-        for (PointOutcome point : points) {
-            Map<String, Double> unmeasuredRates = new LinkedHashMap<>();
-            Map<String, Integer> placedHere = new LinkedHashMap<>();
-            for (String id : strategyIds) {
-                placedHere.put(id, point.byStrategy().get(id).placed());
-            }
-            Map<String, Integer> corePlaced = new LinkedHashMap<>();
-            for (String id : coreIds) corePlaced.put(id, placedHere.get(id));
-            boolean pointComparable = BenchmarkRules.totalsComparable(corePlaced.values());
-            Integer coreCount = pointComparable ? corePlaced.values().iterator().next() : null;
-
-            // 생성식 총전력은 지점마다 전략당 한 번 내어 두 열이 같은 값을 읽는다. 총량 열은 짝이 아닌
-            // 지점을 null 로 가리지만(아래), 격차 열은 이 행과 기준 전략 둘만 짝지으므로 가리는 조건이
-            // 다르다 — 같은 오라클 호출을 두 조건으로 쓰는 것이지 값을 두 번 계산하는 것이 아니다.
-            Map<String, Double> powerByStrategy = new LinkedHashMap<>();
-            for (String id : strategyIds) {
-                powerByStrategy.put(id, power(oracle, point, point.byStrategy().get(id), mode));
-            }
-            Integer placedBaseline = placedHere.get(PABFD_ID);
-            Double powerBaseline = powerByStrategy.get(PABFD_ID);
-            if (pointComparable) {
-                usablePoints++;
-            } else {
-                mismatchExample = corePlaced;
-            }
-
-            for (String id : strategyIds) {
-                Placement p = point.byStrategy().get(id);
-                Map<String, List<Double>> into = samples.get(id);
-                // override 열은 기준 집합의 마스크를 받되 자기 건수가 기준 건수와 같아야 총량을 낸다
-                boolean rowComparable = pointComparable && (coreIds.contains(id) || coreCount.equals(p.placed()));
-                if (pointComparable && !rowComparable) droppedByRow.merge(id, 1, Integer::sum);
-
-                add(into, BenchmarkRules.PLACEMENT_RATE,
-                        p.requested() == 0 ? null : round(100.0 * p.placed() / p.requested()));
-                add(into, BenchmarkRules.PER_WORKLOAD_POWER, perWorkload(oracle, point, p, mode));
-                add(into, BenchmarkRules.ENGINE_BELIEVED_COST, round(p.engineBelievedCostW()));
-                // 개입 횟수는 시도당 계수다 — 전 전략이 같은 워크로드를 한 번씩 시도하므로 배치 건수와
-                // 무관하게 지점마다 센다. 아래 짝짓기 조건을 여기에 걸면 없는 결함을 고치는 것이다.
-                add(into, BenchmarkRules.C3_INTERVENTIONS, (double) p.thermalExclusions());
-
-                // 총량 계열과 온도 분포 계열은 건수가 짝지어진 지점에서만 표본에 넣는다. 적게 배치하고 전력을
-                // 덜 쓰는 것이 승리가 아닌 것처럼, 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것도 열 성능이
-                // 아니다 — 생성식 온도는 CPU 의 함수라 배치량이 다르면 열이 아니라 배치량을 재게 된다.
-                // 짝이 아닌 지점의 값은 아예 세지 않는다.
-                add(into, BenchmarkRules.GENERATOR_POWER,
-                        rowComparable ? powerByStrategy.get(id) : null);
-                // 격차는 전 전략 짝을 요구하지 않는다 — 이 행과 기준 전략의 건수만 같으면 낸다.
-                add(into, BenchmarkRules.GAP_VS_PABFD,
-                        gapVsBaseline(id, placedHere.get(id), powerByStrategy.get(id),
-                                placedBaseline, powerBaseline));
-                add(into, BenchmarkRules.ACTIVE_NODE_DELTA, rowComparable
-                        ? (double) (p.activeCountAfter() - point.activeCountBefore()) : null);
-                add(into, BenchmarkRules.WARN_ZONE_NODES,
-                        rowComparable ? (double) p.warnZoneNodes() : null);
-                add(into, BenchmarkRules.TEMP_STDDEV,
-                        rowComparable && point.measuredNodeCount() >= 2 ? round(p.measuredTempStdDev()) : null);
-
-                Double rate = p.placed() == 0 ? null : round(100.0 * p.unmeasuredPlacements() / p.placed());
-                add(into, BenchmarkRules.UNMEASURED_RATE, rate);
-                if (rate != null && coreIds.contains(id)) unmeasuredRates.put(id, rate);
-            }
-
-            // 미계측 격차는 기준 집합 사이의 값이라 지점마다 한 번 계산해 전 전략에 같은 값으로 싣는다.
-            Double spread = spreadOf(unmeasuredRates);
-            for (String id : strategyIds) {
-                add(samples.get(id), BenchmarkRules.UNMEASURED_SPREAD, spread);
-            }
-        }
-
-        boolean comparable = usablePoints == points.size();
-        String incomparable = comparable ? null
-                : pairingNote(usablePoints, points.size(), mismatchExample);
-        if (!droppedByRow.isEmpty()) {
-            final int usable = usablePoints;
-            List<String> parts = new ArrayList<>();
-            droppedByRow.forEach((id, k) -> parts.add(id + " " + k + "곳 제외(표본 " + (usable - k) + ")"));
-            String note = "override 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", parts)
-                    + " — 그 열의 총량 표본(samples)은 그만큼 적다";
-            incomparable = incomparable == null ? note : incomparable + ". " + note;
-        }
-
-        List<StrategyResult> results = new ArrayList<>(strategyIds.size());
-        for (String id : strategyIds) {
-            Placement any = points.get(0).byStrategy().get(id);
-            results.add(new StrategyResult(id, any.strategy().label(), any.strategy().kind().name(),
-                    any.strategy().policy().name(), overrides.getOrDefault(id, Map.of()),
-                    metricValues(samples.get(id), any, usablePoints, points, droppedByRow.getOrDefault(id, 0))));
-        }
-
-        return new Cell(loadRatio, mode.name(),
-                median(points.stream().map(p -> (double) p.requestedWorkloads()).toList()),
-                median(points.stream().map(PointOutcome::requestedCores).toList()),
-                median(points.stream().map(PointOutcome::headroomCores).toList()),
-                median(points.stream().map(p -> (double) p.activeCountBefore()).toList()),
-                comparable, incomparable,
-                unmeasuredCaution(samples, coreIds),
-                probeReasonCounts(points), results);
-    }
-
-    /**
-     * 이 행의 <b>기준 전략 대비</b> 총전력 격차(%). 기준 전략 자신과 기준이 없는 실행에서는 값을 내지 않는다 —
-     * 자기 자신의 0 은 "격차가 없다"가 아니라 값이 아니고, 그 사유는 {@code invalidReason} 이 적는다.
-     *
-     * <p>짝 조건과 분모 가드는 {@link BenchmarkRules#pairedGapPercent} 가 들고 있다 — 판정에 쓰는 식이라
-     * 결과 코드보다 먼저 등록된 자리에 있어야 하고, 여기서는 반올림만 한다.</p>
-     */
-    private static Double gapVsBaseline(String id, Integer placed, Double power,
-                                        Integer placedBaseline, Double powerBaseline) {
-        if (PABFD_ID.equals(id) || placed == null || power == null
-                || placedBaseline == null || powerBaseline == null) {
-            return null;
-        }
-        Double gap = BenchmarkRules.pairedGapPercent(placed, placedBaseline, power, powerBaseline);
-        return gap == null ? null : round(gap);
-    }
-
-    /**
-     * 짝짓기 문장에 함께 붙는 격차 열의 단서. 이 문장이 없으면 <b>같은 셀 안에서 응답이 모순으로 읽힌다</b> —
-     * 총량 열은 "비교할 수 없다"고 적혀 있는데 격차 열에는 값이 있기 때문이다. 두 열의 짝 조건이 다르다는
-     * 사실은 지표 목록과 API 설명에만 있었고, 셀만 읽는 사람에게는 닿지 않았다.
-     */
-    private static final String GAP_PAIRING_NOTE =
-            "총전력 격차 열은 이 행과 기준 전략 둘의 건수만 맞으면 내므로 이 셀에서도 값이 있을 수 있다";
-
-    /**
-     * 총량·온도 분포 지표를 몇 곳에서 냈는지 밝히는 문장. 셀에 실어 두면 "몇 곳의 중앙값" 이라는 사실이 숫자와
-     * 같은 자리에서 읽힌다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.
-     */
-    private static String pairingNote(int usable, int total, Map<String, Integer> mismatchExample) {
-        if (usable == 0) {
-            return "전 전략의 배치 건수가 같은 시각 지점이 없어 총량과 온도 분포를 비교할 수 없다 — "
-                    + BenchmarkRules.totalsIncomparableReason(mismatchExample) + ". " + GAP_PAIRING_NOTE;
-        }
-        return String.format(
-                "시각 지점 %d곳 중 %d곳에서만 전 전략의 배치 건수가 같아 총량·온도 분포 지표는 그 %d곳으로 냈다 "
-                        + "(짝이 아닌 지점의 예: %s). %s",
-                total, usable, usable, BenchmarkRules.totalsIncomparableReason(mismatchExample),
-                GAP_PAIRING_NOTE);
-    }
-
-    private static List<MetricValue> metricValues(Map<String, List<Double>> samples, Placement any,
-                                                  int usablePoints, List<PointOutcome> points, int droppedPoints) {
-        int measuredNodes = points.get(0).measuredNodeCount();
-        String strategyId = any.strategy().id();
-        boolean placedAnywhere = points.stream()
-                .anyMatch(p -> p.byStrategy().get(strategyId).placed() > 0);
-        boolean baselinePresent = points.get(0).byStrategy().containsKey(PABFD_ID);
-        List<MetricValue> values = new ArrayList<>(BenchmarkRules.METRICS.size());
-
-        for (BenchmarkMetric metric : BenchmarkRules.METRICS) {
-            List<Double> raw = samples.getOrDefault(metric.key(), List.of());
-            List<Double> series = raw.stream().filter(Objects::nonNull).toList();
-            // 지점별 값은 지점 대조가 필요한 지표만 싣는다. 필터 전 리스트라 인덱스가 시각 지점이고,
-            // 짝이 아닌 지점은 null 로 남는다.
-            List<Double> pointValues = BenchmarkRules.GAP_VS_PABFD.equals(metric.key())
-                    ? pointSeries(raw, points.size()) : null;
-
-            String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere,
-                    baselinePresent, !series.isEmpty());
-            if (series.isEmpty()) {
-                boolean totals = BenchmarkRules.GENERATOR_POWER.equals(metric.key()) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(metric.key())
-                        || BenchmarkRules.WARN_ZONE_NODES.equals(metric.key()) || BenchmarkRules.TEMP_STDDEV.equals(metric.key());
-                if (invalid == null && totals && droppedPoints > 0 && droppedPoints == usablePoints) {
-                    invalid = "기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + droppedPoints + "곳)";
-                }
-                values.add(new MetricValue(metric.key(), null, null, null, 0, pointValues, false,
-                        invalid != null ? invalid : "이 셀에서 값이 나오지 않았다"));
-                continue;
-            }
-            if (invalid != null) {
-                // 순위 근거가 될 수 없다고 판정한 지표에 중앙값을 실으면, valid 플래그를 보지 않은
-                // 인용자에게는 그냥 숫자로 읽힌다. 값은 지우고 표본 수는 남긴다 — "지점이 없어 무효"와
-                // "지점은 있었지만 판정이 무효"가 응답에서 구분되어야 한다.
-                values.add(new MetricValue(metric.key(), null, null, null, series.size(), pointValues,
-                        false, invalid));
-                continue;
-            }
-            values.add(new MetricValue(metric.key(), median(series),
-                    round(series.stream().mapToDouble(Double::doubleValue).min().orElseThrow()),
-                    round(series.stream().mapToDouble(Double::doubleValue).max().orElseThrow()),
-                    series.size(), pointValues, true, null));
-        }
-        return values;
-    }
-
-    /**
-     * 지점별 값 — 길이는 <b>항상</b> 스윕 지점 수이고 인덱스가 시각 지점이다.
-     *
-     * <p>지점 루프가 지표마다 지점당 한 번씩 담으므로 운영 경로에서는 이미 길이가 맞는다 — 길이를 채우는
-     * 가지는 <b>방어</b>이고, 지금은 테스트가 직접 부를 때만 지난다. 어떤 키가 조건부로만 담기게 되는 날
-     * 길이 불변식이 조용히 깨지는 것을 막는 자리다. 값만 모아 압축하면 두 실행을 지점별로 대조할 때 정렬이 어긋나 짝 비교가
-     * 성립하지 않는다 — 짝이 아닌 지점이 몇 번째였는지가 응답에 남아야 한다.</p>
-     *
-     * <p>응답 수준 테스트는 빈 자리 뒤에 값이 남는 행이 있는지만 센다. 빈 자리가 제자리에 남는지는 같은 패키지의 테스트가
-     * 이 메서드를 직접 불러 확인한다 — 길이·표본 수·중앙값은 값을 앞으로 당겨 모아도 그대로라 그 셋으로는 잡지 못한다.</p>
-     */
-    static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
-        List<Double> series = new ArrayList<>(Math.max(raw.size(), sweepPoints));
-        series.addAll(raw);
-        while (series.size() < sweepPoints) series.add(null);
-        return series;
-    }
-
-    /**
-     * 지표가 이 전략·이 셀에서 순위 근거가 될 수 없는 사유. 없으면 null.
-     *
-     * <p>총량 계열은 <b>짝지어진 지점이 하나도 없을 때만</b> 무효다. 일부 지점만 짝이었다면 그 지점들의
-     * 중앙값은 정당한 비교이고, 몇 곳이었는지는 {@code samples} 와 셀의 짝짓기 문장이 밝힌다.</p>
-     *
-     * <p>건당 전력은 <b>전 시각 지점에서 배치가 0건일 때만</b> 무효다. 첫 지점 하나로 판정하면 t=0 에
-     * 0건이고 다른 지점에 배치한 전략의 정당한 중앙값이 통째로 사라진다 — 그래서 {@code placedAnywhere}
-     * 는 셀 전체를 보고 온다. 온도 게이트·계측 노드 수는 셀 안에서 상수라 첫 지점으로 판정해도 된다.</p>
-     */
-    private static String invalidReason(BenchmarkMetric metric, Placement any,
-                                        int usablePoints, int measuredNodes, boolean placedAnywhere,
-                                        boolean baselinePresent, boolean paired) {
-        String key = metric.key();
-        if (BenchmarkRules.GAP_VS_PABFD.equals(key)) {
-            // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0 이나 빈 값을 내면 "격차가
-            // 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
-            if (!baselinePresent) {
-                return "기준 전략(전력 인지 최적적합)이 이 실행에 없다";
-            }
-            if (PABFD_ID.equals(any.strategy().id())) {
-                return "기준 전략 자신 — 0 은 값이 아니다";
-            }
-            // 같은 행의 총량 열은 전용 사유를 다는데 격차만 "값이 나오지 않았다"로 나가면 원인을 되짚을 수
-            // 없다. 이 열이 비는 이유는 전 전략이 아니라 기준 전략 하나와 어긋났다는 것이다.
-            if (!paired) {
-                return "기준 전략과 배치 건수가 같은 시각 지점이 없다";
-            }
-        }
-        if ((BenchmarkRules.GENERATOR_POWER.equals(key) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(key))
-                && usablePoints == 0) {
-            return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다";
-        }
-        if ((BenchmarkRules.TEMP_STDDEV.equals(key) || BenchmarkRules.WARN_ZONE_NODES.equals(key))
-                && usablePoints == 0) {
-            return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 "
-                    + "열 성능이 아니다";
-        }
-        if (BenchmarkRules.PER_WORKLOAD_POWER.equals(key) && !placedAnywhere) {
-            return "전 시각 지점에서 배치 0건이라 건당 값을 낼 수 없다";
-        }
-        if (BenchmarkRules.C3_INTERVENTIONS.equals(key) && !any.temperatureGated()) {
-            return "이 전략은 온도 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
-        }
-        // 제약을 끈 변종은 막히는 자리가 없어 성공률이 정의상 최고가 된다. 개입 횟수(위)에만 가드를 걸고
-        // 성공률에 안 걸면, 반칙으로 나빠 보이는 칸만 가리고 반칙으로 좋아 보이는 칸은 그대로 두는 셈이다.
-        // 온도·전력 게이트를 따로 본다 — 둘 중 하나만 끈 변종이 생기면 온도 플래그 하나로는 못 걸러진다.
-        if (BenchmarkRules.PLACEMENT_RATE.equals(key) && !(any.temperatureGated() && any.powerGated())) {
-            return "이 전략은 온도·전력 제약이 꺼져 있어 막히는 자리가 없다 — 제약을 받는 전략과 성공률을 "
-                    + "비교하지 않는다. 이 열은 경쟁자가 아니라 '제약이 없었다면 얼마나 배치됐을까'의 천장이다";
-        }
-        if ((BenchmarkRules.TEMP_STDDEV.equals(key) || BenchmarkRules.WARN_ZONE_NODES.equals(key))
-                && measuredNodes < 2) {
-            return "계측 노드가 둘 미만이라 온도 분포를 말할 수 없다";
-        }
-        return null;
-    }
-
-    // ── 지표 계산 ────────────────────────────────────────────
-
-    /**
-     * 생성식 기준 총전력.
-     *
-     * <p>{@code AVAILABLE} 판에서 통전된 노드는 <b>배치 전부터 부하가 있던 노드와 이번에 배치한 노드</b>다 —
-     * 부하가 도는 노드를 끌 수는 없으므로 "안 쓰는 노드는 꺼져 있다"를 그 노드에까지 적용하면 없는
-     * 절감을 만들어 낸다.</p>
-     */
-    private static Double power(GroundTruthOracle oracle, PointOutcome point, Placement p, PowerControl mode) {
-        return round(oracle.clusterPowerWatts(p.cpuAfterByNode(), powered(point, p), mode));
-    }
-
-    /** 배치 1건당 늘어난 생성식 기준 전력. 깨우기 비용은 {@code AVAILABLE} 판에서만 붙는다. */
-    private static Double perWorkload(GroundTruthOracle oracle, PointOutcome point,
-                                      Placement p, PowerControl mode) {
-        if (p.placed() == 0) return null;
-        double after = oracle.clusterPowerWatts(p.cpuAfterByNode(), powered(point, p), mode);
-        double before = oracle.clusterPowerWatts(point.cpuBeforeByNode(), point.activeBefore(), mode);
-        return round((after - before) / p.placed());
-    }
-
-    /**
-     * 통전 판정 — {@link BenchmarkRules#POWERED_ON_CPU_PERCENT} 로만 본다.
-     *
-     * <p>{@code PowerModel.isActive} 를 쓰지 않는 이유는 그 메서드가 엔진 설정을 읽기 때문이다. 판정식
-     * 자체는 같다({@code 실효 CPU% > 문턱}) — {@code PlacementContext.activeNodeCount} 도 같은 부등호를
-     * 쓰므로 배치 전(여기)과 배치 후의 셈이 어긋나지 않는다. 경계값을 포함하는 방향까지 같아야 한다.</p>
-     */
-    private static boolean poweredOn(NodeResource node) {
-        return node.effectiveCpuUsagePercent() > BenchmarkRules.POWERED_ON_CPU_PERCENT;
-    }
-
-    private static Set<String> powered(PointOutcome point, Placement p) {
-        Set<String> on = new LinkedHashSet<>(point.activeBefore());
-        on.addAll(p.usedNodes());
-        return on;
-    }
-
-    /**
-     * 계측 노드의 <b>생성식 온도</b> 표준편차. 계측 노드가 둘 미만이면 0(무효 사유는 따로 붙는다).
-     *
-     * <p>엔진의 {@code effectiveTemperature}(= 실측 × (1 + inertiaK × 예약비율))를 쓰지 않는다. 그 식은
-     * <b>엔진의 열관성 가정</b>이고 {@code inertiaK} 는 엔진 튜닝 노브다 — 그것으로 재면 열 엔진이 자기
-     * 가정으로 채점받고, 노브를 돌리면 세계는 그대로인데 측정값이 움직인다. 대신 배치가 만든 CPU 분포를
-     * 생성식에 넣어 같은 배치를 <b>평가자의 식</b>으로 다시 계산한다. 예약분은
-     * {@code effectiveCpuUsagePercent} 에 이미 들어 있으므로 누락되지 않는다.</p>
-     *
-     * <p>바뀌는 것은 온도의 출처가 아니라 <b>예약 상승분 모델 하나</b>다 — 노드에 실린 온도 자체가 이미
-     * 생성식 값이라 예약 0 이면 두 계산은 같다. 엔진 {@code T×(1+0.15r)} 대 생성식 {@code T+30r} 의 차이가
-     * 이 지표를 움직이는 전부이고, 그 격차는 판의 {@code thermalRiseScaleCheck} 가 밝힌다.</p>
-     *
-     * <p>미계측 노드를 빼는 것은 그대로다 — 오라클은 미계측 노드의 온도도 알지만, 이 지표의 사전 등록 문구가
-     * "계측 노드만"이고 계측 공백판의 뜻이 거기 있다. 필터를 풀면 sparse 판과 main 판의 온도 열이 같아진다.</p>
-     */
-    private static double measuredTempStdDev(PlacementContext ctx, GroundTruthOracle oracle) {
-        List<Double> temps = ctx.nodes().stream()
-                .filter(n -> n.getTemperatureCelsius() > 0)
-                .map(n -> oracle.nodeTemperatureC(n.getNodeId(), n.effectiveCpuUsagePercent()))
-                .toList();
-        if (temps.size() < 2) return 0;
-
-        double mean = temps.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-        double variance = temps.stream().mapToDouble(v -> (v - mean) * (v - mean)).sum() / temps.size();
-        return Math.sqrt(variance);
-    }
-
-    /**
-     * 경고 구간에 든 <b>계측</b> 노드 수 — 온도는 생성식, 경계는 정책(엔진 노브)이다.
-     * 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다. 반은 생성식·반은 엔진 노브라는 사실은 지표의
-     * 라벨과 유효성 문구가 함께 밝힌다 — 경계를 바꾸면 세계가 그대로인데 숫자가 움직인다.
-     */
-    private int warnZoneNodes(PlacementContext ctx, SchedulingPolicy policy, GroundTruthOracle oracle) {
-        double warning = policy.getWarningTemperatureCelsius() != null
-                ? policy.getWarningTemperatureCelsius()
-                : thermalModel.defaultWarningCelsius();
-
-        return (int) ctx.nodes().stream()
-                .filter(n -> n.getTemperatureCelsius() > 0)
-                .filter(n -> oracle.nodeTemperatureC(n.getNodeId(), n.effectiveCpuUsagePercent()) >= warning)
-                .count();
-    }
-
-    /**
-     * 열 때문에 후보가 막힌 횟수 — 제외 까닭 코드로 센다.
-     *
-     * <p>예전에는 사유 문구에 "온도"·"냉각" 이 들었는지 보았다. 문구를 한 글자만 고쳐도 이 셈이 조용히
-     * 0 이 되는 자리였다. 이제 {@link ExclusionReason#isThermal()} 이 온도 계열 넷을 가른다 — 세는 조건이
-     * 같아 값은 그대로다.</p>
-     *
-     * <p>패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다 — 등록된 판은 온도 제약이
-     * 걸리지 않아 이 지표가 늘 0 이라, 판 응답만으로는 무엇을 세는지 가려낼 수 없다.</p>
-     */
-    static int countThermalExclusions(SchedulingResult result) {
-        int count = 0;
-        for (NodeScore score : result.candidateScores()) {
-            if (score.exclusionCode() != null && score.exclusionCode().isThermal()) count++;
-        }
-        return count;
-    }
-
-    private static Double spreadOf(Map<String, Double> rates) {
-        if (rates.size() < 2) return null;
-        double max = rates.values().stream().mapToDouble(Double::doubleValue).max().orElseThrow();
-        double min = rates.values().stream().mapToDouble(Double::doubleValue).min().orElseThrow();
-        return round(max - min);
-    }
-
-    /** 미계측 비율이 전략 간에 크게 갈리면 셀이 스스로 경고 문장을 만든다 — 각주에 의존하지 않는다. */
-    private static String unmeasuredCaution(Map<String, Map<String, List<Double>>> samples,
-                                            List<String> strategyIds) {
-        Map<String, Double> medianRate = new LinkedHashMap<>();
-        for (String id : strategyIds) {
-            List<Double> series = samples.get(id)
-                    .getOrDefault(BenchmarkRules.UNMEASURED_RATE, List.of())
-                    .stream().filter(Objects::nonNull).toList();
-            Double m = median(series);
-            if (m != null) medianRate.put(id, m);
-        }
-        Double spread = spreadOf(medianRate);
-        if (spread == null || spread < BenchmarkRules.UNMEASURED_SPREAD_CAUTION_PP) return null;
-
-        String highest = medianRate.entrySet().stream()
-                .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElseThrow();
-        String lowest = medianRate.entrySet().stream()
-                .min(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElseThrow();
-        return BenchmarkRules.unmeasuredCaution(spread, highest, lowest);
-    }
-
-    private static Map<String, Integer> probeReasonCounts(List<PointOutcome> points) {
-        Map<String, Integer> counts = new TreeMap<>();
-        for (PointOutcome point : points) {
-            for (String reason : point.probeExclusions().values()) {
-                counts.merge(shortenReason(reason), 1, Integer::sum);
-            }
-        }
-        return counts;
-    }
-
-    /** 사유에서 숫자를 떼어 종류만 남긴다 — 숫자를 남기면 지점마다 다른 키가 되어 셀 수 없다. */
-    private static String shortenReason(String reason) {
-        int paren = reason.indexOf(" (");
-        return paren > 0 ? reason.substring(0, paren) : reason;
-    }
-
     // ── 전략과 정책 ──────────────────────────────────────────
 
     /**
-     * 비교할 전략 전부 — 운영 엔진 전량 + 자원전용 두 변종 + 대조군({@link #BASELINE_ORDER}).
-     *
-     * <p>엔진은 레지스트리가 밝히는 목록에서 가져온다 — 여기에 이름을 적어 두면 엔진이 늘 때 조용히
-     * 빠진다. 순서는 식별자로 정렬해 응답 열 순서를 빈 등록 순서에서 떼어 놓는다.</p>
+     * 이 실행이 본 엔진 설정과 정책 사본 전량 — 조립은 {@link BenchmarkColumns#engineConfig()}. 패키지 공개 — 다이제스트 테스트가
+     * 판을 계산하지 않고 스냅샷만 읽는다.
      */
-    private List<PlacementStrategy> strategies() {
-        List<PlacementStrategy> all = new ArrayList<>();
-
-        List<String> engineIds = engineRegistry.describe().stream()
-                .map(m -> m.get("id")).sorted().toList();
-        for (String id : engineIds) {
-            all.add(PlacementStrategy.ofEngine(engineRegistry.resolve(id)));
-        }
-
-        for (EngineVariant variant : engineVariants()) all.add(variant.strategy());
-
-        Map<String, PlacementStrategy> baselines = new LinkedHashMap<>();
-        baselines.put("ffd-size", BaselinePlacers.ffdBySize());
-        baselines.put("ffd-priority-size", BaselinePlacers.ffdByPriorityThenSize());
-        baselines.put(PABFD_ID, BaselinePlacers.pabfd(powerModel));
-        baselines.put("bfd", BaselinePlacers.bfd());
-        baselines.put("coolest-first", BaselinePlacers.coolestFirst());
-        baselines.put(RANDOM_ID, BaselinePlacers.random(BenchmarkRules.RANDOM_SEEDS.get(0)));
-
-        // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id 는 여기서 크게 실패해야 한다. 목록에만 있으면
-        // null 이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200 이다. 테스트 전용 이음매로 부분 집합을
-        // 줄 수는 있으므로 검사는 "목록 ⊆ 맵" 과 "각 id 의 record id 일치" 다.
-        for (String id : baselineOrder) {
-            PlacementStrategy strategy = baselines.get(id);
-            if (strategy == null) {
-                throw new IllegalStateException("대조군 순서 목록에 구현이 없는 id 가 있다: " + id
-                        + " (구현: " + baselines.keySet() + ")");
-            }
-            if (!id.equals(strategy.id())) {
-                throw new IllegalStateException("대조군 맵의 키와 전략 id 가 다르다: " + id + " ≠ " + strategy.id());
-            }
-            all.add(strategy);
-        }
-        // 참조 비교(==)가 아니라 equals 다 — List.copyOf 가 같은 인스턴스를 돌려주는 것은 구현 노트일 뿐이라,
-        // 참조로 걸면 어느 날 이 검사가 조용히 영구히 꺼진다. 그것이 바로 이 검사가 막으려는 사고다.
-        if (BASELINE_ORDER.equals(baselineOrder) && !baselines.keySet().equals(Set.copyOf(BASELINE_ORDER))) {
-            throw new IllegalStateException("구현은 있는데 순서 목록에 없는 대조군이 있다 — 열이 조용히 빠진다: "
-                    + baselines.keySet() + " vs " + BASELINE_ORDER);
-        }
-
-        return all;
+    EngineConfigSnapshot engineConfig() {
+        return columns.engineConfig();
     }
 
-    /**
-     * 엔진 쪽 변종 열 전부 — {@link #ENGINE_VARIANT_ORDER} 순서. 자원전용 두 변종은 기본 엔진에 정책만 갈아 끼운 것이다 —
-     * 가중치를 안 봐도 제약이 막아 주는지, 제약까지 없으면 얼마나 나빠지는지를 갈라 본다.
-     *
-     * <p>순서 목록과 구현 맵의 집합이 같아야 한다 — 대조군 쪽 가드와 같은 이유로, 한쪽에만 있는 id 는 여기서 크게 실패한다.</p>
-     */
-    private List<EngineVariant> engineVariants() {
-        SchedulingEngine weighted = engineRegistry.resolve(EngineRegistry.DEFAULT_ENGINE_ID);
-        Map<String, EngineVariant> variants = new LinkedHashMap<>();
-        variants.put("resource-only-gated", new EngineVariant(new PlacementStrategy("resource-only-gated", "자원전용(전력·온도 제약 유지)",
-                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_GATED, null, weighted::schedule),
-                Map.of(), powerModel));
-        variants.put("resource-only-ungated", new EngineVariant(new PlacementStrategy("resource-only-ungated", "자원전용(제약까지 해제)",
-                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED, null, weighted::schedule),
-                Map.of(), powerModel));
-        // 링크 게이트를 켠 가중 점수 — 링크 판에서 weighted 와의 차이가 netScore 경로의 효과다. 링크 없는 판에서는 워크로드에
-        // dataMdcId 가 없어 게이트가 켜지지 않으므로 weighted 와 같은 값이다(구조적 사실 — 테스트가 고정한다)
-        variants.put(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
-                "가중 점수(링크 게이트 on · 링크 판에서만 weighted 와 다르다 · 판정 자격 없음)",
-                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),
-                Map.of("affinityEnabled", "true"), powerModel));
-
-        // 한계 전력 눈금 민감도 3열 — 전력 엔진에 눈금만 다른 전력 모델을 물린다. 믿은 비용도 그 모델로 잰다
-        for (double scale : BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS) {
-            String id = BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + (long) scale;
-            String meaning = scale <= 0 ? "정격 분모 · 구 방식 · 독립 증거 아님"
-                    : scale < BenchmarkRules.MAX_REAL_MARGINAL_WATTS_AT_JUDGMENT ? "포화 발현 · 판정 자격 없음" : "무포화 · 판정 자격 없음";
-            variants.put(id, powerVariant(id, "전력 인지(한계 전력 눈금 " + (long) scale + "W · " + meaning + ")",
-                    Map.of("marginalScaleWatts", String.valueOf(scale)), p -> p.setMarginalScaleWatts(scale)));
-        }
-        // 역산 차단 열 — 같은 판·같은 지점에서 역산 유무만 갈린 짝 비교
-        variants.put(BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN, powerVariant(BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN,
-                "전력 인지(유휴 역산 차단 · 대체값 고정 · 독립 증거 아님)",
-                Map.of("idleFromMeasurement", "false"), p -> p.setIdleFromMeasurement(false)));
-
-        if (!variants.keySet().equals(Set.copyOf(ENGINE_VARIANT_ORDER))) {
-            throw new IllegalStateException("엔진 변종 순서 목록과 구현이 다르다 — 열이 조용히 빠진다: "
-                    + variants.keySet() + " vs " + ENGINE_VARIANT_ORDER);
-        }
-        List<EngineVariant> ordered = new ArrayList<>(ENGINE_VARIANT_ORDER.size());
-        for (String id : ENGINE_VARIANT_ORDER) {
-            EngineVariant v = variants.get(id);
-            if (!id.equals(v.strategy().id())) throw new IllegalStateException("엔진 변종 맵의 키와 전략 id 가 다르다: " + id + " ≠ " + v.strategy().id());
-            ordered.add(v);
-        }
-        return ordered;
+    /** 클러스터 파일의 노드를 한 시각의 노드 스냅샷으로 — 정의는 {@link BenchmarkPointRunner#nodesAt}. 같은 패키지의 테스트가 이 이름으로 부른다. */
+    static List<NodeResource> nodesAt(SyntheticCluster cluster, long t) {
+        return BenchmarkPointRunner.nodesAt(cluster, t);
     }
 
-    /**
-     * 전력 엔진 변종 열 — 기본 설정 사본에 전력 노브 하나를 바꾼 {@link PowerAwareScheduler} 를 새로 조립한다. 열 모델은 온도 모델·
-     * 네트워크 모델을 운영 것과 같은 설정으로 만들고 전력 모델만 갈아 끼운다. 스프링 컨텍스트에 등록되지 않는 객체다.
-     */
-    private EngineVariant powerVariant(String id, String label, Map<String, String> override,
-                                       java.util.function.Consumer<SchedulerProperties.Power> tweak) {
-        SchedulerProperties tuned = BenchmarkEngineConfigs.withPower(properties, tweak);
-        PowerModel model = new PowerModel(tuned);
-        PowerAwareScheduler engine = new PowerAwareScheduler(model, thermalModel, new NetworkModel(tuned), tuned);
-        return new EngineVariant(new PlacementStrategy(id, label, PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE,
-                null, engine::schedule), override, model);
+    /** 열 때문에 후보가 막힌 횟수 — 정의는 {@link BenchmarkPointRunner#countThermalExclusions}. 테스트가 이 이름으로 부른다. */
+    static int countThermalExclusions(SchedulingResult result) {
+        return BenchmarkPointRunner.countThermalExclusions(result);
     }
 
-    /** 열별 노브 override — 전략 id → (노브 이름 → 값). 기본 설정 그대로인 열은 없다. */
-    private Map<String, Map<String, String>> overrides() {
-        Map<String, Map<String, String>> out = new LinkedHashMap<>();
-        for (EngineVariant v : engineVariants()) if (!v.override().isEmpty()) out.put(v.strategy().id(), v.override());
-        return out;
-    }
-
-    /**
-     * 표본 워크로드에 판이 선언한 데이터 MDC 를 <b>순환 배정</b>한다 — 표본 순서가 결정적이라 배정도 결정적이고, 전략 실행 전에 끝나
-     * 전 열이 같은 목록을 본다. 절이 없는 판은 아무것도 하지 않는다(기존 판의 게이트는 꺼진 채다). {@code sample()} 이 호출마다 새
-     * 객체를 만들므로 공유 인스턴스가 오염될 길은 없다.
-     */
+    /** 데이터 MDC 순환 배정 — 정의는 {@link BenchmarkPointRunner#assignDataMdc}. 테스트가 이 이름으로 부른다. */
     static void assignDataMdc(List<Workload> sampled, SyntheticCluster cluster) {
-        List<String> ids = cluster.workloadDataMdcIds();
-        if (ids.isEmpty()) return;
-        for (int i = 0; i < sampled.size(); i++) sampled.get(i).setDataMdcId(ids.get(i % ids.size()));
+        BenchmarkPointRunner.assignDataMdc(sampled, cluster);
     }
 
-    /**
-     * 요구 대역폭 순환 배정 — 목록의 {@code 0} 은 요구 없음이라 null 로 둔다(그 워크로드는 부족분 항이 꺼진다).
-     *
-     * <p>{@code assignDataMdc} 와 같은 자리에서 같은 표본 순서로 돌린다. 표본은 {@code sample()} 이 판마다 새로 만든
-     * 객체라 공유 인스턴스를 오염시키지 않고, 전 열이 같은 목록을 본다.</p>
-     */
+    /** 요구 대역폭 순환 배정 — 정의는 {@link BenchmarkPointRunner#assignRequiredBandwidth}. 테스트가 이 이름으로 부른다. */
     static void assignRequiredBandwidth(List<Workload> sampled, SyntheticCluster cluster) {
-        List<Double> values = cluster.workloadBandwidthMbps();
-        if (values.isEmpty()) return;
-        for (int i = 0; i < sampled.size(); i++) {
-            double v = values.get(i % values.size());
-            sampled.get(i).setRequiredBandwidthMbps(v > 0 ? v : null);
-        }
+        BenchmarkPointRunner.assignRequiredBandwidth(sampled, cluster);
+    }
+
+    /** 지점별 값 — 정의는 {@link BenchmarkCellAssembler#pointSeries}. 같은 패키지의 테스트가 이 이름으로 부른다. */
+    static List<Double> pointSeries(List<Double> raw, int sweepPoints) {
+        return BenchmarkCellAssembler.pointSeries(raw, sweepPoints);
     }
 
     /** 배정 규칙을 응답 전제로 밝힌다. */
@@ -1163,195 +414,4 @@ public class PlacementBenchmarkService {
                 : "표본 순서대로 " + values + " 순환 배정(0 은 요구 없음) — 링크 대역폭에 못 미치는 만큼만 링크 점수를 깎는다";
     }
 
-    /**
-     * 이 전략이 볼 정책 — 변종 사본에 열 override 를 얹는다. 지금 정책 노브 override 는 {@code affinityEnabled} 하나다.
-     * 어떤 경우에도 <b>영속되지 않는 사본</b>이다.
-     */
-    private static SchedulingPolicy policyFor(PlacementStrategy strategy, Map<String, String> override) {
-        SchedulingPolicy policy = policyFor(strategy.policy());
-        if ("true".equals(override.get("affinityEnabled"))) {
-            policy = policy.detachedCopy();
-            policy.setAffinityEnabled(true);
-        }
-        return policy;
-    }
-
-    /** 변종 하나의 정책 사본. 설정 스냅샷도 이 메서드로 만든다 — 응답이 밝히는 정책과 돌린 정책이 갈리지 않게. */
-    private static SchedulingPolicy policyFor(PlacementStrategy.PolicyVariant variant) {
-        SchedulingPolicy base = baseline();
-        return switch (variant) {
-            case BASE -> base;
-            case RESOURCE_ONLY_GATED -> BenchmarkPolicies.resourceOnly(base, true);
-            case RESOURCE_ONLY_UNGATED -> BenchmarkPolicies.resourceOnly(base, false);
-        };
-    }
-
-    /**
-     * 이 실행이 본 엔진 설정과 정책 사본 전량.
-     *
-     * <p>정책은 전략이 실제로 쓰는 {@link #policyFor(PlacementStrategy.PolicyVariant)} 로 만든다 — 스냅샷을 따로
-     * 조립하면 언젠가 두 벌이 갈려 응답이 밝히는 정책과 돌린 정책이 달라진다. 다이제스트의 정규화 문자열은
-     * record 의 {@code toString} 이 아니라 <b>명시적 이름=값 목록</b>이다 — 필드 순서를 바꾸는 리팩터링에
-     * 어제 낸 표와 오늘 낸 표가 "다른 설정"으로 보이면 안 된다.</p>
-     */
-    EngineConfigSnapshot engineConfig() {   // 패키지 공개 — 다이제스트 테스트가 판을 계산하지 않고 스냅샷만 읽는다
-        SchedulerProperties.Power p = properties.getPower();
-        SchedulerProperties.Thermal t = properties.getThermal();
-        SchedulerProperties.Network nw = properties.getNetwork();
-
-        List<String> engineIds = engineRegistry.describe().stream().map(m -> m.get("id")).sorted().toList();
-        PowerKnobs power = new PowerKnobs(p.getIdleRatio(), p.getActiveCpuPercent(),
-                BenchmarkRules.POWERED_ON_CPU_PERCENT, p.getCurveAlpha(), p.getPeiWeight(),
-                p.getWasteWeight(), p.getMarginalWeight(), p.getPeiNormalizer(),
-                p.getResourceShare(), p.getDefaultCapacityWatts(),
-                p.getCapacityByNode() == null ? Map.of() : new TreeMap<>(p.getCapacityByNode()),
-                p.isIdleFromMeasurement(), p.getMarginalScaleWatts());
-        ThermalKnobs thermal = new ThermalKnobs(t.getInertiaK(), t.getDefaultWarningCelsius(),
-                t.getCooldownMinutes(), BenchmarkRules.COOLDOWN_MINUTES_FOR_BENCHMARK);
-        NetworkKnobs network = new NetworkKnobs(nw.getLatencyScaleMs(), nw.getDegradedPenalty(), nw.getLinkWeight(), nw.getUnknownLinkScore());
-
-        List<PolicySnapshot> policies = new ArrayList<>();
-        List<String> canonical = new ArrayList<>();
-        canonical.add("engines=" + engineIds);
-        canonical.add("idleRatio=" + power.idleRatio());
-        canonical.add("activeCpuPercent=" + power.activeCpuPercent());
-        canonical.add("poweredOn=" + power.benchmarkPoweredOnCpuPercent());
-        canonical.add("curveAlpha=" + power.curveAlpha());
-        canonical.add("peiWeight=" + power.peiWeight());
-        canonical.add("wasteWeight=" + power.wasteWeight());
-        canonical.add("marginalWeight=" + power.marginalWeight());
-        canonical.add("peiNormalizer=" + power.peiNormalizer());
-        canonical.add("resourceShare=" + power.resourceShare());
-        canonical.add("defaultCapacityWatts=" + power.defaultCapacityWatts());
-        canonical.add("capacityByNode=" + new TreeMap<>(power.capacityByNode()));
-        // 모델 형태 노브 — 값이 아니라 식이 바뀌는 자리라, 빠뜨리면 어제 표와 오늘 표가 같은 설정으로 보인다
-        canonical.add("idleFromMeasurement=" + power.idleFromMeasurement());
-        canonical.add("marginalScaleWatts=" + power.marginalScaleWatts());
-        canonical.add("inertiaK=" + thermal.inertiaK());
-        canonical.add("defaultWarningCelsius=" + thermal.defaultWarningCelsius());
-        canonical.add("cooldownMinutes=" + thermal.cooldownMinutes());
-        canonical.add("benchmarkCooldown=" + thermal.benchmarkCooldownMinutes());
-        // 네트워크 노브 — 링크를 선언한 판에서 결과에 반영된다. 없으면 같은 다이제스트로 다른 표가 나올 수 있다
-        canonical.add("network=" + network.latencyScaleMs() + "," + network.degradedPenalty() + ","
-                + network.linkWeight() + "," + network.unknownLinkScore());
-        // 열별 override — 전략 id 오름차순, 노브는 이름 오름차순(TreeMap). 열마다 다른 노브를 쓰면서 다이제스트가 고정되면
-        // "응답이 자기 입력을 지목한다" 가 거짓이 된다
-        List<String> overrideSegments = new ArrayList<>();
-        overrides().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
-            List<String> kv = new ArrayList<>();
-            new TreeMap<>(e.getValue()).forEach((k, v) -> kv.add(k + "=" + v));
-            overrideSegments.add(e.getKey() + ":" + String.join(",", kv));
-        });
-        canonical.add("overrides=" + String.join(";", overrideSegments));
-        for (PlacementStrategy.PolicyVariant variant : PlacementStrategy.PolicyVariant.values()) {
-            SchedulingPolicy policy = policyFor(variant);
-            PolicySnapshot snap = new PolicySnapshot(variant.name(),
-                    policy.getCpuWeight(), policy.getMemoryWeight(), policy.getPowerWeight(),
-                    policy.getTemperatureWeight(), policy.getNetworkWeight(),
-                    policy.getMaxCpuUsagePercent(), policy.getMaxMemoryUsagePercent(),
-                    policy.getMaxTemperatureCelsius(), policy.getMaxPowerUsagePercent(),
-                    policy.getWarningTemperatureCelsius(),
-                    policy.isPowerAwareEnabled(), policy.isTemperatureAwareEnabled(), policy.isAffinityEnabled());
-            policies.add(snap);
-            canonical.add(variant.name() + "=" + snap.cpuWeight() + "," + snap.memoryWeight() + ","
-                    + snap.powerWeight() + "," + snap.temperatureWeight() + "," + snap.networkWeight() + ","
-                    + snap.maxCpuUsagePercent() + "," + snap.maxMemoryUsagePercent() + ","
-                    + snap.maxTemperatureCelsius() + "," + snap.maxPowerUsagePercent() + ","
-                    + snap.warningTemperatureCelsius() + "," + snap.powerAwareEnabled() + ","
-                    + snap.temperatureAwareEnabled() + "," + snap.affinityEnabled());
-        }
-
-        return new EngineConfigSnapshot(BenchmarkClusters.digestOf(String.join("|", canonical)),
-                engineIds, power, thermal, network, policies);
-    }
-
-    /**
-     * 비교의 기준 정책 — 코드에 선언된 기본값.
-     *
-     * <p>활성 정책을 읽지 않는다. 조회 경로가 정책이 없으면 기본 정책을 <b>새로 넣기</b> 때문에 진단
-     * 호출이 데이터를 만들게 된다. 그 사실은 응답의 {@code policyBasis} 가 밝힌다.</p>
-     */
-    private static SchedulingPolicy baseline() {
-        return new SchedulingPolicy("benchmark-base", "배치 비교용 기준 정책 (저장되지 않음)");
-    }
-
-    // ── 판 만들기 ────────────────────────────────────────────
-
-    /**
-     * 클러스터 파일의 노드를 한 시각의 {@link NodeResource} 로 만든다.
-     *
-     * <p>{@code private} 이 아닌 이유는 {@link #sweepPoints} 와 같다 — 같은 패키지의 테스트가 이 스냅샷의
-     * 전력이 오라클의 같은 시각 값과 같은지를 본다. 테스트가 사본을 두면 두 세계가 갈라져도 초록불이 된다.</p>
-     *
-     * <p><b>정격 전력은 계측 여부와 무관하게 싣는다.</b> 운영에서도 정격은 원장에서 오고 IPMI 와 별개다 —
-     * 계측이 없는 노드는 "지금 몇 W 인지"를 모르는 것이고 "몇 W 까지 쓸 수 있는지"를 모르는 게 아니다.
-     * 이 구분이 계측 공백판의 뜻이다.</p>
-     */
-    static List<NodeResource> nodesAt(SyntheticCluster cluster, long t) {
-        List<NodeResource> nodes = new ArrayList<>(cluster.nodes().size());
-        for (SyntheticCluster.Node n : cluster.nodes()) {
-            NodeResource node = new NodeResource(n.mdcId(), n.nodeId(), n.cores(), n.memoryMb(), n.gpus(),
-                    cluster.cpuUsage(n, t), cluster.memoryUsage(n, t), cluster.diskUsage(n, t),
-                    n.ipmi() ? cluster.powerWatts(n, t) : 0,
-                    n.believedCapacityWatts(),   // 판 경로에서는 파일이 원장이다 — 엔진이 믿는 정격은 생성식 정격과 다를 수 있다
-                    n.ipmi() ? cluster.temperature(n, t) : 0,
-                    cluster.networkRx(n, t), cluster.networkTx(n, t))
-                    .withDiskCapacityGb((long) n.diskTotalGb());
-            node.setPowerSource(n.ipmi() ? PowerSource.IPMI : PowerSource.NONE);
-            nodes.add(node);
-        }
-        return nodes;
-    }
-
-    private static Set<String> unmeasuredNodeIds(SyntheticCluster cluster) {
-        Set<String> ids = new HashSet<>();
-        for (SyntheticCluster.Node n : cluster.nodes()) {
-            if (!n.ipmi()) ids.add(n.nodeId());
-        }
-        return ids;
-    }
-
-    /**
-     * 부하율의 분모 — 총 코어가 아니라 <b>정책 상한까지의 여유</b>다.
-     *
-     * <p>{@link BenchmarkRules#HEADROOM_DEFINITION} 을 그대로 계산한다. 노드마다 구속 자원이 달라
-     * (어떤 노드는 메모리가, 어떤 노드는 CPU 가 먼저 막힌다) 두 축의 최솟값을 쓴다. 총 코어를 쓰면
-     * 90% 부하율이 실제로는 수용 불가가 되어 성공률이 전 전략에서 함께 무너지고, 그러면 부하율 축이
-     * 전략을 구분하지 못한다.</p>
-     */
-    private static double headroomCores(List<NodeResource> nodes, SchedulingPolicy policy) {
-        double total = 0;
-        for (NodeResource node : nodes) {
-            double byCpu = node.getTotalCpu()
-                    * (policy.getMaxCpuUsagePercent() - node.effectiveCpuUsagePercent()) / 100.0;
-            double byMemory = node.getTotalMemoryMb()
-                    * (policy.getMaxMemoryUsagePercent() - node.effectiveMemoryUsagePercent()) / 100.0
-                    / BenchmarkRules.MEMORY_MB_PER_CORE;
-            total += Math.max(0, Math.min(byCpu, byMemory));
-        }
-        return total;
-    }
-
-    // ── 숫자 다루기 ──────────────────────────────────────────
-
-    private static void add(Map<String, List<Double>> into, String key, Double value) {
-        into.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
-    }
-
-    /** 중앙값. 빈 목록이면 null. */
-    private static Double median(List<Double> values) {
-        List<Double> sorted = values.stream().filter(Objects::nonNull).sorted().toList();
-        if (sorted.isEmpty()) return null;
-        int mid = sorted.size() / 2;
-        double m = sorted.size() % 2 == 1
-                ? sorted.get(mid)
-                : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
-        return round(m);
-    }
-
-    /** NaN·무한대는 <b>0 이 아니라 null</b> 로 낸다 — 0 은 "가장 좋은 값"으로 읽힌다. */
-    private static Double round(double value) {
-        if (!Double.isFinite(value)) return null;
-        return Math.round(value * 10000.0) / 10000.0;
-    }
 }

@@ -208,14 +208,14 @@ final class BenchmarkCellAssembler {
             List<Double> series = raw.stream().filter(Objects::nonNull).toList();
             // 지점별 값은 지점 대조가 필요한 지표만 싣는다. 필터 전 리스트라 인덱스가 시각 지점이고,
             // 짝이 아닌 지점은 null 로 남는다.
-            List<Double> pointValues = BenchmarkRules.GAP_VS_PABFD.equals(metric.key())
+            BenchmarkMetricKind kind = BenchmarkMetricKind.of(metric.key());
+            List<Double> pointValues = kind == BenchmarkMetricKind.GAP
                     ? pointSeries(raw, points.size()) : null;
 
             String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere,
                     baselinePresent, !series.isEmpty());
             if (series.isEmpty()) {
-                boolean totals = BenchmarkRules.GENERATOR_POWER.equals(metric.key()) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(metric.key())
-                        || BenchmarkRules.WARN_ZONE_NODES.equals(metric.key()) || BenchmarkRules.TEMP_STDDEV.equals(metric.key());
+                boolean totals = kind.pairedPointsOnly();
                 if (invalid == null && totals && droppedPoints > 0 && droppedPoints == usablePoints) {
                     invalid = "기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + droppedPoints + "곳)";
                 }
@@ -272,8 +272,8 @@ final class BenchmarkCellAssembler {
     static String invalidReason(BenchmarkMetric metric, Placement any,
                                         int usablePoints, int measuredNodes, boolean placedAnywhere,
                                         boolean baselinePresent, boolean paired) {
-        String key = metric.key();
-        if (BenchmarkRules.GAP_VS_PABFD.equals(key)) {
+        BenchmarkMetricKind kind = BenchmarkMetricKind.of(metric.key());
+        if (kind == BenchmarkMetricKind.GAP) {
             // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0 이나 빈 값을 내면 "격차가
             // 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
             if (!baselinePresent) {
@@ -288,29 +288,29 @@ final class BenchmarkCellAssembler {
                 return "기준 전략과 배치 건수가 같은 시각 지점이 없다";
             }
         }
-        if ((BenchmarkRules.GENERATOR_POWER.equals(key) || BenchmarkRules.ACTIVE_NODE_DELTA.equals(key))
+        if (kind == BenchmarkMetricKind.PAIRED_TOTAL
                 && usablePoints == 0) {
             return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치하고 전력을 덜 쓰는 것은 승리가 아니다";
         }
-        if ((BenchmarkRules.TEMP_STDDEV.equals(key) || BenchmarkRules.WARN_ZONE_NODES.equals(key))
+        if (kind == BenchmarkMetricKind.PAIRED_THERMAL
                 && usablePoints == 0) {
             return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 "
                     + "열 성능이 아니다";
         }
-        if (BenchmarkRules.PER_WORKLOAD_POWER.equals(key) && !placedAnywhere) {
+        if (kind == BenchmarkMetricKind.PER_WORKLOAD && !placedAnywhere) {
             return "전 시각 지점에서 배치 0건이라 건당 값을 낼 수 없다";
         }
-        if (BenchmarkRules.C3_INTERVENTIONS.equals(key) && !any.temperatureGated()) {
+        if (kind == BenchmarkMetricKind.THERMAL_INTERVENTIONS && !any.temperatureGated()) {
             return "이 전략은 온도 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
         }
         // 제약을 끈 변종은 막히는 자리가 없어 성공률이 정의상 최고가 된다. 개입 횟수(위)에만 가드를 걸고
         // 성공률에 안 걸면, 반칙으로 나빠 보이는 칸만 가리고 반칙으로 좋아 보이는 칸은 그대로 두는 셈이다.
         // 온도·전력 게이트를 따로 본다 — 둘 중 하나만 끈 변종이 생기면 온도 플래그 하나로는 못 걸러진다.
-        if (BenchmarkRules.PLACEMENT_RATE.equals(key) && !(any.temperatureGated() && any.powerGated())) {
+        if (kind == BenchmarkMetricKind.PLACEMENT_RATE && !(any.temperatureGated() && any.powerGated())) {
             return "이 전략은 온도·전력 제약이 꺼져 있어 막히는 자리가 없다 — 제약을 받는 전략과 성공률을 "
                     + "비교하지 않는다. 이 열은 경쟁자가 아니라 '제약이 없었다면 얼마나 배치됐을까'의 천장이다";
         }
-        if ((BenchmarkRules.TEMP_STDDEV.equals(key) || BenchmarkRules.WARN_ZONE_NODES.equals(key))
+        if (kind == BenchmarkMetricKind.PAIRED_THERMAL
                 && measuredNodes < 2) {
             return "계측 노드가 둘 미만이라 온도 분포를 말할 수 없다";
         }

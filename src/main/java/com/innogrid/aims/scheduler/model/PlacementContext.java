@@ -134,6 +134,19 @@ public class PlacementContext {
         return new PlacementContext(nodes, policy, ConstraintEvaluator.withDefaults());
     }
 
+    /**
+     * 노드만 바꾼 새 컨텍스트 — 통합 권고가 노드 하나를 비워 보는 계산에 쓴다. this 는 바꾸지 않는다({@code with*} 와 다르다).
+     *
+     * <p>판정 입력(정책 · 링크 · MDC 예산 · 실행 단위 전력 예산 · 평가기의 설정과 냉각 대기 상태)을 그대로 잇고,
+     * 평가기는 냉각 대기를 새로 걸지 않는 사본이다. 수집 제외 목록은 진단 문구용이라 잇지 않는다.</p>
+     */
+    public PlacementContext sandbox(List<NodeResource> nodes) {
+        return new PlacementContext(nodes, policy, evaluator.copyWithoutCooldownMarking())
+                .withLinkMatrix(linkMatrix)
+                .withMdcBudgets(mdcBudgets)
+                .withPowerBudget(powerBudgetWatts);
+    }
+
     public List<NodeResource> nodes() {
         return nodes;
     }

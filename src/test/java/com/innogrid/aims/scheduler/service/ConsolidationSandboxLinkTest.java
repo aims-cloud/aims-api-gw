@@ -42,7 +42,7 @@ class ConsolidationSandboxLinkTest {
         LinkMatrix links = LinkMatrix.of(List.of(new MdcLink("mdc-01", "mdc-02", 20)));
         PlacementContext base = PlacementContext.of(List.of(n1, n2), policy).withLinkMatrix(links);
 
-        PlacementContext sandbox = service.sandboxWithout(n1, base.nodes(), policy, base.linkMatrix());
+        PlacementContext sandbox = service.sandboxWithout(n1, base);
 
         assertSame(links, sandbox.linkMatrix(), "실제 배치와 같은 링크 스냅샷");
         assertEquals(List.of("n2"), sandbox.nodes().stream().map(NodeResource::getNodeId).toList());
@@ -55,7 +55,7 @@ class ConsolidationSandboxLinkTest {
         NodeResource n1 = node("n1");
         SchedulingPolicy policy = new SchedulingPolicy("p", "d");
 
-        PlacementContext sandbox = service.sandboxWithout(n1, List.of(n1, node("n2")), policy, LinkMatrix.EMPTY);
+        PlacementContext sandbox = service.sandboxWithout(n1, PlacementContext.of(List.of(n1, node("n2")), policy));
 
         assertSame(LinkMatrix.EMPTY, sandbox.linkMatrix());
         assertTrue(sandbox.nodes().stream().noneMatch(n -> n.getNodeId().equals("n1")));

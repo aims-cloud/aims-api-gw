@@ -102,8 +102,27 @@ class ConstraintEvaluatorCooldownTest {
         assertEquals(props.getThermal().getCooldownMinutes(), evaluator.remainingCooldownMinutes(N));
     }
 
+    @DisplayName("냉각 대기를 걸지 않는 평가기는 걸린 냉각 대기에 노드를 빼지만 새로 걸지 않는다")
+    @Test
+    void copy_without_cooldown_marking_blocks_but_marks_none() {
+        ConstraintEvaluator copy = evaluator.copyWithoutCooldownMarking();
+
+        assertEquals(ExclusionReason.TEMPERATURE_EXCEEDED, evaluate(copy, node(80), policy(75)).reason());
+        assertFalse(thermal.isCoolingDown(N), "사본은 온도 상한을 넘은 노드를 그 평가에서만 뺀다");
+
+        assertEquals(ExclusionReason.TEMPERATURE_EXCEEDED, evaluate(node(80), policy(75)).reason());
+        assertTrue(thermal.isCoolingDown(N), "원래 평가기는 그대로 냉각 대기를 건다");
+
+        assertEquals("냉각 대기 중 (10분 남음)", evaluate(copy, node(60), policy(75)).message(), "사본도 걸린 대기는 본다");
+        assertNull(evaluate(copy, node(60), policy(80)), "75℃ 상한의 대기는 80℃ 상한 평가를 막지 않는다");
+    }
+
     private Exclusion evaluate(NodeResource node, SchedulingPolicy policy) {
-        return evaluator.exclusion(workload, node, PlacementContext.of(List.of(node), policy));
+        return evaluate(evaluator, node, policy);
+    }
+
+    private Exclusion evaluate(ConstraintEvaluator by, NodeResource node, SchedulingPolicy policy) {
+        return by.exclusion(workload, node, PlacementContext.of(List.of(node), policy));
     }
 
     private static NodeResource node(double temperature) {

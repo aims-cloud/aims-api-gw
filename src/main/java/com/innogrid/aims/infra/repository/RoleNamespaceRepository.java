@@ -2,6 +2,7 @@ package com.innogrid.aims.infra.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import com.innogrid.aims.infra.entity.RoleNamespace;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -17,4 +18,6 @@ public interface RoleNamespaceRepository extends JpaRepository<RoleNamespace, Lo
     List<RoleNamespace> findByRole_Id(Long roleId);
 
     boolean existsByRole_IdAndNsId(Long roleId, String nsId);
+
+    Optional<RoleNamespace> findByRole_IdAndNsId(Long roleId, String nsId);
 }

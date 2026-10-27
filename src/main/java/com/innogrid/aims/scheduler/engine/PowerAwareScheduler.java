@@ -103,7 +103,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
 
     @Override
     protected PowerRun newRun(Workload workload, PlacementContext context) {
-        // 평균은 판정 대상 문장(BenchmarkRules.JUDGMENT_TARGET)대로 후보 전체(제외 판정·미계측 노드 포함)로 낸다.
+        // 평균은 판정 회차 4 지목(BenchmarkRules.GAP_JUDGMENT_RULE 의 소비된 회차 목록)대로 후보 전체(제외 판정·미계측 노드 포함)로 낸다.
         // 제외 판정은 여기서 부르지 않는다 — 냉각 기록을 남기므로 다시 부르면 호출 횟수가 바뀌어 결과가 달라진다(AbstractScoringEngine)
         return new PowerRun(PowerModel.meanPositiveCores(context.nodes()));
     }

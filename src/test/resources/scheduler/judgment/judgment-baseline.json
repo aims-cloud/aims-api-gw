@@ -1,7 +1,7 @@
 {
   "schemaVersion" : 3,
   "provenance" : {
-    "gitHead" : "616ea09c32f469bc2e0a69939f4ce3c7e363babf (refs/heads/rules/judgment-target-retire-round3)",
+    "gitHead" : "b6da0771ffc1e7da77d2da646fbb5c8d27d0b904 (refs/heads/rules/judgment-target-pei-per-core)",
     "productionPath" : "저장소 시험 · 코드 기본 SchedulerProperties · compareFresh(캐시 우회) — 배포 env 의 덮어쓰기는 반영하지 않는다",
     "distribution" : "heavytail",
     "boardDigests" : {
@@ -21,10 +21,10 @@
     "ruleAxisDigests" : {
       "banned" : "e621e7f43e72",
       "boards" : "9ab95b89dc3e",
-      "judgment" : "3bd73f1c4650",
+      "judgment" : "d9229f7925fd",
       "measured" : "0189eec53480",
       "metrics" : "0435607b4998",
-      "prose" : "75a82028ba09",
+      "prose" : "6ceae632b3b6",
       "sensitivity" : "3741559c00dd",
       "sweep" : "559301d27583"
     },

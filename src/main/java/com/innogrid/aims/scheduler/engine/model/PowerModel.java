@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.engine.model;
 
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -54,18 +56,60 @@ public class PowerModel {
      * {@code PowerOptimizationService})는 "지금 이 노드가 어떤가" 를 보이는 자리라 실측 {@code normalizedPei} 를 그대로 쓴다 —
      * {@link #headroomScore} 와 {@link #effectiveHeadroomPercent} 의 분업과 같다.</p>
      *
-     * <p>예약이 0 이면 {@code u_eff = u}, {@code P_eff = P} 라 값이 비트 단위로 같다. 예약 비율 r 이 있으면
+     * <p><b>코어 비율을 분자에 곱한다.</b> 사용률은 코어 수를 보지 않아, 같은 사용률·같은 W 면 8코어와 64코어가 같은 PEI 를 받았다
+     * (판정 회차 4 지목). 그래서 실효 사용률에 (그 노드 코어 수 ÷ 그 배치 호출 후보 중 코어 수가 0 보다 큰 노드의 평균 코어 수) 비율을
+     * 먼저 계산해 곱한다. 평균을 내는 후보는 그 호출의 후보 전체다 — 제외 판정을 받은 노드와 전력을 계측하지 못한 노드도 센다.
+     * 코어 수가 0 이하인 노드는 비율 1 이다. 새 노브는 없고 정규화 상수도 그대로다. 진단 {@link #normalizedPei} 에는 이 비율이 없어,
+     * 코어 수가 섞인 후보에서는 같은 노드의 두 PEI 값이 갈린다.</p>
+     *
+     * <p>예약이 0 이고 코어 비율이 1(후보가 하나이거나 코어 수가 모두 같음)이면 {@code u_eff = u}, {@code P_eff = P},
+     * {@code u × 1.0 = u} 라 {@link #normalizedPei} 와 값이 비트 단위로 같다. 예약 비율 r 이 있으면
      * {@code (u + 100r) / (P + D·r)} (D = 정격 − 유휴) 이고, 이 값이 실측 {@code u/P} 보다 큰 조건은 {@code 100·P > u·D} 다 —
      * 등록된 판정 자격 두 판의 노드는 전부 이 조건을 만족해 예약이 쌓일수록 PEI 가 오른다(판 파일 값으로 계산, 하락·포화 노드 없음 —
-     * 두 판의 생성식처럼 P ≥ P_idle + D·u/100 이면 대수적으로 항상 성립). 조건이 깨지는 노드는 이상 곡선 아래로 쓰는 노드고 거기서는 내려간다.</p>
+     * 두 판의 생성식처럼 P ≥ P_idle + D·u/100 이면 대수적으로 항상 성립). 조건이 깨지는 노드는 이상 곡선 아래로 쓰는 노드고 거기서는 내려간다.
+     * 코어 비율은 호출마다 양의 상수라 오르내림의 방향을 바꾸지 않는다(실효 사용률이 100 에 닿기 전까지 — 그 뒤로는 실효 전력만 늘어 내려간다).
+     * 다만 비율이 1 보다 큰 노드(코어가 평균보다 많은 노드)는 1.0 에 먼저 닿을 수 있어, 두 판에서 1.0 에 닿지 않는다는 것은 판 파일 값 계산이 아니라
+     * {@code PlacementBenchmarkServiceTest} 의 포화 테스트가 확인한다.</p>
      */
-    public double placementPei(NodeResource node) {
+    public double placementPei(NodeResource node, double meanCores) {
         double powerEff = effectivePowerWatts(node);
         // 정격 0 이면 실효 전력이 실측에 머물러(D = 0) 분자만 실효가 되는 기저 혼재라 중립값 — placementWasteScore 와 같은 가드.
         // 엔진은 hasPower(전력·정격 > 0)로 이 경로를 이미 막으므로 직접 호출자(테스트·앞으로의 호출부)를 위한 방어다
         if (node.getPowerCapacityWatts() <= 0 || powerEff <= 0) return 0.5;
-        double efficiency = node.effectiveCpuUsagePercent() / powerEff;
+        // 비율을 먼저 내 분자에만 곱한다 — 비율이 1.0 이면 (u × 1.0) / P = u / P 라 정정 전과 비트 단위로 같다
+        double efficiency = node.effectiveCpuUsagePercent() * coreRatio(node, meanCores) / powerEff;
         return Math.min(1.0, efficiency / effectivePeiNormalizer());
+    }
+
+    /**
+     * 후보가 이 노드 하나일 때의 배치 점수용 PEI — 평균이 자기 코어 수라 비율 1 이다. 배치 엔진은 두 인자 판을 쓴다.
+     * 후보가 여럿인 배치 경로에서 이 판을 부르면 코어 비율이 빠진다.
+     */
+    public double placementPei(NodeResource node) {
+        return placementPei(node, node.getTotalCpu());
+    }
+
+    /**
+     * 배치 점수용 PEI 의 코어 기준 — 후보 중 코어 수가 0 보다 큰 노드의 평균 코어 수. 그런 노드가 없으면 0 이다.
+     * 코어 수가 모두 c 이면 정수 합 ÷ 개수 = (n·c)/n 이라 정확히 c 다.
+     */
+    public static double meanPositiveCores(List<NodeResource> candidates) {
+        long sum = 0;
+        int count = 0;
+        for (NodeResource candidate : candidates) {
+            int cores = candidate.getTotalCpu();
+            if (cores > 0) {
+                sum += cores;
+                count++;
+            }
+        }
+        return count == 0 ? 0.0 : (double) sum / count;
+    }
+
+    /** 코어 비율 — 코어 수가 0 이하이거나 평균이 0 이면 1. 코어 수가 평균과 같으면 c/c = 1.0 이 정확하다. */
+    static double coreRatio(NodeResource node, double meanCores) {
+        int cores = node.getTotalCpu();
+        return cores > 0 && meanCores > 0 ? cores / meanCores : 1.0;
     }
 
     /** 정규화 전 PEI 원값(%/W). 평가 API 에서 그대로 보여준다. */

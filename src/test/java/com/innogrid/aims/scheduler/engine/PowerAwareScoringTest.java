@@ -2,6 +2,8 @@ package com.innogrid.aims.scheduler.engine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -484,6 +487,92 @@ class PowerAwareScoringTest {
         }
     }
 
+    // ── 배치 점수용 PEI 의 코어 비율 ────────────────────────────
+
+    /**
+     * 12·36코어(평균 24) · 사용률 40% · 200W 이면 정정 전 PEI 0.4 에 비율 0.5 · 1.5 를 곱해 상세 PEI 가 0.2 · 0.6 이다.
+     * 비율은 PEI 항에만 곱하므로 비낭비·한계 전력 칸은 그 노드만 후보로 둔 실행과 같다.
+     */
+    @DisplayName("코어 수가 섞인 후보의 상세 PEI 는 코어 비율을 곱한 값이고 비낭비·실질한계전력점수 값은 그대로다")
+    @Test
+    void mixed_core_candidates_scale_only_the_pei_detail_by_the_core_ratio() {
+        SchedulingResult mixed = scheduler.schedule(workload(2),
+                List.of(coreNode("small", 12, 40, 40, 200, 500), coreNode("large", 36, 40, 40, 200, 500)), policy());
+        SchedulingResult smallAlone = scheduler.schedule(workload(2), List.of(coreNode("small", 12, 40, 40, 200, 500)), policy());
+        SchedulingResult largeAlone = scheduler.schedule(workload(2), List.of(coreNode("large", 36, 40, 40, 200, 500)), policy());
+
+        assertEquals(0.2, detail(mixed, "small", "PEI"), 0.0, "0.4 × 12/24");
+        assertEquals(0.6, detail(mixed, "large", "PEI"), 0.0, "0.4 × 36/24");
+        assertEquals(0.4, detail(smallAlone, "small", "PEI"), 0.0, "후보가 하나면 비율 1");
+        assertEquals(0.4, detail(largeAlone, "large", "PEI"), 0.0, "후보가 하나면 비율 1");
+        for (String key : List.of("비낭비", "실질한계전력점수")) {
+            assertEquals(detail(smallAlone, "small", key), detail(mixed, "small", key), 0.0, key + " 는 비율을 곱하지 않는다");
+            assertEquals(detail(largeAlone, "large", key), detail(mixed, "large", key), 0.0, key + " 는 비율을 곱하지 않는다");
+        }
+    }
+
+    /**
+     * 평균을 내는 후보는 그 호출의 후보 전체다 — 메모리가 모자라 제외된 36코어, 전력을 계측하지 못한 4코어, 정격을 모르는 20코어도
+     * 센다. 평균은 (12 + 36 + 4 + 20) / 4 = 18 이고, 적격 후보만 세면 12, 전력 계측 후보만 세면 24 라 상세 PEI 가 달라진다.
+     */
+    @DisplayName("코어 평균은 제외된 노드와 전력 미계측 노드를 포함한 후보 전체로 낸다")
+    @Test
+    void the_core_mean_counts_every_candidate_including_excluded_and_unmeasured_nodes() {
+        PowerModel model = new PowerModel(new SchedulerProperties());
+        NodeResource eligible = coreNode("eligible", 12, 40, 40, 200, 500);
+        List<NodeResource> candidates = List.of(eligible,
+                coreNode("memory-short", 36, 40, 95, 200, 500),              // 메모리 여유 5% = 819MB < 요구 2048MB
+                coreNode("unmeasured", 4, 40, 40, 0, 500),
+                coreNode("unrated", 20, 40, 40, 200, 0));
+        SchedulingResult result = scheduler.schedule(workload(2), candidates, policy());
+
+        Set<String> eligibleIds = result.candidateScores().stream().filter(NodeScore::eligible).map(NodeScore::nodeId)
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("eligible", "unmeasured", "unrated"), eligibleIds, "메모리가 모자란 노드만 제외된다");
+        assertEquals(18.0, PowerModel.meanPositiveCores(candidates), 0.0);
+        assertEquals(round4(model.placementPei(eligible, 18.0)), detail(result, "eligible", "PEI"), 0.0, "0.4 × 12/18");
+        assertNotEquals(round4(model.placementPei(eligible, 12.0)), detail(result, "eligible", "PEI"), "적격 후보만의 평균 12 가 아니다");
+        assertNotEquals(round4(model.placementPei(eligible, 24.0)), detail(result, "eligible", "PEI"), "전력 계측 후보만의 평균 24 가 아니다");
+    }
+
+    /**
+     * 코어 수가 모두 같으면 정정 전과 같다 — 제외된 노드와 예약이 있는 노드를 섞은 12코어 3대에서 각 노드의 상세 PEI 는 한 인자 판과 같고,
+     * 총점은 그 노드만 후보로 둔 실행과 같으며, 선택은 그 총점이 가장 높은 적격 노드다.
+     */
+    @DisplayName("코어 수가 모두 같은 후보에서 상세 PEI·총점·선택은 정정 전과 같다")
+    @Test
+    void homogeneous_candidates_keep_pei_totals_and_selection_unchanged() {
+        PowerModel model = new PowerModel(new SchedulerProperties());
+        List<String> ids = List.of("idle", "short", "busy");
+        SchedulingResult together = scheduler.schedule(workload(2), homogeneousNodes(), policy());
+
+        String expectedWinner = null;
+        double best = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < ids.size(); i++) {
+            NodeResource node = homogeneousNodes().get(i);
+            NodeScore alone = scheduler.schedule(workload(2), List.of(node), policy()).candidateScores().get(0);
+            NodeScore inGroup = together.candidateScores().stream().filter(s -> s.nodeId().equals(node.getNodeId())).findFirst().orElseThrow();
+
+            assertEquals(round4(model.placementPei(node)), inGroup.details().get("PEI"), 0.0, node.getNodeId() + " 상세 PEI = 한 인자 판");
+            assertEquals(alone.totalScore(), inGroup.totalScore(), 0.0, node.getNodeId() + " 총점 = 그 노드만 둔 실행");
+            assertEquals(alone.eligible(), inGroup.eligible(), node.getNodeId() + " 적격 여부");
+            if (alone.eligible() && alone.totalScore() > best) {
+                best = alone.totalScore();
+                expectedWinner = node.getNodeId();
+            }
+        }
+        assertFalse(together.candidateScores().stream().filter(s -> s.nodeId().equals("short")).findFirst().orElseThrow().eligible(),
+                "메모리가 모자란 노드는 제외된다");
+        assertEquals(expectedWinner, together.selectedNodeId());
+    }
+
+    /** 12코어 3대 — 유휴 · 메모리 부족(제외) · 예약 1코어가 잡힌 가동 노드. 부를 때마다 새 객체를 만든다. */
+    private List<NodeResource> homogeneousNodes() {
+        NodeResource busy = coreNode("busy", 12, 50, 40, 300, 500);
+        busy.reserve(1, 0, 0);
+        return List.of(coreNode("idle", 12, 5, 40, 160, 500), coreNode("short", 12, 40, 95, 250, 500), busy);
+    }
+
     // ── 헬퍼 ────────────────────────────────────────────────────
 
     private Double detail(SchedulingResult result, String nodeId, String key) {
@@ -505,5 +594,11 @@ class PowerAwareScoringTest {
                               double power, double temp) {
         return new NodeResource("mdc-01", nodeId, 8, 16384, 0,
                 cpuUsage, memUsage, 40, power, 500, temp, 1_000_000, 500_000);
+    }
+
+    private NodeResource coreNode(String nodeId, int cores, double cpuUsage, double memUsage,
+                                  double power, double capacity) {
+        return new NodeResource("mdc-01", nodeId, cores, 16384, 0,
+                cpuUsage, memUsage, 40, power, capacity, 55, 1_000_000, 500_000);
     }
 }

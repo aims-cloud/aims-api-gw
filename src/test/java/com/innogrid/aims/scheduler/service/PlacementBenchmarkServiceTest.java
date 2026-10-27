@@ -2099,6 +2099,47 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
+     * 판정 자격 두 판에서 배치 점수용 PEI 가 1.0 에 포화하지 않는다 — 포화는 판정 대상이 아니다.
+     *
+     * <p>노드 배치 스코어 PEI 는 코어 비율(그 노드 코어 수 ÷ 후보 평균 코어 수)을 곱하므로 평균보다 코어가 많은 노드가 1.0 에 먼저 닿는다.
+     * 하네스는 판 스냅샷 전체로 컨텍스트를 만들므로 평균은 그 지점의 {@code nodesAt} 전체로 낸다. 예약은 0 부터 코어 전량까지 모두 본다 —
+     * 예약이 쌓일수록 PEI 가 오르다가 실효 사용률이 100 에 잘린 뒤로는 실효 전력만 늘어 내려가므로, 최댓값은 코어 전량 예약이 아닐 수 있다.
+     * 이 범위는 실행에서 실제로 생기는 예약보다 넓어, 통과하면 실제 실행에서도 포화가 없다는 충분조건이다.</p>
+     */
+    @DisplayName("판정 자격 두 판 전 지점·전 계측 노드의 배치용 PEI 는 어떤 예약에서도 1.0 미만이다")
+    @Test
+    void placement_pei_does_not_saturate_on_the_judgment_boards() {
+        PowerModel powerModel = new PowerModel(new SchedulerProperties());
+        BenchmarkClusters clusters = new BenchmarkClusters();
+        double max = 0.0;
+        String where = null;
+        int measured = 0;
+        for (String boardId : List.of(BenchmarkRules.JUDGMENT_BOARD, BenchmarkRules.DIRECTION_CHECK_BOARD)) {
+            SyntheticCluster cluster = clusters.get(boardId);
+            for (long t : PlacementBenchmarkService.sweepPoints(cluster)) {
+                List<NodeResource> snapshot = PlacementBenchmarkService.nodesAt(cluster, t);
+                double meanCores = PowerModel.meanPositiveCores(snapshot);
+                for (NodeResource node : snapshot) {
+                    if (node.getPowerWatts() <= 0 || node.getPowerCapacityWatts() <= 0) continue;   // 엔진의 전력 계측 판정과 같다
+                    measured++;
+                    for (int reserved = 0; reserved <= node.getTotalCpu(); reserved++) {
+                        NodeResource copy = node.snapshot();
+                        copy.reserve(reserved, 0, 0);
+                        double pei = powerModel.placementPei(copy, meanCores);
+                        if (pei > max) {
+                            max = pei;
+                            where = boardId + " " + node.getNodeId() + " 예약 " + reserved + "코어 t=" + t + "s";
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(measured > 0, "판정 자격 판에서 전력 계측 노드를 하나도 읽지 못했다");
+        System.out.println("placement PEI max on judgment boards = " + max + " (" + where + ")");
+        assertTrue(max < 1.0, "배치용 PEI 가 1.0 에 포화했다 — " + max + " (" + where + ")");
+    }
+
+    /**
      * 엔진에게 건네는 노드 스냅샷과 평가자의 오라클이 <b>같은 세계</b>를 본다. 둘이 갈라지면 엔진은 A 세계에서
      * 결정하고 표는 B 세계에서 채점하게 되고, 그 차이가 알고리즘 차이로 읽힌다.
      *

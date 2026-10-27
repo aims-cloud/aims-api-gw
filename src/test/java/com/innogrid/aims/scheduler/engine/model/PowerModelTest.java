@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.engine.model;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -597,8 +598,94 @@ class PowerModelTest {
         assertEquals(200.0, model.realMarginalPower(node, 2), 1e-9);
     }
 
+    // ── 배치 점수용 PEI 의 코어 비율 ────────────────────────────
+
+    /**
+     * 코어 수가 모두 같은 후보에서는 정정 전 식과 비트 단위로 같다. 코어 {3, 12, 48, 49} 를 고른 이유: c = 3·12·48 에서는
+     * {@code (u·c)/c ≠ u} 인 사용률이 있어 곱 순서를 바꾸면 여기서 멈추고, c = 49 는 {@code c × (1/c) ≠ 1} 이라 역수를 곱하면
+     * 여기서 멈춘다. 예약 0 의 기준은 손대지 않는 진단 {@code normalizedPei}, 예약 1 의 기준은 공개 메서드로 다시 적은 정정 전 식이다.
+     * 코어 0 노드는 평균에서 빠지므로 후보에 섞어 둔다.
+     */
+    @DisplayName("코어 수가 모두 같은 후보에서 배치용 PEI 는 정정 전 식과 비트 단위로 같다")
+    @Test
+    void placement_pei_is_bit_identical_to_the_previous_formula_on_homogeneous_candidates() {
+        List<String> mismatches = new ArrayList<>();
+        for (int cores : new int[] {3, 12, 48, 49}) {
+            for (int tenths = 1; tenths <= 999; tenths++) {
+                double usage = tenths / 10.0;
+                for (int reserved = 0; reserved <= 1; reserved++) {
+                    NodeResource target = nodeWithCores(cores, usage, 250, 500);
+                    target.reserve(reserved, 0, 0);
+                    List<NodeResource> candidates = List.of(target, nodeWithCores(cores, 40, 250, 500),
+                            nodeWithCores(cores, 70, 300, 500), nodeWithCores(0, 40, 250, 500));
+                    double expected = reserved == 0
+                            ? model.normalizedPei(target)
+                            : Math.min(1.0, (target.effectiveCpuUsagePercent() / model.effectivePowerWatts(target))
+                                    / model.effectivePeiNormalizer());
+                    double actual = model.placementPei(target, PowerModel.meanPositiveCores(candidates));
+                    if (Double.doubleToRawLongBits(actual) != Double.doubleToRawLongBits(expected)
+                            || Double.doubleToRawLongBits(model.placementPei(target)) != Double.doubleToRawLongBits(expected)) {
+                        mismatches.add(cores + "코어 사용률 " + usage + " 예약 " + reserved + ": " + actual + " ≠ " + expected);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), mismatches.subList(0, Math.min(5, mismatches.size())), "어긋난 점 " + mismatches.size() + "개");
+    }
+
+    /** 코어 8·16·24(평균 16)의 비율은 0.5 · 1 · 1.5 이고, 비율을 곱한 값도 1.0 에서 포화한다. */
+    @DisplayName("코어 수가 섞인 후보의 배치용 PEI 는 실효 사용률에 코어 비율을 곱한 값이고 1.0 에서 포화한다")
+    @Test
+    void placement_pei_multiplies_the_core_ratio_and_still_saturates() {
+        NodeResource small = nodeWithCores(8, 40, 250, 500);
+        NodeResource middle = nodeWithCores(16, 40, 250, 500);
+        NodeResource large = nodeWithCores(24, 40, 250, 500);
+        double mean = PowerModel.meanPositiveCores(List.of(small, middle, large));
+
+        assertEquals(16.0, mean, 0.0);
+        assertEquals(0.5, PowerModel.coreRatio(small, mean), 0.0);
+        assertEquals(1.0, PowerModel.coreRatio(middle, mean), 0.0);
+        assertEquals(1.5, PowerModel.coreRatio(large, mean), 0.0);
+        // 40 / 250 / 0.5 = 0.32 에 비율을 곱한다
+        assertEquals(0.16, model.placementPei(small, mean), 1e-12);
+        assertEquals(0.32, model.placementPei(middle, mean), 1e-12);
+        assertEquals(0.48, model.placementPei(large, mean), 1e-12);
+
+        NodeResource frugalSmall = nodeWithCores(8, 90, 100, 500);    // 90 / 100 / 0.5 = 1.8 → 비율 0.5 를 곱해 0.9
+        NodeResource frugalLarge = nodeWithCores(24, 90, 100, 500);   // 1.8 × 1.5 = 2.7 → 상한 1.0
+        assertEquals(0.9, model.placementPei(frugalSmall, mean), 1e-12);
+        assertEquals(1.0, model.placementPei(frugalLarge, mean), 0.0);
+    }
+
+    /** 코어 수 0 이하 노드는 평균에서 빠지고 비율 1 이다. 모든 후보가 0 이하이면 평균 0 이고 모두 비율 1 이다. */
+    @DisplayName("코어 수가 0 이하인 노드는 평균에서 빠지고 코어 비율이 1 이다")
+    @Test
+    void nodes_without_cores_are_left_out_of_the_mean_and_get_ratio_one() {
+        NodeResource zero = nodeWithCores(0, 40, 250, 500);
+        NodeResource negative = nodeWithCores(-1, 40, 250, 500);
+        NodeResource small = nodeWithCores(8, 40, 250, 500);
+        double mean = PowerModel.meanPositiveCores(List.of(small, nodeWithCores(24, 40, 250, 500), zero, negative));
+
+        assertEquals(16.0, mean, 0.0, "(8 + 24) / 2 — 코어 0 이하 노드는 세지 않는다");
+        assertEquals(1.0, PowerModel.coreRatio(zero, mean), 0.0);
+        assertEquals(1.0, PowerModel.coreRatio(negative, mean), 0.0);
+        assertEquals(model.placementPei(zero), model.placementPei(zero, mean), 0.0, "비율 1 — 정정 전 값");
+        assertEquals(0.32, model.placementPei(zero, mean), 1e-12);
+
+        double none = PowerModel.meanPositiveCores(List.of(zero, negative));
+        assertEquals(0.0, none, 0.0, "코어 수가 0 보다 큰 노드가 없으면 평균 0");
+        assertEquals(0.0, PowerModel.meanPositiveCores(List.of()), 0.0);
+        assertEquals(1.0, PowerModel.coreRatio(small, none), 0.0, "평균 0 이면 비율 1");
+        assertEquals(model.placementPei(small), model.placementPei(small, none), 0.0);
+    }
+
     private NodeResource node(double cpuUsage, double powerWatts, double capacityWatts) {
         return new NodeResource("mdc-01", "node-1", 8, 16384, 0,
+                cpuUsage, 30, 30, powerWatts, capacityWatts, 50, 1000, 500);
+    }
+
+    private NodeResource nodeWithCores(int cores, double cpuUsage, double powerWatts, double capacityWatts) {
+        return new NodeResource("mdc-01", "node-" + cores, cores, 16384, 0,
                 cpuUsage, 30, 30, powerWatts, capacityWatts, 50, 1000, 500);
     }
 }

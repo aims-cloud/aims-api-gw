@@ -69,7 +69,12 @@ class JudgmentBaselineTest {
                     "판정 무효화 축 변경에 따른 재산출(재취득 예외 — 이 PR 은 판정을 게시하지 않는다). 공석이던 다음 판정 주어를 노드 배치 스코어 PEI 항의 코어 수 무시로 지정해 judgment 축이 돌아 8696f4da2e4d 는 더는 B 로 쓸 수 없다. "
                             + "두 셀 power 행 지점 배열이 직전 기준선과 지점별로 같고 증거 묶음 entriesDigest 0cafa69fbcc9 도 그대로라 이 PR 의 규칙 변경 기여는 0 — 직전 기준선 뒤 게시된 판정이 없어 정례 재취득은 아니다. "
                             + "산출 HEAD 는 이 PR 의 규칙 커밋 자체(그 커밋에서 낸 값이며 파일 커밋 전)로 브랜치 커밋이지만 머지 커밋 방식이라 머지 뒤에도 도달 가능",
-                    "a3a5ef3 (develop, 배치 전략 비교 서비스 분리 PR 머지 — 757a6b4 뒤 엔진·판·하네스 경로 머지가 있었으나 증거 묶음 entries 불변으로 값 동등)", "b6da077", "0.0000 / 0.0000", 11.8396, 16.6866));
+                    "a3a5ef3 (develop, 배치 전략 비교 서비스 분리 PR 머지 — 757a6b4 뒤 엔진·판·하네스 경로 머지가 있었으나 증거 묶음 entries 불변으로 값 동등)", "b6da077", "0.0000 / 0.0000", 11.8396, 16.6866),
+            new BaselineSeal("1cd81ee0f858", "2026-10-27",
+                    "판정 무효화 축 변경에 따른 재산출(재취득 예외 — 이 PR 은 판정을 게시하지 않는다)이며 노드 배치 스코어 PEI 항 판정 게시 뒤의 정례 재취득을 겸한다. 그 지목을 소비 목록에 내리고 다음 판정 주어를 공석으로 두어 judgment 축이 돌아 98dea25bbe99 는 더는 B 로 쓸 수 없다. "
+                            + "두 셀 중앙값 이동(11.8396 → 9.715 / 16.6866 → 14.2874, 둘 다 축소)은 전부 그 판정의 정정(PASS)에서 온 것이고 이 PR 의 규칙 변경 기여는 0 — "
+                            + "두 셀 power 행 지점 배열이 그 판정의 N 배열과 지점별로 같고 증거 묶음 entriesDigest 6d9356bed3f6 도 그대로다. 산출 HEAD 는 이 PR 의 규칙 커밋 자체(그 커밋에서 낸 값이며 파일 커밋 전)로 브랜치 커밋이지만 머지 커밋 방식이라 머지 뒤에도 도달 가능",
+                    "9df818e (develop, 노드 배치 스코어 전력 효율 항 코어 수 반영 PR 머지 — 그 아래 인증·인프라 PR 머지 e2b932c 는 엔진 무관, 증거 묶음 entries 6d9356bed3f6 로 값 동등)", "d34725e", "2.1246 / 2.3992", 9.715, 14.2874));
 
     private static JudgmentBaseline load() throws IOException {
         return JudgmentBaselines.readRepositoryBaseline();
@@ -96,6 +101,13 @@ class JudgmentBaselineTest {
         assertEquals(current.judgmentMedian(), load().cells().get("judgment").columns().get("power").median(), 1e-12, "이력 행의 판정 셀 중앙값이 파일과 다르다");
         assertEquals(current.directionMedian(), load().cells().get("direction").columns().get("power").median(), 1e-12, "이력 행의 방향 셀 중앙값이 파일과 다르다");
         assertEquals(BASELINE_HISTORY.size(), BASELINE_HISTORY.stream().map(BaselineSeal::digest).distinct().count(), "같은 다이제스트가 두 행에 있다");
+        // 중앙값 차는 「직전 − 새」 두 셀 값이다 — 손으로 적는 숫자의 부호가 뒤집혀 들어가지 않게 앞 행 중앙값과 견준다
+        for (int i = 1; i < BASELINE_HISTORY.size(); i++) {
+            BaselineSeal prev = BASELINE_HISTORY.get(i - 1), s = BASELINE_HISTORY.get(i);
+            String expected = String.format(java.util.Locale.ROOT, "%.4f / %.4f",
+                    prev.judgmentMedian() - s.judgmentMedian(), prev.directionMedian() - s.directionMedian());
+            assertEquals(expected, s.medianShiftFromPrevious(), "이력 행의 중앙값 차가 「직전 − 새」 와 다르다: " + s);
+        }
     }
 
     @DisplayName("기준선 파일이 판정 셀·방향 셀 × 열 5 의 지점 배열(길이 12, null 자리 보존)과 표본 수·중앙값을 담고 판정 셀은 판정 가능하다")

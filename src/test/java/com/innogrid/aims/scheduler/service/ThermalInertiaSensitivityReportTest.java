@@ -41,8 +41,12 @@ class ThermalInertiaSensitivityReportTest {
     private static final Path OUT = Path.of("build", "benchmark-evidence", "thermal-inertia-sensitivity.txt");
     private static final double DEFAULT_K = new SchedulerProperties().getThermal().getInertiaK();
     private static final double[] COEFFICIENTS = {0.10, 0.15, 0.20};              // 가운데가 기본 계수 — 기본값이 바뀌면 리터럴도 함께 고친다
-    /** 판정 자격 두 판 power 행 격차 중앙값(판정 셀 · 방향 셀) — 유휴 기준선 일원화 리비전에서 낸 값(그 전 {11.0343, 14.4323}·{12.4476, 16.1995}·{13.1305, 17.4029}). */
-    private static final double[][] EXPECTED = {{11.2109, 14.8067}, {11.8396, 16.6866}, {12.6627, 16.8882}};
+    /**
+     * 판정 자격 두 판 power 행 격차 중앙값(판정 셀 · 방향 셀) — 노드 배치 스코어 PEI 항에 코어 비율을 곱한 리비전에서 낸 값
+     * (그 전 유휴 기준선 일원화 리비전 {11.2109, 14.8067}·{11.8396, 16.6866}·{12.6627, 16.8882},
+     * 그 전 {11.0343, 14.4323}·{12.4476, 16.1995}·{13.1305, 17.4029}).
+     */
+    private static final double[][] EXPECTED = {{8.6348, 14.3785}, {9.7150, 14.2874}, {10.6035, 15.2761}};
 
     @DisplayName("열관성 계수 0.10 / 0.15 / 0.20 에서 판정 자격 두 판 power 행 격차 중앙값을 표로 남기고 기본 계수 행이 현 실행과 같다")
     @Test

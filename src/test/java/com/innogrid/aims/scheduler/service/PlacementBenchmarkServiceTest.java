@@ -401,7 +401,9 @@ class PlacementBenchmarkServiceTest {
      * 총전력 표본이 5 → 1 로 줄어든 것이 이 규칙의 계기다. 리터럴의 출처는 두 겹이다: 처음은 변종 열 도입 전(위생 정비 PR jar) 응답의
      * 표본 5 · 6429.0022 · 32.3241 이었고, 배치 점수 PEI·비낭비 항의 기저를 실효로 바꾼 판정 회차 1 에서 power 열의 배치가 달라져
      * 기준 집합 짝 지점이 5 → 6 으로 늘고 두 중앙값이 6412.2625 · 32.2913 으로 움직였으며, 열 항의 기저를 실효 온도로 바꾼 다음 회차에서
-     * 반증판 짝 지점이 6 → 7, 총전력 중앙값이 6403.1272 로 다시 움직였다(계측 공백판 32.2913 은 그대로) — 지금 리터럴은 뒤쪽 값이다.
+     * 반증판 짝 지점이 6 → 7, 총전력 중앙값이 6403.1272 로 다시 움직였다(계측 공백판 32.2913 은 그대로). 노드 배치 스코어 PEI 항에
+     * 코어 비율을 곱한 회차에서 반증판 짝 지점이 7 → 4, 총전력 중앙값이 6234.1715, 계측 공백판 미계측 격차가 34.4749 로 움직였다
+     * — 지금 리터럴은 맨 뒤 값이다.
      * 값의 이동은 배치 점수 변경에 귀속된다. 현 리터럴은 변종 열이 있는 실행에서 온 값이라 override 열 독립성의 교차 증거는
      * 첫 출처에서 소모됐고, 이 테스트는 이후 회차에 대해 "값이 조용히 움직이지 않는다" 를 지킨다.
      */
@@ -411,13 +413,13 @@ class PlacementBenchmarkServiceTest {
         Cell adversarial = cell(service.compare("adversarial", "heavytail").boards().get(0), 90, "AVAILABLE");
         MetricValue power = strategy(adversarial, "power").metrics().stream()
                 .filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow();
-        assertEquals(7, power.samples(), "짝 지점 수가 사전 등록 리터럴(7)과 다르다 — 짝 조건이 override 열까지 보고 있거나 배치가 또 움직였다");
+        assertEquals(4, power.samples(), "짝 지점 수가 사전 등록 리터럴(4)과 다르다 — 짝 조건이 override 열까지 보고 있거나 배치가 또 움직였다");
         // 허용 오차는 판정 규칙의 지점 비교 무시 폭(0.0002, 4자리 두 칸)과 같은 근거 — 실수 항등인 변경이 마지막 자리를 한 칸 뒤집을 수 있어 한 칸(1e-4)은 여유가 0 이다
-        assertEquals(6403.1272, power.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
+        assertEquals(6234.1715, power.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
         Cell sparse = cell(service.compare("sparse", "heavytail").boards().get(0), 90, "AVAILABLE");
         MetricValue spread = strategy(sparse, "power").metrics().stream()
                 .filter(m -> m.key().equals(BenchmarkRules.UNMEASURED_SPREAD)).findFirst().orElseThrow();
-        assertEquals(32.2913, spread.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, "미계측 격차가 변종 열까지 포함해 계산됐다");
+        assertEquals(34.4749, spread.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, "미계측 격차가 변종 열까지 포함해 계산됐다");
     }
 
     /** 순환 배정 — 표본 순서대로 a,b,c,a,b,c… 링크 판만 부여하고 링크 없는 판은 아무것도 하지 않는다. */
@@ -1524,6 +1526,10 @@ class PlacementBenchmarkServiceTest {
      * 짝 지점이 하나도 없으면 온도 분포 두 지표도 총량처럼 <b>값을 싣지 않고 사유를 적는다</b>. 값이 남아 있으면
      * valid 플래그를 보지 않은 인용자에게는 그냥 숫자다. 그런 셀이 지금 판에 없으면 이 테스트는 그 사실을 알린다 —
      * 없다는 것을 조용히 통과로 바꾸지 않는다.
+     *
+     * <p>override 열은 셀에 짝 지점이 있어도 자기 배치 건수가 기준 집합과 다른 지점을 빼므로, 그런 지점뿐이면 표본이 0 이 되고
+     * 제외 사유를 단다(노드 배치 스코어 PEI 항에 코어 비율을 곱한 회차부터 반증판 90% 의 {@code power-s250}·{@code power-s0} 이 그렇다).
+     * 그때는 같은 셀의 {@code power} 열에 짝 지점이 있어야 한다. 그런 행은 짝 지점 0 셀이 아니라서 아래 가드의 개수에 세지 않는다.</p>
      */
     @DisplayName("짝 지점이 하나도 없는 셀에서는 온도 분포 두 지표도 값 없이 사유만 싣는다")
     @Test
@@ -1534,15 +1540,23 @@ class PlacementBenchmarkServiceTest {
             for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
                 for (StrategyResult s : c.strategies()) {
                     if (metric(s, BenchmarkRules.GENERATOR_POWER).samples() > 0) continue;
+                    boolean overrideColumn = !s.engineConfigOverride().isEmpty();
+                    boolean droppedOnly = false;
                     for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
                         MetricValue m = metric(s, key);
                         String where = boardId + " " + c.loadRatioPercent() + "% " + s.strategyId() + " " + key;
                         assertNull(m.median(), where + ": 짝 지점이 없는데 값이 실렸다");
                         assertEquals(0, m.samples(), where);
                         assertNotNull(m.invalidReason(), where + ": 사유가 없다");
-                        assertTrue(m.invalidReason().contains("배치 건수가 같은 시각 지점이 없다"), where + ": " + m.invalidReason());
+                        if (overrideColumn && m.invalidReason().startsWith("기준 집합과 배치 건수가 다른 지점뿐")) {
+                            assertTrue(metric(strategy(c, "power"), BenchmarkRules.GENERATOR_POWER).samples() > 0,
+                                    where + ": 제외 사유는 power 열에 짝 지점이 있는 셀에서만 나와야 한다");
+                            droppedOnly = true;
+                        } else {
+                            assertTrue(m.invalidReason().contains("배치 건수가 같은 시각 지점이 없다"), where + ": " + m.invalidReason());
+                        }
                     }
-                    checked++;
+                    if (!droppedOnly) checked++;
                 }
             }
         }

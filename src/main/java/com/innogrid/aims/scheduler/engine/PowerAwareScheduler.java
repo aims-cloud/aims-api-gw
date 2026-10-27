@@ -25,7 +25,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * <pre>
  * 총점 = (1−자원몫) × 전력·열 복합 + 자원몫 × 자원 여유
  *
- * 전력점수 = w1×PEI + w2×비낭비 + w3×실질한계전력
+ * 전력점수 = w1×PEI + w2×비낭비 + w3×실질한계전력   (PEI 는 후보 평균 코어 수 대비 코어 비율을 곱한 배치용 값)
  * 열점수   = 냉각점수 × (1 − 경고감점)
  * </pre>
  *
@@ -88,14 +88,24 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
         return "PowerAwareScheduler";
     }
 
-    /** 호출 한 번의 누적값 — 후보 중 전력을 잰 노드가 하나라도 있는가(제외된 후보도 센다 · 현재 동작). */
+    /**
+     * 호출 한 번의 누적값 — 후보 중 전력을 잰 노드가 하나라도 있는가(제외된 후보도 센다 · 현재 동작)와
+     * 배치 점수용 PEI 의 코어 기준(후보 전체 중 코어 수가 0 보다 큰 노드의 평균 코어 수 · 제외 판정·미계측 노드 포함).
+     */
     static final class PowerRun extends Run {
+        final double meanCores;
         boolean anyPowerMetric;
+
+        PowerRun(double meanCores) {
+            this.meanCores = meanCores;
+        }
     }
 
     @Override
     protected PowerRun newRun(Workload workload, PlacementContext context) {
-        return new PowerRun();
+        // 평균은 판정 대상 문장(BenchmarkRules.JUDGMENT_TARGET)대로 후보 전체(제외 판정·미계측 노드 포함)로 낸다.
+        // 제외 판정은 여기서 부르지 않는다 — 냉각 기록을 남기므로 다시 부르면 호출 횟수가 바뀌어 결과가 달라진다(AbstractScoringEngine)
+        return new PowerRun(PowerModel.meanPositiveCores(context.nodes()));
     }
 
     @Override
@@ -107,8 +117,9 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
         run.anyPowerMetric |= hasPower;
 
         // ── 전력 복합 점수 ──────────────────────────────────
-        // PEI·비낭비도 실효 기저 — 한계 전력·가동 판정·자원 여유와 같은 입력(예약 반영)을 본다
-        double pei = powerModel.placementPei(node);
+        // PEI·비낭비도 실효 기저 — 한계 전력·가동 판정·자원 여유와 같은 입력(예약 반영)을 본다.
+        // PEI 는 후보 평균 코어 수 대비 코어 비율을 곱한 배치용 값이다(비낭비·한계 전력에는 곱하지 않는다)
+        double pei = powerModel.placementPei(node, run.meanCores);
         double waste = powerModel.placementWasteScore(node);
         double marginal = powerModel.marginalScore(node, workload.getRequiredCpu());
         double powerScore = hasPower

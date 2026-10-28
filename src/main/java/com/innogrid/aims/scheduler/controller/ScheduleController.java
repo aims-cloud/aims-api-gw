@@ -147,7 +147,7 @@ public class ScheduleController {
     @Operation(summary = "저장 전 모의 실행",
             description = "생성 폼 값으로 모의 실행과 같은 결과를 저장 없이 돌려줍니다 — 같은 열일곱 키이고 id 는 null, "
                     + "scheduleId·enabled 는 보낸 값입니다. 검증은 저장 전 미리보기와 같고(본문 없음·엔진·배치 순서·설명 400, 없는 정책 id 404), "
-                    + "전력 상한은 폼 값을 적용합니다. 온도 상한 칸이 있으면 400 입니다 — 저장한 뒤 모의 실행으로 확인하십시오. "
+                    + "전력 상한과 온도 상한은 폼 값을 적용하고, 온도 상한을 지정하면 냉각 대기를 남기지 않습니다. "
                     + "노드를 모으므로 버튼 단위로 호출하고, 어떤 행도 쓰지 않으며 200 이 저장 성공을 뜻하지는 않습니다.")
     @PostMapping("/dry-run")
     public ApiResponse<ScheduleDryRunResponse> dryRunDraft(@RequestBody(required = false) ScheduleRequest request) {

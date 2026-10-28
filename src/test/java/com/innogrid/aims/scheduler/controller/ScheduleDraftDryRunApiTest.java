@@ -75,15 +75,15 @@ class ScheduleDraftDryRunApiTest {
         assertEquals(history, historyRepository.count());
     }
 
-    @DisplayName("미인증은 403 이고 온도 상한·본문 없음·모르는 엔진은 400 이 공통 래퍼로 실린다")
+    @DisplayName("미인증은 403 이고 본문 없음·모르는 엔진은 400 이 공통 래퍼로 실리며 온도 상한을 지정한 요청은 200 으로 받는다")
     @Test
     void anonymous_403_and_errors_in_wrapper() throws Exception {
         mockMvc.perform(post(BASE + "/dry-run").with(anonymous()).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post(BASE + "/dry-run").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"resourceType\":\"NPU\",\"maxTemperatureCelsius\":50}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("저장 전 모의 실행은 온도 상한을 받지 않습니다 — 저장한 뒤 모의 실행으로 확인하십시오"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.clusterSnapshot.status").value("NO_TARGET"));
         mockMvc.perform(post(BASE + "/dry-run"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("요청 본문이 필요합니다"));

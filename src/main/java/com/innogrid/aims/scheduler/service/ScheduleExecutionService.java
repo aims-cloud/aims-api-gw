@@ -21,6 +21,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
@@ -30,6 +31,7 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
@@ -105,6 +107,8 @@ public class ScheduleExecutionService {
     private final RunClusterSnapshot clusterSnapshot;
     /** 재시작 정리에서 전달 기록을 보는 데 쓴다. 생성자로 직접 조립해 null 을 넣으면(지금은 그런 조립이 없다) 전달 기록 없이 전부 실패로 돌린다. */
     private final PlacementDispatchService dispatchService;
+    /** 실행마다 배치 입력을 남긴다. 빈이 아니라 여기서 만든다. */
+    private final RunInputCapture inputCapture;
 
     public ScheduleExecutionService(ScheduleRepository scheduleRepository,
                                     ScheduleRunRepository runRepository,
@@ -117,7 +121,9 @@ public class ScheduleExecutionService {
                                     EngineRegistry engineRegistry,
                                     SchedulerProperties properties,
                                     RunClusterSnapshot clusterSnapshot,
-                                    PlacementDispatchService dispatchService) {
+                                    PlacementDispatchService dispatchService,
+                                    ScheduleRunInputRepository inputRepository,
+                                    ThermalModel thermalModel) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
@@ -130,6 +136,7 @@ public class ScheduleExecutionService {
         this.properties = properties;
         this.clusterSnapshot = clusterSnapshot;
         this.dispatchService = dispatchService;
+        this.inputCapture = new RunInputCapture(inputRepository, thermalModel, properties);
     }
 
     /**
@@ -192,6 +199,7 @@ public class ScheduleExecutionService {
             }
 
             recordSnapshotBefore(run, context);
+            captureInputs(run, context, targets, engineId);
 
             int success = 0;
             int attempted = 0;
@@ -427,6 +435,18 @@ public class ScheduleExecutionService {
         } catch (RuntimeException | LinkageError e) {
             log.warn("실행 전 클러스터 스냅샷 기록 실패(배치는 계속한다): run={}", run.getId(), e);
             run.markSnapshotFailed();
+        }
+    }
+
+    /**
+     * 배치 루프 직전의 입력을 남긴다({@link RunInputCapture}). 스냅샷과 같은 규칙이다 — 곁들이는 기록이라 실패해도 배치는
+     * 계속하고, 지연 로드 실패({@link LinkageError})까지 잡는다. 실행 1회당 INSERT 한 번이고 배치 루프 밖이다.
+     */
+    private void captureInputs(ScheduleRun run, PlacementContext context, List<Workload> targets, String engineId) {
+        try {
+            inputCapture.capture(run.getId(), engineId, context, targets, clusterSnapshot.knobsDigest());
+        } catch (RuntimeException | LinkageError e) {
+            log.warn("실행 입력 저장 실패(배치는 계속한다): run={}", run.getId(), e);
         }
     }
 

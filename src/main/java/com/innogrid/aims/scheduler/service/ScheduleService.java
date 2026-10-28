@@ -35,6 +35,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
@@ -71,6 +72,7 @@ public class ScheduleService {
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
     private final SchedulingHistoryRepository historyRepository;
+    private final ScheduleRunInputRepository inputRepository;
     private final CronSupport cronSupport;
     private final EngineRegistry engineRegistry;
     private final ScheduleActorResolver actorResolver;
@@ -78,12 +80,14 @@ public class ScheduleService {
     public ScheduleService(ScheduleRepository scheduleRepository,
                            ScheduleRunRepository runRepository,
                            SchedulingHistoryRepository historyRepository,
+                           ScheduleRunInputRepository inputRepository,
                            CronSupport cronSupport,
                            EngineRegistry engineRegistry,
                            ScheduleActorResolver actorResolver) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
+        this.inputRepository = inputRepository;
         this.cronSupport = cronSupport;
         this.engineRegistry = engineRegistry;
         this.actorResolver = actorResolver;
@@ -317,6 +321,9 @@ public class ScheduleService {
         for (Schedule schedule : targets) {
             List<ScheduleRun> runs = runRepository.findByScheduleId(schedule.getId());
             unlinkHistories(runs);
+            if (!runs.isEmpty()) {
+                inputRepository.deleteByScheduleRunIds(runs.stream().map(ScheduleRun::getId).toList());
+            }
             runRepository.deleteAll(runs);
         }
         scheduleRepository.deleteAll(targets);

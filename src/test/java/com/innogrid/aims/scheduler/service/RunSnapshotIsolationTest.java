@@ -17,6 +17,7 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -46,6 +47,7 @@ class RunSnapshotIsolationTest {
     @Autowired ScheduleRepository scheduleRepository;
     @Autowired ScheduleRunRepository runRepository;
     @Autowired WorkloadRepository workloadRepository;
+    @Autowired ScheduleRunInputRepository inputRepository;
 
     @MockitoBean NodeResourceCollector collector;
     @MockitoBean PlacementService placementService;
@@ -113,6 +115,28 @@ class RunSnapshotIsolationTest {
                 "jar 를 덮어쓴 직후의 첫 실행이 통째로 실패로 뒤바뀐다");
         assertEquals(1, run.getSuccessCount());
         assertEquals(ScheduleRun.SnapshotStatus.FAILED, run.getSnapshotStatus());
+    }
+
+    @DisplayName("실행 입력 저장이 터져도 배치는 성공으로 끝나고 입력 행만 남지 않는다")
+    @Test
+    void a_failure_in_input_capture_does_not_change_the_run_result() {
+        givenOneNodeAndOneWorkload("rsi-input");
+        when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
+                .thenReturn(new RunClusterSnapshot.Fixed(1, 0, 1, 500.0));
+        when(clusterSnapshot.movingOf(any(PlacementContext.class), anyDouble()))
+                .thenReturn(new RunClusterSnapshot.Moving(0, 120.0, 40.0));
+        // 노브 지문은 실행 전 스냅샷이 한 번, 입력 저장이 한 번 읽는다 — 두 번째만 터뜨린다
+        when(clusterSnapshot.knobsDigest())
+                .thenReturn("0123456789ab")
+                .thenThrow(new IllegalStateException("입력 저장 실패"))
+                .thenReturn("0123456789ab");
+
+        ScheduleRun run = runNow("rsi-input");
+
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus(), "입력 저장 때문에 배치가 실패로 뒤바뀌었다");
+        assertEquals(1, run.getSuccessCount());
+        assertEquals("0123456789ab", run.getSnapshotKnobsDigest(), "실행 전 스냅샷은 그대로 적힌다");
+        assertTrue(inputRepository.findByScheduleRunId(run.getId()).isEmpty());
     }
 
     @DisplayName("스냅샷이 멀쩡하면 전·후가 모두 적힌다")

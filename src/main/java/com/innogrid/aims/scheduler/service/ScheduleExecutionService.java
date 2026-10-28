@@ -298,25 +298,26 @@ public class ScheduleExecutionService {
      * 한 건 때문에 전체를 잃지 않는다.</p>
      */
     public ScheduleDryRunResponse dryRun(Long id) {
-        return dryRunOf(scheduleService.require(id));
+        return dryRunOf(scheduleService.require(id), false);
     }
 
     /**
      * 저장하지 않은 생성 폼으로 같은 모의 실행 — 저장 전 미리보기와 같은 검증을 거친 초안을 그대로 놓아 본다.
      *
-     * <p>온도 상한 칸은 받지 않는다(400). 폼의 온도 상한은 저장하지 않은 값인데도 평가 중 냉각 대기 표시(그 상한 이하로
-     * 평가하는 배치를 막음)를 남기기 때문이다 — 저장된 스케줄의 모의 실행으로 확인한다. 전력 상한은 폼 값을 그대로 적용한다.</p>
+     * <p>전력 상한과 온도 상한은 폼 값을 그대로 적용한다. 온도 상한을 지정하면 냉각 대기를 새로 걸지 않는 평가기로
+     * 평가한다 — 폼의 온도 상한은 저장하지 않은 값이라, 그 상한으로 냉각 대기(그 상한 이하로 평가하는 배치를 막음)를
+     * 남기면 안 된다. 이미 걸린 냉각 대기는 상한별로 그대로 본다. 지정하지 않으면 저장된 스케줄의 모의 실행과 같다.</p>
      */
     public ScheduleDryRunResponse dryRunDraft(ScheduleRequest request) {
         Schedule draft = scheduleService.draft(request);
-        if (draft.getMaxTemperatureCelsius() != null) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST,
-                    "저장 전 모의 실행은 온도 상한을 받지 않습니다 — 저장한 뒤 모의 실행으로 확인하십시오");
-        }
-        return dryRunOf(draft);
+        return dryRunOf(draft, draft.getMaxTemperatureCelsius() != null);
     }
 
-    private ScheduleDryRunResponse dryRunOf(Schedule schedule) {
+    /**
+     * @param withoutCooldownMarking 참이면 수집한 컨텍스트의 사본({@link PlacementContext#sandbox})으로 평가해 냉각 대기를
+     *                               새로 걸지 않는다. 수집 제외 목록은 사본이 잇지 않아 따로 옮긴다.
+     */
+    private ScheduleDryRunResponse dryRunOf(Schedule schedule, boolean withoutCooldownMarking) {
         PolicyChoice policy = policyChoiceFor(schedule, false);
         EngineChoice engine = engineChoiceFor(schedule, policy.policy());
         Workload.ResourceType type = schedule.resolveResourceType();
@@ -334,8 +335,11 @@ public class ScheduleExecutionService {
                     0, 0, false, emptySnapshot(ScheduleRun.SnapshotStatus.NO_TARGET, knobs), List.of());
         }
 
-        PlacementContext context = schedulingService.createContext(policy.policy())
+        PlacementContext collected = schedulingService.createContext(policy.policy())
                 .withPowerBudget(schedule.getMaxPowerBudgetWatts());
+        PlacementContext context = withoutCooldownMarking
+                ? collected.sandbox(collected.nodes()).withExcluded(collected.excludedNodes())
+                : collected;
         if (context.isEmpty()) {
             return response(schedule, type, policy, engine, ScheduleRun.RunStatus.FAILED,
                     SchedulingService.noActiveNodesReason(context), null,

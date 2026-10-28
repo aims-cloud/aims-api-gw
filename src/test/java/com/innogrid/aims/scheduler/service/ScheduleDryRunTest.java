@@ -19,6 +19,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleDryRunResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -49,6 +50,7 @@ class ScheduleDryRunTest {
 
     private static final String PREFIX = "sdr-";
     private static final String NODE = "sdr-node:9100";
+    private static final String HOT = "sdr-hot:9100";
 
     @Autowired ScheduleService scheduleService;
     @Autowired ScheduleExecutionService executionService;
@@ -59,6 +61,7 @@ class ScheduleDryRunTest {
     @Autowired PlacementDispatchRepository dispatchRepository;
     @Autowired SchedulingPolicyRepository policyRepository;
     @Autowired SchedulerProperties properties;
+    @Autowired ThermalModel thermalModel;
     @MockitoBean NodeResourceCollector collector;
     @MockitoBean DispatcherRegistry registry;
 
@@ -69,6 +72,7 @@ class ScheduleDryRunTest {
 
     @AfterEach
     void clean() {
+        thermalModel.clearCritical(HOT);
         historyRepository.findAll().stream().filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith(PREFIX)).forEach(historyRepository::delete);
         dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith(PREFIX)).forEach(dispatchRepository::delete);
         runRepository.findAll().stream().filter(r -> r.getScheduleKey() != null && r.getScheduleKey().startsWith(PREFIX)).forEach(runRepository::delete);
@@ -266,6 +270,22 @@ class ScheduleDryRunTest {
         assertEquals(ScheduleRun.SnapshotStatus.NO_NODES, dry.clusterSnapshot().status());
         assertTrue(dry.decisions().isEmpty());
         assertNotNull(dry.message());
+    }
+
+    @DisplayName("온도 상한을 지정한 스케줄의 모의 실행은 그 상한을 넘은 노드에 냉각 대기를 남긴다")
+    @Test
+    void saved_dry_run_with_temperature_marks_cooldown() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(
+                List.of(new NodeResource("mdc-01", HOT, 8, 65_536, 0, 10, 20, 0, 100, 500, 70, 0, 0)), List.of()));
+        save("temp", 1, Workload.WorkloadPriority.NORMAL);
+        long scheduleId = scheduleService.create(new ScheduleRequest(PREFIX + "temp", PREFIX + "temp", Workload.ResourceType.GPU,
+                "0 0 2 * * ?", false, true, PREFIX, "weighted", null, null, 60.0, null)).id();
+
+        ScheduleDryRunResponse dry = executionService.dryRun(scheduleId);
+
+        assertEquals(0, dry.successCount());
+        assertTrue(dry.decisions().get(0).exclusionCodes().contains("TEMPERATURE_EXCEEDED"), dry.decisions().get(0).exclusionCodes());
+        assertTrue(thermalModel.isCoolingDown(HOT, 60));
     }
 
     @DisplayName("사용 여부가 꺼진 스케줄도 모의 실행은 200 이고 enabled 로 구분한다")

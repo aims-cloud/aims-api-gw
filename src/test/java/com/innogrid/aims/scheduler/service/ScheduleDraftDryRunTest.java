@@ -21,6 +21,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
@@ -36,13 +37,15 @@ import static org.mockito.Mockito.when;
 
 /**
  * 저장 전 스케줄 모의 실행 — 생성 폼 값이 같은 값을 저장한 스케줄의 모의 실행과 같은 결과를 내고, 어떤 행도 쓰지 않으며,
- * 온도 상한 칸은 노드를 모으기 전에 400 으로 막는다.
+ * 온도 상한을 지정하면 그 값으로 평가하되 냉각 대기를 새로 남기지 않는다.
  */
 @SpringBootTest
 class ScheduleDraftDryRunTest {
 
     private static final String PREFIX = "sddr-";
     private static final String NODE = "sddr-node:9100";
+    private static final String HOT = "sddr-hot:9100";
+    private static final String COOL = "sddr-cool:9100";
 
     @Autowired ScheduleService scheduleService;
     @Autowired ScheduleExecutionService executionService;
@@ -64,6 +67,8 @@ class ScheduleDraftDryRunTest {
     @AfterEach
     void clean() {
         thermalModel.clearCritical(NODE);
+        thermalModel.clearCritical(HOT);
+        thermalModel.clearCritical(COOL);
         historyRepository.findAll().stream().filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith(PREFIX)).forEach(historyRepository::delete);
         dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith(PREFIX)).forEach(dispatchRepository::delete);
         runRepository.findAll().stream().filter(r -> r.getScheduleKey() != null && r.getScheduleKey().startsWith(PREFIX)).forEach(runRepository::delete);
@@ -133,21 +138,109 @@ class ScheduleDraftDryRunTest {
         verify(collector, times(1)).collect();
     }
 
-    @DisplayName("온도 상한 칸이 있으면 노드를 모으기 전에 400 이고 냉각 대기 표시도 남지 않는다")
+    @DisplayName("폼의 온도 상한으로 평가하고 냉각 대기를 남기지 않는다 — 상한을 넘은 노드만 빠진다")
     @Test
-    void temperature_override_rejected_before_collecting() {
-        eightCoreNode();
-        save("temp", 1, Workload.WorkloadPriority.NORMAL);
-        // 노드 온도 0℃ > 상한 −1℃ — 검사를 지우면 평가가 실제로 냉각 대기 표시를 남긴다
-        ScheduleRequest form = new ScheduleRequest(PREFIX + "temp", PREFIX + "temp", Workload.ResourceType.GPU, "0 0 2 * * ?",
-                false, true, PREFIX, "weighted", null, null, -1.0, null);
+    void draft_temperature_cap_applied_without_cooldown() {
+        hotAndCoolNodes();
+        save("tc", 1, Workload.WorkloadPriority.NORMAL);
 
-        BusinessException e = assertThrows(BusinessException.class, () -> executionService.dryRunDraft(form));
+        ScheduleDryRunResponse draft = executionService.dryRunDraft(form(PREFIX + "tc", null, 60.0));
 
-        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
-        assertTrue(e.getMessage().contains("온도 상한"), e.getMessage());
-        verify(collector, times(0)).collect();
-        assertFalse(thermalModel.isCoolingDown(NODE));
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, draft.status());
+        assertEquals(1, draft.successCount());
+        assertEquals(COOL, draft.decisions().get(0).selectedNodeId());
+        assertTrue(draft.decisions().get(0).exclusionCodes().contains("TEMPERATURE_EXCEEDED"), draft.decisions().get(0).exclusionCodes());
+        assertFalse(thermalModel.isCoolingDown(HOT), "저장하지 않은 상한으로 냉각 대기를 걸지 않는다");
+        verify(collector, times(1)).collect();
+    }
+
+    @DisplayName("이미 걸린 냉각 대기는 상한별로 본다 — 65℃ 대기는 폼 60 을 막고 폼 90 은 막지 않으며 새 대기는 생기지 않는다")
+    @Test
+    void draft_temperature_cap_reads_existing_cooldown() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(node(HOT, 70)), List.of()));
+        save("cd", 1, Workload.WorkloadPriority.NORMAL);
+        thermalModel.markCritical(HOT, 65);
+
+        ScheduleDryRunResponse low = executionService.dryRunDraft(form(PREFIX + "cd", null, 60.0));
+        ScheduleDryRunResponse high = executionService.dryRunDraft(form(PREFIX + "cd", null, 90.0));
+
+        assertEquals(0, low.successCount());
+        assertTrue(low.decisions().get(0).exclusionCodes().contains("COOLING_DOWN"), low.decisions().get(0).exclusionCodes());
+        assertEquals(1, high.successCount(), "상한이 더 높은 평가는 65℃ 대기에 막히지 않는다: " + high.decisions());
+        assertEquals(HOT, high.decisions().get(0).selectedNodeId());
+        assertTrue(thermalModel.isCoolingDown(HOT, 65));
+        assertFalse(thermalModel.isCoolingDown(HOT, 66), "65℃ 보다 높은 상한의 대기가 새로 생기지 않는다");
+    }
+
+    @DisplayName("같은 값을 저장한 스케줄의 모의 실행과 같고, 다른 것은 뒤 대상에서 그 노드의 제외 사유가 냉각 대기가 아닌 온도 초과인 것뿐이다")
+    @Test
+    void draft_temperature_cap_matches_saved_except_cooldown_codes() {
+        hotAndCoolNodes();
+        save("m1", 1, Workload.WorkloadPriority.HIGH);
+        save("m2", 1, Workload.WorkloadPriority.NORMAL);
+        ScheduleRequest form = form(PREFIX + "mt", null, 60.0);
+
+        // 저장 전을 먼저 돌린다 — 저장본 모의 실행은 HOT 에 냉각 대기를 걸어 뒤 호출을 바꾼다
+        ScheduleDryRunResponse draft = executionService.dryRunDraft(form);
+        assertFalse(thermalModel.isCoolingDown(HOT));
+        ScheduleDryRunResponse saved = executionService.dryRun(scheduleService.create(form).id());
+
+        assertNull(draft.id());
+        assertEquals(saved.status(), draft.status());
+        assertEquals(saved.message(), draft.message());
+        assertEquals(saved.successCount(), draft.successCount());
+        assertEquals(saved.failedCount(), draft.failedCount());
+        assertEquals(saved.clusterSnapshot(), draft.clusterSnapshot());
+        assertEquals(2, draft.successCount());
+        assertEquals(saved.decisions().get(0), draft.decisions().get(0));
+        ScheduleDryRunResponse.DryRunDecision d = draft.decisions().get(1), s = saved.decisions().get(1);
+        assertEquals(s.workloadId(), d.workloadId());
+        assertEquals(s.success(), d.success());
+        assertEquals(s.selectedNodeId(), d.selectedNodeId());
+        assertEquals(s.finalScore(), d.finalScore());
+        assertEquals(s.reason(), d.reason());
+        assertTrue(d.exclusionCodes().contains("TEMPERATURE_EXCEEDED") && !d.exclusionCodes().contains("COOLING_DOWN"), d.exclusionCodes());
+        assertTrue(s.exclusionCodes().contains("COOLING_DOWN"), s.exclusionCodes());
+        assertTrue(thermalModel.isCoolingDown(HOT, 60), "저장본 모의 실행은 지금처럼 냉각 대기를 남긴다");
+    }
+
+    @DisplayName("온도 상한을 지정하지 않으면 지금처럼 정책 상한으로 냉각 대기를 남긴다")
+    @Test
+    void draft_without_temperature_still_marks_cooldown() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(node(HOT, 80)), List.of()));
+        save("nt", 1, Workload.WorkloadPriority.NORMAL);
+
+        ScheduleDryRunResponse draft = executionService.dryRunDraft(form(PREFIX + "nt", null, null));
+
+        assertEquals(0, draft.successCount());
+        assertTrue(draft.decisions().get(0).exclusionCodes().contains("TEMPERATURE_EXCEEDED"), draft.decisions().get(0).exclusionCodes());
+        assertTrue(thermalModel.isCoolingDown(HOT), "정책 상한(75℃)을 넘은 노드에 냉각 대기가 걸린다");
+    }
+
+    @DisplayName("온도 상한을 지정해도 수집에서 빠진 노드 수가 전후 상태에 그대로 실린다")
+    @Test
+    void draft_temperature_cap_keeps_excluded_nodes() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(node(COOL, 40)),
+                List.of(new ExcludedNode("mdc-01", "sddr-gone:9100", List.of("cpu")))));
+        save("ex", 1, Workload.WorkloadPriority.NORMAL);
+
+        ScheduleDryRunResponse withCap = executionService.dryRunDraft(form(PREFIX + "ex", null, 60.0));
+        ScheduleDryRunResponse withoutCap = executionService.dryRunDraft(form(PREFIX + "ex", null, null));
+
+        assertEquals(1, withCap.clusterSnapshot().excludedCount());
+        assertEquals(withoutCap.clusterSnapshot(), withCap.clusterSnapshot());
+    }
+
+    @DisplayName("온도 상한을 지정해도 폼의 전력 상한을 함께 적용한다")
+    @Test
+    void draft_temperature_cap_with_power_budget() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(node(HOT, 70)), List.of()));
+        save("tp", 1, Workload.WorkloadPriority.NORMAL);
+
+        ScheduleDryRunResponse draft = executionService.dryRunDraft(form(PREFIX + "tp", 50.0, 90.0));
+
+        assertEquals(0, draft.successCount());
+        assertTrue(draft.decisions().get(0).exclusionCodes().contains("RUN_POWER_BUDGET_EXCEEDED"), draft.decisions().get(0).exclusionCodes());
     }
 
     @DisplayName("폼의 전력 상한을 실행처럼 적용한다 — 노드 전력이 상한을 넘으면 전부 실패")
@@ -181,7 +274,7 @@ class ScheduleDraftDryRunTest {
 
         BusinessException order = assertThrows(BusinessException.class, () -> executionService.dryRunDraft(
                 new ScheduleRequest(null, null, Workload.ResourceType.CONTAINER, null, null, null, null, "no-such-engine", null, null, 50.0, null)));
-        assertEquals("알 수 없는 스케줄링 엔진입니다: no-such-engine", order.getMessage(), "초안 검증이 온도 상한 검사보다 먼저다");
+        assertEquals("알 수 없는 스케줄링 엔진입니다: no-such-engine", order.getMessage(), "초안 검증이 평가보다 먼저다");
 
         ScheduleDryRunResponse ok = executionService.dryRunDraft(
                 new ScheduleRequest(null, null, Workload.ResourceType.CONTAINER, null, null, null, null, null, null, null, null, null));
@@ -215,8 +308,23 @@ class ScheduleDraftDryRunTest {
                 List.of(new NodeResource("mdc-01", NODE, 8, 65_536, 0, 10, 20, 0, 100, 500, 0, 0, 0)), List.of()));
     }
 
+    /** 70℃ 노드와 40℃ 노드 — 호출마다 새 객체라 앞 호출의 예약이 남지 않는다. */
+    private void hotAndCoolNodes() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(
+                List.of(node(HOT, 70), node(COOL, 40)), List.of()));
+    }
+
+    private static NodeResource node(String nodeId, double celsius) {
+        return new NodeResource("mdc-01", nodeId, 8, 65_536, 0, 10, 20, 0, 100, 500, celsius, 0, 0);
+    }
+
     private static ScheduleRequest form(String key, Workload.ResourceType type, boolean enabled, Double powerBudget) {
         return new ScheduleRequest(key, key, type, "0 0 2 * * ?", false, enabled, PREFIX, "weighted", null, powerBudget, null, null);
+    }
+
+    private static ScheduleRequest form(String key, Double powerBudget, Double temperature) {
+        return new ScheduleRequest(key, key, Workload.ResourceType.GPU, "0 0 2 * * ?", false, true, PREFIX, "weighted", null,
+                powerBudget, temperature, null);
     }
 
     private Workload save(String name, int cpu, Workload.WorkloadPriority priority) {

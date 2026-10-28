@@ -38,7 +38,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * <b>유일한 교차 노드 검사</b>다. 순서는 동작이 아니라 "먼저 걸린 사유"만 정하므로, 싼 검사부터라는
  * 기존 순서를 지키는 편이 낫다.</p>
  *
- * <p>실제로 배치하지 않는 조회(통합 권고)는 {@link #copyWithoutCooldownMarking()} 사본을 쓴다. 사본은 같은 설정과
+ * <p>실제로 배치하지 않는 조회(통합 권고 · 온도 상한이 있는 저장 전 모의 실행)는 {@link #copyWithoutCooldownMarking()} 사본을 쓴다. 사본은 같은 설정과
  * 같은 냉각 대기 상태로 판정하지만, C3 에서 온도 상한을 넘은 노드에 냉각 대기를 새로 걸지 않는다.</p>
  */
 @Component
@@ -65,7 +65,7 @@ public class ConstraintEvaluator {
      * 같은 설정과 같은 냉각 대기 상태를 보되 냉각 대기를 새로 걸지 않는 사본.
      *
      * <p>걸린 냉각 대기에는 상한별로 노드를 빼고, 온도 상한을 넘은 노드는 그 평가에서만 뺀다. 실제로 배치하지 않는
-     * 조회(통합 권고)가 쓴다. 만료된 대기 정리는 냉각 대기 목록 조회와 같이 일어난다.</p>
+     * 조회(통합 권고 · 온도 상한이 있는 저장 전 모의 실행)가 쓴다. 만료된 대기 정리는 냉각 대기 목록 조회와 같이 일어난다.</p>
      */
     public ConstraintEvaluator copyWithoutCooldownMarking() {
         return new ConstraintEvaluator(powerModel, thermalModel, false);

@@ -100,6 +100,7 @@ class ScheduleDraftDryRunApiTest {
                 .andReturn().getResponse().getContentAsString());
         JsonNode op = doc.get("paths").get(BASE + "/dry-run").get("post");
         assertEquals("저장 전 모의 실행", op.get("summary").asString());
+        assertTrue(op.get("description").asString().contains("온도 상한을 지정하면 냉각 대기를 남기지 않습니다"), op.get("description").asString());
         assertTrue(op.get("requestBody").get("content").get("application/json").get("schema").get("$ref").asString().endsWith("/ScheduleRequest"));
         String resp = op.get("responses").get("200").get("content").properties().iterator().next().getValue().get("schema").get("$ref").asString();
         assertTrue(resp.endsWith("/ApiResponseScheduleDryRunResponse"), resp);

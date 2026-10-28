@@ -143,6 +143,14 @@ public class ThermalModel {
         });
     }
 
+    /**
+     * 지금 맵에 있는 냉각 대기 기록 그대로 — 노드별 · 상한별 시작 시각. 실행 입력 저장이 읽는다.
+     * 읽기만 한다: {@link #isCoolingDown} 과 달리 만료된 기록을 지우지 않으므로, 읽은 뒤의 판정이 읽기 전과 같다.
+     */
+    public Map<String, Map<Double, Instant>> cooldownMarks() {
+        return Map.copyOf(criticalSince);
+    }
+
     /** 임계 상태에서 회복된 노드의 기록을 모두 지운다. */
     public void clearCritical(String nodeId) {
         criticalSince.remove(nodeId);

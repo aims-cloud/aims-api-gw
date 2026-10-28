@@ -74,6 +74,11 @@ public final class LinkMatrix {
         return links.isEmpty();
     }
 
+    /** 원장 스냅샷 전부(바꿀 수 없는 맵) — 실행 입력 저장이 읽는다. */
+    public Map<MdcLink.Pair, Quality> entries() {
+        return links;
+    }
+
     public int size() {
         return links.size();
     }

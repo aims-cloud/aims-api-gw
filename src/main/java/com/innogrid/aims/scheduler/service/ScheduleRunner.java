@@ -22,6 +22,7 @@ import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
+import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
@@ -49,6 +50,7 @@ public class ScheduleRunner implements SmartLifecycle {
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
     private final SchedulingHistoryRepository historyRepository;
+    private final ScheduleRunInputRepository inputRepository;
     private final ScheduleExecutionService executionService;
     private final SchedulerProperties properties;
 
@@ -69,11 +71,13 @@ public class ScheduleRunner implements SmartLifecycle {
     public ScheduleRunner(ScheduleRepository scheduleRepository,
                           ScheduleRunRepository runRepository,
                           SchedulingHistoryRepository historyRepository,
+                          ScheduleRunInputRepository inputRepository,
                           ScheduleExecutionService executionService,
                           SchedulerProperties properties) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
+        this.inputRepository = inputRepository;
         this.executionService = executionService;
         this.properties = properties;
     }
@@ -218,7 +222,7 @@ public class ScheduleRunner implements SmartLifecycle {
     // ── 이력 정리 ───────────────────────────────────────────────
 
     /**
-     * 보존 기간이 지난 실행 이력을 하루 한 번 정리한다.
+     * 보존 기간이 지난 실행 이력과 그 실행 입력({@code schedule_run_inputs})을 하루 한 번 정리한다.
      *
      * <p>배치 결정 이력({@code scheduling_history})은 지우지 않고 연결만 끊는다.
      * 연구 근거 자료이기 때문이다.</p>
@@ -228,7 +232,11 @@ public class ScheduleRunner implements SmartLifecycle {
         if (today.equals(lastCleanupDate)) return;
         lastCleanupDate = today;
 
-        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(properties.getRunRetentionDays());
+        cleanupRunsStartedBefore(OffsetDateTime.now().minusDays(properties.getRunRetentionDays()));
+    }
+
+    /** {@code cutoff} 전에 시작한 실행 이력과 그 실행 입력을 지우고 결정 이력은 연결만 끊는다. 하루 한 번 가드 밖이라 테스트가 직접 부른다. */
+    void cleanupRunsStartedBefore(OffsetDateTime cutoff) {
         List<ScheduleRun> expired = runRepository.findByStartedAtBefore(cutoff);
         if (expired.isEmpty()) return;
 
@@ -236,6 +244,7 @@ public class ScheduleRunner implements SmartLifecycle {
         List<SchedulingHistory> linked = historyRepository.findByScheduleRunIdIn(runIds);
         linked.forEach(SchedulingHistory::unlinkRun);
         historyRepository.saveAll(linked);
+        inputRepository.deleteByScheduleRunIds(runIds);
         runRepository.deleteAll(expired);
 
         log.info("실행 이력 정리: {}건 삭제 (보존 {}일), 결정 이력 {}건은 연결만 해제",

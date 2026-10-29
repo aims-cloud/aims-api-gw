@@ -8,8 +8,10 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
+import com.innogrid.aims.scheduler.repository.PlacementInputRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -26,7 +28,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *
  * <p>지정하지 않은 협력자는 목(mock)이나 기본 구현으로 채운다. <b>선택 원장 셋(링크·디스패치·예산)은
  * 지정하지 않으면 {@code null} 로 남고</b>, 그것이 곧 "그 기능 없음"이다 — 옛 7·8·9인자 생성자가
- * 표현하던 것과 같은 의미다.</p>
+ * 표현하던 것과 같은 의미다. 단건 배치 입력 저장도 {@link #placementInputs} 로 붙이지 않으면 꺼져 있다.</p>
  */
 public final class SchedulingServiceBuilder {
 
@@ -42,6 +44,8 @@ public final class SchedulingServiceBuilder {
     private MdcLinkRepository links;
     private PlacementDispatchService dispatch;
     private MdcPowerBudgetRepository budgets;
+    private PlacementInputRepository placementInputs;
+    private ThermalModel thermalModel;
 
     private SchedulingServiceBuilder() {}
 
@@ -66,6 +70,13 @@ public final class SchedulingServiceBuilder {
     /** MDC 전력 예산 원장을 붙인다. 붙이지 않으면 MDC 총량 제약이 걸리지 않는다. */
     public SchedulingServiceBuilder budgets(MdcPowerBudgetRepository v) { this.budgets = v; return this; }
 
+    /** 단건 배치 입력 저장을 붙인다. 붙이지 않으면 입력을 남기지 않는다. */
+    public SchedulingServiceBuilder placementInputs(PlacementInputRepository v, ThermalModel thermal) {
+        this.placementInputs = v;
+        this.thermalModel = thermal;
+        return this;
+    }
+
     public SchedulingService build() {
         return new SchedulingService(
                 workloads != null ? workloads : mock(WorkloadRepository.class),
@@ -75,6 +86,6 @@ public final class SchedulingServiceBuilder {
                 engines != null ? engines : new EngineRegistry(List.of(new WeightedScoreScheduler())),
                 evaluator != null ? evaluator : ConstraintEvaluator.withDefaults(),
                 properties != null ? properties : new SchedulerProperties(),
-                links, dispatch, budgets);
+                links, dispatch, budgets, placementInputs, thermalModel);
     }
 }

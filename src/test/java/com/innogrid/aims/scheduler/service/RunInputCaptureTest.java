@@ -14,24 +14,32 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dispatch.DispatcherRegistry;
+import com.innogrid.aims.scheduler.dispatch.PlacementDispatcher;
 import com.innogrid.aims.scheduler.dispatch.RecordingPlacementDispatcher;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
+import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.MdcLink;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
+import com.innogrid.aims.scheduler.entity.PlacementInput;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.ScheduleRunInput;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
+import com.innogrid.aims.scheduler.repository.PlacementInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
@@ -45,6 +53,9 @@ import static org.mockito.Mockito.when;
 /**
  * 스케줄 실행 입력 저장 — 실행 1회에 한 행, 담는 항목, 담지 않는 회차, 함께 지우는 두 자리, 형식의 빠짐 없음.
  * 재생이 되는지는 {@link RunInputReplayTest} 가 본다.
+ *
+ * <p>단건 배치 입력 저장도 여기서 본다 — 같은 형식이고 같은 컨텍스트 조합이 필요하다. 1회에 한 행, 실패한 결정 포함,
+ * 노드가 없으면 남기지 않음, 결정 전 워크로드 상태, 보존 정리.</p>
  */
 @SpringBootTest
 class RunInputCaptureTest {
@@ -66,6 +77,9 @@ class RunInputCaptureTest {
     @Autowired ScheduleRunInputRepository inputRepository;
     @Autowired ThermalModel thermalModel;
     @Autowired SchedulerProperties properties;
+    @Autowired SchedulingService schedulingService;
+    @Autowired PlacementInputRepository placementInputRepository;
+    @Autowired RunClusterSnapshot clusterSnapshot;
     @MockitoBean NodeResourceCollector collector;
     @MockitoBean DispatcherRegistry registry;
 
@@ -77,6 +91,8 @@ class RunInputCaptureTest {
     @AfterEach
     void clean() {
         List.of(NODE_A, NODE_B).forEach(thermalModel::clearCritical);
+        Set<Long> ours = workloadRepository.findAll().stream().filter(w -> w.getName().startsWith(PREFIX)).map(Workload::getId).collect(Collectors.toSet());
+        placementInputRepository.findAll().stream().filter(r -> ours.contains(r.getWorkloadId())).forEach(placementInputRepository::delete);
         historyRepository.findAll().stream().filter(h -> h.getWorkloadName() != null && h.getWorkloadName().startsWith(PREFIX)).forEach(historyRepository::delete);
         dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith(PREFIX)).forEach(dispatchRepository::delete);
         workloadRepository.findAll().stream().filter(w -> w.getName().startsWith(PREFIX)).forEach(workloadRepository::delete);
@@ -266,7 +282,126 @@ class RunInputCaptureTest {
                 RunInputCapture.MAPPER.writeValueAsString(read), "픽스처에 없는 필드·이름이 다른 필드·순서가 다른 필드가 있다");
     }
 
+    // ── 단건 배치 입력 ─────────────────────────────────────────
+
+    @DisplayName("단건 배치 1회에 입력 한 행 — 엔진은 요청과, 성공 여부·선택 노드는 응답과 같고, 저장한 입력을 다시 계산하면 같은 결정이 나온다")
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"weighted", "power", "temperature"})
+    void single_placement_captures_inputs_and_decision(String engine) {
+        twoNodes();
+        Workload w = save("one-" + engine, Workload.WorkloadPriority.NORMAL);
+
+        SchedulingResult result = schedulingService.scheduleWorkload(w.getId(), engine);
+
+        assertTrue(result.success(), result.reason());
+        PlacementInput row = onlyPlacementInputOf(w.getId());
+        assertEquals(engine, row.getEngineId());
+        assertTrue(row.isSuccess());
+        assertEquals(result.selectedNodeId(), row.getSelectedNodeId());
+        assertEquals(RunInputCapture.FORMAT_VERSION, row.getFormatVersion());
+        assertEquals(RunInputCapture.digest(row.getPayload()), row.getInputDigest());
+        assertEquals(clusterSnapshot.knobsDigest(), row.getKnobsDigest(), "스케줄 실행 입력과 같은 노브 지문");
+        RunInputCapture.RunInputs in = RunInputCapture.read(row.getPayload());
+        assertEquals(engine, in.engineId());
+        assertEquals(List.of(w.getId()), in.workloads().stream().map(RunInputCapture.WorkloadRow::id).toList());
+        assertEquals(List.of(NODE_B, NODE_A), in.nodes().stream().map(RunInputCapture.NodeRow::nodeId).toList(), "수집 순서 그대로");
+
+        SchedulingResult again = RunInputReplay.replay(in, List.of(), Set.of()).get(0).result();
+        assertEquals(row.getSelectedNodeId(), again.selectedNodeId());
+        assertEquals(row.isSuccess(), again.success());
+    }
+
+    @DisplayName("엔진이 배치하지 못한 단건 배치도 입력과 실패 결정을 남긴다 — 배치 이력에는 여전히 남지 않고, 엔진을 비우면 기본 엔진 id 가 남는다")
+    @Test
+    void failed_single_placement_is_captured() {
+        twoNodes();
+        Workload big = new Workload(PREFIX + "big", 64, 1024);   // 노드는 16코어 — 어느 노드에도 놓을 수 없다
+        big.setResourceType(Workload.ResourceType.GPU);
+        big = workloadRepository.saveAndFlush(big);
+
+        SchedulingResult result = schedulingService.scheduleWorkload(big.getId(), null);
+
+        assertFalse(result.success());
+        PlacementInput row = onlyPlacementInputOf(big.getId());
+        assertFalse(row.isSuccess());
+        assertNull(row.getSelectedNodeId());
+        assertEquals(EngineRegistry.DEFAULT_ENGINE_ID, row.getEngineId(), "요청 엔진이 비면 실제로 쓴 기본 엔진");
+        assertFalse(RunInputReplay.replay(RunInputCapture.read(row.getPayload()), List.of(), Set.of()).get(0).result().success());
+        assertTrue(historyRepository.findAll().stream().noneMatch(h -> (PREFIX + "big").equals(h.getWorkloadName())),
+                "단건 배치의 실패 결정은 배치 이력에 남기지 않는다 — 입력 행에만 있다");
+    }
+
+    @DisplayName("노드가 하나도 없어 엔진을 부르지 않은 단건 배치는 입력을 남기지 않는다")
+    @Test
+    void single_placement_without_nodes_captures_nothing() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(), List.of()));
+        Workload w = save("nonode-single", Workload.WorkloadPriority.NORMAL);
+
+        SchedulingResult result = schedulingService.scheduleWorkload(w.getId(), "weighted");
+
+        assertEquals("활성 노드가 없습니다", result.reason());
+        assertTrue(placementInputRepository.findAll().stream().noneMatch(r -> r.getWorkloadId().equals(w.getId())));
+    }
+
+    @DisplayName("단건 배치 입력의 워크로드는 결정 전 상태다 — 배치가 바꾼 상태가 섞이지 않는다")
+    @Test
+    void single_placement_captures_workload_before_decision() {
+        twoNodes();
+        Workload w = save("before", Workload.WorkloadPriority.NORMAL);
+
+        schedulingService.scheduleWorkload(w.getId(), "weighted");
+
+        RunInputCapture.WorkloadRow captured = RunInputCapture.read(onlyPlacementInputOf(w.getId()).getPayload()).workloads().get(0);
+        assertEquals(Workload.WorkloadStatus.PENDING, captured.status());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, workloadRepository.findById(w.getId()).orElseThrow().getStatus());
+    }
+
+    @DisplayName("실행 계층이 받지 않은 단건 배치도 엔진 결정을 남긴다 — 응답은 실패로 낮아져도 행은 엔진이 고른 노드와 성공")
+    @Test
+    void rejected_single_placement_keeps_engine_decision() {
+        twoNodes();
+        Workload w = save("rejected", Workload.WorkloadPriority.NORMAL);
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) { return Outcome.rejected("노드 점검 중"); }
+        });
+
+        SchedulingResult result = schedulingService.scheduleWorkload(w.getId(), "weighted");
+
+        assertFalse(result.success(), "실행 계층이 받지 않아 응답은 실패로 낮아진다");
+        PlacementInput row = onlyPlacementInputOf(w.getId());
+        assertTrue(row.isSuccess(), "행은 실패로 낮추기 전의 엔진 결정이다");
+        PlacementDispatch recorded = dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).get(0);
+        assertEquals(PlacementDispatch.DispatchStatus.REJECTED, recorded.getStatus());
+        assertEquals(recorded.getNodeId(), row.getSelectedNodeId(), "행의 선택 노드는 실행 계층에 넘긴 노드와 같다");
+    }
+
+    @DisplayName("보존 정리는 지울 실행이 없어도 보존 기간 전에 저장한 단건 배치 입력을 지우고 그 뒤의 것은 남긴다")
+    @Test
+    void retention_cleanup_deletes_old_placement_inputs() {
+        Workload w = save("retention", Workload.WorkloadPriority.NORMAL);
+        OffsetDateTime now = OffsetDateTime.now();
+        PlacementInput old = placementInputRepository.save(new PlacementInput(w.getId(), RunInputCapture.FORMAT_VERSION,
+                now.minusDays(100), "weighted", true, NODE_A, null, null, "{}"));
+        PlacementInput recent = placementInputRepository.save(new PlacementInput(w.getId(), RunInputCapture.FORMAT_VERSION,
+                now.minusDays(1), "weighted", true, NODE_A, null, null, "{}"));
+        OffsetDateTime cutoff = now.minusDays(90);
+        assertTrue(runRepository.findByStartedAtBefore(cutoff).isEmpty(), "지울 실행이 없는 상태에서 본다");
+
+        runner.cleanupBefore(cutoff);
+
+        assertTrue(placementInputRepository.findById(old.getId()).isEmpty());
+        assertTrue(placementInputRepository.findById(recent.getId()).isPresent());
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
+
+    private PlacementInput onlyPlacementInputOf(Long workloadId) {
+        List<PlacementInput> rows = placementInputRepository.findAll().stream()
+                .filter(r -> r.getWorkloadId().equals(workloadId)).toList();
+        assertEquals(1, rows.size(), "단건 배치 1회에 한 행");
+        return rows.get(0);
+    }
 
     private static Set<String> declaredFields(Class<?> type, Set<String> excluded) {
         return Arrays.stream(type.getDeclaredFields())

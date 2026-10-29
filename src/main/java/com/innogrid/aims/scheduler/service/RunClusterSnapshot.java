@@ -61,6 +61,11 @@ public class RunClusterSnapshot {
      * 싣기 때문에 이 계산과 무관한 변경에도 값이 움직인다.</p>
      */
     public String knobsDigest() {
+        return knobsDigestOf(properties);
+    }
+
+    /** {@link #knobsDigest()} 와 같은 계산 — 이 빈을 주입받지 않는 단건 배치 입력 저장도 같은 지문을 남긴다. */
+    static String knobsDigestOf(SchedulerProperties properties) {
         SchedulerProperties.Power power = properties.getPower();
         String canonical = "activeCpuPercent=" + power.getActiveCpuPercent()
                 + ";idleRatio=" + power.getIdleRatio()

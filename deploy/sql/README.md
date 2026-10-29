@@ -30,6 +30,7 @@ psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-09-17_schedule_run_snapshot.sql
 psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-09-21_node_exporter_mappings.sql
 psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-09-22_scheduling_history_exclusion_codes.sql
 psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-10-28_schedule_run_inputs.sql
+psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-10-29_placement_inputs.sql
 ```
 
 `-v ON_ERROR_STOP=1` 을 붙인다. psql 기본값은 문장이 실패해도 계속 진행이라, 제약 하나가 안 걸린 것을 모른 채

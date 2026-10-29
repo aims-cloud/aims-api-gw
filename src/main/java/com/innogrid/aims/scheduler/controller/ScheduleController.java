@@ -13,6 +13,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunEngineReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
@@ -235,6 +236,20 @@ public class ScheduleController {
     public ApiResponse<ScheduleRunReplayResponse> replayRun(@PathVariable Long id,
                                                             @PathVariable Long runId) {
         return ApiResponse.ok(scheduleService.replay(id, runId));
+    }
+
+    @Operation(summary = "엔진별 재계산",
+            description = "실행 1건이 저장한 배치 입력 하나로 운영 엔진 세 개(weighted·power·temperature)를 각각 다시 계산해, "
+                    + "워크로드별 선택 노드·성공 여부를 배치 이력과 나란히 돌려줍니다. 같은 정책에서 스케줄 엔진만 바꿨다면 어떻게 배치됐을지를 "
+                    + "보는 검증·연구용이고, 화면이 부르지 않으며 DB 에 아무것도 저장하지 않습니다. 노드 배치 스코어·평가 지표·순위는 싣지 않으며 "
+                    + "이 응답으로 엔진 우열을 말하지 않습니다(판정은 배치 전략 비교의 판정판에서만). "
+                    + "건너뛴 워크로드와 실행 계층이 받지 않아 예약을 되돌린 워크로드는 모든 엔진에서 같게 처리합니다 — 되돌림은 실행 계층이 "
+                    + "노드마다 다르게 받을 수 있다면 가정입니다. replayVerdict 는 실제로 쓴 엔진을 다시 계산한 실행 재생 판정이고, MATCH 가 "
+                    + "아니면 다른 엔진 열을 같은 조건의 대안으로 읽을 수 없습니다. 오류는 실행 재생과 같습니다(404 · 409 · 500).")
+    @GetMapping("/{id}/runs/{runId}/replay/engines")
+    public ApiResponse<ScheduleRunEngineReplayResponse> replayRunByEngine(@PathVariable Long id,
+                                                                          @PathVariable Long runId) {
+        return ApiResponse.ok(scheduleService.replayEngines(id, runId));
     }
 
     // ── 실행 주기 검증 ──────────────────────────────────────────

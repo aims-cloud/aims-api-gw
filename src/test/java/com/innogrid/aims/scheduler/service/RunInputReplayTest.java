@@ -13,11 +13,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.innogrid.aims.scheduler.dispatch.DispatcherRegistry;
 import com.innogrid.aims.scheduler.dispatch.PlacementDispatcher;
 import com.innogrid.aims.scheduler.dispatch.RecordingPlacementDispatcher;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse;
+import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
@@ -30,6 +33,8 @@ import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
+
+import jakarta.persistence.EntityManager;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -44,6 +49,9 @@ import static org.mockito.Mockito.when;
  *                 pre            가장 한가한 노드 — 실행 전에 냉각 대기를 걸어 둔다(저장된 대기가 없으면 재생이 이 노드를 고른다)
  * 워크로드       우선순위가 다른 GPU 종류 3건(요구 GPU 0)
  * </pre>
+ *
+ * <p>실행 재생 API 의 판정({@link ScheduleService#replay})도 여기서 서비스를 직접 불러 본다 — 실제 실행이 남긴 입력·이력·전달
+ * 기록이 있어야 해서 이 컨텍스트를 함께 쓴다.</p>
  */
 @SpringBootTest
 class RunInputReplayTest {
@@ -63,6 +71,10 @@ class RunInputReplayTest {
     @Autowired PlacementDispatchRepository dispatchRepository;
     @Autowired ScheduleRunInputRepository inputRepository;
     @Autowired ThermalModel thermalModel;
+    @Autowired WorkloadService workloadService;
+    @Autowired EngineRegistry engineRegistry;
+    @Autowired TransactionTemplate tx;
+    @Autowired EntityManager em;
     @MockitoBean NodeResourceCollector collector;
     @MockitoBean DispatcherRegistry registry;
 
@@ -142,7 +154,163 @@ class RunInputReplayTest {
                 "거부 기록을 쓰지 않으면 재생이 어긋나야 이 테스트가 되돌림을 확인한다");
     }
 
+    @DisplayName("실행 재생은 엔진마다 모든 워크로드를 MATCH 로 판정하고 운영 냉각 대기를 건드리지 않는다")
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"weighted", "power", "temperature"})
+    void replay_service_matches_every_workload(String engine) {
+        fourNodes();
+        thermalModel.markCritical(PRE, 75);
+        save("w1", 4, Workload.WorkloadPriority.HIGH);
+        save("w2", 4, Workload.WorkloadPriority.NORMAL);
+        save("w3", 4, Workload.WorkloadPriority.LOW);
+        long scheduleId = schedule("a-" + engine, engine);
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        // 실행이 hot 에 건 대기를 지워 둔다 — 같은 상한의 대기가 이미 있으면 다시 걸어도 그대로라, 남겨 두면 재생이 운영 모델에 대기를 걸어도 아래 비교가 같다
+        thermalModel.clearCritical(HOT);
+        String marksBefore = String.valueOf(thermalModel.cooldownMarks());   // 안쪽 맵까지 문자열로 떠 둔다
+
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MATCH, replay.verdict(), "판정: " + replay.steps());
+        assertEquals(3, replay.total());
+        assertEquals(3, replay.matched());
+        assertEquals(engine, replay.engineId());
+        assertEquals(marksBefore, String.valueOf(thermalModel.cooldownMarks()), "재생은 엔진·모델을 새로 만들어 운영 냉각 대기를 바꾸지 않는다");
+    }
+
+    @DisplayName("실행 계층에 닿지 못한(UNAVAILABLE) 배치도 예약을 되돌려 재생해야 다음 워크로드가 같은 노드를 받는다")
+    @Test
+    void unavailable_dispatch_is_rolled_back_in_replay() {
+        twoTieNodes();
+        save("u1", 5, Workload.WorkloadPriority.HIGH);
+        save("u2", 5, Workload.WorkloadPriority.NORMAL);
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) {
+                return (PREFIX + "u1").equals(request.workloadName()) ? Outcome.unavailable("연결 끊김") : Outcome.accepted(null, "ok");
+            }
+        });
+        long scheduleId = schedule("s-unavailable", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        List<SchedulingHistory> history = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId());
+        assertEquals(TIE_B, history.get(1).getSelectedNodeId(), "u1 의 예약이 되돌아가 u2 가 같은 노드를 받는다");
+
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MATCH, replay.verdict(), "판정: " + replay.steps());
+        RunInputCapture.RunInputs inputs = RunInputCapture.read(inputRepository.findByScheduleRunId(run.getId()).orElseThrow().getPayload());
+        assertEquals(ScheduleRunReplayResponse.Verdict.MISMATCH,
+                RunInputReplay.compare(RunInputReplay.replay(inputs, history, Set.of()), history, Set.of()).verdict(),
+                "되돌림을 빼면 어긋나야 이 테스트가 UNAVAILABLE 되돌림을 확인한다");
+    }
+
+    @DisplayName("거부된 배치와 배치 직전에 건너뛴 워크로드가 있는 실행도 재생하면 MATCH 이고 건너뛴 건은 SKIPPED 다")
+    @Test
+    void replay_service_follows_rejection_and_skip() {
+        Workload[] r = rejectFirstAndMoveSecond();
+        long scheduleId = schedule("s-api-reject", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MATCH, replay.verdict(), "판정: " + replay.steps());
+        assertEquals(1, replay.skipped());
+        assertEquals(ScheduleRunReplayResponse.Outcome.SKIPPED,
+                replay.steps().stream().filter(s -> s.workloadId().equals(r[1].getId())).findFirst().orElseThrow().outcome());
+    }
+
+    @DisplayName("배치 이력 한 행의 노드 배치 스코어가 다르면 그 워크로드만 MISMATCH 로 판정한다")
+    @Test
+    void changed_score_in_history_is_a_mismatch() {
+        fourNodes();
+        save("m1", 4, Workload.WorkloadPriority.HIGH);
+        save("m2", 4, Workload.WorkloadPriority.NORMAL);
+        long scheduleId = schedule("s-mismatch", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        SchedulingHistory first = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId()).get(0);
+        tx.executeWithoutResult(st -> em.createQuery("update SchedulingHistory h set h.finalScore = h.finalScore + 0.001 where h.id = :id")
+                .setParameter("id", first.getId()).executeUpdate());
+
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MISMATCH, replay.verdict());
+        assertEquals(1, replay.mismatched());
+        assertEquals(ScheduleRunReplayResponse.Outcome.MISMATCH, replay.steps().get(0).outcome());
+        assertEquals(replay.steps().get(0).recordedNodeId(), replay.steps().get(0).replayedNodeId(), "노드는 같고 스코어만 다르다");
+    }
+
+    @DisplayName("거부된 워크로드를 지워 전달 기록이 사라지면 그 뒤를 확인할 수 없어 INCOMPLETE 로 판정한다")
+    @Test
+    void deleting_a_rejected_workload_makes_replay_incomplete() {
+        twoTieNodes();
+        Workload d1 = save("d1", 5, Workload.WorkloadPriority.HIGH);
+        save("d2", 5, Workload.WorkloadPriority.NORMAL);
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) {
+                return (PREFIX + "d1").equals(request.workloadName()) ? Outcome.rejected("노드 점검 중") : Outcome.accepted(null, "ok");
+            }
+        });
+        long scheduleId = schedule("s-deleted", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        workloadService.delete(d1.getId());   // 전달 기록만 함께 지운다 — 배치 이력은 남는다
+
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.INCOMPLETE, replay.verdict(), "판정: " + replay.steps());
+        assertEquals(1, replay.missingDispatchRecords());
+        assertEquals(ScheduleRunReplayResponse.Outcome.MISMATCH, replay.steps().get(1).outcome(),
+                "되돌림을 몰라 d2 는 다른 노드로 재생된다 — 그래도 판정은 MISMATCH 가 아니다");
+    }
+
+    @DisplayName("배치 이력 행이 없는 워크로드는 NOT_RECORDED 이고 판정은 INCOMPLETE 다")
+    @Test
+    void missing_history_row_is_not_recorded() {
+        fourNodes();
+        save("n1", 4, Workload.WorkloadPriority.HIGH);
+        save("n2", 4, Workload.WorkloadPriority.NORMAL);
+        long scheduleId = schedule("s-norecord", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        List<SchedulingHistory> history = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId());
+        historyRepository.delete(history.get(history.size() - 1));
+
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.INCOMPLETE, replay.verdict());
+        assertEquals(1, replay.notRecorded());
+        assertEquals(ScheduleRunReplayResponse.Outcome.NOT_RECORDED, replay.steps().get(1).outcome());
+        assertNull(replay.steps().get(1).recordedSuccess());
+    }
+
+    @DisplayName("재생기가 다시 만드는 엔진 id 는 엔진 레지스트리의 id 와 같다 — 엔진을 더하면 재생기도 함께 고친다")
+    @Test
+    void replayable_engines_match_the_engine_registry() {
+        Set<String> registered = engineRegistry.describe().stream().map(e -> e.get("id")).collect(Collectors.toSet());
+        assertEquals(registered, RunInputReplay.ENGINES);
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
+
+    /** r1 을 거부하면서 r2 를 다른 경로가 배치한 것처럼 바꾼다 — r2 는 배치 직전 다시 읽혀 건너뛰어진다. */
+    private Workload[] rejectFirstAndMoveSecond() {
+        twoTieNodes();
+        Workload r1 = save("r1", 5, Workload.WorkloadPriority.HIGH);
+        Workload r2 = save("r2", 5, Workload.WorkloadPriority.NORMAL);
+        save("r3", 5, Workload.WorkloadPriority.LOW);
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) {
+                if ((PREFIX + "r1").equals(request.workloadName())) {
+                    Workload other = workloadRepository.findById(r2.getId()).orElseThrow();
+                    other.assignTo("mdc-01", TIE_A, 0, "다른 경로");
+                    workloadRepository.saveAndFlush(other);
+                    return Outcome.rejected("노드 점검 중");
+                }
+                return Outcome.accepted(null, "ok");
+            }
+        });
+        return new Workload[] {r1, r2};
+    }
 
     private static void assertReplayMatches(List<RunInputReplay.Step> steps, List<SchedulingHistory> history) {
         assertEquals(history.size(), steps.size());

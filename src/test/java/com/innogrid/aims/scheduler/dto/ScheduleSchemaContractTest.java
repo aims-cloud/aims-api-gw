@@ -23,12 +23,12 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄 화면 DTO 의 <b>설명·예시·필수 표기가 코드와 갈리지 않는지</b> — 컨텍스트를 띄우지 않고 반사로만 본다.
  *
- * <p>이 열 record 는 프런트가 문자 그대로 읽는 계약이다. "설명이 있는지" 만 보는 검사는 한 단어로도
+ * <p>이 대상 record 는 프런트가 문자 그대로 읽는 계약이다. "설명이 있는지" 만 보는 검사는 한 단어로도
  * 통과하므로, 무게는 예시·허용값·필수 표기를 <b>코드의 사실과 대조</b>하는 쪽에 둔다 — 스케줄 ID 예시는
  * 서버 정규식에 맞아야 하고, cron 예시는 서버 검증을 통과해야 하며, 상태 허용값은 전이표가 실제로 받는
  * 값과 같아야 한다. 어느 하나가 갈리면 문서가 서버보다 넓거나 좁아져 프런트는 400 을 만난다.</p>
  *
- * <p>대상 아홉 개는 리터럴로 적는다. 새 DTO 를 이 계약에 편입하는 것은 결정이라 명시가 맞다.</p>
+ * <p>대상은 리터럴로 적는다. 새 DTO 를 이 계약에 편입하는 것은 결정이라 명시가 맞다.</p>
  */
 class ScheduleSchemaContractTest {
 
@@ -37,9 +37,10 @@ class ScheduleSchemaContractTest {
             ScheduleRunDetailResponse.class, ScheduleRunDetailResponse.ClusterSnapshot.class,
             ScheduleRunDetailResponse.Decision.class,
             CronPreviewResponse.class, CronPreviewResponse.NextRun.class, StatusChangeRequest.class,
-            ScheduleUpdateRequest.class);
+            ScheduleUpdateRequest.class,
+            ScheduleRunReplayResponse.class, ScheduleRunReplayResponse.Step.class);
 
-    @DisplayName("열 record 의 모든 필드에 설명이 있고, 설명은 필드 이름의 반복이 아니다")
+    @DisplayName("대상 record 의 모든 필드에 설명이 있고, 설명은 필드 이름의 반복이 아니다")
     @Test
     void every_component_carries_a_description_that_is_not_its_own_name() {
         int seen = 0;
@@ -56,10 +57,10 @@ class ScheduleSchemaContractTest {
                 seen++;
             }
         }
-        assertEquals(98, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
+        assertEquals(120, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
     }
 
-    @DisplayName("열 record 전부 클래스 레벨 설명이 있다")
+    @DisplayName("대상 record 전부 클래스 레벨 설명이 있다")
     @Test
     void every_record_carries_a_type_level_description() {
         for (Class<?> type : TARGETS) {
@@ -85,7 +86,8 @@ class ScheduleSchemaContractTest {
         for (Class<?> type : List.of(ScheduleResponse.class, ScheduleRunResponse.class,
                 ScheduleRunDetailResponse.class, ScheduleRunDetailResponse.ClusterSnapshot.class,
                 ScheduleRunDetailResponse.Decision.class,
-                CronPreviewResponse.class, CronPreviewResponse.NextRun.class)) {
+                CronPreviewResponse.class, CronPreviewResponse.NextRun.class,
+                ScheduleRunReplayResponse.class, ScheduleRunReplayResponse.Step.class)) {
             assertTrue(requiredNames(type).isEmpty(),
                     type.getSimpleName() + ": 응답에 필수 표기가 있다 — 응답은 서버가 채우는 것이라 필수 개념이 없다");
         }

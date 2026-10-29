@@ -34,7 +34,7 @@ public record ScheduleRunEngineReplayResponse(
         @Schema(description = "실행이 배치 직전에 다시 읽어 건너뛴 워크로드 수 — 모든 엔진에서 같게 건너뛴다")
         int skipped,
         @Schema(description = "실행 계층이 받지 않아 실행이 예약을 되돌린 워크로드 수 — 모든 엔진에서 같은 워크로드의 예약을 되돌린다. "
-                + "0 이면 이 가정이 결과에 닿지 않는다")
+                + "그 밖의 배치는 실행 계층이 받았다고 보므로, 실행 계층이 노드마다 다르게 받게 되면 0 이어도 다른 엔진 열은 실제와 다를 수 있다")
         int rolledBack,
         @Schema(description = "엔진별 집계, 순서 고정(weighted · power · temperature)")
         List<Engine> engines,
@@ -52,9 +52,10 @@ public record ScheduleRunEngineReplayResponse(
             String engineId,
             @Schema(description = "그 실행이 실제로 쓴 엔진이면 true")
             boolean recorded,
-            @Schema(description = "엔진 결정이 성공한 워크로드 수(건너뛴 워크로드 제외)")
+            @Schema(description = "엔진 결정이 성공한 워크로드 수(건너뛴 워크로드 제외). 엔진 결정 기준이라 예약을 되돌린 워크로드가 있으면 "
+                    + "실행 이력의 성공 수와 다를 수 있다")
             int placed,
-            @Schema(description = "엔진 결정이 실패한 워크로드 수(건너뛴 워크로드 제외)")
+            @Schema(description = "엔진 결정이 실패한 워크로드 수(건너뛴 워크로드 제외). 엔진 결정 기준이다")
             int failed,
             @Schema(description = "선택 노드·성공 여부가 배치 이력과 같은 워크로드 수. 건너뛴 워크로드와 이력 행이 없는 워크로드는 세지 않고, "
                     + "실패와 실패는 같은 것으로 센다")

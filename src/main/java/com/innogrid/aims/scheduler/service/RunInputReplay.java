@@ -5,13 +5,18 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-
-import org.springframework.test.util.ReflectionTestUtils;
+import java.util.stream.Collectors;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse.Outcome;
+import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse.Verdict;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
 import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
@@ -21,6 +26,8 @@ import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.MdcLink;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch.DispatchStatus;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -35,15 +42,23 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 저장한 실행 입력만으로 그 회차의 배치를 다시 돌린다 — 저장한 묶음이 재생에 충분한지 확인하는 테스트 도구.
+ * 저장한 실행 입력만으로 그 실행의 배치를 다시 돌리고 배치 이력과 대조한다 — 실행 재생 API 와 재생 테스트가 함께 쓴다.
  *
- * <p>엔진·평가기·모델은 스프링 빈을 쓰지 않고 공개 생성자로 다시 만든다. 노브는 payload 의 전력·열·네트워크 설정을 새
- * {@link SchedulerProperties} 에 덮어쓴다. 냉각 대기는 시각을 맞춘 시계로 다시 건 뒤 저장 시각으로 돌려놓는다. 평가기는
- * 대기를 거는 쪽이다 — 실제 실행처럼 루프 중 상한을 넘은 노드에 대기가 걸려 뒤 워크로드가 그 노드를 보지 못한다.</p>
+ * <p>엔진·평가기·모델은 스프링 빈을 쓰지 않고 공개 생성자로 다시 만든다. 운영 {@link ThermalModel} 빈의 냉각 대기를 건드리지
+ * 않으려는 것이다. 노브는 payload 의 전력·열·네트워크 설정을 새 {@link SchedulerProperties} 에 덮어쓴다. 냉각 대기는 시각을
+ * 맞춘 시계로 다시 건 뒤 저장 시각으로 돌려놓는다. 평가기는 대기를 거는 쪽이다 — 실제 실행처럼 루프 중 상한을 넘은 노드에
+ * 대기가 걸려 뒤 워크로드가 그 노드를 보지 못한다.</p>
  *
- * <p>루프 안에서 생긴 일은 결과 쪽 기록에서 가져온다: 배치 이력의 후보 0 행은 건너뜀, 전달 기록의 거부는 예약 되돌림.</p>
+ * <p>루프 안에서 생긴 일은 결과 쪽 기록에서 가져온다: 배치 이력의 후보 0 행은 건너뜀, 전달 기록의 거부·불가는 예약 되돌림
+ * ({@link PlacementDispatchService#downgrade} 가 실패로 낮추는 상태와 같다).</p>
  */
 final class RunInputReplay {
+
+    /** 다시 만들 수 있는 엔진 id. 엔진 레지스트리의 id 와 같아야 한다 — 테스트가 맞대어 확인한다. */
+    static final Set<String> ENGINES = Set.of("weighted", "power", "temperature");
+
+    /** 실행이 예약을 되돌린 전달 상태 — 실행 계층이 받지 않은 배치. */
+    private static final Set<DispatchStatus> ROLLED_BACK = EnumSet.of(DispatchStatus.REJECTED, DispatchStatus.UNAVAILABLE);
 
     private RunInputReplay() {}
 
@@ -52,6 +67,12 @@ final class RunInputReplay {
 
     /** 재생에 쓰는 엔진 묶음. 노브를 덮어쓴 설정이 정말 저장값과 같은지 테스트가 볼 수 있게 설정도 돌려준다. */
     record Rebuilt(SchedulerProperties properties, ThermalModel thermalModel, PlacementContext context, SchedulingEngine engine) {}
+
+    /** 재생 한 건과 그 워크로드의 배치 이력 행(없으면 null)을 맞댄 결과. */
+    record Compared(Step step, SchedulingHistory recorded, Outcome outcome) {}
+
+    /** 대조 전체 — 판정과 워크로드별 결과, 성공한 배치인데 전달 기록이 없는 워크로드 수. */
+    record Report(Verdict verdict, List<Compared> steps, int missingDispatchRecords) {}
 
     static Rebuilt rebuild(RunInputCapture.RunInputs in) {
         SchedulerProperties props = new SchedulerProperties();
@@ -88,31 +109,107 @@ final class RunInputReplay {
     /**
      * 대상 순서대로 다시 배치한다.
      *
-     * @param history  그 실행의 배치 이력(워크로드마다 한 행) — 후보 0 행이면 건너뛴 것이다
-     * @param rejected 실행 계층이 받지 않은 워크로드 id — 성공한 배치의 예약을 되돌린다
+     * @param history    그 실행의 배치 이력(워크로드마다 한 행) — 후보 0 행이면 건너뛴 것이다
+     * @param rolledBack 실행 계층이 받지 않아 실행이 예약을 되돌린 워크로드 id — 성공한 배치의 예약을 되돌린다
      */
-    static List<Step> replay(RunInputCapture.RunInputs in, List<SchedulingHistory> history, Set<Long> rejected) {
+    static List<Step> replay(RunInputCapture.RunInputs in, List<SchedulingHistory> history, Set<Long> rolledBack) {
         Rebuilt rebuilt = rebuild(in);
-        Map<Long, SchedulingHistory> byWorkload = new java.util.HashMap<>();
-        history.forEach(h -> byWorkload.put(h.getWorkloadId(), h));
+        Map<Long, SchedulingHistory> byWorkload = byWorkload(history);
         List<Step> steps = new ArrayList<>();
         for (RunInputCapture.WorkloadRow row : in.workloads()) {
-            SchedulingHistory h = byWorkload.get(row.id());
-            if (h != null && h.getCandidateCount() == 0 && h.getSelectedNodeId() == null) {
+            if (isSkip(byWorkload.get(row.id()))) {
                 steps.add(new Step(row.id(), true, null));
                 continue;
             }
             Workload w = workload(row);
-            SchedulingResult result = rebuilt.engine().schedule(w, rebuilt.context());
+            SchedulingResult result;
+            try {
+                result = rebuilt.engine().schedule(w, rebuilt.context());
+            } catch (RuntimeException e) {
+                // 어느 워크로드에서 났는지 붙여 다시 던진다 — 호출자가 오류 응답에 싣는다
+                throw new IllegalStateException("워크로드 " + row.id() + " 재계산 중 오류: " + e, e);
+            }
             if (result.success()) {
                 rebuilt.context().reserve(result.selectedNodeId(), w);
-                if (rejected.contains(row.id())) {
+                if (rolledBack.contains(row.id())) {
                     rebuilt.context().unreserve(result.selectedNodeId(), w);
                 }
             }
             steps.add(new Step(row.id(), false, result));
         }
         return steps;
+    }
+
+    /** 이 전달 상태면 실행이 예약을 되돌렸다. */
+    static boolean rollsBack(DispatchStatus status) {
+        return ROLLED_BACK.contains(status);
+    }
+
+    /** 그 실행의 전달 기록 중 예약을 되돌린 워크로드 id. */
+    static Set<Long> rolledBackOf(List<PlacementDispatch> dispatches) {
+        return dispatches.stream().filter(d -> rollsBack(d.getStatus()))
+                .map(PlacementDispatch::getWorkloadId).collect(Collectors.toSet());
+    }
+
+    /**
+     * 배치 이력은 성공인데 그 실행의 전달 기록이 없는 워크로드 id. 워크로드 삭제가 전달 기록만 지웠거나, 멱등키가 같은 기록이
+     * 다른 실행에 이미 있어 새로 만들지 않은 경우다 — 실행이 예약을 되돌렸는지 알 수 없다.
+     */
+    static Set<Long> missingDispatch(List<SchedulingHistory> history, List<PlacementDispatch> dispatches) {
+        Set<Long> dispatched = dispatches.stream().map(PlacementDispatch::getWorkloadId).collect(Collectors.toSet());
+        Set<Long> missing = new HashSet<>();
+        for (SchedulingHistory h : history) {
+            if (Boolean.TRUE.equals(h.getSuccess()) && !dispatched.contains(h.getWorkloadId())) {
+                missing.add(h.getWorkloadId());
+            }
+        }
+        return missing;
+    }
+
+    /**
+     * 재생 결과를 워크로드 id 로 배치 이력과 맞댄다. 선택 노드·노드 배치 스코어({@code finalScore})·성공 여부가 모두 같아야
+     * MATCH 다 — 스코어는 오차 없이 비교한다.
+     *
+     * <p>판정은 앞에서부터 본다. 이력 행이 없는 워크로드부터, 그리고 전달 기록이 없는 성공 배치의 다음 워크로드부터는 실행의
+     * 예약 상태를 알 수 없다. 그 지점 앞에서 어긋났으면 MISMATCH, 앞이 모두 같고 그런 지점이 있으면 INCOMPLETE, 끝까지
+     * 확인했으면 MATCH 다.</p>
+     */
+    static Report compare(List<Step> steps, List<SchedulingHistory> history, Set<Long> missingDispatch) {
+        Map<Long, SchedulingHistory> byWorkload = byWorkload(history);
+        List<Compared> compared = new ArrayList<>();
+        Verdict verdict = null;
+        boolean unknown = false;
+        for (Step step : steps) {
+            SchedulingHistory h = byWorkload.get(step.workloadId());
+            Outcome outcome = outcomeOf(step, h);
+            compared.add(new Compared(step, h, outcome));
+            if (outcome == Outcome.NOT_RECORDED) unknown = true;
+            if (outcome == Outcome.MISMATCH && !unknown && verdict == null) verdict = Verdict.MISMATCH;
+            if (missingDispatch.contains(step.workloadId())) unknown = true;
+        }
+        if (verdict == null) verdict = unknown ? Verdict.INCOMPLETE : Verdict.MATCH;
+        return new Report(verdict, compared, missingDispatch.size());
+    }
+
+    private static Outcome outcomeOf(Step step, SchedulingHistory h) {
+        if (h == null) return Outcome.NOT_RECORDED;
+        if (step.skipped()) return Outcome.SKIPPED;
+        SchedulingResult r = step.result();
+        boolean same = Objects.equals(h.getSelectedNodeId(), r.selectedNodeId())
+                && Double.compare(h.getFinalScore(), r.finalScore()) == 0
+                && Boolean.valueOf(r.success()).equals(h.getSuccess());
+        return same ? Outcome.MATCH : Outcome.MISMATCH;
+    }
+
+    /** 실행이 배치 직전에 다시 읽어 건너뛴 워크로드의 이력 행 — 후보 0 · 선택 노드 없음. */
+    private static boolean isSkip(SchedulingHistory h) {
+        return h != null && h.getCandidateCount() == 0 && h.getSelectedNodeId() == null;
+    }
+
+    private static Map<Long, SchedulingHistory> byWorkload(List<SchedulingHistory> history) {
+        Map<Long, SchedulingHistory> byWorkload = new HashMap<>();
+        history.forEach(h -> byWorkload.put(h.getWorkloadId(), h));
+        return byWorkload;
     }
 
     private static void apply(JsonNode values, Object target) {
@@ -154,9 +251,9 @@ final class RunInputReplay {
         return p;
     }
 
+    /** 엔진과 예약은 워크로드 id 를 쓰지 않아 id 는 채우지 않는다 — 대조는 {@link Step#workloadId()} 로 한다. */
     static Workload workload(RunInputCapture.WorkloadRow r) {
         Workload w = new Workload(r.name(), r.requiredCpu(), r.requiredMemoryMb());
-        ReflectionTestUtils.setField(w, "id", r.id());
         w.setRequiredGpu(r.requiredGpu());
         w.setRequiredDiskGb(r.requiredDiskGb());
         w.setResourceType(r.resourceType());

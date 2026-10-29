@@ -251,6 +251,21 @@ class RunInputCaptureTest {
         assertEquals(declaredFields(SchedulingPolicy.class, Set.of("id", "createdAt")), componentNames(RunInputCapture.PolicyRow.class));
     }
 
+    @DisplayName("형식 1 고정 픽스처를 읽어 다시 쓰면 같은 JSON 이다 — 형식 1 의 필드 이름·종류·순서가 바뀌면 저장해 둔 실행을 재생할 수 없다")
+    @Test
+    void format_1_fixture_round_trips() throws Exception {
+        String fixture;
+        try (var in = getClass().getResourceAsStream("/scheduler/replay/run-input-format-1.json")) {
+            fixture = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+
+        RunInputCapture.RunInputs read = RunInputCapture.read(fixture);
+
+        assertEquals(RunInputCapture.FORMAT_VERSION, read.formatVersion());
+        assertEquals(RunInputCapture.MAPPER.writeValueAsString(RunInputCapture.MAPPER.readTree(fixture)),
+                RunInputCapture.MAPPER.writeValueAsString(read), "픽스처에 없는 필드·이름이 다른 필드·순서가 다른 필드가 있다");
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     private static Set<String> declaredFields(Class<?> type, Set<String> excluded) {

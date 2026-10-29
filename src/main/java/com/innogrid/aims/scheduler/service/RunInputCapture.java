@@ -42,8 +42,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 받지 않아 되돌린 예약(전달 기록). 둘 다 이미 남으므로 재생할 때 거기서 읽는다. 실행 도중 편집된 워크로드의 새 값은 담지
  * 않는다.</p>
  *
- * <p>빈이 아니다 — {@link ScheduleExecutionService} 가 만들어 쓴다. 직렬화기도 전역 빈을 주입받지 않고 여기서 만든다. 전역
- * 설정이 바뀌어도 저장 형식이 흔들리지 않게 하려는 것이다.</p>
+ * <p>빈이 아니다 — {@link ScheduleExecutionService} 와 단건 배치({@link SchedulingService})가 만들어 쓴다. 직렬화기도 전역 빈을
+ * 주입받지 않고 여기서 만든다. 전역 설정이 바뀌어도 저장 형식이 흔들리지 않게 하려는 것이다.</p>
  */
 final class RunInputCapture {
 
@@ -62,12 +62,22 @@ final class RunInputCapture {
         this.properties = properties;
     }
 
+    /** 저장소 없이 문자열만 만드는 형태 — 단건 배치({@link SchedulingService})는 자기 표에 저장한다. {@link #capture} 를 쓰지 않는다. */
+    RunInputCapture(ThermalModel thermalModel, SchedulerProperties properties) {
+        this(null, thermalModel, properties);
+    }
+
     /** 입력을 모아 문자열로 바꾸고 한 행으로 저장한다. 예외는 호출자가 잡는다 — 실행은 계속해야 한다. */
     void capture(Long runId, String engineId, PlacementContext context, List<Workload> targets, String knobsDigest) {
         Instant now = Instant.now();
-        String payload = MAPPER.writeValueAsString(inputsOf(engineId, now, context, targets));
+        String payload = payloadOf(engineId, now, context, targets);
         repository.save(new ScheduleRunInput(runId, FORMAT_VERSION, OffsetDateTime.ofInstant(now, ZoneOffset.UTC),
                 knobsDigest, digest(payload), payload));
+    }
+
+    /** 입력을 모아 그 자리에서 문자열로 바꾼다 — 뒤에 바뀌는 예약·냉각 대기·워크로드 상태가 섞이지 않게. */
+    String payloadOf(String engineId, Instant capturedAt, PlacementContext context, List<Workload> targets) {
+        return MAPPER.writeValueAsString(inputsOf(engineId, capturedAt, context, targets));
     }
 
     RunInputs inputsOf(String engineId, Instant capturedAt, PlacementContext context, List<Workload> targets) {

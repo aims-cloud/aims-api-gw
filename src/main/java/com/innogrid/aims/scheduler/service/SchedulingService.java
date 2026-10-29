@@ -1,6 +1,8 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +22,9 @@ import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
+import com.innogrid.aims.scheduler.entity.PlacementInput;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
@@ -32,6 +36,7 @@ import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
+import com.innogrid.aims.scheduler.repository.PlacementInputRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
@@ -67,8 +72,14 @@ public class SchedulingService {
     /** MDC 전력 예산 원장. null 이면(직접 조립한 테스트 경로) MDC 총량 제약이 걸리지 않는다. */
     private final MdcPowerBudgetRepository budgetRepository;
 
+    /** 단건 배치 입력 저장소. null 이면(직접 조립한 테스트 경로) 입력을 남기지 않는다. */
+    private final PlacementInputRepository inputRepository;
+
+    /** 단건 배치 입력을 문자열로 만든다. 저장소가 없으면 null. 빈이 아니라 여기서 만든다 — 스케줄 실행과 같은 형식을 쓴다. */
+    private final RunInputCapture inputCapture;
+
     /**
-     * 유일한 생성자다. 선택 원장(링크·디스패치·예산)은 {@code null} 이면 그 기능이 꺼진다.
+     * 유일한 생성자다. 선택 원장(링크·디스패치·예산·단건 배치 입력)은 {@code null} 이면 그 기능이 꺼진다.
      *
      * <p>예전에는 "옛 인자 수" 생성자를 하나씩 남겨 7·8·9·10인자 4단이었다. 테스트가 위치 인자로 직접
      * 조립하고 있어 인자를 늘릴 때마다 테스트가 깨졌기 때문인데, 인자 열 개가 대부분 리포지토리·서비스
@@ -85,7 +96,9 @@ public class SchedulingService {
                              SchedulerProperties properties,
                              MdcLinkRepository linkRepository,
                              PlacementDispatchService dispatchService,
-                             MdcPowerBudgetRepository budgetRepository) {
+                             MdcPowerBudgetRepository budgetRepository,
+                             PlacementInputRepository inputRepository,
+                             ThermalModel thermalModel) {
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.nodeCollector = nodeCollector;
@@ -96,6 +109,8 @@ public class SchedulingService {
         this.linkRepository = linkRepository;
         this.dispatchService = dispatchService;
         this.budgetRepository = budgetRepository;
+        this.inputRepository = inputRepository;
+        this.inputCapture = inputRepository == null ? null : new RunInputCapture(thermalModel, properties);
     }
 
     /**
@@ -119,8 +134,45 @@ public class SchedulingService {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
 
+        PendingInput input = prepareInput(workload, context, engineId);
         SchedulingResult result = placementService.place(workload, context, engineId).withPolicyName(policyNameOf(context));
+        saveInput(workload.getId(), input, result);
         return dispatch(workload, result, null);
+    }
+
+    /** 배치 직전 입력 — 저장 시각·실제로 쓸 엔진·문자열로 바꾼 입력. */
+    private record PendingInput(Instant capturedAt, String engineId, String payload) {}
+
+    /**
+     * 배치 직전 입력을 문자열로 만든다. {@link PlacementService#place} 가 워크로드 상태를 바꾸므로 그 전에 만든다.
+     * 저장을 끈 조립이거나 만들다 실패하면 null — 배치는 그대로 한다.
+     */
+    private PendingInput prepareInput(Workload workload, PlacementContext context, String engineId) {
+        if (inputCapture == null) return null;
+        try {
+            String resolved = engineRegistry.resolve(engineId).getId();
+            Instant now = Instant.now();
+            return new PendingInput(now, resolved, inputCapture.payloadOf(resolved, now, context, List.of(workload)));
+        } catch (RuntimeException | LinkageError e) {
+            log.warn("단건 배치 입력 만들기 실패(배치는 계속한다): workload={}", workload.getId(), e);
+            return null;
+        }
+    }
+
+    /**
+     * 엔진 결정과 함께 입력을 한 행으로 남긴다 — 실패한 결정도 남긴다. {@link PlacementService#place} 의 트랜잭션이 끝난 뒤라,
+     * 저장이 실패해도 결정은 되돌아가지 않는다. 실패는 로그만 남기고 응답은 그대로 둔다.
+     */
+    private void saveInput(Long workloadId, PendingInput input, SchedulingResult result) {
+        if (input == null) return;
+        try {
+            inputRepository.save(new PlacementInput(workloadId, RunInputCapture.FORMAT_VERSION,
+                    OffsetDateTime.ofInstant(input.capturedAt(), ZoneOffset.UTC), input.engineId(),
+                    result.success(), result.selectedNodeId(), RunClusterSnapshot.knobsDigestOf(properties),
+                    RunInputCapture.digest(input.payload()), input.payload()));
+        } catch (RuntimeException | LinkageError e) {
+            log.warn("단건 배치 입력 저장 실패(응답은 그대로): workload={}", workloadId, e);
+        }
     }
 
     /**

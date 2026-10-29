@@ -26,7 +26,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *
  * <p>지정하지 않은 협력자는 목(mock)이나 기본 구현으로 채운다. <b>선택 원장 셋(링크·디스패치·예산)은
  * 지정하지 않으면 {@code null} 로 남고</b>, 그것이 곧 "그 기능 없음"이다 — 옛 7·8·9인자 생성자가
- * 표현하던 것과 같은 의미다.</p>
+ * 표현하던 것과 같은 의미다. 단건 배치 입력 저장은 이 빌더로 조립하면 늘 꺼져 있다 — 그 저장은 스프링 컨텍스트 테스트가 본다.</p>
  */
 public final class SchedulingServiceBuilder {
 
@@ -75,6 +75,6 @@ public final class SchedulingServiceBuilder {
                 engines != null ? engines : new EngineRegistry(List.of(new WeightedScoreScheduler())),
                 evaluator != null ? evaluator : ConstraintEvaluator.withDefaults(),
                 properties != null ? properties : new SchedulerProperties(),
-                links, dispatch, budgets);
+                links, dispatch, budgets, null, null);
     }
 }

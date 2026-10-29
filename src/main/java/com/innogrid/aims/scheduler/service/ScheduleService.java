@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 
 import com.innogrid.aims.common.dto.PageResponse;
@@ -28,12 +29,17 @@ import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
+import com.innogrid.aims.scheduler.entity.ScheduleRunInput;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
+import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
@@ -73,6 +79,7 @@ public class ScheduleService {
     private final ScheduleRunRepository runRepository;
     private final SchedulingHistoryRepository historyRepository;
     private final ScheduleRunInputRepository inputRepository;
+    private final PlacementDispatchRepository dispatchRepository;
     private final CronSupport cronSupport;
     private final EngineRegistry engineRegistry;
     private final ScheduleActorResolver actorResolver;
@@ -81,6 +88,7 @@ public class ScheduleService {
                            ScheduleRunRepository runRepository,
                            SchedulingHistoryRepository historyRepository,
                            ScheduleRunInputRepository inputRepository,
+                           PlacementDispatchRepository dispatchRepository,
                            CronSupport cronSupport,
                            EngineRegistry engineRegistry,
                            ScheduleActorResolver actorResolver) {
@@ -88,6 +96,7 @@ public class ScheduleService {
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
         this.inputRepository = inputRepository;
+        this.dispatchRepository = dispatchRepository;
         this.cronSupport = cronSupport;
         this.engineRegistry = engineRegistry;
         this.actorResolver = actorResolver;
@@ -152,10 +161,7 @@ public class ScheduleService {
     /** 실행 1건의 상세 — 워크로드별 배치 결정을 함께 돌려준다. */
     @Transactional(readOnly = true)
     public ScheduleRunDetailResponse runDetail(Long id, Long runId) {
-        Schedule schedule = require(id);
-        ScheduleRun run = runRepository.findByIdAndScheduleId(runId, schedule.getId())
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
-                        "실행 이력을 찾을 수 없습니다: " + runId));
+        ScheduleRun run = requireRun(id, runId);
 
         List<ScheduleRunDetailResponse.Decision> decisions =
                 historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId()).stream()
@@ -163,6 +169,87 @@ public class ScheduleService {
                         .toList();
         return new ScheduleRunDetailResponse(ScheduleRunResponse.from(run),
                 ScheduleRunDetailResponse.ClusterSnapshot.from(run), decisions);
+    }
+
+    /**
+     * 실행 1건을 저장한 입력으로 다시 계산해 배치 이력과 대조한다. DB 에 저장하지 않는다 — 엔진·모델은 요청마다 새로 만들고
+     * 운영 냉각 대기도 건드리지 않는다.
+     *
+     * <p>404: 실행이 없거나 다른 스케줄의 실행이거나 저장한 입력이 없다. 409: 아직 실행 중이거나, 형식 판이 지금 읽을 수
+     * 있는 판이 아니거나, 원문이 저장한 지문과 다르거나, 지금 코드로 읽을 수 없거나, 다시 만들 수 없는 엔진이다. 500: 다시
+     * 계산하던 엔진이 예외를 냈다(워크로드 id 를 사유에 싣는다).</p>
+     */
+    @Transactional(readOnly = true)
+    public ScheduleRunReplayResponse replay(Long id, Long runId) {
+        ScheduleRun run = requireRun(id, runId);
+        if (run.getStatus() == ScheduleRun.RunStatus.RUNNING) {
+            throw new BusinessException(HttpStatus.CONFLICT, "아직 실행 중인 실행은 재생할 수 없습니다: " + runId);
+        }
+        ScheduleRunInput input = inputRepository.findByScheduleRunId(run.getId())
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "저장한 입력이 없는 실행입니다(입력 저장 전 실행·배치 전에 끝난 실행·저장 실패): " + runId));
+        if (input.getFormatVersion() != RunInputCapture.FORMAT_VERSION) {
+            throw new BusinessException(HttpStatus.CONFLICT, "재생할 수 없는 입력 형식 판입니다: " + input.getFormatVersion());
+        }
+        if (!RunInputCapture.digest(input.getPayload()).equals(input.getInputDigest())) {
+            throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력이 저장 때의 지문과 다릅니다: " + runId);
+        }
+        RunInputCapture.RunInputs inputs;
+        try {
+            inputs = RunInputCapture.read(input.getPayload());
+        } catch (JacksonException e) {
+            throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력을 지금 코드로 읽을 수 없습니다: " + runId);
+        }
+        if (!RunInputReplay.ENGINES.contains(inputs.engineId())) {
+            throw new BusinessException(HttpStatus.CONFLICT, "다시 만들 수 없는 엔진입니다: " + inputs.engineId());
+        }
+
+        List<SchedulingHistory> history = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId());
+        List<PlacementDispatch> dispatches = dispatchRepository.findByScheduleRunIdOrderByRequestedAtAsc(run.getId());
+        List<RunInputReplay.Step> steps;
+        try {
+            steps = RunInputReplay.replay(inputs, history, RunInputReplay.rolledBackOf(dispatches));
+        } catch (RuntimeException e) {
+            // 처리하지 않은 예외는 인증 없는 오류 경로로 넘어가 본문 없는 403 이 된다 — 사유를 실어 500 으로 돌려준다
+            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "실행 재생에 실패했습니다: " + e.getMessage());
+        }
+        RunInputReplay.Report report = RunInputReplay.compare(steps, history,
+                RunInputReplay.missingDispatch(history, dispatches));
+        return toReplayResponse(run, input, inputs.engineId(), report);
+    }
+
+    private static ScheduleRunReplayResponse toReplayResponse(ScheduleRun run, ScheduleRunInput input, String engineId,
+                                                              RunInputReplay.Report report) {
+        List<ScheduleRunReplayResponse.Step> steps = report.steps().stream().map(c -> {
+            SchedulingHistory h = c.recorded();
+            SchedulingResult r = c.step().result();
+            return new ScheduleRunReplayResponse.Step(c.step().workloadId(), c.outcome(),
+                    h == null ? null : h.getSelectedNodeId(),
+                    h == null ? null : h.getFinalScore(),
+                    h == null ? null : h.getSuccess(),
+                    r == null ? null : r.selectedNodeId(),
+                    r == null ? null : r.finalScore(),
+                    r == null ? null : r.success());
+        }).toList();
+        return new ScheduleRunReplayResponse(run.getId(), input.getFormatVersion(), input.getCapturedAt(), engineId,
+                input.getInputDigest(), input.getKnobsDigest(), report.verdict(), steps.size(),
+                count(steps, ScheduleRunReplayResponse.Outcome.MATCH),
+                count(steps, ScheduleRunReplayResponse.Outcome.MISMATCH),
+                count(steps, ScheduleRunReplayResponse.Outcome.SKIPPED),
+                count(steps, ScheduleRunReplayResponse.Outcome.NOT_RECORDED),
+                report.missingDispatchRecords(), steps);
+    }
+
+    private static int count(List<ScheduleRunReplayResponse.Step> steps, ScheduleRunReplayResponse.Outcome outcome) {
+        return (int) steps.stream().filter(s -> s.outcome() == outcome).count();
+    }
+
+    /** 실행이 없거나 다른 스케줄의 실행이면 404. */
+    private ScheduleRun requireRun(Long id, Long runId) {
+        Schedule schedule = require(id);
+        return runRepository.findByIdAndScheduleId(runId, schedule.getId())
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
+                        "실행 이력을 찾을 수 없습니다: " + runId));
     }
 
     // ── 생성·수정·삭제 ──────────────────────────────────────────

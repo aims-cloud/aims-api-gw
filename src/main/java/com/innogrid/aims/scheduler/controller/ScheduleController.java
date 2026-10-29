@@ -13,6 +13,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -221,6 +222,19 @@ public class ScheduleController {
     public ApiResponse<ScheduleRunDetailResponse> getRunDetail(@PathVariable Long id,
                                                                @PathVariable Long runId) {
         return ApiResponse.ok(scheduleService.runDetail(id, runId));
+    }
+
+    @Operation(summary = "실행 재생",
+            description = "실행 1건이 저장한 배치 입력으로 그 실행의 배치를 지금 코드로 다시 계산해, 워크로드별로 배치 이력의 "
+                    + "선택 노드·노드 배치 스코어(finalScore)·성공 여부와 대조합니다. 화면이 부르지 않는 검증용이고 DB 에 아무것도 저장하지 않습니다. "
+                    + "실행 도중 편집된 워크로드나 실행 중 만료된 냉각 대기처럼 저장한 입력에 없는 일은 재생하지 않으므로, "
+                    + "MISMATCH 가 곧 결함을 뜻하지는 않습니다. "
+                    + "실행이 없거나 다른 스케줄의 실행이거나 저장한 입력이 없으면 404, 실행 중이거나 형식 판·지문·엔진을 재생할 수 없거나 "
+                    + "입력을 지금 코드로 읽을 수 없으면 409, 다시 계산하던 엔진이 오류를 내면 500.")
+    @GetMapping("/{id}/runs/{runId}/replay")
+    public ApiResponse<ScheduleRunReplayResponse> replayRun(@PathVariable Long id,
+                                                            @PathVariable Long runId) {
+        return ApiResponse.ok(scheduleService.replay(id, runId));
     }
 
     // ── 실행 주기 검증 ──────────────────────────────────────────

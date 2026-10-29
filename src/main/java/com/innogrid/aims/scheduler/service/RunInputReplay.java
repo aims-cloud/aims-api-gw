@@ -42,7 +42,8 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 저장한 실행 입력만으로 그 실행의 배치를 다시 돌리고 배치 이력과 대조한다 — 실행 재생 API 와 재생 테스트가 함께 쓴다.
+ * 저장한 실행 입력만으로 그 실행의 배치를 다시 돌리고 배치 이력과 대조한다 — 실행 재생 API·엔진별 재계산 API 와 재생 테스트가
+ * 함께 쓴다. 엔진별 재계산은 같은 루프를 엔진만 바꿔 돌린다.
  *
  * <p>엔진·평가기·모델은 스프링 빈을 쓰지 않고 공개 생성자로 다시 만든다. 운영 {@link ThermalModel} 빈의 냉각 대기를 건드리지
  * 않으려는 것이다. 노브는 payload 의 전력·열·네트워크 설정을 새 {@link SchedulerProperties} 에 덮어쓴다. 냉각 대기는 시각을
@@ -54,8 +55,10 @@ import tools.jackson.databind.JsonNode;
  */
 final class RunInputReplay {
 
-    /** 다시 만들 수 있는 엔진 id. 엔진 레지스트리의 id 와 같아야 한다 — 테스트가 맞대어 확인한다. */
-    static final Set<String> ENGINES = Set.of("weighted", "power", "temperature");
+    /** 다시 만들 수 있는 엔진 id 와 엔진별 재계산 응답의 엔진 순서. 엔진 레지스트리의 id 와 같아야 한다 — 테스트가 맞대어 확인한다. */
+    static final List<String> ENGINE_ORDER = List.of("weighted", "power", "temperature");
+
+    static final Set<String> ENGINES = Set.copyOf(ENGINE_ORDER);
 
     /** 실행이 예약을 되돌린 전달 상태 — 실행 계층이 받지 않은 배치. */
     private static final Set<DispatchStatus> ROLLED_BACK = EnumSet.of(DispatchStatus.REJECTED, DispatchStatus.UNAVAILABLE);
@@ -75,6 +78,11 @@ final class RunInputReplay {
     record Report(Verdict verdict, List<Compared> steps, int missingDispatchRecords) {}
 
     static Rebuilt rebuild(RunInputCapture.RunInputs in) {
+        return rebuild(in, in.engineId());
+    }
+
+    /** 저장한 입력을 그대로 두고 엔진만 바꿔 조립한다 — 엔진마다 설정·모델·컨텍스트를 새로 만들어 서로의 예약·냉각 대기가 섞이지 않는다. */
+    static Rebuilt rebuild(RunInputCapture.RunInputs in, String engineId) {
         SchedulerProperties props = new SchedulerProperties();
         apply(in.knobs().power(), props.getPower());
         apply(in.knobs().thermal(), props.getThermal());
@@ -97,11 +105,11 @@ final class RunInputReplay {
                 .withExcluded(in.excludedNodes())
                 .withLinkMatrix(LinkMatrix.of(links))
                 .withMdcBudgets(new MdcPowerBudgets(in.mdcBudgets()));
-        SchedulingEngine engine = switch (in.engineId()) {
+        SchedulingEngine engine = switch (engineId) {
             case "weighted" -> new WeightedScoreScheduler(power, thermal, network);
             case "power" -> new PowerAwareScheduler(power, thermal, network, props);
             case "temperature" -> new TemperatureAwareScheduler(thermal);
-            default -> throw new IllegalArgumentException("재생할 수 없는 엔진: " + in.engineId());
+            default -> throw new IllegalArgumentException("재생할 수 없는 엔진: " + engineId);
         };
         return new Rebuilt(props, thermal, context, engine);
     }
@@ -113,7 +121,15 @@ final class RunInputReplay {
      * @param rolledBack 실행 계층이 받지 않아 실행이 예약을 되돌린 워크로드 id — 성공한 배치의 예약을 되돌린다
      */
     static List<Step> replay(RunInputCapture.RunInputs in, List<SchedulingHistory> history, Set<Long> rolledBack) {
-        Rebuilt rebuilt = rebuild(in);
+        return replay(in, in.engineId(), history, rolledBack);
+    }
+
+    /**
+     * 엔진만 바꿔 대상 순서대로 다시 배치한다. 건너뜀과 예약 되돌림은 기록 엔진과 같게 따른다 — 건너뜀은 배치 직전 다시 읽은
+     * 워크로드 상태로 정해져 엔진과 무관하고, 되돌림은 워크로드 단위로 적용한다(실행 계층이 노드마다 다르게 받을 수 있다면 가정이다).
+     */
+    static List<Step> replay(RunInputCapture.RunInputs in, String engineId, List<SchedulingHistory> history, Set<Long> rolledBack) {
+        Rebuilt rebuilt = rebuild(in, engineId);
         Map<Long, SchedulingHistory> byWorkload = byWorkload(history);
         List<Step> steps = new ArrayList<>();
         for (RunInputCapture.WorkloadRow row : in.workloads()) {
@@ -138,6 +154,24 @@ final class RunInputReplay {
             steps.add(new Step(row.id(), false, result));
         }
         return steps;
+    }
+
+    /**
+     * 다시 계산한 결정 중 배치 이력과 선택 노드·성공 여부가 같은 수. 건너뛴 워크로드와 이력 행이 없는 워크로드는 세지 않고, 실패와
+     * 실패(선택 노드 없음)는 같은 것으로 센다. 노드 배치 스코어는 엔진마다 뜻이 달라 보지 않는다.
+     */
+    static int sameAsRecorded(List<Step> steps, List<SchedulingHistory> history) {
+        Map<Long, SchedulingHistory> byWorkload = byWorkload(history);
+        int same = 0;
+        for (Step step : steps) {
+            SchedulingHistory h = byWorkload.get(step.workloadId());
+            if (step.skipped() || h == null) continue;
+            SchedulingResult r = step.result();
+            if (Objects.equals(h.getSelectedNodeId(), r.selectedNodeId()) && Boolean.valueOf(r.success()).equals(h.getSuccess())) {
+                same++;
+            }
+        }
+        return same;
     }
 
     /** 이 전달 상태면 실행이 예약을 되돌렸다. */

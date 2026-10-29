@@ -5,8 +5,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -29,6 +32,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunDetailResponse;
+import com.innogrid.aims.scheduler.dto.ScheduleRunEngineReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunResponse;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
@@ -181,6 +185,47 @@ public class ScheduleService {
      */
     @Transactional(readOnly = true)
     public ScheduleRunReplayResponse replay(Long id, Long runId) {
+        StoredRun stored = loadStoredRun(id, runId);
+        List<RunInputReplay.Step> steps;
+        try {
+            steps = RunInputReplay.replay(stored.inputs(), stored.history(), stored.rolledBack());
+        } catch (RuntimeException e) {
+            // 처리하지 않은 예외는 인증 없는 오류 경로로 넘어가 본문 없는 403 이 된다 — 사유를 실어 500 으로 돌려준다
+            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "실행 재생에 실패했습니다: " + e.getMessage());
+        }
+        RunInputReplay.Report report = RunInputReplay.compare(steps, stored.history(), stored.missingDispatch());
+        return toReplayResponse(stored.run(), stored.input(), stored.inputs().engineId(), report);
+    }
+
+    /**
+     * 실행 1건을 저장한 입력으로 운영 엔진 세 개마다 다시 계산해 워크로드별 선택 노드·성공 여부를 나란히 돌려준다. DB 에 저장하지
+     * 않는다. 엔진마다 설정·모델·컨텍스트를 새로 만들고, 실제로 쓴 엔진은 한 번만 계산해 그 결과로 재생 판정도 낸다.
+     *
+     * <p>오류는 실행 재생과 같다(같은 검사를 거친다). 500 사유에는 엔진 id 를 함께 싣는다.</p>
+     */
+    @Transactional(readOnly = true)
+    public ScheduleRunEngineReplayResponse replayEngines(Long id, Long runId) {
+        StoredRun stored = loadStoredRun(id, runId);
+        Map<String, List<RunInputReplay.Step>> byEngine = new LinkedHashMap<>();
+        for (String engine : RunInputReplay.ENGINE_ORDER) {
+            try {
+                byEngine.put(engine, RunInputReplay.replay(stored.inputs(), engine, stored.history(), stored.rolledBack()));
+            } catch (RuntimeException e) {
+                throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "엔진별 재계산에 실패했습니다: 엔진 " + engine + " · " + e.getMessage());
+            }
+        }
+        String recordedEngine = stored.inputs().engineId();
+        RunInputReplay.Report report = RunInputReplay.compare(byEngine.get(recordedEngine), stored.history(),
+                stored.missingDispatch());
+        return toEngineReplayResponse(stored, report.verdict(), byEngine);
+    }
+
+    /** 다시 계산할 실행과 그 입력·배치 이력·전달 기록 — 실행 재생과 엔진별 재계산이 같은 검사를 거쳐 얻는다. */
+    private record StoredRun(ScheduleRun run, ScheduleRunInput input, RunInputCapture.RunInputs inputs,
+                             List<SchedulingHistory> history, Set<Long> rolledBack, Set<Long> missingDispatch) {}
+
+    private StoredRun loadStoredRun(Long id, Long runId) {
         ScheduleRun run = requireRun(id, runId);
         if (run.getStatus() == ScheduleRun.RunStatus.RUNNING) {
             throw new BusinessException(HttpStatus.CONFLICT, "아직 실행 중인 실행은 재생할 수 없습니다: " + runId);
@@ -206,16 +251,44 @@ public class ScheduleService {
 
         List<SchedulingHistory> history = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId());
         List<PlacementDispatch> dispatches = dispatchRepository.findByScheduleRunIdOrderByRequestedAtAsc(run.getId());
-        List<RunInputReplay.Step> steps;
-        try {
-            steps = RunInputReplay.replay(inputs, history, RunInputReplay.rolledBackOf(dispatches));
-        } catch (RuntimeException e) {
-            // 처리하지 않은 예외는 인증 없는 오류 경로로 넘어가 본문 없는 403 이 된다 — 사유를 실어 500 으로 돌려준다
-            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "실행 재생에 실패했습니다: " + e.getMessage());
-        }
-        RunInputReplay.Report report = RunInputReplay.compare(steps, history,
+        return new StoredRun(run, input, inputs, history, RunInputReplay.rolledBackOf(dispatches),
                 RunInputReplay.missingDispatch(history, dispatches));
-        return toReplayResponse(run, input, inputs.engineId(), report);
+    }
+
+    private static ScheduleRunEngineReplayResponse toEngineReplayResponse(StoredRun stored,
+                                                                          ScheduleRunReplayResponse.Verdict verdict,
+                                                                          Map<String, List<RunInputReplay.Step>> byEngine) {
+        String recordedEngine = stored.inputs().engineId();
+        List<ScheduleRunEngineReplayResponse.Engine> engines = new ArrayList<>();
+        byEngine.forEach((engine, steps) -> engines.add(new ScheduleRunEngineReplayResponse.Engine(engine,
+                engine.equals(recordedEngine),
+                (int) steps.stream().filter(s -> !s.skipped() && s.result().success()).count(),
+                (int) steps.stream().filter(s -> !s.skipped() && !s.result().success()).count(),
+                RunInputReplay.sameAsRecorded(steps, stored.history()))));
+
+        Map<Long, SchedulingHistory> recorded = new HashMap<>();
+        stored.history().forEach(h -> recorded.put(h.getWorkloadId(), h));
+        List<RunInputReplay.Step> recordedSteps = byEngine.get(recordedEngine);
+        List<ScheduleRunEngineReplayResponse.Step> rows = new ArrayList<>();
+        for (int i = 0; i < recordedSteps.size(); i++) {
+            RunInputReplay.Step step = recordedSteps.get(i);
+            SchedulingHistory h = recorded.get(step.workloadId());
+            List<ScheduleRunEngineReplayResponse.Choice> choices = new ArrayList<>();
+            if (!step.skipped()) {
+                for (Map.Entry<String, List<RunInputReplay.Step>> e : byEngine.entrySet()) {
+                    SchedulingResult r = e.getValue().get(i).result();
+                    choices.add(new ScheduleRunEngineReplayResponse.Choice(e.getKey(), r.selectedNodeId(), r.success()));
+                }
+            }
+            rows.add(new ScheduleRunEngineReplayResponse.Step(step.workloadId(), step.skipped(),
+                    h == null ? null : h.getSelectedNodeId(), h == null ? null : h.getSuccess(), choices));
+        }
+        int skipped = (int) recordedSteps.stream().filter(RunInputReplay.Step::skipped).count();
+        int rolledBack = (int) stored.inputs().workloads().stream().filter(w -> stored.rolledBack().contains(w.id())).count();
+        ScheduleRunInput input = stored.input();
+        return new ScheduleRunEngineReplayResponse(stored.run().getId(), input.getFormatVersion(), input.getCapturedAt(),
+                recordedEngine, input.getInputDigest(), input.getKnobsDigest(), verdict, recordedSteps.size(), skipped,
+                rolledBack, engines, rows);
     }
 
     private static ScheduleRunReplayResponse toReplayResponse(ScheduleRun run, ScheduleRunInput input, String engineId,

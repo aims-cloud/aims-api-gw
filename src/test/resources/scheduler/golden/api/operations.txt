@@ -58,6 +58,7 @@ POST /api/v1/scheduler/schedules/{id}/run
 GET /api/v1/scheduler/schedules/{id}/runs
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}/replay
+GET /api/v1/scheduler/schedules/{id}/runs/{runId}/replay/engines
 GET /api/v1/scheduler/thermal/cooldowns
 GET /api/v1/scheduler/workloads
 POST /api/v1/scheduler/workloads

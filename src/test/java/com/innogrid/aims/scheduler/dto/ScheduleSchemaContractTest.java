@@ -38,7 +38,9 @@ class ScheduleSchemaContractTest {
             ScheduleRunDetailResponse.Decision.class,
             CronPreviewResponse.class, CronPreviewResponse.NextRun.class, StatusChangeRequest.class,
             ScheduleUpdateRequest.class,
-            ScheduleRunReplayResponse.class, ScheduleRunReplayResponse.Step.class);
+            ScheduleRunReplayResponse.class, ScheduleRunReplayResponse.Step.class,
+            ScheduleRunEngineReplayResponse.class, ScheduleRunEngineReplayResponse.Engine.class,
+            ScheduleRunEngineReplayResponse.Step.class, ScheduleRunEngineReplayResponse.Choice.class);
 
     @DisplayName("대상 record 의 모든 필드에 설명이 있고, 설명은 필드 이름의 반복이 아니다")
     @Test
@@ -57,7 +59,7 @@ class ScheduleSchemaContractTest {
                 seen++;
             }
         }
-        assertEquals(120, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
+        assertEquals(145, seen, "컴포넌트 수가 바뀌었다 — 필드를 늘렸으면 이 숫자와 설명을 함께 갱신한다");
     }
 
     @DisplayName("대상 record 전부 클래스 레벨 설명이 있다")
@@ -87,7 +89,9 @@ class ScheduleSchemaContractTest {
                 ScheduleRunDetailResponse.class, ScheduleRunDetailResponse.ClusterSnapshot.class,
                 ScheduleRunDetailResponse.Decision.class,
                 CronPreviewResponse.class, CronPreviewResponse.NextRun.class,
-                ScheduleRunReplayResponse.class, ScheduleRunReplayResponse.Step.class)) {
+                ScheduleRunReplayResponse.class, ScheduleRunReplayResponse.Step.class,
+                ScheduleRunEngineReplayResponse.class, ScheduleRunEngineReplayResponse.Engine.class,
+                ScheduleRunEngineReplayResponse.Step.class, ScheduleRunEngineReplayResponse.Choice.class)) {
             assertTrue(requiredNames(type).isEmpty(),
                     type.getSimpleName() + ": 응답에 필수 표기가 있다 — 응답은 서버가 채우는 것이라 필수 개념이 없다");
         }

@@ -77,6 +77,32 @@ class RunInputReplayRuleTest {
         assertEquals(Set.of(2L), missing);
     }
 
+    @DisplayName("배치 이력과 같은 결정 수는 건너뛴 워크로드와 이력 행이 없는 워크로드를 세지 않는다")
+    @Test
+    void same_as_recorded_ignores_skipped_and_unrecorded_steps() {
+        SchedulingHistory skip = new SchedulingHistory(2L, "w2", null, null, 0, "배치 건너뜀", "weighted", "default");
+        skip.linkToRun(1L, false);
+        List<SchedulingHistory> history = List.of(recorded(1L, "n1", 0.5), skip);
+        List<RunInputReplay.Step> steps = List.of(replayed(1L, "n1", 0.9), new RunInputReplay.Step(2L, true, null), replayed(3L, "n1", 0.4));
+
+        assertEquals(1, RunInputReplay.sameAsRecorded(steps, history), "1번만 센다 — 2번은 건너뜀, 3번은 이력 행 없음 · 노드 배치 스코어는 보지 않는다");
+    }
+
+    @DisplayName("배치 이력과 같은 결정 수는 실패와 실패를 같다고 세고, 노드나 성공 여부가 다르면 세지 않는다")
+    @Test
+    void same_as_recorded_counts_failure_against_failure() {
+        SchedulingHistory failed = new SchedulingHistory(1L, "w1", null, null, 0, "자원 부족", "weighted", "default");
+        failed.setCandidateCount(2);
+        failed.linkToRun(1L, false);
+        List<SchedulingHistory> history = List.of(failed, recorded(2L, "n1", 0.5), recorded(3L, "n1", 0.5));
+        List<RunInputReplay.Step> steps = List.of(
+                new RunInputReplay.Step(1L, false, SchedulingResult.failure("자원 부족")),
+                replayed(2L, "n2", 0.5),
+                new RunInputReplay.Step(3L, false, SchedulingResult.failure("자원 부족")));
+
+        assertEquals(1, RunInputReplay.sameAsRecorded(steps, history), "1번(실패=실패)만 같다 — 2번은 노드, 3번은 성공 여부가 다르다");
+    }
+
     private static SchedulingHistory recorded(Long workloadId, String node, double score) {
         SchedulingHistory h = new SchedulingHistory(workloadId, "w" + workloadId, "mdc-01", node, score, "최고 점수", "weighted", "default");
         h.setCandidateCount(2);

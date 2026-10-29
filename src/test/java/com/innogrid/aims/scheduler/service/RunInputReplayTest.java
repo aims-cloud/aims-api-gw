@@ -19,6 +19,7 @@ import com.innogrid.aims.scheduler.dispatch.DispatcherRegistry;
 import com.innogrid.aims.scheduler.dispatch.PlacementDispatcher;
 import com.innogrid.aims.scheduler.dispatch.RecordingPlacementDispatcher;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
+import com.innogrid.aims.scheduler.dto.ScheduleRunEngineReplayResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
@@ -50,7 +51,7 @@ import static org.mockito.Mockito.when;
  * 워크로드       우선순위가 다른 GPU 종류 3건(요구 GPU 0)
  * </pre>
  *
- * <p>실행 재생 API 의 판정({@link ScheduleService#replay})도 여기서 서비스를 직접 불러 본다 — 실제 실행이 남긴 입력·이력·전달
+ * <p>실행 재생 API 의 판정({@link ScheduleService#replay})과 엔진별 재계산({@link ScheduleService#replayEngines})도 여기서 서비스를 직접 불러 본다 — 실제 실행이 남긴 입력·이력·전달
  * 기록이 있어야 해서 이 컨텍스트를 함께 쓴다.</p>
  */
 @SpringBootTest
@@ -287,6 +288,129 @@ class RunInputReplayTest {
     void replayable_engines_match_the_engine_registry() {
         Set<String> registered = engineRegistry.describe().stream().map(e -> e.get("id")).collect(Collectors.toSet());
         assertEquals(registered, RunInputReplay.ENGINES);
+    }
+
+    @DisplayName("엔진별 재계산은 실제로 쓴 엔진 열이 실행 재생과 같고 모두 배치 이력과 같으며, 엔진 순서가 고정되고 운영 냉각 대기를 건드리지 않는다")
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"weighted", "power", "temperature"})
+    void engine_replay_keeps_the_recorded_engine_column_equal_to_replay(String engine) {
+        fourNodes();
+        thermalModel.markCritical(PRE, 75);
+        save("e1", 4, Workload.WorkloadPriority.HIGH);
+        save("e2", 4, Workload.WorkloadPriority.NORMAL);
+        save("e3", 4, Workload.WorkloadPriority.LOW);
+        long scheduleId = schedule("b-" + engine, engine);
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        thermalModel.clearCritical(HOT);   // 실행이 건 대기를 지워 둔다 — 재생이 운영 모델에 대기를 걸면 아래 비교가 어긋난다
+        String marksBefore = String.valueOf(thermalModel.cooldownMarks());
+
+        ScheduleRunEngineReplayResponse byEngine = scheduleService.replayEngines(scheduleId, run.getId());
+        ScheduleRunReplayResponse replay = scheduleService.replay(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MATCH, byEngine.replayVerdict());
+        assertEquals(engine, byEngine.recordedEngineId());
+        assertEquals(RunInputReplay.ENGINE_ORDER, byEngine.engines().stream().map(ScheduleRunEngineReplayResponse.Engine::engineId).toList());
+        ScheduleRunEngineReplayResponse.Engine recorded = byEngine.engines().stream().filter(ScheduleRunEngineReplayResponse.Engine::recorded)
+                .findFirst().orElseThrow();
+        assertEquals(engine, recorded.engineId());
+        assertEquals(3, recorded.sameAsRecorded(), "실제로 쓴 엔진은 배치 이력과 모두 같다");
+        int at = RunInputReplay.ENGINE_ORDER.indexOf(engine);
+        for (int i = 0; i < 3; i++) {
+            assertEquals(replay.steps().get(i).replayedNodeId(), byEngine.steps().get(i).choices().get(at).nodeId(),
+                    "실제로 쓴 엔진 열은 실행 재생의 선택과 같다 " + i);
+        }
+        assertEquals(marksBefore, String.valueOf(thermalModel.cooldownMarks()), "엔진별 재계산도 운영 냉각 대기를 바꾸지 않는다");
+    }
+
+    @DisplayName("엔진마다 따로 조립해 다시 계산한다 — 온도 엔진은 시원한 노드를, 가중치 엔진은 한가한 노드를 고르고 각 열은 그 엔진 단독 재생과 같다")
+    @Test
+    void engine_replay_builds_each_engine_separately() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(
+                new NodeResource("mdc-01", PRE, 16, 65_536, 0, 60, 60, 0, 300, 500, 30, 0, 0),
+                new NodeResource("mdc-01", HOT, 16, 65_536, 0, 5, 5, 0, 110, 500, 70, 0, 0)), List.of()));
+        save("s1", 2, Workload.WorkloadPriority.NORMAL);
+        long scheduleId = schedule("b-separate", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+
+        ScheduleRunEngineReplayResponse byEngine = scheduleService.replayEngines(scheduleId, run.getId());
+
+        RunInputCapture.RunInputs inputs = RunInputCapture.read(inputRepository.findByScheduleRunId(run.getId()).orElseThrow().getPayload());
+        List<SchedulingHistory> history = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId());
+        List<ScheduleRunEngineReplayResponse.Choice> choices = byEngine.steps().get(0).choices();
+        for (int i = 0; i < RunInputReplay.ENGINE_ORDER.size(); i++) {
+            String engine = RunInputReplay.ENGINE_ORDER.get(i);
+            assertEquals(RunInputReplay.replay(inputs, engine, history, Set.of()).get(0).result().selectedNodeId(), choices.get(i).nodeId(),
+                    engine + " 열은 그 엔진만 따로 다시 계산한 선택과 같다");
+        }
+        assertEquals(HOT, choices.get(RunInputReplay.ENGINE_ORDER.indexOf("weighted")).nodeId(), "가중치 엔진은 CPU 가 한가한 노드");
+        assertEquals(PRE, choices.get(RunInputReplay.ENGINE_ORDER.indexOf("temperature")).nodeId(), "온도 엔진은 시원한 노드");
+        assertEquals(ScheduleRunReplayResponse.Verdict.MATCH, byEngine.replayVerdict());
+        assertEquals(RunInputReplay.ENGINE_ORDER, choices.stream().map(ScheduleRunEngineReplayResponse.Choice::engineId).toList(),
+                "선택의 엔진 id 는 엔진 순서 그대로");
+        assertEquals(1, byEngine.engines().get(RunInputReplay.ENGINE_ORDER.indexOf("weighted")).sameAsRecorded(),
+                "실제로 쓴 가중치 엔진은 배치 이력과 같다");
+        assertEquals(0, byEngine.engines().get(RunInputReplay.ENGINE_ORDER.indexOf("temperature")).sameAsRecorded(),
+                "온도 엔진은 배치 이력과 다른 노드를 골라 같은 결정 수가 0");
+    }
+
+    @DisplayName("실행 계층에 닿지 못해 예약을 되돌린 워크로드는 모든 엔진에서 되돌려, 노드 한 대에서도 모든 엔진이 다음 워크로드를 배치한다")
+    @Test
+    void engine_replay_rolls_back_for_every_engine() {
+        when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(
+                new NodeResource("mdc-01", TIE_B, 8, 65_536, 0, 10, 20, 0, 200, 500, 50, 0, 0)), List.of()));
+        save("v1", 5, Workload.WorkloadPriority.HIGH);
+        save("v2", 5, Workload.WorkloadPriority.NORMAL);
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) {
+                return (PREFIX + "v1").equals(request.workloadName()) ? Outcome.unavailable("연결 끊김") : Outcome.accepted(null, "ok");
+            }
+        });
+        long scheduleId = schedule("b-rollback", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+
+        ScheduleRunEngineReplayResponse byEngine = scheduleService.replayEngines(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MATCH, byEngine.replayVerdict());
+        assertEquals(1, byEngine.rolledBack());
+        for (ScheduleRunEngineReplayResponse.Engine e : byEngine.engines()) {
+            assertEquals(2, e.placed(), e.engineId() + " 도 v1 의 예약을 되돌려 8코어 노드에 v2(5코어)를 배치한다");
+        }
+    }
+
+    @DisplayName("배치 직전에 건너뛴 워크로드는 모든 엔진에서 건너뛰고 엔진별 선택이 비어 있다")
+    @Test
+    void engine_replay_skips_for_every_engine() {
+        Workload[] r = rejectFirstAndMoveSecond();
+        long scheduleId = schedule("b-skip", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+
+        ScheduleRunEngineReplayResponse byEngine = scheduleService.replayEngines(scheduleId, run.getId());
+
+        assertEquals(1, byEngine.skipped());
+        ScheduleRunEngineReplayResponse.Step skipped = byEngine.steps().stream().filter(s -> s.workloadId().equals(r[1].getId()))
+                .findFirst().orElseThrow();
+        assertTrue(skipped.skipped());
+        assertTrue(skipped.choices().isEmpty());
+        for (ScheduleRunEngineReplayResponse.Engine e : byEngine.engines()) {
+            assertEquals(byEngine.total() - byEngine.skipped(), e.placed() + e.failed(), e.engineId() + " 는 건너뛴 워크로드를 계산하지 않는다");
+        }
+    }
+
+    @DisplayName("배치 이력 한 행의 노드 배치 스코어가 다르면 엔진별 재계산의 재생 판정도 MISMATCH 다")
+    @Test
+    void engine_replay_verdict_follows_replay_comparison() {
+        fourNodes();
+        save("x1", 4, Workload.WorkloadPriority.HIGH);
+        long scheduleId = schedule("b-mismatch", "weighted");
+        ScheduleRun run = executionService.runNow(scheduleId, "tester");
+        SchedulingHistory first = historyRepository.findByScheduleRunIdOrderByCreatedAtAscIdAsc(run.getId()).get(0);
+        tx.executeWithoutResult(st -> em.createQuery("update SchedulingHistory h set h.finalScore = h.finalScore + 0.001 where h.id = :id")
+                .setParameter("id", first.getId()).executeUpdate());
+
+        ScheduleRunEngineReplayResponse byEngine = scheduleService.replayEngines(scheduleId, run.getId());
+
+        assertEquals(ScheduleRunReplayResponse.Verdict.MISMATCH, byEngine.replayVerdict());
     }
 
     // ── 헬퍼 ───────────────────────────────────────────────────

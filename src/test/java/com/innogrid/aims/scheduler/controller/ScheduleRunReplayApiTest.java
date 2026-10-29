@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 실행 재생 API 의 응답 계약과 오류 — 응답 14키·단계 8키의 순서, 404 두 가지, 409 네 가지.
+ * 실행 재생 API 와 엔진별 재계산 API 의 응답 계약과 오류 — 재생 응답 14키·단계 8키, 엔진별 재계산 응답 12키·엔진 5키·단계 5키·선택
+ * 3키의 순서, 404 두 가지, 409 네 가지(엔진별 재계산은 같은 검사를 거쳐 세 가지만 다시 본다).
  *
  * <p>이 컨텍스트는 실 게이트웨이라 노드가 없어 즉시 실행으로는 입력이 남지 않는다. 그래서 형식 1 고정 픽스처
  * ({@code scheduler/replay/run-input-format-1.json})를 입력 행으로 심고 실행·결정 이력도 저장소에 직접 심는다. 재생 판정이
@@ -51,6 +52,11 @@ class ScheduleRunReplayApiTest {
             "knobsDigest", "verdict", "total", "matched", "mismatched", "skipped", "notRecorded", "missingDispatchRecords", "steps");
     private static final List<String> STEP_KEYS = List.of("workloadId", "outcome", "recordedNodeId", "recordedScore", "recordedSuccess",
             "replayedNodeId", "replayedScore", "replayedSuccess");
+    private static final List<String> ENGINE_RESPONSE_KEYS = List.of("runId", "formatVersion", "capturedAt", "recordedEngineId", "inputDigest",
+            "knobsDigest", "replayVerdict", "total", "skipped", "rolledBack", "engines", "steps");
+    private static final List<String> ENGINE_KEYS = List.of("engineId", "recorded", "placed", "failed", "sameAsRecorded");
+    private static final List<String> STEP_KEYS_BY_ENGINE = List.of("workloadId", "skipped", "recordedNodeId", "recordedSuccess", "choices");
+    private static final List<String> CHOICE_KEYS = List.of("engineId", "nodeId", "success");
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -133,6 +139,71 @@ class ScheduleRunReplayApiTest {
             }
         } finally {
             deleteSchedule(scheduleId);
+        }
+    }
+
+    @DisplayName("엔진별 재계산 응답은 12키, 엔진 5키, 단계 5키, 선택 3키가 선언 순서대로 실리고 엔진 순서가 고정이다")
+    @Test
+    void engine_replay_response_keys_and_engine_order() throws Exception {
+        String payload = fixture();
+        long scheduleId = createSchedule();
+        List<Long> historyIds = new ArrayList<>();
+        try {
+            long runId = finishedRun(scheduleId);
+            inputRepository.save(input(runId, 1, digest(payload), payload));
+            SchedulingHistory failed = new SchedulingHistory(WORKLOAD_ID, "rpl-w1", null, null, 0, "모든 후보 노드가 제약 조건을 충족하지 못합니다",
+                    "weighted", "default");
+            failed.setCandidateCount(2);
+            failed.linkToRun(runId, false);
+            historyIds.add(historyRepository.save(failed).getId());
+
+            JsonNode body = data(get(BASE + "/" + scheduleId + "/runs/" + runId + "/replay/engines"));
+
+            assertEquals(ENGINE_RESPONSE_KEYS, keys(body));
+            assertEquals("weighted", body.get("recordedEngineId").asString());
+            assertEquals("MISMATCH", body.get("replayVerdict").asString(), "실패로 남은 결정을 다시 계산해 성공하면 재생 판정은 MISMATCH");
+            List<String> order = new ArrayList<>();
+            for (JsonNode e : body.get("engines")) {
+                assertEquals(ENGINE_KEYS, keys(e));
+                order.add(e.get("engineId").asString());
+            }
+            assertEquals(List.of("weighted", "power", "temperature"), order);
+            JsonNode step = body.get("steps").get(0);
+            assertEquals(STEP_KEYS_BY_ENGINE, keys(step));
+            assertEquals(3, step.get("choices").size());
+            assertEquals(CHOICE_KEYS, keys(step.get("choices").get(0)));
+            assertFalse(body.has("payload"), "저장한 입력 원문은 싣지 않는다");
+        } finally {
+            historyRepository.deleteAllById(historyIds);
+            deleteSchedule(scheduleId);
+        }
+    }
+
+    @DisplayName("엔진별 재계산도 입력 없는 실행·다른 스케줄의 실행은 404, 실행 중·형식 판 2·지문이 다른 입력은 409 다")
+    @Test
+    void engine_replay_shares_replay_errors() throws Exception {
+        String payload = fixture();
+        long scheduleId = createSchedule();
+        long otherId = createSchedule();
+        try {
+            long noInput = finishedRun(scheduleId);
+            mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + noInput + "/replay/engines")).andExpect(status().isNotFound());
+            long done = finishedRun(scheduleId);
+            inputRepository.save(input(done, 1, digest(payload), payload));
+            mockMvc.perform(get(BASE + "/" + otherId + "/runs/" + done + "/replay/engines")).andExpect(status().isNotFound());
+
+            long running = runRepository.save(new ScheduleRun(scheduleId, "rpl", ScheduleRun.TriggerType.MANUAL, "tester")).getId();
+            inputRepository.save(input(running, 1, digest(payload), payload));
+            long version2 = finishedRun(scheduleId);
+            inputRepository.save(input(version2, 2, digest(payload), payload));
+            long altered = finishedRun(scheduleId);
+            inputRepository.save(input(altered, 1, digest(payload), payload.replace("rpl-w1", "rpl-w2")));
+            for (long runId : List.of(running, version2, altered)) {
+                mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + runId + "/replay/engines")).andExpect(status().isConflict());
+            }
+        } finally {
+            deleteSchedule(scheduleId);
+            deleteSchedule(otherId);
         }
     }
 

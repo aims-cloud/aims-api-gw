@@ -30,7 +30,7 @@ public class SchedulingPolicy {
     @Column(length = 20)
     private Workload.ResourceType resourceType;
 
-    /** 이 정책으로 스케줄링할 때 기본으로 쓸 엔진 id. null 이면 weighted. */
+    /** 스케줄 실행과 엔진을 비운 단건·모의 배치가 이 정책으로 배치할 때 쓸 엔진 id. null 이면 weighted. */
     @Column(length = 30)
     private String defaultEngine;
 

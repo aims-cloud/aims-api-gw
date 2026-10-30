@@ -117,25 +117,23 @@ public class SchedulingService {
      * 워크로드를 스케줄링한다.
      *
      * @param workloadId 스케줄링할 워크로드 ID
-     * @param engineId   사용할 엔진 (weighted, power, temperature)
+     * @param engineId   사용할 엔진 (weighted, power, temperature) — 비우면 정책 기본 엔진, 그것도 없으면 weighted
      */
     public SchedulingResult scheduleWorkload(Long workloadId, String engineId) {
         Workload workload = workloadRepository.findById(workloadId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
                         "워크로드를 찾을 수 없습니다: " + workloadId));
 
-        if (engineId != null && !engineRegistry.contains(engineId)) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST,
-                    "알 수 없는 스케줄링 엔진입니다: " + engineId);
-        }
+        String requested = requestedEngine(engineId);
 
         PlacementContext context = createContext(resolvePolicy(workload.resolveResourceType()));
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
 
-        PendingInput input = prepareInput(workload, context, engineId);
-        SchedulingResult result = placementService.place(workload, context, engineId).withPolicyName(policyNameOf(context));
+        String engine = engineFor(requested, context.policy());
+        PendingInput input = prepareInput(workload, context, engine);
+        SchedulingResult result = placementService.place(workload, context, engine).withPolicyName(policyNameOf(context));
         saveInput(workload.getId(), input, result);
         return dispatch(workload, result, null);
     }
@@ -299,9 +297,9 @@ public class SchedulingService {
         Workload workload = workloadRepository.findById(workloadId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
                         "워크로드를 찾을 수 없습니다: " + workloadId));
-        requireKnownEngine(engineId);
+        String requested = requestedEngine(engineId);
         // 저장된 워크로드의 모의 배치는 단건 배치와 같은 정책 경로 — default 가 없으면 만들어 저장한다
-        return evaluate(workload, engineId, resolvePolicy(workload.resolveResourceType()));
+        return evaluate(workload, requested, resolvePolicy(workload.resolveResourceType()));
     }
 
     /**
@@ -309,15 +307,30 @@ public class SchedulingService {
      * {@code default} 를 저장하지 않는다(실행 미리보기와 같은 규칙). 종류를 비우면 VM 으로 읽는다.
      */
     public SchedulingResult dryRun(Workload draft, String engineId) {
-        requireKnownEngine(engineId);
-        return evaluate(draft, engineId, choosePolicy(draft.resolveResourceType()).policy());
+        String requested = requestedEngine(engineId);
+        return evaluate(draft, requested, choosePolicy(draft.resolveResourceType()).policy());
     }
 
-    private void requireKnownEngine(String engineId) {
-        if (engineId != null && !engineRegistry.contains(engineId)) {
+    /** 요청한 엔진 — 비었거나 공백이면 null(정책에서 고른다), 등록되지 않은 이름이면 400. */
+    private String requestedEngine(String engineId) {
+        if (engineId == null || engineId.isBlank()) return null;
+        if (!engineRegistry.contains(engineId)) {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
                     "알 수 없는 스케줄링 엔진입니다: " + engineId);
         }
+        return engineId;
+    }
+
+    /**
+     * 단건 배치·모의 배치가 쓸 엔진 — 요청한 엔진, 없으면 정책 기본 엔진(등록된 것일 때만), 그것도 없으면 서버 기본값.
+     * 스케줄 실행의 엔진 선택({@code ScheduleExecutionService.engineChoiceFor})에서 스케줄 단계를 요청으로 바꾼 것이다.
+     */
+    private String engineFor(String requested, SchedulingPolicy policy) {
+        if (requested != null) return requested;
+        if (policy != null && policy.getDefaultEngine() != null && engineRegistry.contains(policy.getDefaultEngine())) {
+            return policy.getDefaultEngine();
+        }
+        return EngineRegistry.DEFAULT_ENGINE_ID;
     }
 
     /** 제약 평가만 수행한다 — 정책은 호출자가 고른다(저장 여부가 거기서 갈린다). 워크로드 상태와 이력은 건드리지 않는다. */
@@ -326,7 +339,7 @@ public class SchedulingService {
         if (context.isEmpty()) {
             return SchedulingResult.failure(noActiveNodesReason(context), policyNameOf(context));
         }
-        return evaluateIn(workload, engineId, context);
+        return evaluateIn(workload, engineFor(engineId, policy), context);
     }
 
     /**

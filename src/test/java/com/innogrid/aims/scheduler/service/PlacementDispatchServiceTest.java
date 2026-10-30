@@ -372,6 +372,66 @@ class PlacementDispatchServiceTest {
         assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w.getId()).isEmpty());
     }
 
+    // ── 요청 시각이 같은 기록 ────────────────────────────────────
+
+    /** 같은 워크로드의 옛 결정·새 결정 기록 — 요청 시각을 같게 맞췄고, 옛 기록을 먼저 만들어 id 가 작다. */
+    private record SameTimeRows(Workload workload, PlacementDispatch older, PlacementDispatch later) {}
+
+    /**
+     * 결정 두 개(옛 → 새)를 만들고 두 기록의 요청 시각을 같게 맞춘다. 두 기록 모두 배정 시각보다 앞서지 않아 현재 결정으로
+     * 보이는 동률이다. {@code laterStatus} 가 있으면 새 기록의 상태를 그 값으로 둔다(기록형 디스패처는 곧바로 ACCEPTED).
+     */
+    private SameTimeRows sameTimeRows(String name, DispatchStatus laterStatus) {
+        when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
+        Workload w = assigned(name);
+        PlacementDispatch older = service.afterPlacement(w, ok(), null);
+        do {
+            w.assignTo("mdc-01", "n2", 0.6, "재배치");
+        } while (PlacementDispatch.keyOf(w).equals(older.getIdempotencyKey()));
+        w = workloadRepository.saveAndFlush(w);
+        PlacementDispatch later = service.afterPlacement(w, ok(), null);
+        assertTrue(older.getId() < later.getId(), "옛 기록을 먼저 만들었다");
+        ReflectionTestUtils.setField(older, "requestedAt", later.getRequestedAt());
+        if (laterStatus != null) ReflectionTestUtils.setField(later, "status", laterStatus);
+        return new SameTimeRows(w, dispatchRepository.saveAndFlush(older), dispatchRepository.saveAndFlush(later));
+    }
+
+    private DispatchStatus statusOf(PlacementDispatch d) {
+        return dispatchRepository.findById(d.getId()).orElseThrow().getStatus();
+    }
+
+    @DisplayName("요청 시각이 같으면 상태 변경은 나중에 만든 기록을 마감하고 먼저 만든 기록은 그대로 둔다")
+    @Test
+    void status_change_closes_later_row_on_same_requested_at() {
+        SameTimeRows rows = sameTimeRows("dps-tie-close", null);
+
+        schedulingService.changeStatus(rows.workload().getId(), Workload.WorkloadStatus.FAILED);
+
+        assertEquals(DispatchStatus.FAILED, statusOf(rows.later()));
+        assertEquals(DispatchStatus.ACCEPTED, statusOf(rows.older()), "먼저 만든 기록은 그대로");
+    }
+
+    @DisplayName("요청 시각이 같으면 재시작 정리는 나중에 만든 전달 중 기록을 닫고 워크로드를 실패로 돌린다")
+    @Test
+    void restart_recovery_reads_later_row_on_same_requested_at() {
+        SameTimeRows rows = sameTimeRows("dps-tie-restart", DispatchStatus.REQUESTED);
+
+        assertEquals(PlacementDispatchService.RestartRecovery.CLOSED_AND_FAILED,
+                service.recoverAfterRestart(rows.workload().getId(), "재시작 정리 테스트"),
+                "먼저 만든 ACCEPTED 기록을 최신으로 보면 KEPT 로 끝나 나중 기록이 열린 채 남는다");
+        assertEquals(DispatchStatus.UNAVAILABLE, statusOf(rows.later()));
+        assertEquals(DispatchStatus.ACCEPTED, statusOf(rows.older()));
+    }
+
+    @DisplayName("요청 시각이 같으면 워크로드별 기록은 나중에 만든 기록이 앞에 온다")
+    @Test
+    void by_workload_lists_later_row_first_on_same_requested_at() {
+        SameTimeRows rows = sameTimeRows("dps-tie-list", null);
+
+        assertEquals(List.of(rows.later().getId(), rows.older().getId()),
+                service.byWorkload(rows.workload().getId()).stream().map(PlacementDispatch::getId).toList());
+    }
+
     // ── 예약 취소 ──────────────────────────────────────────────
 
     @DisplayName("예약 취소는 현재 결정의 ACCEPTED 기록만 FAILED 로 마감하고 옛 결정의 기록은 건드리지 않는다")

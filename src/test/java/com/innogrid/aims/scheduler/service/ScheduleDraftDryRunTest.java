@@ -1,6 +1,8 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -154,7 +156,7 @@ class ScheduleDraftDryRunTest {
         verify(collector, times(1)).collect();
     }
 
-    @DisplayName("이미 걸린 냉각 대기는 상한별로 본다 — 65℃ 대기는 폼 60 을 막고 폼 90 은 막지 않으며 새 대기는 생기지 않는다")
+    @DisplayName("이미 걸린 냉각 대기는 상한별로 본다 — 65℃ 대기는 폼 60 을 막고 폼 68·90 은 막지 않으며, 노드가 폼 68 의 상한을 넘어도 새 대기는 생기지 않는다")
     @Test
     void draft_temperature_cap_reads_existing_cooldown() {
         when(collector.collect()).thenAnswer(inv -> new NodeResourceCollector.Snapshot(List.of(node(HOT, 70)), List.of()));
@@ -162,14 +164,20 @@ class ScheduleDraftDryRunTest {
         thermalModel.markCritical(HOT, 65);
 
         ScheduleDryRunResponse low = executionService.dryRunDraft(form(PREFIX + "cd", null, 60.0));
+        // 65 < 68 < 70 — 65℃ 대기에는 막히지 않고 온도 초과로 빠지므로, 대기를 남기는 코드에 실제로 닿는 유일한 폼이다
+        ScheduleDryRunResponse mid = executionService.dryRunDraft(form(PREFIX + "cd", null, 68.0));
         ScheduleDryRunResponse high = executionService.dryRunDraft(form(PREFIX + "cd", null, 90.0));
 
         assertEquals(0, low.successCount());
         assertTrue(low.decisions().get(0).exclusionCodes().contains("COOLING_DOWN"), low.decisions().get(0).exclusionCodes());
+        assertEquals(0, mid.successCount(), "폼 68 은 65℃ 대기가 아니라 온도 초과로 빠진다: " + mid.decisions());
+        assertTrue(mid.decisions().get(0).exclusionCodes().contains("TEMPERATURE_EXCEEDED"), mid.decisions().get(0).exclusionCodes());
+        assertFalse(mid.decisions().get(0).exclusionCodes().contains("COOLING_DOWN"), mid.decisions().get(0).exclusionCodes());
         assertEquals(1, high.successCount(), "상한이 더 높은 평가는 65℃ 대기에 막히지 않는다: " + high.decisions());
         assertEquals(HOT, high.decisions().get(0).selectedNodeId());
         assertTrue(thermalModel.isCoolingDown(HOT, 65));
-        assertFalse(thermalModel.isCoolingDown(HOT, 66), "65℃ 보다 높은 상한의 대기가 새로 생기지 않는다");
+        assertEquals(Set.of(65.0), thermalModel.cooldownMarks().getOrDefault(HOT, Map.of()).keySet(),
+                "노드가 폼 68 의 상한을 넘어도 그 상한의 대기가 새로 생기지 않는다 — 처음 건 65℃ 대기만 남는다");
     }
 
     @DisplayName("같은 값을 저장한 스케줄의 모의 실행과 같고, 다른 것은 뒤 대상에서 그 노드의 제외 사유가 냉각 대기가 아닌 온도 초과인 것뿐이다")

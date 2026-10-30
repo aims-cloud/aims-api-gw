@@ -17,7 +17,7 @@ import com.innogrid.aims.scheduler.entity.Workload;
 /**
  * 배치 비교용 워크로드 분포 — 손으로 고른 목록이 아니라 파일에 선언된 분포에서 결정적으로 뽑는다.
  *
- * <p>DB 워크로드는 쓰지 않는다. {@code SchedulingService.applyReservations} 가 DB 워크로드를 예약으로
+ * <p>DB 워크로드는 쓰지 않는다. {@code PlacementContextAssembler.applyReservations} 가 DB 워크로드를 예약으로
  * 얹기 때문에, DB 에서 가져온 워크로드를 다시 배치 대상으로 주면 같은 워크로드가 예약으로 한 번, 배치
  * 대상으로 또 한 번 계산된다. 그래서 이 클래스가 만드는 워크로드는 저장하지 않는 <b>detached 엔티티</b>다
  * — {@code getId()}·{@code getCreatedAt()} 은 늘 null 이다.</p>

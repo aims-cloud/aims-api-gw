@@ -81,12 +81,21 @@ final class RunInputReplay {
         return rebuild(in, in.engineId());
     }
 
-    /** 저장한 입력을 그대로 두고 엔진만 바꿔 조립한다 — 엔진마다 설정·모델·컨텍스트를 새로 만들어 서로의 예약·냉각 대기가 섞이지 않는다. */
-    static Rebuilt rebuild(RunInputCapture.RunInputs in, String engineId) {
+    /**
+     * 저장한 설정 노브를 새 설정에 덮어쓴다. 지금 코드에 없는 노브는 무시하고, 저장 뒤 새로 생긴 노브는 지금 기본값으로 둔다.
+     * 형식이 지금 코드와 다르면 {@link tools.jackson.core.JacksonException} 을 던진다 — 실행 재생은 이것을 409 로 돌려준다.
+     */
+    static SchedulerProperties properties(RunInputCapture.RunInputs in) {
         SchedulerProperties props = new SchedulerProperties();
         apply(in.knobs().power(), props.getPower());
         apply(in.knobs().thermal(), props.getThermal());
         apply(in.knobs().network(), props.getNetwork());
+        return props;
+    }
+
+    /** 저장한 입력을 그대로 두고 엔진만 바꿔 조립한다 — 엔진마다 설정·모델·컨텍스트를 새로 만들어 서로의 예약·냉각 대기가 섞이지 않는다. */
+    static Rebuilt rebuild(RunInputCapture.RunInputs in, String engineId) {
+        SchedulerProperties props = properties(in);
 
         MovableClock clock = new MovableClock();
         ThermalModel thermal = new ThermalModel(props, clock);

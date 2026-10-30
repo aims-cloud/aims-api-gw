@@ -16,6 +16,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultMatcher;
 
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.ScheduleRunInput;
@@ -26,9 +27,12 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -207,7 +211,106 @@ class ScheduleRunReplayApiTest {
         }
     }
 
+    @DisplayName("저장한 입력 원문이 없으면 두 경로 모두 409 다 — 지문 계산에서 본문 없는 403 으로 새지 않는다")
+    @Test
+    void missing_payload_is_409_on_both_paths() throws Exception {
+        long scheduleId = createSchedule();
+        try {
+            long runId = finishedRun(scheduleId);
+            inputRepository.save(input(runId, 1, "000000000000", null));
+
+            expectReason(runId, scheduleId, status().isConflict(), "저장한 입력 원문이 없습니다");
+        } finally {
+            deleteSchedule(scheduleId);
+        }
+    }
+
+    @DisplayName("저장한 설정 노브의 형식이 지금 코드와 다르면 두 경로 모두 409 다")
+    @Test
+    void knob_of_another_shape_is_409_on_both_paths() throws Exception {
+        String payload = fixture();
+        String knobs = payload.replace("\"knobs\": {\"power\": {}", "\"knobs\": {\"power\": {\"idleRatio\": {\"v\": 1}}");
+        assertNotEquals(payload, knobs);
+        long scheduleId = createSchedule();
+        try {
+            long runId = finishedRun(scheduleId);
+            inputRepository.save(input(runId, 1, digest(knobs), knobs));
+
+            expectReason(runId, scheduleId, status().isConflict(), "저장한 설정 노브를 지금 코드에 적용할 수 없습니다");
+        } finally {
+            deleteSchedule(scheduleId);
+        }
+    }
+
+    @DisplayName("원문이 null 한 단어이거나 엔진이 빠진 입력은 두 경로 모두 409 다 — 지문은 맞아도 본문 없는 403 으로 새지 않는다")
+    @Test
+    void null_literal_or_engineless_input_is_409_on_both_paths() throws Exception {
+        ObjectNode tree = (ObjectNode) objectMapper.readTree(fixture());
+        tree.remove("engineId");
+        String engineless = objectMapper.writeValueAsString(tree);
+        long scheduleId = createSchedule();
+        try {
+            long nullLiteral = finishedRun(scheduleId);
+            inputRepository.save(input(nullLiteral, 1, digest("null"), "null"));
+            long noEngine = finishedRun(scheduleId);
+            inputRepository.save(input(noEngine, 1, digest(engineless), engineless));
+
+            expectReason(nullLiteral, scheduleId, status().isConflict(), "저장한 입력에 엔진이 없습니다");
+            expectReason(noEngine, scheduleId, status().isConflict(), "저장한 입력에 엔진이 없습니다");
+        } finally {
+            deleteSchedule(scheduleId);
+        }
+    }
+
+    @DisplayName("설정 노브 묶음 자체가 비면 두 경로 모두 사유를 실은 500 이다 — 본문 없는 403 으로 되돌아가지 않는다")
+    @Test
+    void missing_knobs_is_500_with_reason_on_both_paths() throws Exception {
+        ObjectNode tree = (ObjectNode) objectMapper.readTree(fixture());
+        tree.putNull("knobs");
+        String noKnobs = objectMapper.writeValueAsString(tree);
+        long scheduleId = createSchedule();
+        try {
+            long runId = finishedRun(scheduleId);
+            inputRepository.save(input(runId, 1, digest(noKnobs), noKnobs));
+
+            expectReason(runId, scheduleId, status().isInternalServerError(), "저장한 입력으로 다시 계산할 수 없습니다");
+        } finally {
+            deleteSchedule(scheduleId);
+        }
+    }
+
+    @DisplayName("다시 계산하다 예외가 나면 실행 재생은 사유를 실은 500, 엔진별 재계산은 엔진 id 를 실은 500 이다")
+    @Test
+    void recompute_failure_is_500_with_engine_in_reason() throws Exception {
+        ObjectNode tree = (ObjectNode) objectMapper.readTree(fixture());
+        tree.putNull("policy");
+        String noPolicy = objectMapper.writeValueAsString(tree);
+        long scheduleId = createSchedule();
+        try {
+            long runId = finishedRun(scheduleId);
+            inputRepository.save(input(runId, 1, digest(noPolicy), noPolicy));
+
+            mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + runId + "/replay"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.message").value(containsString("실행 재생에 실패했습니다")));
+            mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + runId + "/replay/engines"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.message").value(containsString("엔진별 재계산에 실패했습니다: 엔진 weighted")));
+        } finally {
+            deleteSchedule(scheduleId);
+        }
+    }
+
     // ── 시딩 ───────────────────────────────────────────────────
+
+    /** 실행 재생과 엔진별 재계산이 같은 상태 코드와 사유를 돌려주는지 — 두 경로가 같은 검사를 거친다. */
+    private void expectReason(long runId, long scheduleId, ResultMatcher expected, String reason) throws Exception {
+        for (String path : List.of("/replay", "/replay/engines")) {
+            mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + runId + path))
+                    .andExpect(expected)
+                    .andExpect(jsonPath("$.message").value(containsString(reason)));
+        }
+    }
 
     private long createSchedule() throws Exception {
         String key = "rplapi-" + Long.toHexString(System.nanoTime());

@@ -180,8 +180,9 @@ public class ScheduleService {
      * 운영 냉각 대기도 건드리지 않는다.
      *
      * <p>404: 실행이 없거나 다른 스케줄의 실행이거나 저장한 입력이 없다. 409: 아직 실행 중이거나, 형식 판이 지금 읽을 수
-     * 있는 판이 아니거나, 원문이 저장한 지문과 다르거나, 지금 코드로 읽을 수 없거나, 다시 만들 수 없는 엔진이다. 500: 다시
-     * 계산하던 엔진이 예외를 냈다(워크로드 id 를 사유에 싣는다).</p>
+     * 있는 판이 아니거나, 원문이 없거나 저장한 지문과 다르거나, 지금 코드로 읽을 수 없거나, 엔진이 없거나 다시 만들 수 없는
+     * 엔진이거나, 저장한 설정 노브를 지금 코드에 적용할 수 없다. 500: 그 밖에 다시 조립·계산하다 예외가 났다(엔진 계산 중이면
+     * 워크로드 id 를 사유에 싣는다).</p>
      */
     @Transactional(readOnly = true)
     public ScheduleRunReplayResponse replay(Long id, Long runId) {
@@ -201,7 +202,9 @@ public class ScheduleService {
      * 실행 1건을 저장한 입력으로 운영 엔진 세 개마다 다시 계산해 워크로드별 선택 노드·성공 여부를 나란히 돌려준다. DB 에 저장하지
      * 않는다. 엔진마다 설정·모델·컨텍스트를 새로 만들고, 실제로 쓴 엔진은 한 번만 계산해 그 결과로 재생 판정도 낸다.
      *
-     * <p>오류는 실행 재생과 같다(같은 검사를 거친다). 500 사유에는 엔진 id 를 함께 싣는다.</p>
+     * <p>404·409 는 실행 재생과 같은 검사를 거친다. 엔진 계산 전에 저장한 입력을 다시 조립하지 못하면 실행 재생과 같은 500
+     * 이다(사유에 엔진 id 없음). 그 밖에 세 엔진 중 하나라도 다시 계산하다 예외를 내면 500 이며(사유에 엔진 id), 실행 재생이
+     * 200 인 실행에서도 날 수 있다.</p>
      */
     @Transactional(readOnly = true)
     public ScheduleRunEngineReplayResponse replayEngines(Long id, Long runId) {
@@ -236,6 +239,10 @@ public class ScheduleService {
         if (input.getFormatVersion() != RunInputCapture.FORMAT_VERSION) {
             throw new BusinessException(HttpStatus.CONFLICT, "재생할 수 없는 입력 형식 판입니다: " + input.getFormatVersion());
         }
+        // 아래 검사들은 처리하지 않은 예외가 본문 없는 403 으로 나가지 않게 한다 — 읽지 못한 입력은 409, 그 밖은 사유를 실은 500
+        if (input.getPayload() == null) {
+            throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력 원문이 없습니다: " + runId);
+        }
         if (!RunInputCapture.digest(input.getPayload()).equals(input.getInputDigest())) {
             throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력이 저장 때의 지문과 다릅니다: " + runId);
         }
@@ -244,6 +251,16 @@ public class ScheduleService {
             inputs = RunInputCapture.read(input.getPayload());
         } catch (JacksonException e) {
             throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력을 지금 코드로 읽을 수 없습니다: " + runId);
+        }
+        if (inputs == null || inputs.engineId() == null) {
+            throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력에 엔진이 없습니다: " + runId);
+        }
+        try {
+            RunInputReplay.properties(inputs);
+        } catch (JacksonException e) {
+            throw new BusinessException(HttpStatus.CONFLICT, "저장한 설정 노브를 지금 코드에 적용할 수 없습니다: " + runId);
+        } catch (RuntimeException e) {
+            throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "저장한 입력으로 다시 계산할 수 없습니다: " + e.getMessage());
         }
         if (!RunInputReplay.ENGINES.contains(inputs.engineId())) {
             throw new BusinessException(HttpStatus.CONFLICT, "다시 만들 수 없는 엔진입니다: " + inputs.engineId());

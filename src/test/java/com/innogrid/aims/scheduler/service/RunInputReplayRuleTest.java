@@ -10,12 +10,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse.Outcome;
 import com.innogrid.aims.scheduler.dto.ScheduleRunReplayResponse.Verdict;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch.DispatchStatus;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
+
+import tools.jackson.core.JacksonException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -101,6 +104,30 @@ class RunInputReplayRuleTest {
                 new RunInputReplay.Step(3L, false, SchedulingResult.failure("자원 부족")));
 
         assertEquals(1, RunInputReplay.sameAsRecorded(steps, history), "1번(실패=실패)만 같다 — 2번은 노드, 3번은 성공 여부가 다르다");
+    }
+
+    @DisplayName("저장한 설정 노브를 새 설정에 덮어쓴다 — 지금 코드에 없는 노브는 무시하고, 형식이 다르면 읽기 예외를 던진다")
+    @Test
+    void stored_knobs_override_new_settings() throws Exception {
+        RunInputCapture.RunInputs in;
+        try (var s = getClass().getResourceAsStream("/scheduler/replay/run-input-format-1.json")) {
+            in = RunInputCapture.read(new String(s.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        }
+        double defaultIdle = new SchedulerProperties().getPower().getIdleRatio();
+
+        SchedulerProperties applied = RunInputReplay.properties(withPowerKnobs(in, "{\"idleRatio\": 0.25, \"retiredKnob\": 7}"));
+
+        assertEquals(0.25, applied.getPower().getIdleRatio(), "저장한 값이 들어간다");
+        assertNotEquals(0.25, defaultIdle, "기본값과 달라야 덮어쓴 것을 볼 수 있다");
+        assertThrows(JacksonException.class, () -> RunInputReplay.properties(withPowerKnobs(in, "{\"idleRatio\": {\"v\": 1}}")),
+                "형식이 다른 노브는 읽기 예외 — 실행 재생은 이것을 409 로 돌려준다");
+    }
+
+    private static RunInputCapture.RunInputs withPowerKnobs(RunInputCapture.RunInputs in, String power) {
+        RunInputCapture.Knobs knobs = new RunInputCapture.Knobs(RunInputCapture.MAPPER.readTree(power),
+                in.knobs().thermal(), in.knobs().network());
+        return new RunInputCapture.RunInputs(in.formatVersion(), in.engineId(), in.capturedAt(), in.powerBudgetWatts(),
+                in.nodes(), in.excludedNodes(), in.workloads(), in.policy(), in.mdcBudgets(), in.links(), in.cooldowns(), knobs);
     }
 
     private static SchedulingHistory recorded(Long workloadId, String node, double score) {

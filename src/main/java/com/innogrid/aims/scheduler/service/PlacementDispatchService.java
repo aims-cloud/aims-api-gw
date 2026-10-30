@@ -270,14 +270,14 @@ public class PlacementDispatchService {
      * 끝 상태(COMPLETED·FAILED·REJECTED·…)       → 그대로
      * REQUESTED · ACCEPTED · RUNNING(열린 상태) → 대상 끝 상태로 마감
      * </pre>
-     * 현재 결정은 멱등키가 아니라 <b>요청 시각이 가장 늦은 행</b>으로 본다 — 배정 시각은 나노초로 들고 있다가 DB 에는
-     * 마이크로초로 반올림되어 저장되므로, 저장 뒤 다시 읽은 값으로 만든 키가 드물게 1ms 어긋난다.
+     * 현재 결정은 멱등키가 아니라 <b>요청 시각이 가장 늦은 행</b>(같으면 id 가 큰 행)으로 본다 — 배정 시각은 나노초로 들고
+     * 있다가 DB 에는 마이크로초로 반올림되어 저장되므로, 저장 뒤 다시 읽은 값으로 만든 키가 드물게 1ms 어긋난다.
      * 디스패처 취소 훅은 부르지 않는다 — 상태 변경은 실행 계층에 명령하는 경로가 아니라 결과를 대신 적는 경로다
      * (기록형 디스패처는 할 일이 없고, 원격 구현체를 붙일 때 취소 알림 여부를 다시 판단한다).
      * 호출자의 트랜잭션 안에서 부른다.
      */
     public PlacementDispatch closeCurrent(Workload workload, Workload.WorkloadStatus target) {
-        List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDesc(workload.getId());
+        List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDescIdDesc(workload.getId());
         if (rows.isEmpty()) return null;
         PlacementDispatch current = rows.get(0);
         if (current.getStatus().terminal()) return current;
@@ -349,7 +349,7 @@ public class PlacementDispatchService {
      * 현재 결정의 기록이 REQUESTED         → 기록 UNAVAILABLE(비고 "재시작 — 전달 결과 모름") + 워크로드 실패·배정 해제
      * 기록 없음 · 옛 결정의 기록 · 끝난 기록 → 워크로드 실패·배정 해제(전과 같음)
      * </pre>
-     * 현재 결정은 <b>요청 시각이 가장 늦은 기록</b>이 워크로드의 배정 시각보다 앞서지 않는 것으로 본다 — 기록은 배치가
+     * 현재 결정은 <b>요청 시각이 가장 늦은 기록</b>(같으면 id 가 큰 기록)이 워크로드의 배정 시각보다 앞서지 않는 것으로 본다 — 기록은 배치가
      * 커밋된 뒤에 만들어지므로 현재 결정이면 항상 성립하고, 옛 결정의 기록(단건 재배치·이전 실패 처리로 남은 것)은
      * 배정 시각보다 앞선다. DB 의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다.
      * 디스패처 취소 훅은 부르지 않는다 — 기동 정리는 실행 계층에 명령하는 경로가 아니다.
@@ -360,7 +360,7 @@ public class PlacementDispatchService {
         return tx.execute(status -> {
             Workload workload = workloadRepository.findById(workloadId).orElse(null);
             if (workload == null || workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) return RestartRecovery.SKIPPED;
-            List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDesc(workloadId);
+            List<PlacementDispatch> rows = repository.findByWorkloadIdOrderByRequestedAtDescIdDesc(workloadId);
             PlacementDispatch latest = rows.isEmpty() ? null : rows.get(0);
             boolean current = latest != null && isCurrentDecision(latest, workload);
             if (current && !latest.getStatus().terminal()) {
@@ -386,7 +386,7 @@ public class PlacementDispatchService {
 
     @Transactional(readOnly = true)
     public List<PlacementDispatch> byWorkload(Long workloadId) {
-        return repository.findByWorkloadIdOrderByRequestedAtDesc(workloadId);
+        return repository.findByWorkloadIdOrderByRequestedAtDescIdDesc(workloadId);
     }
 
     @Transactional(readOnly = true)

@@ -69,7 +69,7 @@ public class PlacementDispatchController {
                 service.applyResult(dispatchId, request.status(), request.externalRef(), request.message())));
     }
 
-    @Operation(summary = "워크로드의 디스패치 기록", description = "최신순 배열. 없으면 빈 배열.")
+    @Operation(summary = "워크로드의 디스패치 기록", description = "최신순 배열(요청 시각이 같으면 나중에 만든 기록이 앞). 없으면 빈 배열.")
     @GetMapping("/workloads/{workloadId}/dispatches")
     public ApiResponse<List<PlacementDispatchResponse>> byWorkload(
             @Parameter(description = "워크로드 ID") @PathVariable Long workloadId) {

@@ -155,7 +155,7 @@ class RunningGpuReservationScenarioTest {
         assertTrue(placed.success(), placed.reason());
         assertEquals(NODE, placed.selectedNodeId());
 
-        PlacementDispatch dispatch = dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(workload.getId()).get(0);
+        PlacementDispatch dispatch = dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(workload.getId()).get(0);
         assertEquals(PlacementDispatch.DispatchStatus.ACCEPTED, dispatch.getStatus());
         dispatchService.applyResult(dispatch.getId(), "RUNNING", PREFIX + "job", null);
         if (startLongAgo) {

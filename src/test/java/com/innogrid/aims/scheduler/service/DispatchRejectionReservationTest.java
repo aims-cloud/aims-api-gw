@@ -72,7 +72,7 @@ class DispatchRejectionReservationTest {
         assertEquals(1, run.getSuccessCount(), "w2 만 성공");
         assertEquals(1, run.getFailedCount(), "w1 은 거부로 실패");
         assertEquals(DispatchStatus.REJECTED,
-                dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w1.getId()).get(0).getStatus(),
+                dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w1.getId()).get(0).getStatus(),
                 "w1 이 먼저 배치되어 거부돼야 한다 — 순서가 바뀌면 이 시험은 결함을 못 잡는다");
         Workload first = workloadRepository.findById(w1.getId()).orElseThrow();
         assertEquals(Workload.WorkloadStatus.FAILED, first.getStatus());

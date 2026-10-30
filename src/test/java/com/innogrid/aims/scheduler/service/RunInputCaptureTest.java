@@ -371,7 +371,7 @@ class RunInputCaptureTest {
         assertFalse(result.success(), "실행 계층이 받지 않아 응답은 실패로 낮아진다");
         PlacementInput row = onlyPlacementInputOf(w.getId());
         assertTrue(row.isSuccess(), "행은 실패로 낮추기 전의 엔진 결정이다");
-        PlacementDispatch recorded = dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).get(0);
+        PlacementDispatch recorded = dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w.getId()).get(0);
         assertEquals(PlacementDispatch.DispatchStatus.REJECTED, recorded.getStatus());
         assertEquals(recorded.getNodeId(), row.getSelectedNodeId(), "행의 선택 노드는 실행 계층에 넘긴 노드와 같다");
     }

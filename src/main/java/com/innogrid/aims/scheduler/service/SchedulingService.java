@@ -43,7 +43,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * <p>메트릭 조회(Thanos)는 트랜잭션 밖에서 하고, DB 저장은 {@link PlacementService} 의
  * 짧은 트랜잭션에 맡긴다.</p>
  *
- * <p>배치 컨텍스트 조립(노드 수집 · 링크·예산 원장 · 예약 반영)은 {@link PlacementContextAssembler} 에 맡긴다.</p>
+ * <p>배치 컨텍스트 조립(노드 수집 · 링크·예산 원장 · 예약 반영)은 {@link PlacementContextAssembler} 에, 노드 조회(열 상태 ·
+ * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader} 에 맡긴다.</p>
  */
 @Service
 public class SchedulingService {
@@ -54,7 +55,6 @@ public class SchedulingService {
     private final SchedulingPolicyRepository policyRepository;
     private final PlacementService placementService;
     private final EngineRegistry engineRegistry;
-    private final ConstraintEvaluator constraintEvaluator;
     private final SchedulerProperties properties;
 
     /** 실행 계층 연동. null 이면(직접 조립한 테스트 경로) 결정만 하고 넘기지 않는다. */
@@ -62,6 +62,9 @@ public class SchedulingService {
 
     /** 배치 컨텍스트 조립. 빈이 아니라 여기서 만든다. */
     private final PlacementContextAssembler contextAssembler;
+
+    /** 노드 조회. 빈이 아니라 여기서 만든다 — 조립과 같은 평가기(냉각 대기 기록)를 쓴다. */
+    private final NodeSnapshotReader nodeReader;
 
     /** 단건 배치 입력 저장소. null 이면(직접 조립한 테스트 경로) 입력을 남기지 않는다. */
     private final PlacementInputRepository inputRepository;
@@ -94,11 +97,11 @@ public class SchedulingService {
         this.policyRepository = policyRepository;
         this.placementService = placementService;
         this.engineRegistry = engineRegistry;
-        this.constraintEvaluator = constraintEvaluator;
         this.properties = properties;
         this.dispatchService = dispatchService;
         this.contextAssembler = new PlacementContextAssembler(nodeCollector, constraintEvaluator, workloadRepository,
                 properties, linkRepository, budgetRepository, dispatchService);
+        this.nodeReader = new NodeSnapshotReader(contextAssembler, constraintEvaluator);
         this.inputRepository = inputRepository;
         this.inputCapture = inputRepository == null ? null : new RunInputCapture(thermalModel, properties);
     }
@@ -203,11 +206,7 @@ public class SchedulingService {
         SchedulingPolicy policy = policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
                 .orElseGet(() -> new SchedulingPolicy("default", "기본 스케줄링 정책"));
 
-        PlacementContext context = createContext(policy);
-        for (NodeResource node : context.nodes()) {
-            node.setThermalState(constraintEvaluator.thermalState(node, policy));
-        }
-        return context;
+        return nodeReader.snapshot(policy);
     }
 
     /**
@@ -223,16 +222,7 @@ public class SchedulingService {
      * 수집 단계에서 제외된 노드라면 404 사유에 그 이유를 적는다 — "없다"와 "알 수 없다"는 다르다.
      */
     public NodeResource getNodeResource(String nodeId) {
-        PlacementContext snapshot = nodeSnapshot();
-        return snapshot.nodes().stream()
-                .filter(n -> n.getNodeId().equals(nodeId))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
-                        snapshot.excludedNodes().stream()
-                                .filter(e -> e.nodeId().equals(nodeId))
-                                .findFirst()
-                                .map(e -> "노드를 찾을 수 없습니다: " + nodeId + " — 수집 제외 (" + e.reason() + ")")
-                                .orElse("노드를 찾을 수 없습니다: " + nodeId)));
+        return nodeReader.find(nodeSnapshot(), nodeId);
     }
 
     /**
@@ -243,11 +233,7 @@ public class SchedulingService {
      * 있을 때는 수집한 뒤 노드마다 다시 확인하므로, 수집하는 동안 만료된 노드는 목록에서 빠진다.</p>
      */
     public List<ThermalCooldownResponse> getCoolingDownNodes() {
-        if (!constraintEvaluator.anyCoolingDown()) return List.of();
-        return getNodeResources().stream()
-                .filter(n -> constraintEvaluator.isCoolingDown(n.getNodeId()))
-                .map(n -> ThermalCooldownResponse.of(n, constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
-                .toList();
+        return nodeReader.coolingDown(this::getNodeResources);
     }
 
     /**

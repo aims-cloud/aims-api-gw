@@ -265,12 +265,13 @@ public class SchedulerController {
 
     @Operation(summary = "워크로드 스케줄링 실행",
                description = "engine: weighted(가중치), power(전력최적화), temperature(온도최적화). "
+                       + "engine 을 비우면 적용 정책의 기본 엔진(defaultEngine), 그것도 없으면 weighted 를 씁니다. "
                        + "dryRun=true 로 부르면 배치하지 않고 제약 평가 결과만 돌려줍니다 — "
                        + "워크로드 상태와 배치 이력을 전혀 바꾸지 않습니다. "
                        + "응답의 policyName 은 이 결정에 적용된 배치 정책 이름이며 실패·모의 배치 결과에도 있습니다.")
     @PostMapping("/workloads/{workloadId}/schedule")
     public ApiResponse<SchedulingResult> scheduleWorkload(@PathVariable Long workloadId,
-                                                          @RequestParam(defaultValue = "weighted") String engine,
+                                                          @RequestParam(required = false) String engine,
                                                           @RequestParam(defaultValue = "false") boolean dryRun) {
         return ApiResponse.ok(dryRun
                 ? schedulingService.dryRun(workloadId, engine)
@@ -280,11 +281,12 @@ public class SchedulerController {
     @Operation(summary = "저장 전 워크로드 모의 배치",
                description = "워크로드 생성 폼 값으로 저장 없이 모의 배치 결과를 돌려줍니다 — 단건 배치 dryRun=true 와 같은 일곱 키. "
                        + "검증·사유 문구는 생성과 같고, 종류를 비우면 VM 으로 읽어 정책을 고릅니다. "
+                       + "engine 을 비우면 그 정책의 기본 엔진(defaultEngine), 그것도 없으면 weighted 를 씁니다. "
                        + "워크로드·배치 이력·정책을 만들지 않으며(정책이 하나도 없어도 default 를 저장하지 않음) "
                        + "200 이 실제 배치 성공을 보장하지 않습니다(호출 시점 노드 상태). 호출마다 메트릭을 수집하므로 버튼 단위로 부릅니다.")
     @PostMapping("/workloads/dry-run")
     public ApiResponse<SchedulingResult> dryRunDraft(@RequestBody WorkloadRequest request,
-                                                     @RequestParam(defaultValue = "weighted") String engine) {
+                                                     @RequestParam(required = false) String engine) {
         return ApiResponse.ok(schedulingService.dryRun(workloadService.draft(request), engine));
     }
 

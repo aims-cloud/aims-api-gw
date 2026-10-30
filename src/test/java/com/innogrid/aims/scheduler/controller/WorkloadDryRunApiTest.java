@@ -19,6 +19,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
@@ -77,6 +78,32 @@ class WorkloadDryRunApiTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
         mockMvc.perform(post(BASE + "/dry-run?engine=nope").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("워크로드 이름은(는) 필수입니다"));   // 칸 400 이 엔진 400 보다 먼저
+    }
+
+    @DisplayName("빈 엔진 값은 비운 것과 같아 400 이 아니다")
+    @Test
+    void empty_engine_is_same_as_omitted() throws Exception {
+        for (String engine : List.of("", " ")) {
+            mockMvc.perform(post(BASE + "/dry-run").param("engine", engine).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"api-draft\",\"requiredCpu\":1,\"requiredMemoryMb\":256}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        }
+    }
+
+    @DisplayName("Swagger 의 두 engine 파라미터는 기본값 없이 선택이다 — 비우면 정책 기본 엔진을 쓰므로")
+    @Test
+    void swagger_engine_params_have_no_default() throws Exception {
+        JsonNode paths = objectMapper.readTree(mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("paths");
+        for (String path : List.of(BASE + "/dry-run", BASE + "/{workloadId}/schedule")) {
+            JsonNode engine = null;
+            for (JsonNode p : paths.get(path).get("post").get("parameters")) {
+                if ("engine".equals(p.get("name").asString())) engine = p;
+            }
+            assertNotNull(engine, path + " 에 engine 파라미터");
+            assertFalse(engine.path("required").asBoolean(false), path + " engine 은 선택");
+            assertTrue(engine.get("schema").path("default").isMissingNode(), path + " engine 기본값 없음: " + engine);
+        }
     }
 
     @DisplayName("미인증이면 403 이다")

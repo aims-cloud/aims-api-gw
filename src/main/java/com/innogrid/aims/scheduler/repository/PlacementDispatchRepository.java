@@ -18,7 +18,8 @@ public interface PlacementDispatchRepository extends JpaRepository<PlacementDisp
 
     Optional<PlacementDispatch> findByIdempotencyKey(String idempotencyKey);
 
-    List<PlacementDispatch> findByWorkloadIdOrderByRequestedAtDesc(Long workloadId);
+    /** 워크로드의 기록을 최신순으로 — 요청 시각이 같으면 나중에 만든(id 가 큰) 기록이 앞. 첫 행을 「최신 결정의 기록」으로 쓴다. */
+    List<PlacementDispatch> findByWorkloadIdOrderByRequestedAtDescIdDesc(Long workloadId);
 
     List<PlacementDispatch> findByScheduleRunIdOrderByRequestedAtAsc(Long scheduleRunId);
 

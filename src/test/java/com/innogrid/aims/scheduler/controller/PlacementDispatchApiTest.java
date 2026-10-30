@@ -200,7 +200,7 @@ class PlacementDispatchApiTest {
         mockMvc.perform(post(BASE + "/dispatches/" + ids[1] + "/result").contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"COMPLETED\"}"));
         mockMvc.perform(delete(BASE + "/workloads/" + ids[0])).andExpect(status().isOk());
         mockMvc.perform(get(BASE + "/dispatches/" + ids[1])).andExpect(status().isNotFound());
-        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(ids[0]).isEmpty());
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(ids[0]).isEmpty());
     }
 
     @DisplayName("워크로드 응답은 23필드(요구 대역폭 추가)이고, 미인증은 403")

@@ -80,7 +80,7 @@ class PlacementDispatchServiceTest {
         assertEquals("n1", d.getNodeId());
         assertNull(d.getExternalRef());
         assertEquals(Workload.WorkloadStatus.SCHEDULED, workloadRepository.findById(w.getId()).orElseThrow().getStatus());
-        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).size());
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w.getId()).size());
     }
 
     @DisplayName("같은 결정을 두 번 넘기면 같은 행을 돌려주고 새로 만들지 않는다 (멱등키)")
@@ -91,7 +91,7 @@ class PlacementDispatchServiceTest {
         PlacementDispatch first = service.afterPlacement(w, ok(), null);
         PlacementDispatch second = service.afterPlacement(w, ok(), null);
         assertEquals(first.getId(), second.getId());
-        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).size());
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w.getId()).size());
     }
 
     @DisplayName("실패한 결정은 아무 행도 만들지 않는다")
@@ -100,7 +100,7 @@ class PlacementDispatchServiceTest {
         when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
         Workload w = workloadRepository.saveAndFlush(new Workload("dps-fail", 1, 64));
         assertNull(service.afterPlacement(w, SchedulingResult.failure("자원 부족"), null));
-        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).isEmpty());
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w.getId()).isEmpty());
     }
 
     @DisplayName("실행 계층이 거부하면 REJECTED 로 닫고 워크로드는 FAILED + 배정 해제 + 재시도 1")
@@ -369,7 +369,7 @@ class PlacementDispatchServiceTest {
         Workload after = schedulingService.changeStatus(w.getId(), Workload.WorkloadStatus.FAILED);
 
         assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
-        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(w.getId()).isEmpty());
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(w.getId()).isEmpty());
     }
 
     // ── 예약 취소 ──────────────────────────────────────────────

@@ -168,7 +168,7 @@ class WorkloadChangeDuringRunTest {
         assertEquals(1, run.getFailedCount(), "건너뛴 건은 실패로 센다");
         assertTrue(workloadRepository.findById(gone.getId()).isEmpty(), "지운 워크로드가 되살아나면 안 된다");
         assertTrue(workloadRepository.findAll().stream().noneMatch(w -> (PREFIX + "del-1").equals(w.getName())), "새 행으로도 생기지 않는다");
-        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(gone.getId()).isEmpty(), "전달 기록도 없다");
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(gone.getId()).isEmpty(), "전달 기록도 없다");
         List<SchedulingHistory> skipped = historiesOf(run, gone.getId());
         assertEquals(1, skipped.size(), "결정 목록에 건너뜀 한 건");
         assertFalse(skipped.get(0).getSuccess());
@@ -198,7 +198,7 @@ class WorkloadChangeDuringRunTest {
         assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
         assertEquals("other-node:9100", after.getAssignedNodeId(), "다른 경로의 배정이 덮이면 안 된다");
         assertEquals(afterHook[0].getScheduledAt().toInstant(), after.getScheduledAt().toInstant(), "배정 시각도 그대로");
-        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDesc(target.getId()).isEmpty(), "이 회차가 전달하지 않는다");
+        assertTrue(dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId()).isEmpty(), "이 회차가 전달하지 않는다");
         List<SchedulingHistory> histories = historiesOf(run, target.getId());
         assertEquals(1, histories.size());
         assertFalse(histories.get(0).getSuccess());

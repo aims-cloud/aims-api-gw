@@ -509,6 +509,26 @@ class PlacementDispatchServiceTest {
         assertTrue(r.dispatch().getMessage().contains("취소 훅 예외: IllegalStateException"), "훅 예외는 비고에 남는다");
     }
 
+    @DisplayName("예약 취소는 디스패처 취소 훅을 DB 트랜잭션 안에서 부른다")
+    @Test
+    void release_calls_cancel_hook_inside_transaction() {
+        List<Boolean> inTransaction = new java.util.ArrayList<>();
+        PlacementDispatcher hooked = new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) { return Outcome.accepted("ext", "ok"); }
+            @Override public void cancel(Request request) {
+                inTransaction.add(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
+            }
+        };
+        when(registry.current()).thenReturn(hooked);
+        Workload w = assigned("dps-rel-tx");
+        service.afterPlacement(w, ok(), null);
+
+        schedulingService.release(w.getId());
+
+        assertEquals(List.of(true), inTransaction, "훅은 예약 취소의 트랜잭션 안에서 불린다");
+    }
+
     @DisplayName("재시도 소진 워크로드를 단건 배치로 올린 뒤 취소하면 재시도 횟수가 남아 스케줄 실행 대상이 아니다")
     @Test
     void release_keeps_exhaustion_out_of_schedule_targets() {

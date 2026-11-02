@@ -652,18 +652,9 @@ public class ScheduleExecutionService {
         return copy;
     }
 
-    /** 엔진 선택의 결과 — 엔진 ID 와 고른 단계. */
-    record EngineChoice(String engine, ScheduleRunPreviewResponse.EngineSource source) {}
-
-    /** 스케줄이 지정한 엔진, 없으면 정책 기본 엔진(등록된 것일 때만), 그것도 없으면 서버 기본값. */
+    /** 스케줄이 지정한 엔진, 없으면 정책 기본 엔진(등록된 것일 때만), 그것도 없으면 서버 기본값. 규칙은 단건 배치와 같은 {@link EngineChoice}. */
     private EngineChoice engineChoiceFor(Schedule schedule, SchedulingPolicy policy) {
-        if (schedule.getEngine() != null && !schedule.getEngine().isBlank()) {
-            return new EngineChoice(schedule.getEngine(), ScheduleRunPreviewResponse.EngineSource.SCHEDULE);
-        }
-        if (policy.getDefaultEngine() != null && engineRegistry.contains(policy.getDefaultEngine())) {
-            return new EngineChoice(policy.getDefaultEngine(), ScheduleRunPreviewResponse.EngineSource.POLICY);
-        }
-        return new EngineChoice(EngineRegistry.DEFAULT_ENGINE_ID, ScheduleRunPreviewResponse.EngineSource.DEFAULT);
+        return EngineChoice.choose(schedule.getEngine(), policy, engineRegistry);
     }
 
     private ScheduleRun startRun(Schedule schedule, ScheduleRun.TriggerType triggerType,

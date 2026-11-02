@@ -3,11 +3,15 @@ package com.innogrid.aims.scheduler.repository;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.scheduler.entity.Workload;
 
@@ -118,4 +122,27 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
             @Param("resourceType") Workload.ResourceType resourceType,
             @Param("matchNullType") boolean matchNullType,
             @Param("maxRetryCount") int maxRetryCount);
+
+    /**
+     * 상태가 {@code expected} 중 하나일 때만 {@code next} 로 옮긴다 — 스케줄 실행의 배치 저장이 그 사이 다른 실행·단건 배치가
+     * 커밋한 배치를 덮지 않게 하는 조건부 갱신이다.
+     *
+     * <p>호출자의 트랜잭션 안에서만 부른다({@code MANDATORY}). 갱신한 행의 잠금이 그 트랜잭션이 끝날 때까지 남아야, 같은 행을
+     * 노리는 다른 실행이 이 배치가 커밋된 뒤의 상태로 조건을 다시 본다. 트랜잭션 밖에서 부르면 잠금이 곧바로 풀려 막지 못한다.</p>
+     *
+     * @return 갱신한 행 수. 0 이면 그 사이 상태가 바뀌었거나 지워졌다
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying(clearAutomatically = false, flushAutomatically = true)
+    @Query("update Workload w set w.status = :next where w.id = :id and w.status in :expected")
+    int updateStatusIfIn(@Param("id") Long id,
+                         @Param("expected") Collection<Workload.WorkloadStatus> expected,
+                         @Param("next") Workload.WorkloadStatus next);
+
+    /**
+     * 지금 상태 — 조건부 갱신이 0 행이었을 때 건너뛴 사유를 적으려고 읽는다. 엔티티가 아니라 값만 읽는다(영속성 컨텍스트에
+     * 올리지 않는다).
+     */
+    @Query("select w.status from Workload w where w.id = :id")
+    Optional<Workload.WorkloadStatus> findStatusById(@Param("id") Long id);
 }

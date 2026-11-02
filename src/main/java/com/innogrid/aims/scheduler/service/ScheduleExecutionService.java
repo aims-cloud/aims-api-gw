@@ -49,7 +49,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *          우선순위 CRITICAL→LOW, 같으면 등록 순, 1회 최대 500건
  *
  * 수행     노드 스냅샷 1회 → 예약 반영 → 워크로드마다 배치 직전 다시 읽기(지워졌거나 대기·실패가 아니면
- *          건너뜀 — 실패로 셈) → 제약→엔진→배치 → 커밋 뒤 예약 누적
+ *          건너뜀 — 실패로 셈) → 제약→엔진→배치(저장 직전에도 대기·실패일 때만 저장 · 아니면 건너뜀)
+ *          → 커밋 뒤 예약 누적
  *
  * 판정     대상 0건 · AUTO      → 실행 이력을 만들지 않고 최근 실행 정보만 갱신
  *          대상 0건 · MANUAL    → 소진이면 FAILED(사유에 일괄 재개 필요), 아니면 COMPLETED "대상 없음"
@@ -67,8 +68,11 @@ public class ScheduleExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(ScheduleExecutionService.class);
 
-    /** 실행 대상으로 삼을 워크로드 상태. 실패한 것도 다시 시도한다(재시도 상한 안에서). */
-    private static final List<Workload.WorkloadStatus> TARGET_STATUSES =
+    /**
+     * 실행 대상으로 삼을 워크로드 상태. 실패한 것도 다시 시도한다(재시도 상한 안에서). 배치 저장 직전의 조건부 갱신
+     * ({@link PlacementService})도 같은 목록을 쓴다.
+     */
+    static final List<Workload.WorkloadStatus> TARGET_STATUSES =
             List.of(Workload.WorkloadStatus.PENDING, Workload.WorkloadStatus.FAILED);
 
     /** 우선순위 높은 것부터, 같으면 먼저 등록된 것부터(현행 기본). */

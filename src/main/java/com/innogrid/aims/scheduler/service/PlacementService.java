@@ -75,6 +75,9 @@ public class PlacementService {
      * <p>컨텍스트에 예약은 잡지 않는다. 스케줄 실행의 배치 루프가 이 메서드가 정상 반환한 뒤(=결정이 커밋된 뒤)
      * 예약을 잡는다 — 여기서 잡으면 이력·워크로드 저장이나 커밋이 실패해도 예약이 남아, 그 예외로 루프가 끝난 뒤
      * 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.</p>
+     *
+     * <p>{@code scheduleRunId} 가 있고 저장된 워크로드면 저장 직전에 상태가 아직 대기·실패일 때만 결정한 상태로 옮긴다. 그 사이
+     * 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip} 으로 건너뜀 한 건만 남긴다.</p>
      */
     @Transactional
     public SchedulingResult place(Workload workload, PlacementContext context, String engineId,
@@ -86,6 +89,19 @@ public class PlacementService {
 
         SchedulingResult result = engine.schedule(workload, context);
         ConstraintEvaluator.warnUncheckedDisk(log, workload, result, context, diskMountPoint);
+
+        if (scheduleRunId != null && workload.getId() != null) {
+            // 실행은 배치 직전에 다시 읽지만 그 읽기와 이 저장은 다른 트랜잭션이다. 그 사이 겹친 다른 실행·단건 배치가 이 워크로드를
+            // 배치했거나 지웠으면 덮지 않는다 — 아직 대기·실패일 때만 결정한 상태로 옮기고, 아니면 워크로드를 쓰지 않고 건너뛴다.
+            Workload.WorkloadStatus decided = result.success()
+                    ? Workload.WorkloadStatus.SCHEDULED : Workload.WorkloadStatus.FAILED;
+            if (workloadRepository.updateStatusIfIn(workload.getId(), ScheduleExecutionService.TARGET_STATUSES, decided) == 0) {
+                String reason = workloadRepository.findStatusById(workload.getId())
+                        .map(status -> "배치 건너뜀 — 배치하는 사이 상태가 " + status + " 로 바뀜")
+                        .orElse("배치 건너뜀 — 배치하는 사이 삭제됨");
+                return recordSkip(workload, context, engineId, scheduleRunId, reason);
+            }
+        }
 
         if (result.success()) {
             workload.assignTo(result.selectedMdcId(), result.selectedNodeId(),
@@ -113,11 +129,11 @@ public class PlacementService {
     }
 
     /**
-     * 스케줄 실행이 배치 직전에 다시 읽어 건너뛴 워크로드를 실패 결정 한 건으로 남긴다.
+     * 스케줄 실행이 건너뛴 워크로드(배치 직전에 다시 읽었거나 저장 직전 조건부 갱신이 0 행)를 실패 결정 한 건으로 남긴다.
      *
      * <p>워크로드는 쓰지 않는다 — 지워졌거나 다른 경로로 상태가 바뀐 것이라 재시도 횟수를 올리거나 배정을 바꾸면
      * 안 된다. 실행 결과가 센 대상마다 실행 상세의 결정 목록에 한 행이 있도록 사유와 함께 이력 한 행(후보 0)만 남긴다.
-     * 이력의 워크로드 id·이름은 대상 조회 때의 값이다(지워졌으면 없는 id 를 가리킨다).</p>
+     * 이력의 워크로드 id·이름은 넘겨받은 사본의 값이다 — 다시 읽기에서 건너뛰면 대상 조회 때, 저장 직전 확인에서 건너뛰면 다시 읽은 때의 값(지워졌으면 없는 id).</p>
      */
     @Transactional
     public SchedulingResult recordSkip(Workload polled, PlacementContext context, String engineId,

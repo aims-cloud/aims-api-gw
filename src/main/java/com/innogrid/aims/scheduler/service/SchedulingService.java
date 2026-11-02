@@ -5,7 +5,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -44,7 +43,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 짧은 트랜잭션에 맡긴다.</p>
  *
  * <p>배치 컨텍스트 조립(노드 수집 · 링크·예산 원장 · 예약 반영)은 {@link PlacementContextAssembler} 에, 노드 조회(열 상태 ·
- * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader} 에 맡긴다.</p>
+ * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader} 에, 배치 정책 선택은 {@link PolicyResolver} 에 맡긴다.</p>
  */
 @Service
 public class SchedulingService {
@@ -65,6 +64,9 @@ public class SchedulingService {
 
     /** 노드 조회. 빈이 아니라 여기서 만든다 — 조립과 같은 평가기(냉각 대기 기록)를 쓴다. */
     private final NodeSnapshotReader nodeReader;
+
+    /** 배치 정책 선택. 빈이 아니라 여기서 만든다. */
+    private final PolicyResolver policyResolver;
 
     /** 단건 배치 입력 저장소. null 이면(직접 조립한 테스트 경로) 입력을 남기지 않는다. */
     private final PlacementInputRepository inputRepository;
@@ -102,6 +104,7 @@ public class SchedulingService {
         this.contextAssembler = new PlacementContextAssembler(nodeCollector, constraintEvaluator, workloadRepository,
                 properties, linkRepository, budgetRepository, dispatchService);
         this.nodeReader = new NodeSnapshotReader(contextAssembler, constraintEvaluator);
+        this.policyResolver = new PolicyResolver(policyRepository);
         this.inputRepository = inputRepository;
         this.inputCapture = inputRepository == null ? null : new RunInputCapture(thermalModel, properties);
     }
@@ -203,6 +206,7 @@ public class SchedulingService {
      * 조회·진단이 공유한다. 배치 실행은 {@link #createContext} 를 직접 쓴다.
      */
     public PlacementContext nodeSnapshot() {
+        // 배치 정책 선택(choosePolicy)과 규칙이 다르다 — 공통 활성 하나를 정렬 없이 고르고, 없으면 저장된 default 행 대신 새 기본값을 쓴다.
         SchedulingPolicy policy = policyRepository.findFirstByActiveTrueAndResourceTypeIsNull()
                 .orElseGet(() -> new SchedulingPolicy("default", "기본 스케줄링 정책"));
 
@@ -339,9 +343,7 @@ public class SchedulingService {
      * 없으면 여기서 만들어 저장한다(실행·배치 경로 — 이력이 정책 이름을 가리켜야 한다).
      */
     public PolicyChoice resolvePolicyChoice(Workload.ResourceType resourceType) {
-        PolicyChoice choice = choosePolicy(resourceType);
-        if (choice.persisted()) return choice;
-        return new PolicyChoice(policyRepository.save(choice.policy()), choice.source(), true);
+        return policyResolver.resolve(resourceType);
     }
 
     /**
@@ -350,34 +352,7 @@ public class SchedulingService {
      * 선택 규칙·WARN 은 {@link #resolvePolicy(Workload.ResourceType)} 와 같다.
      */
     public PolicyChoice choosePolicy(Workload.ResourceType resourceType) {
-        if (resourceType != null) {
-            Optional<SchedulingPolicy> byType =
-                    pickOne(policyRepository.findByActiveTrueAndResourceTypeOrderByNameAsc(resourceType), resourceType.name())
-                            .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
-            if (byType.isPresent()) return new PolicyChoice(byType.get(), PolicyChoice.Source.RESOURCE_TYPE, true);
-        }
-        // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
-        // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
-        Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
-                .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
-        if (common.isPresent()) return new PolicyChoice(common.get(), PolicyChoice.Source.COMMON, true);
-
-        Optional<SchedulingPolicy> existing = policyRepository.findByName(DEFAULT_POLICY_NAME);
-        if (existing.isPresent()) {
-            log.warn("활성 배치 정책이 없어 비활성 상태의 '{}' 정책 값으로 배치합니다 (저장·상태 변경 없음)", DEFAULT_POLICY_NAME);
-            return new PolicyChoice(existing.get(), PolicyChoice.Source.DEFAULT, true);
-        }
-        return new PolicyChoice(new SchedulingPolicy(DEFAULT_POLICY_NAME, "기본 스케줄링 정책"), PolicyChoice.Source.DEFAULT, false);
-    }
-
-    /** 활성 정책 목록에서 하나를 결정적으로 고른다(이름순 첫 번째). 둘 이상이면 WARN. */
-    private static Optional<SchedulingPolicy> pickOne(List<SchedulingPolicy> actives, String scope) {
-        if (actives.isEmpty()) return Optional.empty();
-        if (actives.size() > 1) {
-            log.warn("{} 활성 배치 정책이 {}개입니다 — 이름순 첫 번째 '{}' 를 씁니다: {}", scope, actives.size(),
-                    actives.get(0).getName(), actives.stream().map(SchedulingPolicy::getName).toList());
-        }
-        return Optional.of(actives.get(0));
+        return policyResolver.choose(resourceType);
     }
 
     /**

@@ -2,6 +2,9 @@ package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
@@ -205,6 +209,115 @@ class WorkloadChangeDuringRunTest {
         assertTrue(histories.get(0).getReason().contains("SCHEDULED"), histories.get(0).getReason());
     }
 
+    // ── 겹친 배치 ────────────────────────────────────────────────────────
+
+    @DisplayName("겹친 다른 스케줄 실행이 배치하는 사이 먼저 배치한 워크로드는 덮지 않고 건너뛴다")
+    @Test
+    void overlapping_run_does_not_overwrite_placement_committed_while_placing() {
+        Workload target = save(PREFIX + "ovl", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        long other = schedule(PREFIX + "s-ovl-b");
+        Workload[] afterOther = new Workload[1];
+        elsewhereWhilePlacing(() -> {
+            executionService.runNow(other, "tester");
+            afterOther[0] = workloadRepository.findById(target.getId()).orElseThrow();
+        }, false);
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-ovl-a"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals(afterOther[0].getScheduledAt().toInstant(), after.getScheduledAt().toInstant(), "먼저 커밋한 실행의 배정 시각이 덮이면 안 된다");
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId()).size(),
+                "실행 계층에 같은 워크로드를 두 번 전달하지 않는다");
+        assertEquals(0, run.getSuccessCount());
+        List<SchedulingHistory> histories = historiesOf(run, target.getId());
+        assertEquals(1, histories.size(), "결정 목록에 건너뜀 한 건");
+        assertFalse(histories.get(0).getSuccess());
+        assertTrue(histories.get(0).getReason().contains("배치하는 사이 상태가 SCHEDULED"), histories.get(0).getReason());
+    }
+
+    @DisplayName("배치하는 사이 다른 실행이 먼저 배치하면 이 실행의 실패 결정이 그 배치를 되돌리지 않는다")
+    @Test
+    void failed_decision_does_not_revert_placement_committed_while_placing() {
+        Workload target = save(PREFIX + "ovl-fail", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        long other = schedule(PREFIX + "s-ovlf-b");
+        elsewhereWhilePlacing(() -> executionService.runNow(other, "tester"), true);
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-ovlf-a"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus(), "먼저 커밋한 배치가 실패로 덮이면 안 된다");
+        assertEquals(NODE, after.getAssignedNodeId());
+        assertEquals(0, after.resolveRetryCount(), "재시도 횟수를 올리지 않는다");
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId()).size());
+        List<SchedulingHistory> histories = historiesOf(run, target.getId());
+        assertEquals(1, histories.size());
+        assertTrue(histories.get(0).getReason().contains("배치하는 사이"), histories.get(0).getReason());
+    }
+
+    @DisplayName("배치하는 사이 단건 배치가 먼저 끝난 워크로드는 덮지 않고 건너뛴다")
+    @Test
+    void single_placement_committed_while_placing_is_not_overwritten() {
+        Workload target = save(PREFIX + "ovl-one", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        Workload[] afterOther = new Workload[1];
+        elsewhereWhilePlacing(() -> {
+            schedulingService.scheduleWorkload(target.getId(), null);
+            afterOther[0] = workloadRepository.findById(target.getId()).orElseThrow();
+        }, false);
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-ovl-one"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals(afterOther[0].getScheduledAt().toInstant(), after.getScheduledAt().toInstant(), "단건 배치의 배정 시각이 덮이면 안 된다");
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId()).size());
+        List<SchedulingHistory> histories = historiesOf(run, target.getId());
+        assertEquals(1, histories.size());
+        assertFalse(histories.get(0).getSuccess());
+        assertTrue(histories.get(0).getReason().contains("배치하는 사이 상태가 SCHEDULED"), histories.get(0).getReason());
+    }
+
+    @DisplayName("배치하는 사이 지운 워크로드는 건너뛰고 회차는 계속된다")
+    @Test
+    void deleted_while_placing_is_skipped_and_run_continues() {
+        Workload gone = save(PREFIX + "ovl-del-1", 1, Workload.WorkloadPriority.HIGH);
+        Workload kept = save(PREFIX + "ovl-del-2", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        elsewhereWhilePlacing(() -> workloadService.delete(gone.getId()), false);
+
+        ScheduleRun run = assertDoesNotThrow(() -> executionService.runNow(schedule(PREFIX + "s-ovl-del"), "tester"));
+
+        assertEquals(ScheduleRun.RunStatus.COMPLETED, run.getStatus());
+        assertEquals(1, run.getSuccessCount());
+        assertEquals(1, run.getFailedCount(), "건너뛴 건은 실패로 센다");
+        assertTrue(workloadRepository.findById(gone.getId()).isEmpty(), "지운 워크로드가 되살아나면 안 된다");
+        assertTrue(workloadRepository.findAll().stream().noneMatch(w -> (PREFIX + "ovl-del-1").equals(w.getName())), "새 행으로도 생기지 않는다");
+        List<SchedulingHistory> skipped = historiesOf(run, gone.getId());
+        assertEquals(1, skipped.size());
+        assertTrue(skipped.get(0).getReason().contains("배치하는 사이 삭제됨"), skipped.get(0).getReason());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, reload(kept).getStatus(), "다음 워크로드는 배치된다");
+    }
+
+    @DisplayName("재시도 간격이 지난 실패 워크로드는 겹침이 없으면 그대로 배치된다")
+    @Test
+    void retryable_failed_workload_is_placed_without_overlap() {
+        Workload failed = new Workload(PREFIX + "ovl-retry", 1, 64);
+        failed.setResourceType(Workload.ResourceType.NPU);
+        failed.markFailed("앞선 실패");
+        ReflectionTestUtils.setField(failed, "lastFailedAt", OffsetDateTime.now().minusMinutes(20));   // 재시도 간격이 지났다
+        Workload saved = workloadRepository.saveAndFlush(failed);
+        nodeThen(10, () -> { });
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-ovl-retry"), "tester");
+
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, reload(saved).getStatus());
+        assertEquals(1, run.getSuccessCount());
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(saved.getId()).size());
+    }
+
     // ── 저장 실패와 예약 ──────────────────────────────────────────────────
 
     @DisplayName("배치 저장이 실패하면 그 건의 예약이 실행 후 스냅샷에 남지 않는다")
@@ -236,6 +349,27 @@ class WorkloadChangeDuringRunTest {
             return new NodeResourceCollector.Snapshot(
                     List.of(new NodeResource("mdc-01", NODE, 8, 65536, 0, cpuPercent, 20, 0, 0, 500, 0, 0, 0)), List.of());
         });
+    }
+
+    /**
+     * 엔진 스파이 — 첫 호출(배치 직전에 다시 읽은 뒤 · 저장 전)에서 {@code elsewhere} 를 별도 스레드로 끝까지 커밋한 뒤 이어 간다.
+     * 이 회차의 배치 트랜잭션은 아직 워크로드 행을 잡지 않았으므로 다른 쪽이 막히지 않는다. {@code thenFail} 이면 이어 갈 때
+     * 엔진 대신 실패 결정을 돌려준다.
+     */
+    private void elsewhereWhilePlacing(Runnable elsewhere, boolean thenFail) {
+        AtomicBoolean once = new AtomicBoolean(true);
+        doAnswer(inv -> {
+            if (once.getAndSet(false)) {
+                ExecutorService other = Executors.newSingleThreadExecutor();
+                try {
+                    other.submit(elsewhere).get(30, TimeUnit.SECONDS);
+                } finally {
+                    other.shutdownNow();
+                }
+                if (thenFail) return SchedulingResult.failure("자원 부족", "default");
+            }
+            return inv.callRealMethod();
+        }).when(weighted).schedule(any(Workload.class), any(PlacementContext.class));
     }
 
     private Workload save(String name, int cpu, Workload.WorkloadPriority priority) {

@@ -3,7 +3,6 @@ package com.innogrid.aims.scheduler.service;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -43,7 +42,8 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 짧은 트랜잭션에 맡긴다.</p>
  *
  * <p>배치 컨텍스트 조립(노드 수집 · 링크·예산 원장 · 예약 반영)은 {@link PlacementContextAssembler} 에, 노드 조회(열 상태 ·
- * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader} 에, 배치 정책 선택은 {@link PolicyResolver} 에 맡긴다.</p>
+ * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader} 에, 배치 정책 선택은 {@link PolicyResolver} 에, 워크로드 상태 변경(일괄 재개 ·
+ * 상태 전이 · 예약 취소)은 {@link WorkloadStatusChanger} 에 맡긴다.</p>
  */
 @Service
 public class SchedulingService {
@@ -67,6 +67,9 @@ public class SchedulingService {
 
     /** 배치 정책 선택. 빈이 아니라 여기서 만든다. */
     private final PolicyResolver policyResolver;
+
+    /** 워크로드 상태 변경(일괄 재개 · 상태 전이 · 예약 취소). 빈이 아니라 여기서 만든다 — 트랜잭션은 이 서비스의 공개 메서드가 연다. */
+    private final WorkloadStatusChanger statusChanger;
 
     /** 단건 배치 입력 저장소. null 이면(직접 조립한 테스트 경로) 입력을 남기지 않는다. */
     private final PlacementInputRepository inputRepository;
@@ -105,6 +108,7 @@ public class SchedulingService {
                 properties, linkRepository, budgetRepository, dispatchService);
         this.nodeReader = new NodeSnapshotReader(contextAssembler, constraintEvaluator);
         this.policyResolver = new PolicyResolver(policyRepository);
+        this.statusChanger = new WorkloadStatusChanger(workloadRepository, dispatchService, properties);
         this.inputRepository = inputRepository;
         this.inputCapture = inputRepository == null ? null : new RunInputCapture(thermalModel, properties);
     }
@@ -367,40 +371,9 @@ public class SchedulingService {
     @Transactional
     public List<Workload> resumeExhausted(Workload.ResourceType resourceType,
                                           OffsetDateTime from, OffsetDateTime to) {
-        if (resourceType == null && from == null && to == null) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST,
-                    "리소스 종류나 기간 중 하나는 지정해야 합니다 — 조건 없는 전체 재개는 받지 않습니다");
-        }
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, "기간의 시작이 끝보다 뒤입니다");
-        }
-
-        // 널 파라미터는 PostgreSQL 이 타입을 추론하지 못한다 — 경계값과 깃발로 바꿔 넘긴다.
-        boolean anyType = resourceType == null;
-        boolean matchNullType = resourceType == Workload.ResourceType.VM;
-        boolean anyPeriod = from == null && to == null;
-        List<Workload> exhausted = workloadRepository.findRetryExhausted(
-                Workload.WorkloadStatus.FAILED, properties.getMaxRetryCount(),
-                anyType, anyType ? Workload.ResourceType.VM : resourceType,
-                matchNullType,
-                anyPeriod,
-                from != null ? from : OffsetDateTime.parse("1970-01-01T00:00:00Z"),
-                to != null ? to : OffsetDateTime.now().plusYears(100));
-        int limit = properties.getMaxWorkloadsPerRun();
-        if (exhausted.size() > limit) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
-                    "조건에 걸린 워크로드가 %d건으로 한 번에 되살릴 수 있는 %d건을 넘습니다 — 기간이나 리소스 종류로 좁히세요",
-                    exhausted.size(), limit));
-        }
-
-        List<Workload> resumed = new ArrayList<>();
-        for (Workload workload : exhausted) {
-            if (workload.transitionTo(Workload.WorkloadStatus.PENDING)) {
-                resumed.add(workloadRepository.save(workload));
-            }
-        }
-        return resumed;
+        return statusChanger.resumeExhausted(resourceType, from, to);
     }
+
     /**
      * 워크로드의 실행 상태를 전이한다.
      * 배치 이후의 흐름(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
@@ -409,19 +382,7 @@ public class SchedulingService {
      */
     @Transactional
     public Workload changeStatus(Long workloadId, Workload.WorkloadStatus target) {
-        Workload workload = workloadRepository.findById(workloadId)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
-                        "워크로드를 찾을 수 없습니다: " + workloadId));
-
-        if (!workload.transitionTo(target)) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(
-                    "허용되지 않는 상태 전이입니다: %s → %s", workload.getStatus(), target));
-        }
-        if (dispatchService != null
-                && (target == Workload.WorkloadStatus.COMPLETED || target == Workload.WorkloadStatus.FAILED)) {
-            dispatchService.closeCurrent(workload, target);
-        }
-        return workloadRepository.save(workload);
+        return statusChanger.changeStatus(workloadId, target);
     }
 
     /**
@@ -435,19 +396,7 @@ public class SchedulingService {
      */
     @Transactional
     public Release release(Long workloadId) {
-        Workload workload = workloadRepository.findById(workloadId)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
-                        "워크로드를 찾을 수 없습니다: " + workloadId));
-        if (workload.getStatus() != Workload.WorkloadStatus.SCHEDULED) {
-            throw new BusinessException(HttpStatus.CONFLICT, workload.getStatus() == Workload.WorkloadStatus.RUNNING
-                    ? "실행 중인 워크로드는 예약을 취소할 수 없습니다 — 실행 계층 결과로 끝내십시오"
-                    : String.format("취소할 예약이 없습니다 — 워크로드가 %s 상태입니다(SCHEDULED 만 가능)", workload.getStatus()));
-        }
-        String mdcId = workload.getAssignedMdcId();
-        String nodeId = workload.getAssignedNodeId();
-        PlacementDispatch dispatch = dispatchService == null ? null : dispatchService.cancelCurrent(workload);
-        workload.release("예약 취소 — 이전 배정 " + mdcId + "/" + nodeId);
-        return new Release(workloadRepository.save(workload), mdcId, nodeId, dispatch);
+        return statusChanger.release(workloadId);
     }
 
     /** 예약 취소의 결과 묶음. */

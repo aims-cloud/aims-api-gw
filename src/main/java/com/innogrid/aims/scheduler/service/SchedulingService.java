@@ -276,14 +276,10 @@ public class SchedulingService {
 
     /**
      * 단건 배치·모의 배치가 쓸 엔진 — 요청한 엔진, 없으면 정책 기본 엔진(등록된 것일 때만), 그것도 없으면 서버 기본값.
-     * 스케줄 실행의 엔진 선택({@code ScheduleExecutionService.engineChoiceFor})에서 스케줄 단계를 요청으로 바꾼 것이다.
+     * 스케줄 실행과 같은 규칙({@link EngineChoice})에서 스케줄이 지정한 엔진 자리에 요청한 엔진을 넣는다.
      */
     private String engineFor(String requested, SchedulingPolicy policy) {
-        if (requested != null) return requested;
-        if (policy != null && policy.getDefaultEngine() != null && engineRegistry.contains(policy.getDefaultEngine())) {
-            return policy.getDefaultEngine();
-        }
-        return EngineRegistry.DEFAULT_ENGINE_ID;
+        return EngineChoice.choose(requested, policy, engineRegistry).engine();
     }
 
     /** 제약 평가만 수행한다 — 정책은 호출자가 고른다(저장 여부가 거기서 갈린다). 워크로드 상태와 이력은 건드리지 않는다. */

@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -160,6 +161,23 @@ class BenchmarkCellAssemblerTest {
         for (MetricValue v : BenchmarkCellAssembler.metricValues(Map.of(), row, 2, points, 1)) {
             if (pairedOnly.contains(v.key())) assertEquals(NO_VALUE, v.invalidReason(), v.key());
         }
+    }
+
+    /** 등록된 판에서는 링크 판이 전 시각 지점에서 값을 내 이 경로가 응답으로 지나가지 않는다 — 지점의 null 을 0 으로 세면 비율이 낮아 보인다. */
+    @DisplayName("원격 MDC 배치 비율은 일부 시각 지점에만 값이 없으면 남은 지점으로 값을 내고 유효하다")
+    @Test
+    void remote_mdc_rate_uses_the_points_that_have_a_value() {
+        Placement row = placement(BaselinePlacers.ffdBySize(), 1, true, true);
+        List<PointOutcome> points = List.of(point(row), point(row), point(row));
+        Map<String, List<Double>> samples = Map.of(BenchmarkRules.REMOTE_MDC_RATE, Arrays.asList(null, 40.0, 60.0));
+
+        MetricValue v = BenchmarkCellAssembler.metricValues(samples, row, 3, points, 0).stream()
+                .filter(m -> m.key().equals(BenchmarkRules.REMOTE_MDC_RATE)).findFirst().orElseThrow();
+        assertTrue(v.valid(), v.invalidReason());
+        assertEquals(50.0, v.median(), 1e-9);
+        assertEquals(40.0, v.min(), 1e-9);
+        assertEquals(60.0, v.max(), 1e-9);
+        assertEquals(2, v.samples(), "값이 없는 지점은 표본에서 빠진다");
     }
 
     // ── 입력 만들기 ──────────────────────────────────────────

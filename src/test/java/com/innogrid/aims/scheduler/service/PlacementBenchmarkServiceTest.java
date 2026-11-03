@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.scheduler.benchmark.BaselinePlacers;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -459,6 +460,101 @@ class PlacementBenchmarkServiceTest {
         List<Workload> plain = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-heavytail.yml").sample(200);
         PlacementBenchmarkService.assignRequiredBandwidth(plain, clusters.get(BenchmarkClusters.MAIN));
         assertTrue(plain.stream().allMatch(w -> w.getRequiredBandwidthMbps() == null), "요구 대역폭 절이 없는 판은 부여하지 않는다");
+    }
+
+    // ── 원격 MDC 배치 비율 ─────────────────────────────────────
+
+    /** 링크 판은 워크로드에 데이터 MDC 를 배정하는 유일한 판이라 전 셀 · 전 열이 시각 지점마다 값을 낸다. 0~100 밖이면 분모나 분자를 잘못 센 것이다. */
+    @DisplayName("링크 판의 원격 MDC 배치 비율은 두 분포의 전 셀 · 전 열에서 0~100 사이 값이다")
+    @Test
+    void remote_mdc_rate_is_valid_on_every_link_board_cell() {
+        for (String distribution : List.of("heavytail", "uniform")) {
+            for (var c : service.compare("link", distribution).boards().get(0).cells()) {
+                for (var s : c.strategies()) {
+                    MetricValue m = metric(s, BenchmarkRules.REMOTE_MDC_RATE);
+                    String where = distribution + " " + c.loadRatioPercent() + ":" + c.powerControl() + " " + s.strategyId();
+                    assertTrue(m.valid(), where + " — " + m.invalidReason());
+                    assertTrue(m.median() >= 0 && m.median() <= 100, where + " 값 " + m.median());
+                    assertEquals(BenchmarkRules.SWEEP_POINTS, m.samples(), where + " — 시각 지점마다 표본 하나");
+                }
+            }
+        }
+    }
+
+    /** 데이터 MDC 가 없는 판에서 0 을 내면 "원격 배치가 없었다"로 읽힌다 — 값도 표본도 없이 사유를 단 무효여야 한다. */
+    @DisplayName("데이터 MDC 를 배정하지 않은 판은 원격 MDC 배치 비율이 0 이 아니라 사유를 단 무효다")
+    @Test
+    void remote_mdc_rate_is_invalid_with_a_reason_on_boards_without_data_mdc() {
+        for (String board : new BenchmarkClusters().boardIds()) {
+            if (BenchmarkClusters.LINK.equals(board)) continue;
+            for (String distribution : List.of("heavytail", "uniform")) {
+                for (var b : service.compare(board, distribution).boards()) {
+                    for (var c : b.cells()) {
+                        for (var s : c.strategies()) {
+                            MetricValue m = metric(s, BenchmarkRules.REMOTE_MDC_RATE);
+                            String where = board + " " + distribution + " seed " + b.phaseSeed() + " " + c.loadRatioPercent() + ":"
+                                    + c.powerControl() + " " + s.strategyId();
+                            assertNull(m.median(), where);
+                            assertFalse(m.valid(), where);
+                            assertEquals(0, m.samples(), where + " — 데이터 MDC 가 없으면 표본도 없다");
+                            assertEquals("이 판은 워크로드에 데이터 MDC 를 배정하지 않아 원격 배치가 정의되지 않는다", m.invalidReason(), where);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 링크 판의 링크 게이트 끈 열(weighted)과 켠 열(weighted-affinity)의 원격 MDC 배치 비율 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정).
+     * 두 전원 상태 셀은 배치가 같아 값이 같다. 허용 오차는 판정 규칙의 지점 비교 무시 폭과 같은 근거다.
+     */
+    @DisplayName("링크 판의 원격 MDC 배치 비율이 두 분포 · 네 부하율에서 관측 리터럴과 같다")
+    @Test
+    void remote_mdc_rate_on_the_link_board_matches_the_observed_literals() {
+        // 분포:부하율 → { weighted, weighted-affinity }
+        Map<String, double[]> expected = Map.of(
+                "heavytail:30", new double[]{57.1573, 21.5436}, "heavytail:60", new double[]{62.069, 17.0953},
+                "heavytail:90", new double[]{65.5259, 16.2791}, "heavytail:110", new double[]{65.3846, 17.5614},
+                "uniform:30", new double[]{47.3684, 21.0526}, "uniform:60", new double[]{58.6771, 27.9872},
+                "uniform:90", new double[]{62.1475, 26.5852}, "uniform:110", new double[]{62.3316, 24.7642});
+        int checked = 0;
+        for (String distribution : List.of("heavytail", "uniform")) {
+            for (var c : service.compare("link", distribution).boards().get(0).cells()) {
+                double[] want = expected.get(distribution + ":" + c.loadRatioPercent());
+                String where = distribution + " " + c.loadRatioPercent() + ":" + c.powerControl();
+                assertEquals(want[0], metric(strategy(c, "weighted"), BenchmarkRules.REMOTE_MDC_RATE).median(),
+                        BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, where + " weighted");
+                assertEquals(want[1], metric(strategy(c, "weighted-affinity"), BenchmarkRules.REMOTE_MDC_RATE).median(),
+                        BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, where + " weighted-affinity");
+                checked++;
+            }
+        }
+        assertEquals(expected.size() * 2, checked, "두 분포 · 네 부하율 · 두 전원 상태 셀을 모두 봐야 한다");
+    }
+
+    /** 분모는 요청 건수도 배치 건수도 아니고 원격 여부를 말할 수 있는 배치 건수다 — 등록된 판에서는 둘이 늘 같아 응답으로는 가려낼 수 없다. */
+    @DisplayName("원격 MDC 배치 비율은 데이터 MDC 가 있는 배치 건수로 나누고 그 배치가 0건이면 0 이 아니라 null 이다")
+    @Test
+    void remote_mdc_rate_divides_by_placements_with_a_data_mdc() {
+        assertEquals(75.0, BenchmarkCellAssembler.remoteMdcRate(placementWithDataMdc(5, 4, 3)), 1e-9, "배치 건수(5)로 나누면 60 이 된다");
+        assertEquals(33.3333, BenchmarkCellAssembler.remoteMdcRate(placementWithDataMdc(3, 3, 1)), 1e-9);
+        assertNull(BenchmarkCellAssembler.remoteMdcRate(placementWithDataMdc(5, 0, 0)), "원격 여부를 말할 수 있는 배치가 없으면 비율은 정의되지 않는다");
+    }
+
+    /** 등록된 판은 노드 MDC 가 모두 있어 응답으로는 빠지는 가지를 볼 수 없다. */
+    @DisplayName("원격 여부는 노드 MDC 와 데이터 MDC 가 다를 때만 참이고 둘 중 하나라도 없으면 셈에서 빠진다")
+    @Test
+    void remote_mdc_is_counted_only_when_both_mdc_ids_are_known() {
+        assertEquals(Boolean.FALSE, BenchmarkPointRunner.remoteMdc("bm-mdc-a", "bm-mdc-a"), "같은 MDC 는 원격이 아니다");
+        assertEquals(Boolean.TRUE, BenchmarkPointRunner.remoteMdc("bm-mdc-b", "bm-mdc-a"));
+        assertNull(BenchmarkPointRunner.remoteMdc(null, "bm-mdc-a"), "노드 MDC 가 없으면 원격인지 말할 수 없다");
+        assertNull(BenchmarkPointRunner.remoteMdc("bm-mdc-a", null), "데이터 MDC 가 없는 워크로드는 셈에서 빠진다");
+    }
+
+    private static BenchmarkPointRunner.Placement placementWithDataMdc(int placed, int dataMdcPlacements, int remoteMdcPlacements) {
+        return new BenchmarkPointRunner.Placement(BaselinePlacers.ffdBySize(), placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0,
+                true, true, dataMdcPlacements, remoteMdcPlacements);
     }
 
     /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */

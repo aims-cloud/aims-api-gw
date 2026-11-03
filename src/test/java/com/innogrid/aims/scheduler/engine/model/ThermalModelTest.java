@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.SortedMap;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -164,6 +166,44 @@ class ThermalModelTest {
         cooling.clearCritical("node-1");
 
         assertFalse(cooling.isCoolingDown("node-1"));
+    }
+
+    @DisplayName("해제는 그 노드의 대기를 모든 상한에서 지우고 살아 있던 상한과 남은 분을 상한 오름차순으로 돌려준다")
+    @Test
+    void release_clears_one_node_and_reports_live_limits() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-31T00:00:00Z"));
+        ThermalModel cooling = new ThermalModel(new SchedulerProperties(), clock);
+
+        cooling.markCritical("node-1", 90);
+        cooling.markCritical("node-1", 75);
+        clock.advance(Duration.ofMinutes(3));
+        cooling.markCritical("node-1", 60);
+        cooling.markCritical("node-1", 80);
+        cooling.markCritical("node-2", LIMIT);
+
+        SortedMap<Double, Long> released = cooling.release("node-1");
+
+        assertEquals(List.of(60.0, 75.0, 80.0, 90.0), List.copyOf(released.keySet()), "상한 오름차순");
+        assertEquals(List.of(10L, 7L, 10L, 7L), List.copyOf(released.values()), "설정값 10분 − 지난 분");
+        assertFalse(cooling.isCoolingDown("node-1"));
+        assertTrue(cooling.isCoolingDown("node-2", LIMIT), "다른 노드의 대기는 그대로다");
+    }
+
+    @DisplayName("만료된 대기만 남은 노드의 해제는 빈 결과이고 기록도 지운다 — 해제 뒤 새로 건 대기는 다시 걸린다")
+    @Test
+    void release_of_expired_only_node_is_empty_and_drops_record() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-31T00:00:00Z"));
+        ThermalModel cooling = new ThermalModel(new SchedulerProperties(), clock);
+
+        cooling.markCritical("node-1", LIMIT);
+        clock.advance(Duration.ofMinutes(10));
+
+        assertTrue(cooling.release("node-1").isEmpty(), "만료된 대기는 결과에 넣지 않는다");
+        assertFalse(cooling.cooldownMarks().containsKey("node-1"), "만료된 기록도 지운다");
+
+        cooling.markCritical("node-1", LIMIT);
+        assertTrue(cooling.isCoolingDown("node-1", LIMIT), "해제 뒤 새로 건 대기는 다시 걸린다");
+        assertEquals(10, cooling.remainingCooldownMinutes("node-1"));
     }
 
     @DisplayName("예약이 없으면 실효 온도는 실측값과 같다")

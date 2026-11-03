@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
+import com.innogrid.aims.scheduler.dto.ThermalCooldownReleaseResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
@@ -242,6 +243,19 @@ public class SchedulingService {
      */
     public List<ThermalCooldownResponse> getCoolingDownNodes() {
         return nodeReader.coolingDown(this::getNodeResources);
+    }
+
+    /**
+     * 운영자가 노드의 냉각 대기를 푼다 — 그 노드의 대기를 모든 온도 상한에서 지운다. 살아 있던 대기가 없으면 404.
+     *
+     * <p>대기 시간만 건너뛴다. 다음 평가가 현재 온도로 다시 판정하므로 아직 상한을 넘는 노드는 다시 빠지고 대기가 다시 걸린다.
+     * DB 에 쓰지 않고 기록은 로그 한 줄이다.</p>
+     */
+    public ThermalCooldownReleaseResponse releaseCooldown(String nodeId) {
+        ThermalCooldownReleaseResponse released = nodeReader.release(nodeId);
+        log.info("냉각 대기 해제: node={}, limits={}, remainingMinutes={}",
+                nodeId, released.releasedLimitsCelsius(), released.remainingCooldownMinutes());
+        return released;
     }
 
     /**

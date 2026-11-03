@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -154,6 +156,24 @@ public class ThermalModel {
     /** 임계 상태에서 회복된 노드의 기록을 모두 지운다. */
     public void clearCritical(String nodeId) {
         criticalSince.remove(nodeId);
+    }
+
+    /**
+     * 운영자가 노드의 냉각 대기를 푼다 — 그 노드의 기록을 모든 상한에서 한 번에 지우고, 지우기 전에 살아 있던 대기의
+     * 상한 → 남은 분을 상한 오름차순으로 돌려준다. 만료된 기록도 함께 지우지만 결과에는 넣지 않으므로, 살아 있던 대기가
+     * 없으면 빈 맵이다. 그 노드의 항목을 맵에서 한 번에 떼어 내므로 해제 뒤에 새로 걸린 대기는 남는다.
+     */
+    public SortedMap<Double, Long> release(String nodeId) {
+        Instant now = clock.instant();
+        long cooldown = props.getCooldownMinutes();
+        SortedMap<Double, Long> released = new TreeMap<>();
+        Map<Double, Instant> marks = criticalSince.remove(nodeId);
+        if (marks == null) return released;
+        marks.forEach((limit, since) -> {
+            long left = cooldown - Duration.between(since, now).toMinutes();
+            if (left > 0) released.put(limit, left);
+        });
+        return released;
     }
 
     /**

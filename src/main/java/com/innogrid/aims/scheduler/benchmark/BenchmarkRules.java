@@ -373,6 +373,12 @@ public final class BenchmarkRules {
     public static final String GAP_VS_PABFD = "gapVsPabfdPercent";
 
     /**
+     * 데이터 MDC 가 아닌 MDC 의 노드에 놓인 배치의 비율(%). 판 파일의 사실(노드 MDC · 워크로드 데이터 MDC)만으로 센다 —
+     * 엔진의 링크 점수로 세면 링크 게이트를 켠 엔진이 자기 점수로 채점받는다.
+     */
+    public static final String REMOTE_MDC_RATE = "remoteMdcPlacementRate";
+
+    /**
      * 사전 등록된 지표 전량. 응답이 이 목록을 그대로 싣는다.
      *
      * <p><b>최고 온도가 없는 이유</b> — 배치 1건의 온도 상승분은 열관성 계수 × 코어 비율 × 기준 온도라
@@ -445,7 +451,15 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(UNMEASURED_SPREAD, "미계측 비율의 전략 간 최대 격차", "%p",
                     Direction.CONTEXT_ONLY, Role.HONESTY,
-                    "이 값이 크면 전력 순위가 알고리즘이 아니라 센서 공백의 산물일 수 있다"));
+                    "이 값이 크면 전력 순위가 알고리즘이 아니라 센서 공백의 산물일 수 있다"),
+
+            new BenchmarkMetric(REMOTE_MDC_RATE, "원격 MDC 배치 비율", "%",
+                    Direction.LOWER_IS_BETTER, Role.SECONDARY,
+                    "워크로드에 데이터 MDC 를 배정한 판(링크 판)에서만 낸다 — 데이터 MDC 가 있는 성공 배치 가운데 노드의 MDC 가 "
+                            + "데이터 MDC 와 다른 배치의 비율이다. 노드 MDC 가 없는 배치는 분모와 분자에서 뺀다. 데이터 MDC 를 배정하지 않은 판은 "
+                            + "원격이 정의되지 않아 무효다. 판 파일의 MDC 사실로만 세고 엔진의 링크 점수는 쓰지 않는다. 링크 점수를 총점에 섞는 "
+                            + "엔진은 weighted 하나라 효과는 weighted · weighted-affinity 두 열의 쌍으로 읽고, 다른 열의 값은 링크를 보지 않은 "
+                            + "배치의 지역성이다. 원격 배치는 자원·전력 제약 때문에 불가피할 수 있으므로 전력 판정과 섞지 않는다"));
 
     // ── 판정 ─────────────────────────────────────────────────
 

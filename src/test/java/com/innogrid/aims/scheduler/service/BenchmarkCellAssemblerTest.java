@@ -84,6 +84,7 @@ class BenchmarkCellAssemblerTest {
         t.put(BenchmarkRules.ENGINE_BELIEVED_COST, rows(null, null, null, null, null, null, null, null, null, null, null));
         t.put(BenchmarkRules.UNMEASURED_RATE, rows(null, null, null, null, null, null, null, null, null, null, null));
         t.put(BenchmarkRules.UNMEASURED_SPREAD, rows(null, null, null, null, null, null, null, null, null, null, null));
+        t.put(BenchmarkRules.REMOTE_MDC_RATE, rows(null, null, null, null, null, null, null, null, null, null, null));
         return t;
     }
 

@@ -29,7 +29,9 @@ enum BenchmarkMetricKind {
     /** 배치 성공률 — 온도·전력 제약 중 하나라도 꺼진 전략과는 견주지 않는다. */
     PLACEMENT_RATE(BenchmarkRules.PLACEMENT_RATE),
     /** 조건 없이 내는 지표. */
-    UNCONDITIONED(BenchmarkRules.ENGINE_BELIEVED_COST, BenchmarkRules.UNMEASURED_RATE, BenchmarkRules.UNMEASURED_SPREAD);
+    UNCONDITIONED(BenchmarkRules.ENGINE_BELIEVED_COST, BenchmarkRules.UNMEASURED_RATE, BenchmarkRules.UNMEASURED_SPREAD),
+    /** 원격 MDC 배치 비율 — 워크로드에 데이터 MDC 를 배정한 판에서만 낸다. */
+    DATA_LOCALITY(BenchmarkRules.REMOTE_MDC_RATE);
 
     private final List<String> keys;
 

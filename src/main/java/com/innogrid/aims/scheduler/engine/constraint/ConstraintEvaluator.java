@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.engine.constraint;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalDouble;
+import java.util.SortedMap;
 
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -381,5 +382,10 @@ public class ConstraintEvaluator {
     /** 냉각 대기 중인 노드가 하나라도 있는지. 확인하면서 만료된 기록을 지운다. */
     public boolean anyCoolingDown() {
         return thermalModel.anyCoolingDown();
+    }
+
+    /** 노드의 냉각 대기를 모든 상한에서 지우고, 지우기 전에 살아 있던 대기의 상한 → 남은 분(오름차순)을 돌려준다. */
+    public SortedMap<Double, Long> releaseCooldown(String nodeId) {
+        return thermalModel.release(nodeId);
     }
 }

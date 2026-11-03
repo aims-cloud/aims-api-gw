@@ -60,6 +60,7 @@ GET /api/v1/scheduler/schedules/{id}/runs/{runId}
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}/replay
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}/replay/engines
 GET /api/v1/scheduler/thermal/cooldowns
+DELETE /api/v1/scheduler/thermal/cooldowns/{nodeId}
 GET /api/v1/scheduler/workloads
 POST /api/v1/scheduler/workloads
 POST /api/v1/scheduler/workloads/dry-run

@@ -1,11 +1,13 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.util.List;
+import java.util.SortedMap;
 import java.util.function.Supplier;
 
 import org.springframework.http.HttpStatus;
 
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.scheduler.dto.ThermalCooldownReleaseResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
@@ -14,7 +16,7 @@ import com.innogrid.aims.scheduler.model.PlacementContext;
 
 /**
  * 스케줄링 서비스에서 떼어 낸 <b>노드 조회</b> — 열 상태를 붙인 노드 스냅샷, 노드 한 대 찾기(수집 제외 사유를 담은 404),
- * 냉각 대기 노드 목록.
+ * 냉각 대기 노드 목록과 냉각 대기 해제.
  *
  * <p>스프링 빈이 아니다. 서비스가 생성자에서 한 번 만들고, 생성자는 참조만 저장한다. 어느 정책으로 볼지는 서비스가 고른다.</p>
  */
@@ -62,5 +64,17 @@ final class NodeSnapshotReader {
                 .filter(n -> constraintEvaluator.isCoolingDown(n.getNodeId()))
                 .map(n -> ThermalCooldownResponse.of(n, constraintEvaluator.remainingCooldownMinutes(n.getNodeId())))
                 .toList();
+    }
+
+    /**
+     * 노드의 냉각 대기를 모든 온도 상한에서 지운다. 살아 있던 대기가 없으면(만료만 남았어도) 404.
+     * 노드를 수집하지 않는다 — 목록에 없는 노드(수집에서 빠진 노드)의 대기도 풀 수 있고, 다음 평가가 현재 온도로 다시 판정한다.
+     */
+    ThermalCooldownReleaseResponse release(String nodeId) {
+        SortedMap<Double, Long> released = constraintEvaluator.releaseCooldown(nodeId);
+        if (released.isEmpty()) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "냉각 대기 중인 노드가 아닙니다: " + nodeId);
+        }
+        return ThermalCooldownReleaseResponse.of(nodeId, released);
     }
 }

@@ -19,6 +19,7 @@ import com.innogrid.aims.scheduler.dto.ResourceTypeOptionResponse;
 import com.innogrid.aims.scheduler.dto.ResumeExhaustedResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
 import com.innogrid.aims.scheduler.dto.StatusChangeRequest;
+import com.innogrid.aims.scheduler.dto.ThermalCooldownReleaseResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadReleaseResponse;
 import com.innogrid.aims.scheduler.dto.WorkloadRequest;
@@ -358,6 +359,17 @@ public class SchedulerController {
     @GetMapping("/thermal/cooldowns")
     public ApiResponse<List<ThermalCooldownResponse>> getThermalCooldowns() {
         return ApiResponse.ok(schedulingService.getCoolingDownNodes());
+    }
+
+    @Operation(summary = "냉각 대기 해제",
+               description = "노드의 냉각 대기를 모든 임계 온도에서 한 번에 지우고, 지운 임계 온도(오름차순)와 해제 직전에 남아 있던 대기 시간을 돌려줍니다. "
+                       + "대기 시간만 건너뜁니다 — 다음 평가가 현재 온도로 다시 판정하므로 아직 임계 온도를 넘는 노드는 다시 빠지고 대기가 다시 걸립니다. "
+                       + "현재 온도가 임계 온도 아래로 내려간 것을 확인한 뒤 쓰십시오. "
+                       + "노드를 수집하지 않으므로 목록에 없는(수집에서 빠진) 노드의 대기도 풀 수 있습니다. "
+                       + "살아 있는 대기가 없으면(만료만 남았어도) 404. DB 에 쓰지 않고, 냉각 대기는 앱을 다시 시작하면 초기화되는 그대로입니다.")
+    @DeleteMapping("/thermal/cooldowns/{nodeId}")
+    public ApiResponse<ThermalCooldownReleaseResponse> releaseThermalCooldown(@PathVariable String nodeId) {
+        return ApiResponse.ok(schedulingService.releaseCooldown(nodeId));
     }
 
     // ── 스케줄링 엔진 ───────────────────────────────────────────

@@ -69,7 +69,7 @@ final class BenchmarkPointRunner {
                                 Map<String, Double> cpuBeforeByNode, Set<String> activeBefore,
                                 int activeCountBefore, int measuredNodeCount,
                                 Map<String, String> probeExclusions,
-                                Map<String, Placement> byStrategy) {
+                                Map<String, Placement> byStrategy, boolean dataMdcAssigned) {
     }
 
     /** 전략 하나가 한 시각 지점에서 낸 배치 결과. */
@@ -78,7 +78,8 @@ final class BenchmarkPointRunner {
                              Map<String, Double> cpuAfterByNode, int unmeasuredPlacements,
                              int thermalExclusions, int activeCountAfter,
                              double measuredTempStdDev, int warnZoneNodes,
-                             boolean temperatureGated, boolean powerGated) {
+                             boolean temperatureGated, boolean powerGated,
+                             int dataMdcPlacements, int remoteMdcPlacements) {
     }
 
     PointOutcome runPoint(SyntheticCluster cluster, BenchmarkWorkloads workloads,
@@ -122,7 +123,8 @@ final class BenchmarkPointRunner {
         }
 
         return new PointOutcome(headroom, sampled.size(), requestedCores,
-                cpuBefore, activeBefore, activeBefore.size(), measuredNodes, probe, byStrategy);
+                cpuBefore, activeBefore, activeBefore.size(), measuredNodes, probe, byStrategy,
+                !cluster.workloadDataMdcIds().isEmpty());
     }
 
     /**
@@ -163,6 +165,8 @@ final class BenchmarkPointRunner {
         int placed = 0;
         int unmeasured = 0;
         int thermal = 0;
+        int dataMdcPlaced = 0;
+        int remote = 0;
         double believedCost = 0;
 
         for (Workload workload : ordered) {
@@ -181,6 +185,11 @@ final class BenchmarkPointRunner {
             used.add(nodeId);
             placed++;
             if (unmeasuredNodes.contains(nodeId)) unmeasured++;
+            Boolean isRemote = remoteMdc(node.getMdcId(), workload.getDataMdcId());
+            if (isRemote != null) {
+                dataMdcPlaced++;
+                if (isRemote) remote++;
+            }
         }
 
         Map<String, Double> cpuAfter = new LinkedHashMap<>();
@@ -191,7 +200,18 @@ final class BenchmarkPointRunner {
         return new Placement(strategy, placed, ordered.size(), believedCost, used, cpuAfter,
                 unmeasured, thermal, ctx.activeNodeCount(BenchmarkRules.POWERED_ON_CPU_PERCENT),
                 measuredTempStdDev(ctx, oracle), warnZoneNodes(ctx, policy, oracle),
-                policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled());
+                policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled(), dataMdcPlaced, remote);
+    }
+
+    /**
+     * 배치 하나가 원격인가 — 노드의 MDC 가 워크로드의 데이터 MDC 와 다르면 참이다. 둘 중 하나라도 없으면 원격인지 말할 수 없어
+     * null 이고, 그 배치는 원격 MDC 배치 비율의 분모에서 빠진다. 판 파일의 사실만 보고 엔진의 링크 점수는 보지 않는다.
+     *
+     * <p>패키지 안에서 보이게 둔 것은 테스트가 직접 부르기 위해서다 — 등록된 판은 노드 MDC 가 모두 있어 null 가지를 응답으로는 볼 수 없다.</p>
+     */
+    static Boolean remoteMdc(String nodeMdcId, String dataMdcId) {
+        if (nodeMdcId == null || dataMdcId == null) return null;
+        return !nodeMdcId.equals(dataMdcId);
     }
 
     /**

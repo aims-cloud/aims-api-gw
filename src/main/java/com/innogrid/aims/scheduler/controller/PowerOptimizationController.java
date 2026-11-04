@@ -16,6 +16,7 @@ import com.innogrid.aims.scheduler.service.ConsolidationService;
 import com.innogrid.aims.scheduler.service.PowerOptimizationService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -71,13 +72,16 @@ public class PowerOptimizationController {
                        + "지점의 총 전력은 전력을 못 읽은 노드를 0 으로 채워 만들기 때문에, 그 배열을 적분하면 결손이 0W 로 읽혀 적게 나옵니다. "
                        + "소비와 회수 가능 둘 다 0 을 채우기 전의 원시 구간 시계열을 노드별로 적분합니다. 회수 가능 쪽만 시각마다 가동 판정과 유휴 역산을 한 번 더 거칩니다. "
                        + "물은 구간과 실제로 적분한 구간이 다를 수 있어 integratedFrom·integratedTo·integratedHours 를 함께 냅니다(회수 가능 적분 기준). "
-                       + "표본을 잇는 간격은 step 의 두 배이고 하한이 5분입니다 — 그보다 멀어진 자리는 잇지 않고 뺍니다.")
+                       + "표본을 잇는 간격은 step 의 두 배이고 하한이 5분입니다 — 그보다 멀어진 자리는 잇지 않고 뺍니다. "
+                       + "mdcId 를 주면 지점과 energy 를 그 MDC 노드만으로 계산합니다 — 그 MDC 로 수집된 노드가 없으면 사유를 담은 빈 결과(200)입니다.")
     @GetMapping("/power/trend")
     public ApiResponse<PowerOptimizationTrendResponse> getPowerTrend(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
-            @RequestParam(required = false) String step) {
-        return ApiResponse.ok(optimizationService.trend(from, to, step));
+            @RequestParam(required = false) String step,
+            @Parameter(description = "MDC 식별자 — 노드 목록의 mdcId 와 같은 문자열(앞뒤 공백 무시 · 대소문자 구분 · 라벨 없는 노드는 unknown). 비우면 클러스터 전체")
+            @RequestParam(required = false) String mdcId) {
+        return ApiResponse.ok(optimizationService.trend(from, to, step, mdcId));
     }
 
     @Operation(summary = "워크로드 통합 가능성 진단",

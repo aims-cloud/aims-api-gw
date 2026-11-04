@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -191,25 +192,50 @@ public class PowerOptimizationService {
      * 지표는 null 이다(0 으로 채우지 않는다). 저장소가 응답하지 않으면 예외를 올리지 않고 사유를 담은 빈 결과다.</p>
      */
     public PowerOptimizationTrendResponse trend(OffsetDateTime from, OffsetDateTime to, String step) {
+        return trend(from, to, step, null);
+    }
+
+    /**
+     * MDC 하나로 좁힌 추세. {@code mdcId} 가 비면 클러스터 전체 추세와 같다(질의 문자열까지 같다).
+     *
+     * <p>MDC 는 CPU 구간 시리즈의 {@code mdc_id} 라벨로 고른다 — 수집기가 노드의 MDC 를 읽는 라벨과 같고, 없으면
+     * {@code unknown} 이다. 식별자는 앞뒤 공백을 빼고 대소문자를 구분해 정확히 맞춘다(MDC 링크 목록과 같은 규칙).
+     * 질의문에 넣지 않고 받은 시리즈를 자바에서 거른다.</p>
+     *
+     * <p>전력은 <b>노드 전체로</b> 다시 키 매긴 뒤 CPU 쪽만 거른다. 같은 IPMI 시리즈를 가리킨 노드 둘을 빼는 판정이
+     * 클러스터 추세와 같은 범위에서 돌아야 MDC 추세를 더한 값이 클러스터와 맞는다 — MDC 안에서만 판정하면 MDC 를 넘어
+     * 시리즈를 공유한 노드가 MDC 마다 한 번씩 더해진다. 지점·에너지는 CPU 맵의 노드로만 돌므로 전력 맵은 따로 거르지 않는다.</p>
+     */
+    public PowerOptimizationTrendResponse trend(OffsetDateTime from, OffsetDateTime to, String step, String mdcId) {
         if (metricsClient == null) throw new IllegalStateException("메트릭 저장소 없이 조립된 서비스는 추세를 낼 수 없다");
         OffsetDateTime end = to != null ? to : OffsetDateTime.now();
         OffsetDateTime start = from != null ? from : end.minusHours(props.getTrendDefaultHours());
         String interval = (step == null || step.isBlank()) ? props.getTrendDefaultStep() : step.trim();
         TrendRangeSupport.validate(start, end, interval, props.getTrendMaxPoints());
+        String mdc = mdcId == null || mdcId.isBlank() ? null : mdcId.trim();
 
         try {
-            Map<String, Map<Long, Double>> cpu = seriesByInstance(String.format(
-                    "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"%s\"}[5m])) * 100)",
+            List<Map<String, Object>> cpuResults = rangeResults(String.format(mdc == null
+                            ? "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"%s\"}[5m])) * 100)"
+                            : "100 - (avg by (instance, mdc_id) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"%s\"}[5m])) * 100)",
                     properties.getNodeJob()), start, end, interval);
+            Map<String, Map<Long, Double>> allCpu = toSeries(cpuResults, metric -> true);
             // 전력 시계열의 키는 IPMI 시리즈의 instance 라 노드 익스포터와 다를 수 있다(실장비: 중앙 IPMI 주소).
             // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance 에 다시 키 매긴다. 구간 결과의 키가 곧 "저장소에 있는
             // IPMI instance" 라 발견 질의를 따로 던지지 않는다.
             Map<String, Map<Long, Double>> rawPower = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
-            Map<String, Map<Long, Double>> power = rekeyToNodes(rawPower, cpu.keySet());
+            Map<String, Map<Long, Double>> power = rekeyToNodes(rawPower, allCpu.keySet());
 
-            if (cpu.isEmpty()) {
+            if (allCpu.isEmpty()) {
                 return PowerOptimizationTrendResponse.empty(start, end, interval,
                         "해당 구간에 대상 노드의 CPU 메트릭이 없습니다");
+            }
+            Map<String, Map<Long, Double>> cpu = mdc == null ? allCpu
+                    : toSeries(cpuResults, metric -> mdc.equals(mdcOf(metric)));
+            if (cpu.isEmpty()) {
+                return PowerOptimizationTrendResponse.empty(start, end, interval,
+                        "해당 구간에 그 MDC 로 수집된 노드의 CPU 메트릭이 없습니다 — MDC 식별자가 노드 목록의 mdcId 와 다르거나"
+                                + "(대소문자 구분) 그 구간에 수집이 없었습니다");
             }
             TreeSet<Long> timestamps = new TreeSet<>();
             cpu.values().forEach(series -> timestamps.addAll(series.keySet()));
@@ -379,12 +405,27 @@ public class PowerOptimizationService {
 
     /** 구간 질의 결과를 instance → (시각 → 값) 으로 편다. 저장소 응답 형태: [{metric:{instance}, values:[[초,"값"],…]}, …] */
     private Map<String, Map<Long, Double>> seriesByInstance(String promQL, OffsetDateTime start, OffsetDateTime end, String step) {
-        List<Map<String, Object>> results = guard.call(() -> metricsClient.queryRangeResults(
+        return toSeries(rangeResults(promQL, start, end, step), metric -> true);
+    }
+
+    private List<Map<String, Object>> rangeResults(String promQL, OffsetDateTime start, OffsetDateTime end, String step) {
+        return guard.call(() -> metricsClient.queryRangeResults(
                 promQL, start.toInstant(), end.toInstant(), step), properties.getMetrics().getQueryTimeoutMs());
+    }
+
+    /** 시리즈 라벨의 MDC — 수집기와 같이 라벨이 없으면 {@code unknown}. */
+    private static String mdcOf(Map<?, ?> metric) {
+        Object mdc = metric.get("mdc_id");
+        return mdc == null ? "unknown" : mdc.toString();
+    }
+
+    /** 라벨이 {@code keep} 을 만족하는 시리즈만 instance → (시각 → 값) 으로 편다. */
+    private static Map<String, Map<Long, Double>> toSeries(List<Map<String, Object>> results, Predicate<Map<?, ?>> keep) {
         Map<String, Map<Long, Double>> out = new LinkedHashMap<>();
         for (Map<String, Object> series : results) {
             Object metric = series.get("metric");
-            String instance = metric instanceof Map<?, ?> m && m.get("instance") != null ? m.get("instance").toString() : null;
+            String instance = metric instanceof Map<?, ?> m && m.get("instance") != null && keep.test(m)
+                    ? m.get("instance").toString() : null;
             if (instance == null) continue;
             Object raw = series.get("values");
             if (!(raw instanceof List<?> values)) continue;

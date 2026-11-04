@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 수집     8대 전부 후보(IPMI 없는 3대는 전력·온도 0·미계측, 제외 0) · GPU 노드 2대의 GPU 수 4·2 · MDC 3곳
  * 효율     IPMI 5대 계측 · busan-02(유휴 고전력)가 최저 등급 쪽
  * 진단     통합 진단 200 형태 · 후보 8
- * 추세     seoul-01 24시간/5분 → 289 지점, 전력·CPU 채워짐
+ * 추세     seoul-01 24시간/5분 → 289 지점, 전력·CPU 채워짐 · MDC 3곳 추세를 더하면 클러스터 추세(노드 8)
  * 배치     GPU 워크로드 dryRun → GPU 노드(seoul-02 또는 busan-03) 선택 · 디스크 190GB 요구 → daejeon-02(96% 사용)는 제외
  * 표시     /metrics-source = synthetic, 6필드
  * 후보     /node-exporter-mappings/candidates — DCGM 후보 2(seoul-02·busan-03, 호스트명 일치) · IPMI 후보 5 · 노드 8 · unavailable 없음
@@ -196,6 +196,63 @@ class SyntheticModeScenarioTest {
         // 두 계산이 실제로 달라지는 것은 시리즈 중간이 비는 경우이고, 그 자리는 IntervalEnergyTest 가 값으로 고정한다.
         assertEquals(Math.round(fromPoints * 10), Math.round(t.energy().consumedKwh() * 10),
                 "구간 에너지와 지점 적분의 눈금이 어긋난다");
+    }
+
+    @DisplayName("MDC 필터 — 세 MDC 추세를 더하면 클러스터 추세와 같다(노드 수 · 총 전력 · 회수 가능 전력 · 소비 에너지)")
+    @Test
+    void mdc_trends_add_up_to_cluster() throws Exception {
+        // 배포 서버는 MDC 하나·전력 0 이라 MDC 별 값과 합을 볼 수 없다. 가상 클러스터(MDC 3곳)가 그 자리를 대신한다.
+        String from = "2026-11-01T00:00:00Z", to = "2026-11-01T02:00:00Z";
+        JsonNode all = trendData(from, to, null);
+        List<JsonNode> mdcs = List.of(trendData(from, to, "mdc-seoul"), trendData(from, to, "mdc-busan"),
+                trendData(from, to, "mdc-daejeon"));
+
+        int n = all.get("points").size();
+        assertEquals(25, n, "2시간/5분 + 1");
+        for (int i = 0; i < n; i++) {
+            JsonNode c = all.get("points").get(i);
+            int nodes = 0;
+            double watts = 0, reclaimable = 0;
+            for (JsonNode m : mdcs) {
+                JsonNode p = m.get("points").get(i);
+                assertEquals(c.get("at").asString(), p.get("at").asString());
+                nodes += p.get("totalNodes").asInt();
+                watts += p.get("totalPowerWatts").isNull() ? 0 : p.get("totalPowerWatts").asDouble();
+                reclaimable += p.get("reclaimableIdleWatts").isNull() ? 0 : p.get("reclaimableIdleWatts").asDouble();
+            }
+            assertEquals(8, c.get("totalNodes").asInt());
+            assertEquals(8, nodes, "MDC 마다 그 MDC 노드만 — 필터를 무시하면 24");
+            // 지점 전력은 소수 2자리로 반올림되므로 세 MDC 값과 클러스터 값의 반올림 오차(각 0.005)를 허용한다. kWh 는 3자리라 0.002.
+            assertEquals(c.get("totalPowerWatts").asDouble(), watts, 0.03);
+            // 이 판의 미계측 3대는 늘 가동(CPU 최저 10%)이라 정격 대체값이 들지 않아 회수 가능 전력도 더해진다.
+            assertEquals(c.get("reclaimableIdleWatts").asDouble(), reclaimable, 0.03);
+        }
+        double consumed = 0;
+        for (JsonNode m : mdcs) {
+            JsonNode kwh = m.get("energy").get("consumedKwh");
+            consumed += kwh.isNull() ? 0 : kwh.asDouble();
+        }
+        assertEquals(all.get("energy").get("consumedKwh").asDouble(), consumed, 0.002);
+        assertFalse(mdcs.get(2).get("points").get(0).get("measured").asBoolean(), "IPMI 없는 두 대뿐인 mdc-daejeon 은 미계측");
+    }
+
+    @DisplayName("MDC 필터 — 없는 MDC 는 200 이고 응답 6필드 그대로 빈 지점과 사유를 낸다")
+    @Test
+    void unknown_mdc_is_200_with_reason() throws Exception {
+        JsonNode d = trendData("2026-11-01T00:00:00Z", "2026-11-01T02:00:00Z", "mdc-nowhere");
+
+        assertEquals(new TreeSet<>(List.of("from", "to", "step", "points", "message", "energy")), new TreeSet<>(d.propertyNames()),
+                "mdcId 를 응답에 다시 싣지 않는다");
+        assertTrue(d.get("points").isEmpty(), "필터를 무시하면 8대 지점이 나온다");
+        assertTrue(d.get("message").asString().contains("그 MDC 로 수집된 노드의 CPU 메트릭이 없습니다"), d.get("message").asString());
+        assertTrue(d.get("energy").isNull());
+    }
+
+    private JsonNode trendData(String from, String to, String mdcId) throws Exception {
+        var request = get("/api/v1/scheduler/optimization/power/trend").param("from", from).param("to", to).param("step", "5m");
+        if (mdcId != null) request = request.param("mdcId", mdcId);
+        return objectMapper.readTree(mockMvc.perform(request).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("data");
     }
 
     @DisplayName("배치 — GPU 워크로드는 GPU 노드로, 디스크 190GB 요구는 디스크 부족 노드를 피한다")

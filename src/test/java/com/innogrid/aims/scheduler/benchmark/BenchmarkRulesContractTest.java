@@ -43,12 +43,12 @@ class BenchmarkRulesContractTest {
      * 바뀐 것이므로 이 값을 <b>먼저</b> 고쳐야 하고, 그 커밋이 결과 코드보다 앞에 있어야 한다는 사전 등록 요건은 그대로다.
      * 다이제스트가 바뀌는 커밋 메시지에 옛 값 → 새 값을 적는다.</p>
      */
-    private static final String DECLARED_KEY_DIGEST = "039400bdc3c1";
+    private static final String DECLARED_KEY_DIGEST = "0d7a23505911";
 
     /** 사람이 읽는 사전 등록 목록(정렬). 다이제스트는 이 목록에서 계산해 리터럴과 맞춘다 — 두 줄이 같이 바뀌는 것이 이중 서명이다. */
     private static final List<String> DECLARED_KEYS = List.of(
             "activeNodeDelta", "c3InterventionCount", "engineBelievedCostW", "gapVsPabfdPercent", "generatorPowerW",
-            "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "unmeasuredPlacementRate",
+            "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "remoteMdcPlacementRate", "unmeasuredPlacementRate",
             "unmeasuredRateSpreadPercentPoints", "warnZoneNodeCount");
 
     /** 규칙 축 봉인 한 줄 — 다이제스트 · 날짜 · 사유. 이력의 마지막 행이 현재 값이다. */
@@ -62,7 +62,8 @@ class BenchmarkRulesContractTest {
      * {@code metrics} 축(키:방향:역할)은 키 집합만의 {@link #DECLARED_KEY_DIGEST} 와 목적이 달라 값이 다르다.
      */
     private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
-            "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할")),
+            "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할"),
+                    new AxisSeal("3587b2bfa90f", "2026-11-03", "지표 추가 사전 등록 — 원격 MDC 배치 비율(remoteMdcPlacementRate · 낮을수록 좋음 · 보조). 데이터 MDC 를 배정한 판에서만 내고 판 파일의 MDC 사실로만 센다. 표기 축이라 판정 셀·문턱·격차 정의·판정 자격·판정 기준선 불변")),
             "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
             "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율"),
                     new AxisSeal("9ab95b89dc3e", "2026-09-14", "방법론 변경 사전 등록 — 오목 지수 0.625·오목/링크 판 id·위상 독립 판 2장·seed 수 3·SplitMix64 혼합 상수")),
@@ -429,10 +430,10 @@ class BenchmarkRulesContractTest {
 
     /**
      * <b>좋은 방향</b>은 표를 읽는 사람이 승패를 정하는 축이다. 결과를 보고 이것을 뒤집으면 사전 등록이
-     * 아무것도 고정하지 못하므로, 열한 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
+     * 아무것도 고정하지 못하므로, 열두 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
      * 셋(성공률·건당 전력·가동 노드 증감)의 방향이 뚫려 있었다.
      */
-    @DisplayName("지표 열한 개의 좋은 방향이 전부 고정된다")
+    @DisplayName("지표 열두 개의 좋은 방향이 전부 고정된다")
     @Test
     void every_metric_direction_is_pinned() {
         Map<String, Direction> expected = Map.ofEntries(
@@ -446,7 +447,8 @@ class BenchmarkRulesContractTest {
                 Map.entry(BenchmarkRules.C3_INTERVENTIONS, Direction.CONTEXT_ONLY),
                 Map.entry(BenchmarkRules.TEMP_STDDEV, Direction.LOWER_IS_BETTER),
                 Map.entry(BenchmarkRules.UNMEASURED_RATE, Direction.CONTEXT_ONLY),
-                Map.entry(BenchmarkRules.UNMEASURED_SPREAD, Direction.CONTEXT_ONLY));
+                Map.entry(BenchmarkRules.UNMEASURED_SPREAD, Direction.CONTEXT_ONLY),
+                Map.entry(BenchmarkRules.REMOTE_MDC_RATE, Direction.LOWER_IS_BETTER));
 
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {
             assertEquals(expected.get(m.key()), m.direction(),

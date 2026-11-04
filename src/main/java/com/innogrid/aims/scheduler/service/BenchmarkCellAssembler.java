@@ -113,6 +113,7 @@ final class BenchmarkCellAssembler {
                 Double rate = p.placed() == 0 ? null : round(100.0 * p.unmeasuredPlacements() / p.placed());
                 add(into, BenchmarkRules.UNMEASURED_RATE, rate);
                 if (rate != null && coreIds.contains(id)) unmeasuredRates.put(id, rate);
+                add(into, BenchmarkRules.REMOTE_MDC_RATE, remoteMdcRate(p));
             }
 
             // 미계측 격차는 기준 집합 사이의 값이라 지점마다 한 번 계산해 전 전략에 같은 값으로 싣는다.
@@ -201,6 +202,8 @@ final class BenchmarkCellAssembler {
         boolean placedAnywhere = points.stream()
                 .anyMatch(p -> p.byStrategy().get(strategyId).placed() > 0);
         boolean baselinePresent = points.get(0).byStrategy().containsKey(PABFD_ID);
+        // 데이터 MDC 배정은 판의 성질이라 셀 안에서 상수다 — 첫 지점으로 판정해도 된다
+        boolean dataMdcAssigned = points.get(0).dataMdcAssigned();
         List<MetricValue> values = new ArrayList<>(BenchmarkRules.METRICS.size());
 
         for (BenchmarkMetric metric : BenchmarkRules.METRICS) {
@@ -213,7 +216,7 @@ final class BenchmarkCellAssembler {
                     ? pointSeries(raw, points.size()) : null;
 
             String invalid = invalidReason(metric, any, usablePoints, measuredNodes, placedAnywhere,
-                    baselinePresent, !series.isEmpty());
+                    baselinePresent, !series.isEmpty(), dataMdcAssigned);
             if (series.isEmpty()) {
                 boolean totals = kind.pairedPointsOnly();
                 if (invalid == null && totals && droppedPoints > 0 && droppedPoints == usablePoints) {
@@ -271,7 +274,7 @@ final class BenchmarkCellAssembler {
      */
     static String invalidReason(BenchmarkMetric metric, Placement any,
                                         int usablePoints, int measuredNodes, boolean placedAnywhere,
-                                        boolean baselinePresent, boolean paired) {
+                                        boolean baselinePresent, boolean paired, boolean dataMdcAssigned) {
         BenchmarkMetricKind kind = BenchmarkMetricKind.of(metric.key());
         if (kind == BenchmarkMetricKind.GAP) {
             // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0 이나 빈 값을 내면 "격차가
@@ -314,7 +317,27 @@ final class BenchmarkCellAssembler {
                 && measuredNodes < 2) {
             return "계측 노드가 둘 미만이라 온도 분포를 말할 수 없다";
         }
+        if (kind == BenchmarkMetricKind.DATA_LOCALITY) {
+            // 데이터 MDC 를 배정하지 않은 판에서 0 을 내면 "원격 배치가 없었다"로 읽힌다 — 원격이 정의되지 않는 판이다
+            if (!dataMdcAssigned) {
+                return "이 판은 워크로드에 데이터 MDC 를 배정하지 않아 원격 배치가 정의되지 않는다";
+            }
+            if (!paired) {
+                return "데이터 MDC 가 있는 배치가 전 시각 지점에서 0건이라 원격 배치 비율을 낼 수 없다";
+            }
+        }
         return null;
+    }
+
+    /**
+     * 한 시각 지점의 원격 MDC 배치 비율(%). 데이터 MDC 가 있는 배치가 0건이면 <b>0 이 아니라 null</b> 이다 — 0 은 "모두 데이터 MDC
+     * 안에 놓았다"로 읽힌다. 분모는 요청 건수도 배치 건수도 아니고 원격 여부를 말할 수 있는 배치 건수다.
+     *
+     * <p>같은 패키지의 테스트가 직접 부른다 — 등록된 판에서는 배치 건수와 분모가 늘 같아 응답으로는 분모를 가려낼 수 없다.</p>
+     */
+    static Double remoteMdcRate(Placement p) {
+        if (p.dataMdcPlacements() == 0) return null;
+        return round(100.0 * p.remoteMdcPlacements() / p.dataMdcPlacements());
     }
 
     /**

@@ -26,7 +26,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -203,6 +207,126 @@ class PowerOptimizationTrendTest {
         assertEquals(150.0, p.totalPowerWatts(), EPS, "100 이 두 번 더해진 350 도, 한 번 더해진 250 도 아니다");
     }
 
+    // ── MDC 필터 ────────────────────────────────────────────────
+
+    @DisplayName("MDC 를 주면 그 MDC 노드만으로 계산하고 MDC 추세를 더하면 클러스터 추세와 같다")
+    @Test
+    void mdc_filter_keeps_only_that_mdc_and_mdcs_add_up_to_cluster() {
+        stub("node_cpu_seconds_total", List.of(
+                seriesIn("n1", "mdc-a", T1, 80, T2, 70, T3, 50),
+                seriesIn("n2", "mdc-a", T1, 2, T2, 60, T3, 40),
+                seriesIn("n3", "mdc-b", T1, 1, T2, 1, T3, 30)));
+        stub("ipmi_dcmi_power", List.of(
+                series("n1", T1, 200, T2, 200, T3, 200),
+                series("n2", T1, 160, T2, 210, T3, 200),
+                series("n3", T1, 150, T2, 150, T3, 190)));
+
+        PowerOptimizationTrendResponse all = service.trend(from, to, "5m", null);
+        PowerOptimizationTrendResponse a = service.trend(from, to, "5m", "mdc-a");
+        PowerOptimizationTrendResponse b = service.trend(from, to, "5m", "mdc-b");
+
+        Point a1 = a.points().get(0);
+        assertEquals(2, a1.totalNodes(), "n1·n2 만");
+        assertEquals(360.0, a1.totalPowerWatts(), EPS, "200 + 160");
+        assertEquals(1, b.points().get(0).totalNodes(), "n3 만");
+        for (int i = 0; i < all.points().size(); i++) {
+            Point c = all.points().get(i), pa = a.points().get(i), pb = b.points().get(i);
+            assertEquals(c.totalNodes(), pa.totalNodes() + pb.totalNodes());
+            assertEquals(c.activeNodes(), pa.activeNodes() + pb.activeNodes());
+            assertEquals(c.idleNodes(), pa.idleNodes() + pb.idleNodes());
+            assertEquals(c.evaluableNodes(), pa.evaluableNodes() + pb.evaluableNodes());
+            assertEquals(c.totalPowerWatts(), pa.totalPowerWatts() + pb.totalPowerWatts(), 0.02);
+            assertEquals(c.reclaimableIdleWatts(), pa.reclaimableIdleWatts() + pb.reclaimableIdleWatts(), 0.02);
+        }
+        // kWh 는 소수 3자리로 반올림되므로 세 값의 반올림 오차(각 0.0005)를 허용한다.
+        assertEquals(all.energy().consumedKwh(), a.energy().consumedKwh() + b.energy().consumedKwh(), 0.002,
+                "소비 에너지도 MDC 노드의 전력만 적분한다");
+        // 유휴 표본이 두 개 이상인 노드만 적분한다 — mdc-a 는 n2 가 T1 에만 유휴라 값이 없고(null), mdc-b 의 n3 가 전부다.
+        assertNull(a.energy().reclaimableKwh());
+        assertEquals(all.energy().reclaimableKwh(), b.energy().reclaimableKwh(), 0.002);
+    }
+
+    @DisplayName("MDC 라벨이 없는 시리즈는 unknown 으로 잡히고 다른 MDC 에는 들지 않는다")
+    @Test
+    void series_without_mdc_label_is_unknown() {
+        stub("node_cpu_seconds_total", List.of(seriesIn("n1", "mdc-a", T1, 80), series("n2", T1, 40)));
+        stub("ipmi_dcmi_power", List.of(series("n1", T1, 200), series("n2", T1, 100)));
+
+        Point unknown = service.trend(from, to, "5m", "unknown").points().get(0);
+        Point a = service.trend(from, to, "5m", "mdc-a").points().get(0);
+
+        assertEquals(1, unknown.totalNodes());
+        assertEquals(100.0, unknown.totalPowerWatts(), EPS, "라벨 없는 n2 만");
+        assertEquals(1, a.totalNodes());
+        assertEquals(200.0, a.totalPowerWatts(), EPS, "n2 는 mdc-a 에 들지 않는다");
+    }
+
+    @DisplayName("그 MDC 노드가 없으면 예외 없이 사유를 담은 빈 결과다")
+    @Test
+    void unknown_mdc_is_empty_with_reason() {
+        stub("node_cpu_seconds_total", List.of(seriesIn("n1", "mdc-a", T1, 80, T2, 70)));
+        stub("ipmi_dcmi_power", List.of(series("n1", T1, 200, T2, 200)));
+
+        PowerOptimizationTrendResponse r = service.trend(from, to, "5m", "zz");
+
+        assertTrue(r.points().isEmpty());
+        assertNull(r.energy());
+        assertTrue(r.message().contains("그 MDC 로 수집된 노드의 CPU 메트릭이 없습니다"), r.message());
+        assertFalse(r.message().contains("zz"), "입력값을 되풀이하지 않는다");
+
+        // 저장소에 CPU 시리즈가 아예 없으면 MDC 를 줘도 기존 사유 그대로다 — 새 사유는 MDC 를 고른 뒤에만 나온다.
+        stub("node_cpu_seconds_total", List.of());
+        assertEquals("해당 구간에 대상 노드의 CPU 메트릭이 없습니다", service.trend(from, to, "5m", "mdc-a").message());
+        assertEquals("해당 구간에 대상 노드의 CPU 메트릭이 없습니다", service.trend(from, to, "5m", null).message());
+    }
+
+    @DisplayName("MDC 를 비우면 질의 문자열이 그대로이고 주면 MDC 라벨로 묶어 묻는다 — 앞뒤 공백은 빼고 대소문자는 구분한다")
+    @Test
+    void mdc_filter_query_text_and_normalization() {
+        String plain = "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"mdc-nodes\"}[5m])) * 100)";
+        String byMdc = "100 - (avg by (instance, mdc_id) (irate(node_cpu_seconds_total{mode=\"idle\",job=\"mdc-nodes\"}[5m])) * 100)";
+        stub("node_cpu_seconds_total", List.of(seriesIn("n1", "mdc-a", T1, 80), seriesIn("n2", "mdc-b", T1, 40)));
+        stub("ipmi_dcmi_power", List.of(series("n1", T1, 200), series("n2", T1, 100)));
+
+        service.trend(from, to, "5m", null);
+        service.trend(from, to, "5m", "");
+        service.trend(from, to, "5m", "  ");
+        verify(metrics, times(3)).queryRangeResults(eq(plain), any(Instant.class), any(Instant.class), anyString());
+        verify(metrics, never()).queryRangeResults(eq(byMdc), any(Instant.class), any(Instant.class), anyString());
+
+        Point a = service.trend(from, to, "5m", "mdc-a").points().get(0);
+        verify(metrics, times(1)).queryRangeResults(eq(byMdc), any(Instant.class), any(Instant.class), anyString());
+        verify(metrics, times(8)).queryRangeResults(anyString(), any(Instant.class), any(Instant.class), anyString());   // 호출마다 CPU · 전력 2회
+        assertEquals(1, a.totalNodes());
+        assertEquals(a, service.trend(from, to, "5m", " mdc-a ").points().get(0), "앞뒤 공백은 뺀다");
+        assertTrue(service.trend(from, to, "5m", "MDC-A").points().isEmpty(), "대소문자는 구분한다");
+    }
+
+    @DisplayName("MDC 를 넘어 같은 IPMI 시리즈를 가리킨 두 노드는 MDC 추세에서도 미계측이다")
+    @Test
+    void ipmi_shared_across_mdcs_stays_unmeasured_in_mdc_trend() {
+        // 원장: n1(mdc-a) 이 n2(mdc-b) 의 IPMI 를 가리킨다 → n2 의 호스트명 일치와 충돌. 판정은 클러스터 전체로 해야 한다 —
+        // mdc-a 노드만 보고 판정하면 충돌이 보이지 않아 n1 이 n2 의 100W 를 가져간다.
+        NodeExporterMapping m = new NodeExporterMapping("n1:9100");
+        m.setIpmiInstance("n2:9290");
+        NodeExporterMappingRepository ledger = mock(NodeExporterMappingRepository.class);
+        when(ledger.findAll()).thenReturn(List.of(m));
+        SchedulerProperties props = new SchedulerProperties();
+        MetricsQueryGuard guard = new MetricsQueryGuard(2);
+        com.innogrid.aims.scheduler.metrics.SchedulerMetricsGateway gateway = VictoriaMetricsGateway.of(metrics);
+        PowerOptimizationService withLedger = new PowerOptimizationService(mock(SchedulingService.class), new PowerModel(props),
+                props, gateway, guard, null, new ExporterInstanceResolver(ledger, gateway, guard, props));
+        stub("node_cpu_seconds_total", List.of(seriesIn("n1:9100", "mdc-a", T1, 80), seriesIn("n2:9100", "mdc-b", T1, 40),
+                seriesIn("n3:9100", "mdc-a", T1, 50)));
+        stub("ipmi_dcmi_power", List.of(series("n2:9290", T1, 100), series("n3:9290", T1, 150)));
+
+        Point p = withLedger.trend(from, to, "5m", "mdc-a").points().get(0);
+
+        assertEquals(2, p.totalNodes());
+        assertEquals(1, p.evaluableNodes(), "n3 만 계측 — n1 은 n2 와 같은 시리즈를 가리켜 미계측");
+        assertEquals(150.0, p.totalPowerWatts(), EPS, "n2 의 100W 가 mdc-a 에 섞인 250 이 아니다");
+    }
+
     // ── 헬퍼 ───────────────────────────────────────────────────
 
     private void stub(String fragment, List<Map<String, Object>> result) {
@@ -211,10 +335,19 @@ class PowerOptimizationTrendTest {
 
     /** 저장소 응답 형태: {"metric": {"instance": …}, "values": [[초, "값"], …]} */
     private static Map<String, Object> series(String instance, Object... tsValuePairs) {
+        return Map.of("metric", Map.of("instance", instance), "values", values(tsValuePairs));
+    }
+
+    /** MDC 라벨이 붙은 시리즈 — {"metric": {"instance": …, "mdc_id": …}, …} */
+    private static Map<String, Object> seriesIn(String instance, String mdcId, Object... tsValuePairs) {
+        return Map.of("metric", Map.of("instance", instance, "mdc_id", mdcId), "values", values(tsValuePairs));
+    }
+
+    private static List<List<Object>> values(Object... tsValuePairs) {
         List<List<Object>> values = new ArrayList<>();
         for (int i = 0; i + 1 < tsValuePairs.length; i += 2) {
             values.add(List.of(tsValuePairs[i], String.valueOf(tsValuePairs[i + 1])));
         }
-        return Map.of("metric", Map.of("instance", instance), "values", values);
+        return values;
     }
 }

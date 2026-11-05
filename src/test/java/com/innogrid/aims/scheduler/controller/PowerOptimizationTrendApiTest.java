@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * {@code GET /scheduler/optimization/power/trend} 계약 — 응답 6필드·지점 11필드, 저장소 없는 환경에서도 200 + 사유,
- * 구간 검증 400, 미인증 403, 기존 {@code /optimization/power} 불변.
+ * 구간 검증 400, 미인증 403, 기존 {@code /optimization/power} 불변, Swagger 의 선택 파라미터 {@code mdcId}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -77,6 +77,22 @@ class PowerOptimizationTrendApiTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
         mockMvc.perform(get(PATH).param("step", "1s")).andExpect(status().isBadRequest());
         mockMvc.perform(get(PATH).param("step", "abc")).andExpect(status().isBadRequest());
+    }
+
+    @DisplayName("Swagger 의 추세 파라미터에 선택 mdcId 가 있다")
+    @Test
+    void swagger_has_optional_mdc_id() throws Exception {
+        JsonNode params = objectMapper.readTree(mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("paths").get(PATH).get("get").get("parameters");
+        List<String> names = new java.util.ArrayList<>();
+        JsonNode mdcId = null;
+        for (JsonNode p : params) {
+            names.add(p.get("name").asString());
+            if ("mdcId".equals(p.get("name").asString())) mdcId = p;
+        }
+        assertEquals(List.of("from", "to", "step", "mdcId"), names);
+        assertNotNull(mdcId);
+        assertFalse(mdcId.path("required").asBoolean(false), "mdcId 는 선택");
     }
 
     @DisplayName("미인증은 403 이고 기존 진단 경로는 그대로 200")

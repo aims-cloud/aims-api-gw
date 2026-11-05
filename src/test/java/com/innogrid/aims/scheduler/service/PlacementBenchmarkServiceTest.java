@@ -17,6 +17,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BaselinePlacers;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
+import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
@@ -555,6 +556,116 @@ class PlacementBenchmarkServiceTest {
     private static BenchmarkPointRunner.Placement placementWithDataMdc(int placed, int dataMdcPlacements, int remoteMdcPlacements) {
         return new BenchmarkPointRunner.Placement(BaselinePlacers.ffdBySize(), placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0,
                 true, true, dataMdcPlacements, remoteMdcPlacements, 0, 0);
+    }
+
+    // ── 자원 조각화 비율 ───────────────────────────────────────
+
+    /** 부하율 분모와 같은 식이어야 조각화 비율의 여유가 표본 크기를 정한 여유와 같은 뜻이 된다 — 메모리가 묶는 노드 · CPU 가 묶는 노드 · 상한을 넘은 노드로 본다. */
+    @DisplayName("노드 여유는 기준 정책 상한까지의 CPU 와 메모리 환산 코어 중 작은 쪽이고 예약분을 빼며 음수는 0 이다")
+    @Test
+    void node_headroom_is_the_smaller_of_cpu_and_memory_and_never_negative() {
+        SchedulingPolicy base = BenchmarkColumns.baseline();
+        NodeResource memoryBound = new NodeResource("bm", "n-mem", 16, 16384, 0, 0, 0, 0, 0, 500, 0, 0, 0);
+        double byCpu = 16 * base.getMaxCpuUsagePercent() / 100.0;
+        double byMemory = 16384 * base.getMaxMemoryUsagePercent() / 100.0 / BenchmarkRules.MEMORY_MB_PER_CORE;
+        assertTrue(byMemory < byCpu, "이 노드는 메모리가 여유를 묶어야 한다");
+        assertEquals(byMemory, BenchmarkPointRunner.nodeHeadroomCores(memoryBound, base), 1e-9);
+
+        memoryBound.reserve(2, 4096, 0);
+        assertEquals(16384 * (base.getMaxMemoryUsagePercent() - 25.0) / 100.0 / BenchmarkRules.MEMORY_MB_PER_CORE,
+                BenchmarkPointRunner.nodeHeadroomCores(memoryBound, base), 1e-9, "배치를 마친 노드의 여유라 예약분도 뺀다");
+
+        NodeResource cpuBound = new NodeResource("bm", "n-cpu", 4, 65536, 0, 50, 0, 0, 0, 500, 0, 0, 0);
+        assertEquals(4 * (base.getMaxCpuUsagePercent() - 50) / 100.0, BenchmarkPointRunner.nodeHeadroomCores(cpuBound, base), 1e-9);
+
+        NodeResource over = new NodeResource("bm", "n-over", 8, 32768, 0, 95, 0, 0, 0, 500, 0, 0, 0);
+        assertEquals(0.0, BenchmarkPointRunner.nodeHeadroomCores(over, base), 1e-9, "정책 상한을 이미 넘은 노드의 여유는 0 이다");
+    }
+
+    /** 기준 크기는 사전 등록 값(두 분포 모두 4)이고, 더 작은 계층이 있어야 기준 크기를 잘못 고른 것이 드러난다. */
+    @DisplayName("조각화 비율의 기준 크기는 분포 파일의 가장 큰 계층 코어이고 자투리는 그 배수를 뺀 나머지다")
+    @Test
+    void fragment_is_what_is_left_after_whole_largest_classes() {
+        for (String distribution : List.of("heavytail", "uniform")) {
+            BenchmarkWorkloads workloads = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-" + distribution + ".yml");
+            assertEquals(4, BenchmarkPointRunner.largestClassCores(workloads), distribution);
+            assertTrue(workloads.classes().stream().anyMatch(c -> c.cores() < 4), distribution + " — 4코어보다 작은 계층이 있어야 한다");
+        }
+        assertEquals(1.5, BenchmarkPointRunner.fragmentOf(9.5, 4), 1e-9);
+        assertEquals(3.0, BenchmarkPointRunner.fragmentOf(3.0, 4), 1e-9, "기준 크기보다 작은 여유는 전부 자투리다");
+        assertEquals(0.0, BenchmarkPointRunner.fragmentOf(8.0, 4), 1e-9, "기준 크기의 배수인 여유에는 자투리가 없다");
+        assertEquals(0.0, BenchmarkPointRunner.fragmentOf(0.0, 4), 1e-9);
+    }
+
+    /**
+     * 짝 지점이 있는 셀은 전 열이 0~100 사이 값이고 표본 수가 총량 지표(가동 노드 증감)의 표본 수와 같다. 짝 지점이 없는 고부하 셀은 값 없이
+     * 사유를 단 무효다 — 짝 조건이 빠지면 적게 배치한 열이 남긴 여유로 고부하 셀에 값이 생긴다. 반증판에는 기본 설정을 바꾼 열이 자기 배치
+     * 건수가 기준 집합과 다른 지점을 빼는 셀이 있어(90% heavytail 의 power-s250 · power-s0 · power-s1000) 그 열의 짝 조건까지 본다.
+     */
+    @DisplayName("주 결과판 · 반증판의 자원 조각화 비율은 짝 지점에서만 표본을 내고 짝 지점이 없는 셀은 사유를 단 무효다")
+    @Test
+    void fragmented_headroom_is_valid_only_where_points_are_paired() {
+        int valid = 0;
+        int unpaired = 0;
+        int overrideDropped = 0;
+        for (String board : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL)) {
+            for (String distribution : List.of("heavytail", "uniform")) {
+                for (var c : service.compare(board, distribution).boards().get(0).cells()) {
+                    for (var s : c.strategies()) {
+                        MetricValue m = metric(s, BenchmarkRules.FRAGMENTED_HEADROOM);
+                        MetricValue totals = metric(s, BenchmarkRules.ACTIVE_NODE_DELTA);
+                        String where = board + " " + distribution + " " + c.loadRatioPercent() + ":" + c.powerControl() + " " + s.strategyId();
+                        assertEquals(totals.samples(), m.samples(), where + " — 표본은 짝 지점에서만 나온다");
+                        if (m.samples() > 0) {
+                            assertTrue(m.valid(), where + " — " + m.invalidReason());
+                            assertTrue(m.median() >= 0 && m.median() <= 100, where + " 값 " + m.median());
+                            valid++;
+                        } else if (!s.engineConfigOverride().isEmpty()
+                                && metric(strategy(c, "power"), BenchmarkRules.ACTIVE_NODE_DELTA).samples() > 0) {
+                            assertNull(m.median(), where);
+                            assertFalse(m.valid(), where);
+                            assertTrue(m.invalidReason().startsWith("기준 집합과 배치 건수가 다른 지점뿐이라 조각화 비율을 낼 수 없다"),
+                                    where + " — " + m.invalidReason());
+                            overrideDropped++;
+                        } else {
+                            assertNull(m.median(), where);
+                            assertFalse(m.valid(), where);
+                            assertEquals("기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 남긴 여유는 조각화 비교 대상이 아니다",
+                                    m.invalidReason(), where);
+                            unpaired++;
+                        }
+                        if (c.loadRatioPercent() == 110) assertEquals(0, m.samples(), where + " — 110% 셀은 짝 지점이 없다");
+                    }
+                }
+            }
+        }
+        assertTrue(valid > 0 && unpaired > 0 && overrideDropped > 0,
+                "값이 있는 셀 · 짝 지점이 없는 셀 · 자기 건수가 달라 표본이 전부 빠진 기본 설정을 바꾼 열을 모두 봐야 한다");
+    }
+
+    /**
+     * 주 결과판 heavytail 의 다섯 열 자원 조각화 비율 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정). 두 전원 상태 셀은 배치가 같아 값이 같다.
+     * 110% 셀은 짝 지점이 없어 위 테스트가 본다. 허용 오차는 판정 규칙의 지점 비교 무시 폭과 같은 근거다.
+     */
+    @DisplayName("주 결과판 heavytail 의 자원 조각화 비율이 세 부하율에서 관측 리터럴과 같다")
+    @Test
+    void fragmented_headroom_on_the_main_board_matches_the_observed_literals() {
+        List<String> columns = List.of("ffd-size", "ffd-priority-size", "bfd", "weighted", "power");
+        Map<Integer, double[]> expected = Map.of(
+                30, new double[]{16.2046, 16.2046, 11.6147, 23.0101, 25.5453},
+                60, new double[]{11.6981, 11.6981, 6.8479, 37.8524, 27.2332},
+                90, new double[]{18.2917, 20.3239, 7.2408, 51.6563, 40.3181});
+        int checked = 0;
+        for (var c : service.compare("main", "heavytail").boards().get(0).cells()) {
+            double[] want = expected.get(c.loadRatioPercent());
+            if (want == null) continue;
+            for (int i = 0; i < columns.size(); i++) {
+                assertEquals(want[i], metric(strategy(c, columns.get(i)), BenchmarkRules.FRAGMENTED_HEADROOM).median(),
+                        BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, c.loadRatioPercent() + ":" + c.powerControl() + " " + columns.get(i));
+            }
+            checked++;
+        }
+        assertEquals(expected.size() * 2, checked, "세 부하율 · 두 전원 상태 셀을 모두 봐야 한다");
     }
 
     /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */

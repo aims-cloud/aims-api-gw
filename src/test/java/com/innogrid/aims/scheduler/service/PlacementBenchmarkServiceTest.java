@@ -554,7 +554,7 @@ class PlacementBenchmarkServiceTest {
 
     private static BenchmarkPointRunner.Placement placementWithDataMdc(int placed, int dataMdcPlacements, int remoteMdcPlacements) {
         return new BenchmarkPointRunner.Placement(BaselinePlacers.ffdBySize(), placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0,
-                true, true, dataMdcPlacements, remoteMdcPlacements);
+                true, true, dataMdcPlacements, remoteMdcPlacements, 0, 0);
     }
 
     /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */

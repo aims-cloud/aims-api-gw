@@ -238,12 +238,12 @@ class BenchmarkCellAssemblerTest {
     }
 
     private static Placement placement(PlacementStrategy strategy, int placed, boolean temperatureGated, boolean powerGated) {
-        return new Placement(strategy, placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, temperatureGated, powerGated, 0, 0, 0, 0);
+        return new Placement(strategy, placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, temperatureGated, powerGated, 0, 0, 0, 0, 0);
     }
 
     private static Placement placementWithHeadroom(double headroomAfterCores, double fragmentedHeadroomCores) {
         return new Placement(BaselinePlacers.ffdBySize(), 1, 1, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, true, true, 0, 0,
-                headroomAfterCores, fragmentedHeadroomCores);
+                headroomAfterCores, fragmentedHeadroomCores, 0);
     }
 
     /** 이 전략과 기준 전략이 함께 있고 계측 노드가 아홉이며 데이터 MDC 를 배정한 판의 시각 지점. */

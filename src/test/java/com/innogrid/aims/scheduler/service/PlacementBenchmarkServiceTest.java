@@ -555,7 +555,7 @@ class PlacementBenchmarkServiceTest {
 
     private static BenchmarkPointRunner.Placement placementWithDataMdc(int placed, int dataMdcPlacements, int remoteMdcPlacements) {
         return new BenchmarkPointRunner.Placement(BaselinePlacers.ffdBySize(), placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0,
-                true, true, dataMdcPlacements, remoteMdcPlacements, 0, 0);
+                true, true, dataMdcPlacements, remoteMdcPlacements, 0, 0, 0);
     }
 
     // ── 자원 조각화 비율 ───────────────────────────────────────

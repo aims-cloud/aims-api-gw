@@ -87,6 +87,7 @@ final class BenchmarkCellAssembler {
 
                 add(into, BenchmarkRules.PLACEMENT_RATE,
                         p.requested() == 0 ? null : round(100.0 * p.placed() / p.requested()));
+                add(into, BenchmarkRules.CORE_PLACEMENT_RATE, corePlacementRate(p, point.requestedCores()));
                 add(into, BenchmarkRules.PER_WORKLOAD_POWER, perWorkload(oracle, point, p, mode));
                 add(into, BenchmarkRules.ENGINE_BELIEVED_COST, round(p.engineBelievedCostW()));
                 // 개입 횟수는 시도당 계수다 — 전 전략이 같은 워크로드를 한 번씩 시도하므로 배치 건수와
@@ -361,6 +362,17 @@ final class BenchmarkCellAssembler {
     static Double fragmentedHeadroomRate(Placement p) {
         if (p.headroomAfterCores() <= 0) return null;
         return round(100.0 * p.fragmentedHeadroomCores() / p.headroomAfterCores());
+    }
+
+    /**
+     * 한 시각 지점의 코어 기준 배치 성공률(%) — 배치한 워크로드의 요구 코어 합을 그 지점 표본의 요구 코어 합으로 나눈다. 표본의 요구 코어 합이
+     * 0 이면 null 이다. 분모는 전략과 무관한 지점 값이라 전 열이 같은 분모를 쓴다.
+     *
+     * <p>같은 패키지의 테스트가 직접 부른다 — 등록된 판의 표본은 늘 코어를 요구해 응답으로는 null 가지를 볼 수 없다.</p>
+     */
+    static Double corePlacementRate(Placement p, double requestedCores) {
+        if (requestedCores <= 0) return null;
+        return round(100.0 * p.placedCores() / requestedCores);
     }
 
     /**

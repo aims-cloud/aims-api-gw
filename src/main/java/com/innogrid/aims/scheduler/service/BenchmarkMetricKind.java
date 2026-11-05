@@ -31,7 +31,9 @@ enum BenchmarkMetricKind {
     /** 조건 없이 내는 지표. */
     UNCONDITIONED(BenchmarkRules.ENGINE_BELIEVED_COST, BenchmarkRules.UNMEASURED_RATE, BenchmarkRules.UNMEASURED_SPREAD),
     /** 원격 MDC 배치 비율 — 워크로드에 데이터 MDC 를 배정한 판에서만 낸다. */
-    DATA_LOCALITY(BenchmarkRules.REMOTE_MDC_RATE);
+    DATA_LOCALITY(BenchmarkRules.REMOTE_MDC_RATE),
+    /** 자원 조각화 비율 — 총량 지표와 같은 짝 지점에서만 낸다. */
+    PAIRED_FRAGMENTATION(BenchmarkRules.FRAGMENTED_HEADROOM);
 
     private final List<String> keys;
 
@@ -50,6 +52,6 @@ enum BenchmarkMetricKind {
 
     /** 짝 지점에서만 표본을 내는 지표인지 — 짝 지점 표본이 전부 빠지면 그 사실을 사유로 적는다. */
     boolean pairedPointsOnly() {
-        return this == PAIRED_TOTAL || this == PAIRED_THERMAL;
+        return this == PAIRED_TOTAL || this == PAIRED_THERMAL || this == PAIRED_FRAGMENTATION;
     }
 }

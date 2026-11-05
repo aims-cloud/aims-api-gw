@@ -91,6 +91,7 @@ class BenchmarkCellAssemblerTest {
         t.put(BenchmarkRules.UNMEASURED_SPREAD, rows(null, null, null, null, null, null, null, null, null, null, null, null));
         t.put(BenchmarkRules.REMOTE_MDC_RATE, rows(null, null, null, null, null, null, null, null, null, NO_DATA_MDC_PLACEMENT, null,
                 NO_DATA_MDC));
+        t.put(BenchmarkRules.FRAGMENTED_HEADROOM, rows(null, null, null, null, null, null, null, null, null, null, null, null));
         return t;
     }
 
@@ -132,7 +133,7 @@ class BenchmarkCellAssemblerTest {
         Placement row = placement(BaselinePlacers.ffdBySize(), 1, true, true);
         List<PointOutcome> points = List.of(point(row), point(row), point(row));
         Set<String> pairedOnly = Set.of(BenchmarkRules.GENERATOR_POWER, BenchmarkRules.ACTIVE_NODE_DELTA,
-                BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV);
+                BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV, BenchmarkRules.FRAGMENTED_HEADROOM);
 
         // 짝 지점 표본이 전부 빠진 경우(제외 지점 수 == 쓸 수 있는 지점 수 > 0)
         List<MetricValue> dropped = BenchmarkCellAssembler.metricValues(Map.of(), row, 2, points, 2);

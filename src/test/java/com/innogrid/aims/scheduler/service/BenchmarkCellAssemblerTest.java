@@ -219,6 +219,30 @@ class BenchmarkCellAssemblerTest {
         assertEquals(2, v.samples(), "값이 없는 지점은 표본에서 빠진다");
     }
 
+    /** 큰 워크로드를 놓고 작은 것은 배치하지 못한 지점 — 건수 기준(2 ÷ 4 = 50%)보다 코어 기준이 높다. 분자 · 분모를 건수로 바꾸면 값이 달라진다. */
+    @DisplayName("코어 기준 배치 성공률은 배치한 요구 코어 합을 지점 표본의 요구 코어 합으로 나눈다 — 큰 것을 놓은 지점")
+    @Test
+    void core_placement_rate_counts_cores_when_large_workloads_are_placed() {
+        // 요구 1 · 2 · 4 · 4코어 가운데 4 · 4 만 배치 → 8 ÷ 11
+        assertEquals(72.7273, BenchmarkCellAssembler.corePlacementRate(placementWithCores(2, 4, 8.0), 11.0), 1e-9);
+    }
+
+    /** 작은 워크로드를 많이 놓고 큰 것은 배치하지 못한 지점 — 건수 기준(3 ÷ 4 = 75%)보다 코어 기준이 낮다. 두 방향의 편향을 함께 고정한다. */
+    @DisplayName("코어 기준 배치 성공률은 작은 것을 많이 놓은 지점에서 건수 기준보다 낮다")
+    @Test
+    void core_placement_rate_counts_cores_when_small_workloads_are_placed() {
+        // 요구 1 · 1 · 1 · 4코어 가운데 1코어 셋만 배치 → 3 ÷ 7
+        assertEquals(42.8571, BenchmarkCellAssembler.corePlacementRate(placementWithCores(3, 4, 3.0), 7.0), 1e-9);
+        assertEquals(100.0, BenchmarkCellAssembler.corePlacementRate(placementWithCores(4, 4, 7.0), 7.0), 1e-9, "전부 배치하면 100 이다");
+    }
+
+    /** 등록된 판의 표본은 늘 코어를 요구해 응답으로는 null 가지를 볼 수 없다 — 요구가 없는데 0 을 내면 "하나도 못 놓았다"로 읽힌다. */
+    @DisplayName("코어 기준 배치 성공률은 지점 표본의 요구 코어 합이 0 이면 0 이 아니라 null 이다")
+    @Test
+    void core_placement_rate_is_null_without_requested_cores() {
+        assertNull(BenchmarkCellAssembler.corePlacementRate(placementWithCores(0, 0, 0.0), 0.0));
+    }
+
     // ── 입력 만들기 ──────────────────────────────────────────
 
     private record Combo(int usablePoints, int measuredNodes, boolean placedAnywhere, boolean baselinePresent,
@@ -244,6 +268,11 @@ class BenchmarkCellAssemblerTest {
     private static Placement placementWithHeadroom(double headroomAfterCores, double fragmentedHeadroomCores) {
         return new Placement(BaselinePlacers.ffdBySize(), 1, 1, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, true, true, 0, 0,
                 headroomAfterCores, fragmentedHeadroomCores, 0);
+    }
+
+    private static Placement placementWithCores(int placed, int requested, double placedCores) {
+        return new Placement(BaselinePlacers.ffdBySize(), placed, requested, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, true, true, 0, 0, 0, 0,
+                placedCores);
     }
 
     /** 이 전략과 기준 전략이 함께 있고 계측 노드가 아홉이며 데이터 MDC 를 배정한 판의 시각 지점. */

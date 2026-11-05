@@ -668,6 +668,91 @@ class PlacementBenchmarkServiceTest {
         assertEquals(expected.size() * 2, checked, "세 부하율 · 두 전원 상태 셀을 모두 봐야 한다");
     }
 
+    // ── 코어 기준 배치 성공률 ───────────────────────────────────
+
+    /**
+     * 두 성공률은 같은 배치를 건수와 코어로 센 값이라, 전부 배치했을 때만 100 이 되는 것도 같다. 유효 여부 · 표본 수 · 사유도 배치 성공률과 같다 —
+     * 제약을 끈 변종은 두 지표 모두 천장 사유를 단 무효다. 코어 누적이 배치 성공과 무관하게 늘면 이 동치가 깨진다.
+     */
+    @DisplayName("주 결과판 · 반증판의 코어 기준 배치 성공률은 배치 성공률과 유효 여부가 같고 둘 다 100 인 열도 같다")
+    @Test
+    void core_placement_rate_is_valid_where_the_placement_rate_is_and_full_together() {
+        int compared = 0;
+        int ceiling = 0;
+        for (String board : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.ADVERSARIAL)) {
+            for (String distribution : List.of("heavytail", "uniform")) {
+                for (var c : service.compare(board, distribution).boards().get(0).cells()) {
+                    for (var s : c.strategies()) {
+                        MetricValue core = metric(s, BenchmarkRules.CORE_PLACEMENT_RATE);
+                        MetricValue count = metric(s, BenchmarkRules.PLACEMENT_RATE);
+                        String where = board + " " + distribution + " " + c.loadRatioPercent() + ":" + c.powerControl() + " " + s.strategyId();
+                        assertEquals(count.valid(), core.valid(), where);
+                        assertEquals(count.samples(), core.samples(), where + " — 전 시각 지점에서 낸다");
+                        assertEquals(count.invalidReason(), core.invalidReason(), where);
+                        if (core.valid()) {
+                            assertEquals(count.median() == 100.0, core.median() == 100.0,
+                                    where + " — 건수 " + count.median() + " · 코어 " + core.median());
+                            compared++;
+                        } else {
+                            assertNull(core.median(), where);
+                            assertTrue(core.invalidReason().contains("천장"), where + " — " + core.invalidReason());
+                            ceiling++;
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(compared > 0 && ceiling > 0, "값이 있는 열과 제약을 끈 천장 열을 모두 봐야 한다");
+    }
+
+    /** 짝 지점이 없는 고부하 셀에도 값이 있어야 이 지표가 있는 까닭이 선다 — 110% 셀에는 전부 배치하지 못한 열이 있다. */
+    @DisplayName("주 결과판의 90 · 110% 셀에서 코어 기준 배치 성공률은 0~100 사이 값이고 110% 셀에는 100 이 아닌 열이 있다")
+    @Test
+    void core_placement_rate_has_values_in_the_high_load_cells() {
+        int cells = 0;
+        for (String distribution : List.of("heavytail", "uniform")) {
+            for (var c : service.compare("main", distribution).boards().get(0).cells()) {
+                if (c.loadRatioPercent() < 90) continue;
+                boolean below = false;
+                for (var s : c.strategies()) {
+                    MetricValue core = metric(s, BenchmarkRules.CORE_PLACEMENT_RATE);
+                    if (!core.valid()) continue;
+                    String where = distribution + " " + c.loadRatioPercent() + ":" + c.powerControl() + " " + s.strategyId();
+                    assertTrue(core.median() >= 0 && core.median() <= 100, where + " 값 " + core.median());
+                    if (core.median() < 100) below = true;
+                }
+                if (c.loadRatioPercent() == 110) assertTrue(below, distribution + " 110:" + c.powerControl() + " — 전부 배치하지 못한 열이 있어야 한다");
+                cells++;
+            }
+        }
+        assertEquals(8, cells, "두 분포 × 90 · 110% × 두 전원 상태 셀을 모두 봐야 한다");
+    }
+
+    /**
+     * 주 결과판 110% 셀의 일곱 열 코어 기준 배치 성공률 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정). 두 전원 상태 셀은 배치가 같아 값이 같다.
+     * 허용 오차는 판정 규칙의 지점 비교 무시 폭과 같은 근거다.
+     */
+    @DisplayName("주 결과판 110% 셀의 코어 기준 배치 성공률이 두 분포에서 관측 리터럴과 같다")
+    @Test
+    void core_placement_rate_on_the_main_board_matches_the_observed_literals() {
+        List<String> columns = List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "weighted", "power", "coolest-first");
+        Map<String, double[]> expected = Map.of(
+                "heavytail", new double[]{97.1098, 97.1098, 97.1098, 96.5805, 96.8614, 96.8614, 94.2197},
+                "uniform", new double[]{79.4179, 70.114, 76.0136, 80.5874, 80.5874, 80.5874, 80.5874});
+        int checked = 0;
+        for (var e : expected.entrySet()) {
+            for (var c : service.compare("main", e.getKey()).boards().get(0).cells()) {
+                if (c.loadRatioPercent() != 110) continue;
+                for (int i = 0; i < columns.size(); i++) {
+                    assertEquals(e.getValue()[i], metric(strategy(c, columns.get(i)), BenchmarkRules.CORE_PLACEMENT_RATE).median(),
+                            BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, e.getKey() + " 110:" + c.powerControl() + " " + columns.get(i));
+                }
+                checked++;
+            }
+        }
+        assertEquals(expected.size() * 2, checked, "두 분포 · 두 전원 상태 셀을 모두 봐야 한다");
+    }
+
     /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */
     private static Map<String, String> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
         Map<String, String> out = new LinkedHashMap<>();

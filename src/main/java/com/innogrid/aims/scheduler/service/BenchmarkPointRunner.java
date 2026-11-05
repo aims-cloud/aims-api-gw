@@ -72,19 +72,24 @@ final class BenchmarkPointRunner {
                                 Map<String, Placement> byStrategy, boolean dataMdcAssigned) {
     }
 
-    /** 전략 하나가 한 시각 지점에서 낸 배치 결과. */
+    /**
+     * 전략 하나가 한 시각 지점에서 낸 배치 결과. {@code headroomAfterCores} · {@code fragmentedHeadroomCores} 는 배치를 마친 뒤
+     * 노드 여유의 합과 그 가운데 분포의 가장 큰 계층을 하나 더 담지 못하는 자투리의 합이다(둘 다 기준 정책 상한까지 · 코어).
+     */
     record Placement(PlacementStrategy strategy, int placed, int requested,
                              double engineBelievedCostW, Set<String> usedNodes,
                              Map<String, Double> cpuAfterByNode, int unmeasuredPlacements,
                              int thermalExclusions, int activeCountAfter,
                              double measuredTempStdDev, int warnZoneNodes,
                              boolean temperatureGated, boolean powerGated,
-                             int dataMdcPlacements, int remoteMdcPlacements) {
+                             int dataMdcPlacements, int remoteMdcPlacements,
+                             double headroomAfterCores, double fragmentedHeadroomCores) {
     }
 
     PointOutcome runPoint(SyntheticCluster cluster, BenchmarkWorkloads workloads,
                                   int loadRatio, long t, GroundTruthOracle oracle) {
         SchedulingPolicy basePolicy = BenchmarkColumns.baseline();
+        int largestCores = largestClassCores(workloads);
         List<NodeResource> snapshot = nodesAt(cluster, t);
 
         double headroom = headroomCores(snapshot, basePolicy);
@@ -119,7 +124,8 @@ final class BenchmarkPointRunner {
         for (PlacementStrategy strategy : columns.strategies()) {
             EngineVariant v = variants.get(strategy.id());
             byStrategy.put(strategy.id(), run(strategy, sampled, snapshot, cluster, oracle, links,
-                    v == null ? powerModel : v.believedCostModel(), v == null ? Map.of() : v.override()));
+                    v == null ? powerModel : v.believedCostModel(), v == null ? Map.of() : v.override(),
+                    basePolicy, largestCores));
         }
 
         return new PointOutcome(headroom, sampled.size(), requestedCores,
@@ -136,22 +142,28 @@ final class BenchmarkPointRunner {
     private Placement run(PlacementStrategy strategy, List<Workload> sampled,
                           List<NodeResource> snapshot, SyntheticCluster cluster,
                           GroundTruthOracle oracle, LinkMatrix links, PowerModel believedCostModel,
-                          Map<String, String> override) {
+                          Map<String, String> override, SchedulingPolicy basePolicy, int largestCores) {
         if (!RANDOM_ID.equals(strategy.id())) {
-            return runOnce(strategy, sampled, snapshot, cluster, oracle, links, believedCostModel, override);
+            return runOnce(strategy, sampled, snapshot, cluster, oracle, links, believedCostModel, override,
+                    basePolicy, largestCores);
         }
 
         List<Placement> draws = new ArrayList<>(BenchmarkRules.RANDOM_SEEDS.size());
         for (long seed : BenchmarkRules.RANDOM_SEEDS) {
-            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle, links, believedCostModel, override));
+            draws.add(runOnce(BaselinePlacers.random(seed), sampled, snapshot, cluster, oracle, links, believedCostModel, override,
+                    basePolicy, largestCores));
         }
         return medianDraw(draws);
     }
 
+    /**
+     * {@code basePolicy} · {@code largestCores} 는 자원 조각화 비율의 잣대다 — 열마다 같은 기준 정책 상한과 분포의 가장 큰 계층으로
+     * 재야 열 사이에 견줄 수 있어, 전략의 정책({@code policy})이 아니라 시각 지점에서 한 번 정한 값을 받는다.
+     */
     private Placement runOnce(PlacementStrategy strategy, List<Workload> sampled,
                               List<NodeResource> snapshot, SyntheticCluster cluster,
                               GroundTruthOracle oracle, LinkMatrix links, PowerModel believedCostModel,
-                              Map<String, String> override) {
+                              Map<String, String> override, SchedulingPolicy basePolicy, int largestCores) {
         SchedulingPolicy policy = BenchmarkColumns.policyFor(strategy, override);
         ConstraintEvaluator evaluator = BenchmarkContexts.freshEvaluator(properties);
         PlacementContext ctx = BenchmarkContexts.copyOf(snapshot, policy, evaluator, links);
@@ -193,14 +205,44 @@ final class BenchmarkPointRunner {
         }
 
         Map<String, Double> cpuAfter = new LinkedHashMap<>();
+        double headroomAfter = 0;
+        double fragmented = 0;
         for (NodeResource node : ctx.nodes()) {
             cpuAfter.put(node.getNodeId(), node.effectiveCpuUsagePercent());
+            double h = nodeHeadroomCores(node, basePolicy);
+            headroomAfter += h;
+            fragmented += fragmentOf(h, largestCores);
         }
 
         return new Placement(strategy, placed, ordered.size(), believedCost, used, cpuAfter,
                 unmeasured, thermal, ctx.activeNodeCount(BenchmarkRules.POWERED_ON_CPU_PERCENT),
                 measuredTempStdDev(ctx, oracle), warnZoneNodes(ctx, policy, oracle),
-                policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled(), dataMdcPlaced, remote);
+                policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled(), dataMdcPlaced, remote,
+                headroomAfter, fragmented);
+    }
+
+    /**
+     * 노드 여유 하나에서 가장 큰 계층({@code largestCores} 코어)을 하나 더 담지 못하는 자투리 — {@code h − R × ⌊h / R⌋}.
+     * R 코어 배치는 여유를 R 만큼 줄여 자투리를 바꾸지 않으므로, 이 값을 움직이는 것은 R 보다 작은 배치다.
+     *
+     * <p>패키지 안에서 보이게 둔 것은 테스트가 직접 부르기 위해서다.</p>
+     */
+    static double fragmentOf(double headroomCores, int largestCores) {
+        return headroomCores - largestCores * Math.floor(headroomCores / largestCores);
+    }
+
+    /**
+     * 분포 파일 계층 가운데 가장 큰 요구 코어 — 자원 조각화 비율의 기준 크기 R. 규칙 상수로 두지 않고 분포에서 읽어, 분포 파일이
+     * 바뀌면 R 도 함께 바뀌고 그 변경은 분포 축에서 드러난다. 코어를 요구하는 계층이 없으면 자투리가 정의되지 않아 실패한다.
+     *
+     * <p>패키지 안에서 보이게 둔 것은 테스트가 직접 부르기 위해서다.</p>
+     */
+    static int largestClassCores(BenchmarkWorkloads workloads) {
+        int largest = workloads.classes().stream().mapToInt(BenchmarkWorkloads.WorkloadClass::cores).max().orElse(0);
+        if (largest <= 0) {
+            throw new IllegalStateException("분포 파일에 코어를 요구하는 계층이 없어 자원 조각화 비율의 기준 크기를 정할 수 없다");
+        }
+        return largest;
     }
 
     /**
@@ -383,13 +425,23 @@ final class BenchmarkPointRunner {
     private static double headroomCores(List<NodeResource> nodes, SchedulingPolicy policy) {
         double total = 0;
         for (NodeResource node : nodes) {
-            double byCpu = node.getTotalCpu()
-                    * (policy.getMaxCpuUsagePercent() - node.effectiveCpuUsagePercent()) / 100.0;
-            double byMemory = node.getTotalMemoryMb()
-                    * (policy.getMaxMemoryUsagePercent() - node.effectiveMemoryUsagePercent()) / 100.0
-                    / BenchmarkRules.MEMORY_MB_PER_CORE;
-            total += Math.max(0, Math.min(byCpu, byMemory));
+            total += nodeHeadroomCores(node, policy);
         }
         return total;
+    }
+
+    /**
+     * 노드 하나의 여유(코어) — {@link #headroomCores} 의 노드 항. 자원 조각화 비율이 배치를 마친 노드에 같은 식을 쓰므로 떼어 냈다.
+     * 식과 연산 순서는 떼어 내기 전과 같다 — 바뀌면 부하율 분모가 달라져 기존 지표가 전부 움직인다.
+     *
+     * <p>패키지 안에서 보이게 둔 것은 테스트가 직접 부르기 위해서다.</p>
+     */
+    static double nodeHeadroomCores(NodeResource node, SchedulingPolicy policy) {
+        double byCpu = node.getTotalCpu()
+                * (policy.getMaxCpuUsagePercent() - node.effectiveCpuUsagePercent()) / 100.0;
+        double byMemory = node.getTotalMemoryMb()
+                * (policy.getMaxMemoryUsagePercent() - node.effectiveMemoryUsagePercent()) / 100.0
+                / BenchmarkRules.MEMORY_MB_PER_CORE;
+        return Math.max(0, Math.min(byCpu, byMemory));
     }
 }

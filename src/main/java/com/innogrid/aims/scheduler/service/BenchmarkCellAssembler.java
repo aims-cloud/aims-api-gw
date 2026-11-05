@@ -114,6 +114,8 @@ final class BenchmarkCellAssembler {
                 add(into, BenchmarkRules.UNMEASURED_RATE, rate);
                 if (rate != null && coreIds.contains(id)) unmeasuredRates.put(id, rate);
                 add(into, BenchmarkRules.REMOTE_MDC_RATE, remoteMdcRate(p));
+                // 조각화 비율도 짝 지점에서만 낸다 — 적게 배치한 열은 여유가 크게 남아 같은 자리에서 견주면 배치량을 재게 된다
+                add(into, BenchmarkRules.FRAGMENTED_HEADROOM, rowComparable ? fragmentedHeadroomRate(p) : null);
             }
 
             // 미계측 격차는 기준 집합 사이의 값이라 지점마다 한 번 계산해 전 전략에 같은 값으로 싣는다.
@@ -219,8 +221,14 @@ final class BenchmarkCellAssembler {
                     baselinePresent, !series.isEmpty(), dataMdcAssigned);
             if (series.isEmpty()) {
                 boolean totals = kind.pairedPointsOnly();
+                boolean fragmentation = kind == BenchmarkMetricKind.PAIRED_FRAGMENTATION;
                 if (invalid == null && totals && droppedPoints > 0 && droppedPoints == usablePoints) {
-                    invalid = "기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + droppedPoints + "곳)";
+                    invalid = "기준 집합과 배치 건수가 다른 지점뿐이라 " + (fragmentation ? "조각화 비율" : "총량") + "을 낼 수 없다(제외 "
+                            + droppedPoints + "곳)";
+                }
+                // 짝 지점이 남았는데 표본이 없으면 그 지점들의 노드 여유가 모두 0 이었다 — 비율의 분모가 없다
+                if (invalid == null && fragmentation) {
+                    invalid = "짝 지점 전부에서 노드 여유가 0 이라 조각화 비율을 낼 수 없다";
                 }
                 values.add(new MetricValue(metric.key(), null, null, null, 0, pointValues, false,
                         invalid != null ? invalid : "이 셀에서 값이 나오지 않았다"));
@@ -300,6 +308,10 @@ final class BenchmarkCellAssembler {
             return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 "
                     + "열 성능이 아니다";
         }
+        if (kind == BenchmarkMetricKind.PAIRED_FRAGMENTATION
+                && usablePoints == 0) {
+            return "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 남긴 여유는 조각화 비교 대상이 아니다";
+        }
         if (kind == BenchmarkMetricKind.PER_WORKLOAD && !placedAnywhere) {
             return "전 시각 지점에서 배치 0건이라 건당 값을 낼 수 없다";
         }
@@ -338,6 +350,17 @@ final class BenchmarkCellAssembler {
     static Double remoteMdcRate(Placement p) {
         if (p.dataMdcPlacements() == 0) return null;
         return round(100.0 * p.remoteMdcPlacements() / p.dataMdcPlacements());
+    }
+
+    /**
+     * 한 시각 지점의 자원 조각화 비율(%) — 배치를 마친 뒤 노드 여유 합에서 자투리 합이 차지하는 몫. 여유 합이 0 이면 <b>0 이 아니라 null</b>
+     * 이다 — 0 은 "자투리가 없다"로 읽히지만 여유가 없는 클러스터에는 조각화가 정의되지 않는다.
+     *
+     * <p>같은 패키지의 테스트가 직접 부른다 — 등록된 판의 짝 지점은 여유가 남아 응답으로는 null 가지를 볼 수 없다.</p>
+     */
+    static Double fragmentedHeadroomRate(Placement p) {
+        if (p.headroomAfterCores() <= 0) return null;
+        return round(100.0 * p.fragmentedHeadroomCores() / p.headroomAfterCores());
     }
 
     /**

@@ -43,11 +43,11 @@ class BenchmarkRulesContractTest {
      * 바뀐 것이므로 이 값을 <b>먼저</b> 고쳐야 하고, 그 커밋이 결과 코드보다 앞에 있어야 한다는 사전 등록 요건은 그대로다.
      * 다이제스트가 바뀌는 커밋 메시지에 옛 값 → 새 값을 적는다.</p>
      */
-    private static final String DECLARED_KEY_DIGEST = "0d7a23505911";
+    private static final String DECLARED_KEY_DIGEST = "2bee0e12d720";
 
     /** 사람이 읽는 사전 등록 목록(정렬). 다이제스트는 이 목록에서 계산해 리터럴과 맞춘다 — 두 줄이 같이 바뀌는 것이 이중 서명이다. */
     private static final List<String> DECLARED_KEYS = List.of(
-            "activeNodeDelta", "c3InterventionCount", "engineBelievedCostW", "gapVsPabfdPercent", "generatorPowerW",
+            "activeNodeDelta", "c3InterventionCount", "engineBelievedCostW", "fragmentedHeadroomPercent", "gapVsPabfdPercent", "generatorPowerW",
             "measuredTempStdDev", "perWorkloadPowerW", "placementRatePercent", "remoteMdcPlacementRate", "unmeasuredPlacementRate",
             "unmeasuredRateSpreadPercentPoints", "warnZoneNodeCount");
 
@@ -63,7 +63,8 @@ class BenchmarkRulesContractTest {
      */
     private static final Map<String, List<AxisSeal>> RULE_AXIS_HISTORY = Map.of(
             "metrics", List.of(new AxisSeal("0435607b4998", "2026-09-14", "축 봉인 도입 — 키:방향:역할"),
-                    new AxisSeal("3587b2bfa90f", "2026-11-03", "지표 추가 사전 등록 — 원격 MDC 배치 비율(remoteMdcPlacementRate · 낮을수록 좋음 · 보조). 데이터 MDC 를 배정한 판에서만 내고 판 파일의 MDC 사실로만 센다. 표기 축이라 판정 셀·문턱·격차 정의·판정 자격·판정 기준선 불변")),
+                    new AxisSeal("3587b2bfa90f", "2026-11-03", "지표 추가 사전 등록 — 원격 MDC 배치 비율(remoteMdcPlacementRate · 낮을수록 좋음 · 보조). 데이터 MDC 를 배정한 판에서만 내고 판 파일의 MDC 사실로만 센다. 표기 축이라 판정 셀·문턱·격차 정의·판정 자격·판정 기준선 불변"),
+                    new AxisSeal("82bccbb7a028", "2026-11-05", "지표 추가 사전 등록 — 자원 조각화 비율(fragmentedHeadroomPercent · 낮을수록 좋음 · 보조). 노드 여유 가운데 분포의 가장 큰 계층을 하나 더 담지 못하는 자투리의 비율이고 총량 지표와 같은 짝 지점에서만 낸다. 표기 축이라 판정 셀·문턱·격차 정의·판정 자격·판정 기준선 불변")),
             "sweep", List.of(new AxisSeal("559301d27583", "2026-09-14", "축 봉인 도입(이전 값 없음 — 지표 키 다이제스트만 존재했다)")),
             "boards", List.of(new AxisSeal("2a0f6a76ba2f", "2026-09-14", "축 봉인 도입 — 볼록 지수·정격 불일치 비율"),
                     new AxisSeal("9ab95b89dc3e", "2026-09-14", "방법론 변경 사전 등록 — 오목 지수 0.625·오목/링크 판 id·위상 독립 판 2장·seed 수 3·SplitMix64 혼합 상수")),
@@ -92,7 +93,8 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("10edf28f06f4", "2026-09-17", "규칙 보강 — 셀 밖 대조의 지점별 차 중앙값도 판정량과 같은 I 제한으로 내고 표본 수를 병기하도록 명문화. 회전 초안이 이미 그렇게 내고 있어 산출값은 불변이고 의무만 문장으로 올라온다. 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("75a82028ba09", "2026-10-06", "소비된 회차 목록에 회차 3 문장 추가(정정 범위·실측 상수 단서는 소비 쪽 과거형으로)와 다음 회차 지목 인용 갱신(공석). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("6ceae632b3b6", "2026-10-27", "다음 회차 지목 인용 갱신(공석 → 지목). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
-                    new AxisSeal("d259678dfd94", "2026-10-27", "소비된 회차 목록에 회차 4 문장 추가(정정 범위·평균 후보 범위는 소비 쪽 과거형으로)와 다음 회차 지목 인용 갱신(공석). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
+                    new AxisSeal("d259678dfd94", "2026-10-27", "소비된 회차 목록에 회차 4 문장 추가(정정 범위·평균 후보 범위는 소비 쪽 과거형으로)와 다음 회차 지목 인용 갱신(공석). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("b3f33d5fd5f6", "2026-11-05", "총량 짝 조건 규칙에 자원 조각화 비율 문장 추가 — 총량은 아니지만 같은 마스크로 짝 지점에서만 낸다. 총량 지표의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -430,10 +432,10 @@ class BenchmarkRulesContractTest {
 
     /**
      * <b>좋은 방향</b>은 표를 읽는 사람이 승패를 정하는 축이다. 결과를 보고 이것을 뒤집으면 사전 등록이
-     * 아무것도 고정하지 못하므로, 열두 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
+     * 아무것도 고정하지 못하므로, 열세 개 전량을 여기서 못 박는다. 지금까지는 넷만 잠겨 있었고 주 지표
      * 셋(성공률·건당 전력·가동 노드 증감)의 방향이 뚫려 있었다.
      */
-    @DisplayName("지표 열두 개의 좋은 방향이 전부 고정된다")
+    @DisplayName("지표 열세 개의 좋은 방향이 전부 고정된다")
     @Test
     void every_metric_direction_is_pinned() {
         Map<String, Direction> expected = Map.ofEntries(
@@ -448,7 +450,8 @@ class BenchmarkRulesContractTest {
                 Map.entry(BenchmarkRules.TEMP_STDDEV, Direction.LOWER_IS_BETTER),
                 Map.entry(BenchmarkRules.UNMEASURED_RATE, Direction.CONTEXT_ONLY),
                 Map.entry(BenchmarkRules.UNMEASURED_SPREAD, Direction.CONTEXT_ONLY),
-                Map.entry(BenchmarkRules.REMOTE_MDC_RATE, Direction.LOWER_IS_BETTER));
+                Map.entry(BenchmarkRules.REMOTE_MDC_RATE, Direction.LOWER_IS_BETTER),
+                Map.entry(BenchmarkRules.FRAGMENTED_HEADROOM, Direction.LOWER_IS_BETTER));
 
         for (BenchmarkMetric m : BenchmarkRules.METRICS) {
             assertEquals(expected.get(m.key()), m.direction(),

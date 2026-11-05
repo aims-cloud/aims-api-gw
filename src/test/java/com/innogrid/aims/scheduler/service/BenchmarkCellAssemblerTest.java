@@ -25,6 +25,7 @@ import com.innogrid.aims.scheduler.service.BenchmarkPointRunner.Placement;
 import com.innogrid.aims.scheduler.service.BenchmarkPointRunner.PointOutcome;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -52,6 +53,9 @@ class BenchmarkCellAssemblerTest {
     private static final String NO_VALUE = "이 셀에서 값이 나오지 않았다";
     private static final String NO_DATA_MDC = "이 판은 워크로드에 데이터 MDC 를 배정하지 않아 원격 배치가 정의되지 않는다";
     private static final String NO_DATA_MDC_PLACEMENT = "데이터 MDC 가 있는 배치가 전 시각 지점에서 0건이라 원격 배치 비율을 낼 수 없다";
+    private static final String FRAGMENTATION_UNPAIRED =
+            "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 남긴 여유는 조각화 비교 대상이 아니다";
+    private static final String NO_HEADROOM = "짝 지점 전부에서 노드 여유가 0 이라 조각화 비율을 낼 수 없다";
 
     /**
      * 입력 조합 열두 가지 — 순서대로 ① 기본 · ② 짝 지점 0 · ③ 계측 노드 1 · ④ 짝 지점 0 이면서 계측 노드 1 · ⑤ 전 지점 배치 0 ·
@@ -91,6 +95,8 @@ class BenchmarkCellAssemblerTest {
         t.put(BenchmarkRules.UNMEASURED_SPREAD, rows(null, null, null, null, null, null, null, null, null, null, null, null));
         t.put(BenchmarkRules.REMOTE_MDC_RATE, rows(null, null, null, null, null, null, null, null, null, NO_DATA_MDC_PLACEMENT, null,
                 NO_DATA_MDC));
+        t.put(BenchmarkRules.FRAGMENTED_HEADROOM, rows(null, FRAGMENTATION_UNPAIRED, null, FRAGMENTATION_UNPAIRED, null, null, null, null, null,
+                null, null, null));
         return t;
     }
 
@@ -132,7 +138,7 @@ class BenchmarkCellAssemblerTest {
         Placement row = placement(BaselinePlacers.ffdBySize(), 1, true, true);
         List<PointOutcome> points = List.of(point(row), point(row), point(row));
         Set<String> pairedOnly = Set.of(BenchmarkRules.GENERATOR_POWER, BenchmarkRules.ACTIVE_NODE_DELTA,
-                BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV);
+                BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV, BenchmarkRules.FRAGMENTED_HEADROOM);
 
         // 짝 지점 표본이 전부 빠진 경우(제외 지점 수 == 쓸 수 있는 지점 수 > 0)
         List<MetricValue> dropped = BenchmarkCellAssembler.metricValues(Map.of(), row, 2, points, 2);
@@ -140,7 +146,9 @@ class BenchmarkCellAssemblerTest {
         for (MetricValue v : dropped) {
             assertEquals(false, v.valid(), v.key());
             assertEquals(0, v.samples(), v.key());
-            if (pairedOnly.contains(v.key())) {
+            if (BenchmarkRules.FRAGMENTED_HEADROOM.equals(v.key())) {
+                assertEquals("기준 집합과 배치 건수가 다른 지점뿐이라 조각화 비율을 낼 수 없다(제외 2곳)", v.invalidReason(), v.key());
+            } else if (pairedOnly.contains(v.key())) {
                 assertEquals("기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 2곳)", v.invalidReason(), v.key());
             } else if (BenchmarkRules.GAP_VS_PABFD.equals(v.key())) {
                 assertEquals(GAP_UNPAIRED, v.invalidReason(), v.key());
@@ -157,9 +165,11 @@ class BenchmarkCellAssemblerTest {
             }
         }
 
-        // 제외 지점 수가 쓸 수 있는 지점 수와 다르면 짝 지점 지표도 값이 나오지 않았다는 문장으로 나간다
+        // 제외 지점 수가 쓸 수 있는 지점 수와 다르면 짝 지점 지표도 값이 나오지 않았다는 문장으로 나간다 — 조각화 비율은 남은 짝 지점의
+        // 표본이 없다는 것이 곧 그 지점들의 노드 여유가 0 이었다는 뜻이라 그 사유로 나간다
         for (MetricValue v : BenchmarkCellAssembler.metricValues(Map.of(), row, 2, points, 1)) {
-            if (pairedOnly.contains(v.key())) assertEquals(NO_VALUE, v.invalidReason(), v.key());
+            if (BenchmarkRules.FRAGMENTED_HEADROOM.equals(v.key())) assertEquals(NO_HEADROOM, v.invalidReason(), v.key());
+            else if (pairedOnly.contains(v.key())) assertEquals(NO_VALUE, v.invalidReason(), v.key());
         }
     }
 
@@ -177,6 +187,34 @@ class BenchmarkCellAssemblerTest {
         assertEquals(50.0, v.median(), 1e-9);
         assertEquals(40.0, v.min(), 1e-9);
         assertEquals(60.0, v.max(), 1e-9);
+        assertEquals(2, v.samples(), "값이 없는 지점은 표본에서 빠진다");
+    }
+
+    /** 등록된 판의 짝 지점은 노드 여유가 남아 응답으로는 null 가지를 볼 수 없다 — 여유가 없는데 0 을 내면 "자투리가 없다"로 읽힌다. */
+    @DisplayName("자원 조각화 비율은 자투리 합을 여유 합으로 나누고 여유 합이 0 이면 0 이 아니라 null 이다")
+    @Test
+    void fragmented_headroom_rate_divides_fragments_by_headroom() {
+        // 노드 여유 9.5 · 3 · 0 코어 · 기준 크기 4 → 자투리 1.5 · 3 · 0 → 4.5 ÷ 12.5 = 36%
+        assertEquals(36.0, BenchmarkCellAssembler.fragmentedHeadroomRate(placementWithHeadroom(12.5, 4.5)), 1e-9);
+        assertEquals(0.0, BenchmarkCellAssembler.fragmentedHeadroomRate(placementWithHeadroom(8.0, 0.0)), 1e-9,
+                "여유가 기준 크기의 배수뿐이면 자투리가 없다");
+        assertNull(BenchmarkCellAssembler.fragmentedHeadroomRate(placementWithHeadroom(0.0, 0.0)), "여유가 없으면 조각화가 정의되지 않는다");
+    }
+
+    /** 짝 지점이라도 노드 여유가 0 인 지점은 표본이 없다 — 그 자리를 0 으로 세면 비율이 낮아 보인다. */
+    @DisplayName("자원 조각화 비율은 값이 없는 지점을 빼고 남은 지점으로 값을 내고 유효하다")
+    @Test
+    void fragmented_headroom_uses_the_points_that_have_a_value() {
+        Placement row = placement(BaselinePlacers.ffdBySize(), 1, true, true);
+        List<PointOutcome> points = List.of(point(row), point(row), point(row));
+        Map<String, List<Double>> samples = Map.of(BenchmarkRules.FRAGMENTED_HEADROOM, Arrays.asList(null, 20.0, 30.0));
+
+        MetricValue v = BenchmarkCellAssembler.metricValues(samples, row, 3, points, 0).stream()
+                .filter(m -> m.key().equals(BenchmarkRules.FRAGMENTED_HEADROOM)).findFirst().orElseThrow();
+        assertTrue(v.valid(), v.invalidReason());
+        assertEquals(25.0, v.median(), 1e-9);
+        assertEquals(20.0, v.min(), 1e-9);
+        assertEquals(30.0, v.max(), 1e-9);
         assertEquals(2, v.samples(), "값이 없는 지점은 표본에서 빠진다");
     }
 
@@ -199,7 +237,12 @@ class BenchmarkCellAssemblerTest {
     }
 
     private static Placement placement(PlacementStrategy strategy, int placed, boolean temperatureGated, boolean powerGated) {
-        return new Placement(strategy, placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, temperatureGated, powerGated, 0, 0);
+        return new Placement(strategy, placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, temperatureGated, powerGated, 0, 0, 0, 0);
+    }
+
+    private static Placement placementWithHeadroom(double headroomAfterCores, double fragmentedHeadroomCores) {
+        return new Placement(BaselinePlacers.ffdBySize(), 1, 1, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, true, true, 0, 0,
+                headroomAfterCores, fragmentedHeadroomCores);
     }
 
     /** 이 전략과 기준 전략이 함께 있고 계측 노드가 아홉이며 데이터 MDC 를 배정한 판의 시각 지점. */

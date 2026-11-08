@@ -26,8 +26,8 @@ enum BenchmarkMetricKind {
     PER_WORKLOAD(BenchmarkRules.PER_WORKLOAD_POWER),
     /** 온도 제약 개입 횟수 — 온도 제약이 꺼진 전략과는 견주지 않는다. */
     THERMAL_INTERVENTIONS(BenchmarkRules.C3_INTERVENTIONS),
-    /** 배치 성공률 — 온도·전력 제약 중 하나라도 꺼진 전략과는 견주지 않는다. */
-    PLACEMENT_RATE(BenchmarkRules.PLACEMENT_RATE),
+    /** 배치 성공률(건수 · 코어 기준) — 온도·전력 제약 중 하나라도 꺼진 전략과는 견주지 않는다. */
+    PLACEMENT_RATE(BenchmarkRules.PLACEMENT_RATE, BenchmarkRules.CORE_PLACEMENT_RATE),
     /** 조건 없이 내는 지표. */
     UNCONDITIONED(BenchmarkRules.ENGINE_BELIEVED_COST, BenchmarkRules.UNMEASURED_RATE, BenchmarkRules.UNMEASURED_SPREAD),
     /** 원격 MDC 배치 비율 — 워크로드에 데이터 MDC 를 배정한 판에서만 낸다. */

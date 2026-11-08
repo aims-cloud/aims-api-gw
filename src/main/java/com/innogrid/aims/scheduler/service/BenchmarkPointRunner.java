@@ -75,6 +75,7 @@ final class BenchmarkPointRunner {
     /**
      * 전략 하나가 한 시각 지점에서 낸 배치 결과. {@code headroomAfterCores} · {@code fragmentedHeadroomCores} 는 배치를 마친 뒤
      * 노드 여유의 합과 그 가운데 분포의 가장 큰 계층을 하나 더 담지 못하는 자투리의 합이다(둘 다 기준 정책 상한까지 · 코어).
+     * {@code placedCores} 는 배치한 워크로드의 요구 코어 합이다.
      */
     record Placement(PlacementStrategy strategy, int placed, int requested,
                              double engineBelievedCostW, Set<String> usedNodes,
@@ -83,7 +84,7 @@ final class BenchmarkPointRunner {
                              double measuredTempStdDev, int warnZoneNodes,
                              boolean temperatureGated, boolean powerGated,
                              int dataMdcPlacements, int remoteMdcPlacements,
-                             double headroomAfterCores, double fragmentedHeadroomCores) {
+                             double headroomAfterCores, double fragmentedHeadroomCores, double placedCores) {
     }
 
     PointOutcome runPoint(SyntheticCluster cluster, BenchmarkWorkloads workloads,
@@ -175,6 +176,7 @@ final class BenchmarkPointRunner {
         Set<String> unmeasuredNodes = unmeasuredNodeIds(cluster);
         Set<String> used = new LinkedHashSet<>();
         int placed = 0;
+        double placedCores = 0;
         int unmeasured = 0;
         int thermal = 0;
         int dataMdcPlaced = 0;
@@ -196,6 +198,7 @@ final class BenchmarkPointRunner {
             ctx.reserve(nodeId, workload);
             used.add(nodeId);
             placed++;
+            placedCores += workload.getRequiredCpu();
             if (unmeasuredNodes.contains(nodeId)) unmeasured++;
             Boolean isRemote = remoteMdc(node.getMdcId(), workload.getDataMdcId());
             if (isRemote != null) {
@@ -218,7 +221,7 @@ final class BenchmarkPointRunner {
                 unmeasured, thermal, ctx.activeNodeCount(BenchmarkRules.POWERED_ON_CPU_PERCENT),
                 measuredTempStdDev(ctx, oracle), warnZoneNodes(ctx, policy, oracle),
                 policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled(), dataMdcPlaced, remote,
-                headroomAfter, fragmented);
+                headroomAfter, fragmented, placedCores);
     }
 
     /**

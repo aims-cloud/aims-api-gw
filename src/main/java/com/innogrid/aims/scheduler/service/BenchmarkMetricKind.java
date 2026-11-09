@@ -33,7 +33,9 @@ enum BenchmarkMetricKind {
     /** 원격 MDC 배치 비율 — 워크로드에 데이터 MDC 를 배정한 판에서만 낸다. */
     DATA_LOCALITY(BenchmarkRules.REMOTE_MDC_RATE),
     /** 자원 조각화 비율 — 총량 지표와 같은 짝 지점에서만 낸다. */
-    PAIRED_FRAGMENTATION(BenchmarkRules.FRAGMENTED_HEADROOM);
+    PAIRED_FRAGMENTATION(BenchmarkRules.FRAGMENTED_HEADROOM),
+    /** 전력 제약 개입 횟수 — 전력 제약이 꺼진 전략과는 견주지 않는다. */
+    POWER_INTERVENTIONS(BenchmarkRules.POWER_INTERVENTIONS);
 
     private final List<String> keys;
 

@@ -98,6 +98,7 @@ class BenchmarkCellAssemblerTest {
         t.put(BenchmarkRules.FRAGMENTED_HEADROOM, rows(null, FRAGMENTATION_UNPAIRED, null, FRAGMENTATION_UNPAIRED, null, null, null, null, null,
                 null, null, null));
         t.put(BenchmarkRules.CORE_PLACEMENT_RATE, rows(null, null, null, null, null, GATES_OFF, GATES_OFF, null, null, null, null, null));
+        t.put(BenchmarkRules.POWER_INTERVENTIONS, rows(null, null, null, null, null, null, null, null, null, null, null, null));
         return t;
     }
 

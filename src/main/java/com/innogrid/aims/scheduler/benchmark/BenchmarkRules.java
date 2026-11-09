@@ -167,6 +167,16 @@ public final class BenchmarkRules {
     public static final String WEIGHTED_AFFINITY_COLUMN = "weighted-affinity";
 
     /**
+     * 스케줄 배치 순서 열 id — 기본 엔진(weighted)을 스케줄 실행의 운영 비교자로 정렬한 표본에 돌린 두 열이다. 등록 순 열은 우선순위 →
+     * 등록 순(스케줄 기본), 크기 순 열은 우선순위 → 요구 CPU · 메모리 큰 순(스케줄 선택지)이다. override 가 없지만 총량 짝 조건의 기준 집합에
+     * 넣지 않는다({@link #PAIRING_RULE}). 설정 다이제스트와 민감도 축에도 넣지 않는다 — 순서는 엔진 노브가 아니고, 민감도 축에 넣으면
+     * 기준선의 민감도 표가 판정 불가가 된다.
+     */
+    public static final String SCHEDULE_ORDER_AGE_COLUMN = "weighted-priority-age";
+    public static final String SCHEDULE_ORDER_SIZE_COLUMN = "weighted-priority-size";
+    public static final List<String> SCHEDULE_ORDER_COLUMNS = List.of(SCHEDULE_ORDER_AGE_COLUMN, SCHEDULE_ORDER_SIZE_COLUMN);
+
+    /**
      * 위상 독립 판 2장 — 방향판·판정판과 노드 블록이 바이트 동일하고 {@code phaseMode: independent}·{@code seeds:} 만 다르다.
      * legacy 위상은 {@code (seed·31^L + hash(nodeId)) mod 1000} 이라 nodeId 길이가 같은 판에서 seed 는 전 노드에 같은 상수만 더한다 —
      * seed 를 늘려도 표본이 늘지 않는 결함이고, 판정 경로(두 판) 에서 그 결함을 닫는 것이 이 두 판의 존재 이유다.
@@ -407,8 +417,8 @@ public final class BenchmarkRules {
 
             new BenchmarkMetric(GENERATOR_POWER, "총전력(생성식 기준)", "W",
                     Direction.LOWER_IS_BETTER, Role.PRIMARY,
-                    "기본 설정 열(override 없는 열 — 엔진·자원전용·대조군) 전부의 배치 건수가 같은 지점에서만 총량을 비교한다. "
-                            + "override 열은 그 지점에서 자기 건수가 같을 때만 낸다. 건수가 다르면 건당 값을 쓴다. "
+                    "기본 설정 열(override 없는 열 — 엔진·자원전용·대조군, 스케줄 배치 순서 열은 뺀다) 전부의 배치 건수가 같은 지점에서만 총량을 비교한다. "
+                            + "override 열과 스케줄 배치 순서 열은 그 지점에서 자기 건수가 같을 때만 낸다. 건수가 다르면 건당 값을 쓴다. "
                             + "클러스터 파일 생성식으로 계산한 값이라 실측 서버의 전력이 아니다"),
 
             new BenchmarkMetric(GAP_VS_PABFD, "총전력 격차(전력 인지 최적적합 대비)", "%",
@@ -479,8 +489,9 @@ public final class BenchmarkRules {
                             + "계층의 요구 코어 R 을 하나 더 담지 못하는 자투리(h − R × ⌊h / R⌋)가 여유 합에서 차지하는 비율이다. 총량 지표와 같이 "
                             + "기본 설정 열 전부의 배치 건수가 같은 시각 지점에서만 낸다 — 적게 배치한 열이 남긴 여유를 같은 자리에서 견주면 "
                             + "조각화가 아니라 배치량을 재게 된다. 그래서 짝 지점이 없는 고부하 셀은 무효이고, 그 셀에서 조각화가 배치를 막은 정도는 "
-                            + "배치 성공률로 읽는다. R 코어 배치는 그 노드의 자투리를 바꾸지 않고 여유 합만 줄여 비율을 올리며, 자투리를 바꾸는 것은 "
-                            + "R 보다 작은 배치다. GPU · 전력 · 온도 제약은 보지 않는다. 엔진 열은 표본 순서로 배치하므로 운영의 크기 순 배치 선택지 효과를 재는 값이 아니다"),
+                            + "건수 · 코어 두 배치 성공률을 한 쌍으로 읽는다. R 코어 배치는 그 노드의 자투리를 바꾸지 않고 여유 합만 줄여 비율을 올리며, 자투리를 바꾸는 것은 "
+                            + "R 보다 작은 배치다. GPU · 전력 · 온도 제약은 보지 않는다. 엔진 열과 그 변종은 표본 순서로 배치한다 — 운영의 크기 순 배치 선택지 효과는 "
+                            + "스케줄 배치 순서 두 열(우선순위 → 등록 순 · 우선순위 → 크기 순)의 같은 지점 차로 합성 판에서만 읽는다"),
 
             new BenchmarkMetric(CORE_PLACEMENT_RATE, "코어 기준 배치 성공률", "%",
                     Direction.HIGHER_IS_BETTER, Role.SECONDARY,
@@ -497,11 +508,16 @@ public final class BenchmarkRules {
      * 대조군 6 — 판정 자격 집합을 포함한다)의 배치 건수로만 정한다. override 열(링크 게이트·눈금·역산 차단)은 그 마스크를 받아 자기
      * 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. 이유: 짝 조건을 전 열로 잡으면 <b>열을 더하는 것만으로 기존 열의 값이
      * 바뀐다</b>(반증판·계측 공백판에서 실제로 표본 수가 5 → 1 로 줄었다) — 기존 표와의 대조가 깨진다.
+     *
+     * <p>스케줄 배치 순서 열({@link #SCHEDULE_ORDER_COLUMNS})은 override 가 없지만 기준 집합에 넣지 않는다 — 넣으면 같은 이유로 열을 더하는 것만으로
+     * 기존 열의 짝 지점이 바뀐다. override 열과 같은 마스크를 받고, 제외 지점은 override 열과 따로 문장으로 싣는다.</p>
      */
     public static final String PAIRING_RULE =
             "총량 짝 조건 규칙. 총량 열(" + GENERATOR_POWER + "·" + ACTIVE_NODE_DELTA + "·" + WARN_ZONE_NODES + "·" + TEMP_STDDEV + ")의 짝 조건과 미계측 격차는 "
                     + "override 없는 기본 설정 열(엔진 전량·자원전용 2·대조군 6) 전부의 배치 건수가 같은 시각 지점으로 정한다. "
                     + "override 열은 그 마스크를 받아 자기 건수가 기준 집합의 건수와 같은 지점에서만 총량을 낸다. "
+                    + "스케줄 배치 순서 열(" + SCHEDULE_ORDER_AGE_COLUMN + "·" + SCHEDULE_ORDER_SIZE_COLUMN + ")은 override 가 없어도 기준 집합에 넣지 않는다 — "
+                    + "기본 엔진의 배치 순서만 운영 비교자로 바꾼 열이라 override 열과 같은 마스크를 받고, 제외 지점은 override 열과 따로 문장으로 싣는다. "
                     + "자원 조각화 비율(" + FRAGMENTED_HEADROOM + ")도 같은 마스크로 짝 지점에서만 낸다 — 총량은 아니지만 적게 배치한 열이 "
                     + "남긴 여유를 견주면 배치량을 재게 되기 때문이다. "
                     + "열을 더하는 것이 기존 열의 값을 바꾸지 않게 하기 위한 규칙이며, 격차 열(pabfd 짝)은 이 규칙과 무관하다. "

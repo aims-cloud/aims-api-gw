@@ -95,7 +95,8 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("75a82028ba09", "2026-10-06", "소비된 회차 목록에 회차 3 문장 추가(정정 범위·실측 상수 단서는 소비 쪽 과거형으로)와 다음 회차 지목 인용 갱신(공석). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("6ceae632b3b6", "2026-10-27", "다음 회차 지목 인용 갱신(공석 → 지목). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("d259678dfd94", "2026-10-27", "소비된 회차 목록에 회차 4 문장 추가(정정 범위·평균 후보 범위는 소비 쪽 과거형으로)와 다음 회차 지목 인용 갱신(공석). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
-                    new AxisSeal("b3f33d5fd5f6", "2026-11-05", "총량 짝 조건 규칙에 자원 조각화 비율 문장 추가 — 총량은 아니지만 같은 마스크로 짝 지점에서만 낸다. 총량 지표의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
+                    new AxisSeal("b3f33d5fd5f6", "2026-11-05", "총량 짝 조건 규칙에 자원 조각화 비율 문장 추가 — 총량은 아니지만 같은 마스크로 짝 지점에서만 낸다. 총량 지표의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("b00719f78b89", "2026-11-09", "총량 짝 조건 규칙에 스케줄 배치 순서 열(weighted-priority-age · weighted-priority-size) 문장 추가 — override 가 없어도 기준 집합에 넣지 않고 override 열과 같은 마스크를 받으며 제외 지점은 따로 문장으로 싣는다. 기존 열의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -700,6 +701,9 @@ class BenchmarkRulesContractTest {
         assertTrue(BenchmarkRules.CONCAVE_CONCLUSION_TEMPLATE.contains("원인을 지목하지 않"));
         assertTrue(BenchmarkRules.PAIRING_RULE.contains("override 없는 기본 설정 열"), "짝 조건 기준 집합이 문장에 있어야 한다");
         assertTrue(BenchmarkRules.PAIRING_RULE.contains("totalsIncomparableReason"), "짝 제외 지점의 응답 표기 의무가 문장에 있어야 한다");
+        for (String id : BenchmarkRules.SCHEDULE_ORDER_COLUMNS) {
+            assertTrue(BenchmarkRules.PAIRING_RULE.contains(id), id + " — 기준 집합에서 빼는 스케줄 배치 순서 열이 문장에 있어야 한다");
+        }
         assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("유효 지점 교집합"), "민감도 검정은 교집합 위 지점별 차로 정의돼야 한다");
         assertTrue(BenchmarkRules.SENSITIVITY_RULE.contains("수준 의존이 곧 판정 의존은 아니다"));
         assertTrue(BenchmarkRules.PHASE_RULE.contains("생략은 판정 보고의 결격 사유"), "위상 판 범위 보고 의무");

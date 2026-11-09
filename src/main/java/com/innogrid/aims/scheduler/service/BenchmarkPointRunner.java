@@ -75,12 +75,13 @@ final class BenchmarkPointRunner {
     /**
      * 전략 하나가 한 시각 지점에서 낸 배치 결과. {@code headroomAfterCores} · {@code fragmentedHeadroomCores} 는 배치를 마친 뒤
      * 노드 여유의 합과 그 가운데 분포의 가장 큰 계층을 하나 더 담지 못하는 자투리의 합이다(둘 다 기준 정책 상한까지 · 코어).
-     * {@code placedCores} 는 배치한 워크로드의 요구 코어 합이다.
+     * {@code placedCores} 는 배치한 워크로드의 요구 코어 합이다. {@code thermalExclusions} · {@code powerExclusions} 는 시도마다 열 · 전력 까닭으로
+     * 빠진 후보 노드 수의 합이다.
      */
     record Placement(PlacementStrategy strategy, int placed, int requested,
                              double engineBelievedCostW, Set<String> usedNodes,
                              Map<String, Double> cpuAfterByNode, int unmeasuredPlacements,
-                             int thermalExclusions, int activeCountAfter,
+                             int thermalExclusions, int powerExclusions, int activeCountAfter,
                              double measuredTempStdDev, int warnZoneNodes,
                              boolean temperatureGated, boolean powerGated,
                              int dataMdcPlacements, int remoteMdcPlacements,
@@ -179,6 +180,7 @@ final class BenchmarkPointRunner {
         double placedCores = 0;
         int unmeasured = 0;
         int thermal = 0;
+        int power = 0;
         int dataMdcPlaced = 0;
         int remote = 0;
         double believedCost = 0;
@@ -186,6 +188,7 @@ final class BenchmarkPointRunner {
         for (Workload workload : ordered) {
             SchedulingResult result = strategy.placer().place(workload, ctx);
             thermal += countThermalExclusions(result);
+            power += countPowerExclusions(result);
             if (!result.success()) continue;
 
             String nodeId = result.selectedNodeId();
@@ -218,7 +221,7 @@ final class BenchmarkPointRunner {
         }
 
         return new Placement(strategy, placed, ordered.size(), believedCost, used, cpuAfter,
-                unmeasured, thermal, ctx.activeNodeCount(BenchmarkRules.POWERED_ON_CPU_PERCENT),
+                unmeasured, thermal, power, ctx.activeNodeCount(BenchmarkRules.POWERED_ON_CPU_PERCENT),
                 measuredTempStdDev(ctx, oracle), warnZoneNodes(ctx, policy, oracle),
                 policy.isTemperatureAwareEnabled(), policy.isPowerAwareEnabled(), dataMdcPlaced, remote,
                 headroomAfter, fragmented, placedCores);
@@ -353,6 +356,21 @@ final class BenchmarkPointRunner {
         int count = 0;
         for (NodeScore score : result.candidateScores()) {
             if (score.exclusionCode() != null && score.exclusionCode().isThermal()) count++;
+        }
+        return count;
+    }
+
+    /**
+     * 전력 때문에 후보가 막힌 횟수 — 제외 까닭 코드로 센다({@link ExclusionReason#isPower()}). 열 막힘 셈과 같은 자리에서 시도마다 세고,
+     * 앞 제약에서 먼저 걸린 노드는 그 까닭으로 남아 여기서 세지 않는다.
+     *
+     * <p>판에는 MDC 예산 · 워크로드 예산 · 실행 예산 입력이 없어 실제로 걸리는 까닭은 전력 여유 부족과 배치 후 예상 전력 초과 둘이다.
+     * 패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다.</p>
+     */
+    static int countPowerExclusions(SchedulingResult result) {
+        int count = 0;
+        for (NodeScore score : result.candidateScores()) {
+            if (score.exclusionCode() != null && score.exclusionCode().isPower()) count++;
         }
         return count;
     }

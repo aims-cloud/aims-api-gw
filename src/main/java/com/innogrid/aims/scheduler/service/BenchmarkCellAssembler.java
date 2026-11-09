@@ -94,6 +94,7 @@ final class BenchmarkCellAssembler {
                 // 개입 횟수는 시도당 계수다 — 전 전략이 같은 워크로드를 한 번씩 시도하므로 배치 건수와
                 // 무관하게 지점마다 센다. 아래 짝짓기 조건을 여기에 걸면 없는 결함을 고치는 것이다.
                 add(into, BenchmarkRules.C3_INTERVENTIONS, (double) p.thermalExclusions());
+                add(into, BenchmarkRules.POWER_INTERVENTIONS, (double) p.powerExclusions());
 
                 // 총량 계열과 온도 분포 계열은 건수가 짝지어진 지점에서만 표본에 넣는다. 적게 배치하고 전력을
                 // 덜 쓰는 것이 승리가 아닌 것처럼, 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것도 열 성능이
@@ -346,6 +347,9 @@ final class BenchmarkCellAssembler {
         }
         if (kind == BenchmarkMetricKind.THERMAL_INTERVENTIONS && !any.temperatureGated()) {
             return "이 전략은 온도 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
+        }
+        if (kind == BenchmarkMetricKind.POWER_INTERVENTIONS && !any.powerGated()) {
+            return "이 전략은 전력 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
         }
         // 제약을 끈 변종은 막히는 자리가 없어 성공률이 정의상 최고가 된다. 개입 횟수(위)에만 가드를 걸고
         // 성공률에 안 걸면, 반칙으로 나빠 보이는 칸만 가리고 반칙으로 좋아 보이는 칸은 그대로 두는 셈이다.

@@ -556,7 +556,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     private static BenchmarkPointRunner.Placement placementWithDataMdc(int placed, int dataMdcPlacements, int remoteMdcPlacements) {
-        return new BenchmarkPointRunner.Placement(BaselinePlacers.ffdBySize(), placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0,
+        return new BenchmarkPointRunner.Placement(BaselinePlacers.ffdBySize(), placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, 0,
                 true, true, dataMdcPlacements, remoteMdcPlacements, 0, 0, 0);
     }
 
@@ -1969,7 +1969,7 @@ class PlacementBenchmarkServiceTest {
             for (String id : BenchmarkRules.SCHEDULE_ORDER_COLUMNS) {
                 BenchmarkPointRunner.Placement x = shifted.get(id);
                 shifted.put(id, new BenchmarkPointRunner.Placement(x.strategy(), x.requested() + 1, x.requested(), x.engineBelievedCostW(),
-                        x.usedNodes(), x.cpuAfterByNode(), x.unmeasuredPlacements(), x.thermalExclusions(), x.activeCountAfter(),
+                        x.usedNodes(), x.cpuAfterByNode(), x.unmeasuredPlacements(), x.thermalExclusions(), x.powerExclusions(), x.activeCountAfter(),
                         x.measuredTempStdDev(), x.warnZoneNodes(), x.temperatureGated(), x.powerGated(), x.dataMdcPlacements(),
                         x.remoteMdcPlacements(), x.headroomAfterCores(), x.fragmentedHeadroomCores(), x.placedCores()));
             }

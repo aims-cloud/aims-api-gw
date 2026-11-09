@@ -47,6 +47,7 @@ class BenchmarkCellAssemblerTest {
             "기본 설정 열 전부의 배치 건수가 같은 시각 지점이 없다 — 적게 배치해 CPU 를 덜 얹은 노드가 덜 뜨거운 것은 열 성능이 아니다";
     private static final String NOTHING_PLACED = "전 시각 지점에서 배치 0건이라 건당 값을 낼 수 없다";
     private static final String THERMAL_GATE_OFF = "이 전략은 온도 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
+    private static final String POWER_GATE_OFF = "이 전략은 전력 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
     private static final String GATES_OFF = "이 전략은 온도·전력 제약이 꺼져 있어 막히는 자리가 없다 — 제약을 받는 전략과 성공률을 "
             + "비교하지 않는다. 이 열은 경쟁자가 아니라 '제약이 없었다면 얼마나 배치됐을까'의 천장이다";
     private static final String TOO_FEW_MEASURED = "계측 노드가 둘 미만이라 온도 분포를 말할 수 없다";
@@ -98,7 +99,7 @@ class BenchmarkCellAssemblerTest {
         t.put(BenchmarkRules.FRAGMENTED_HEADROOM, rows(null, FRAGMENTATION_UNPAIRED, null, FRAGMENTATION_UNPAIRED, null, null, null, null, null,
                 null, null, null));
         t.put(BenchmarkRules.CORE_PLACEMENT_RATE, rows(null, null, null, null, null, GATES_OFF, GATES_OFF, null, null, null, null, null));
-        t.put(BenchmarkRules.POWER_INTERVENTIONS, rows(null, null, null, null, null, null, null, null, null, null, null, null));
+        t.put(BenchmarkRules.POWER_INTERVENTIONS, rows(null, null, null, null, null, null, POWER_GATE_OFF, null, null, null, null, null));
         return t;
     }
 
@@ -263,16 +264,16 @@ class BenchmarkCellAssemblerTest {
     }
 
     private static Placement placement(PlacementStrategy strategy, int placed, boolean temperatureGated, boolean powerGated) {
-        return new Placement(strategy, placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, temperatureGated, powerGated, 0, 0, 0, 0, 0);
+        return new Placement(strategy, placed, placed, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, 0, temperatureGated, powerGated, 0, 0, 0, 0, 0);
     }
 
     private static Placement placementWithHeadroom(double headroomAfterCores, double fragmentedHeadroomCores) {
-        return new Placement(BaselinePlacers.ffdBySize(), 1, 1, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, true, true, 0, 0,
+        return new Placement(BaselinePlacers.ffdBySize(), 1, 1, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, 0, true, true, 0, 0,
                 headroomAfterCores, fragmentedHeadroomCores, 0);
     }
 
     private static Placement placementWithCores(int placed, int requested, double placedCores) {
-        return new Placement(BaselinePlacers.ffdBySize(), placed, requested, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, true, true, 0, 0, 0, 0,
+        return new Placement(BaselinePlacers.ffdBySize(), placed, requested, 0, Set.of(), Map.of(), 0, 0, 0, 0, 0, 0, true, true, 0, 0, 0, 0,
                 placedCores);
     }
 

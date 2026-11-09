@@ -17,11 +17,13 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.benchmark.BaselinePlacers;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkClusters;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkWorkloads;
+import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.benchmark.GroundTruthOracle;
+import com.innogrid.aims.scheduler.benchmark.PlacementStrategy;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
@@ -1735,6 +1737,281 @@ class PlacementBenchmarkServiceTest {
                     s.strategyId() + " 가 저부하에서 전량 배치하지 못했다 — 판이나 분모를 다시 봐야 한다");
         }
         assertEquals(target.strategies().size() - 1, checked, "겨루는 전략 전량을 봐야 한다");
+    }
+
+    // ── 스케줄 배치 순서 열 ─────────────────────────────────────
+
+    /**
+     * 두 열은 스케줄 실행이 고르는 비교자 객체를 그대로 쓴다 — 복사본이면 운영 순서가 바뀌어도 열이 따라가지 않는다. 스케줄 배치 순서 값이 늘면
+     * 대응하는 열이 없어 실패하므로 열을 함께 더하게 된다. 생성 시각이 없는 표본에서는 마지막 기준이 동률이라 표본 순서가 등록 순 역할을 한다.
+     */
+    @DisplayName("스케줄 배치 순서 두 열은 스케줄 실행의 비교자 객체로 기본 엔진을 돌리고 기준 집합 밖이다")
+    @Test
+    void schedule_order_columns_run_the_default_engine_with_the_execution_comparators() {
+        BenchmarkColumns columns = harnessColumns();
+        Map<String, BenchmarkColumns.EngineVariant> variants = new LinkedHashMap<>();
+        for (BenchmarkColumns.EngineVariant v : columns.engineVariants()) variants.put(v.strategy().id(), v);
+        Map<Schedule.PlacementOrder, String> columnFor = Map.of(
+                Schedule.PlacementOrder.PRIORITY_THEN_AGE, BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN,
+                Schedule.PlacementOrder.PRIORITY_THEN_SIZE, BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN);
+        assertEquals(Schedule.PlacementOrder.values().length, BenchmarkRules.SCHEDULE_ORDER_COLUMNS.size(), "스케줄 배치 순서 값마다 열이 하나다");
+
+        for (Schedule.PlacementOrder order : Schedule.PlacementOrder.values()) {
+            String id = columnFor.get(order);
+            assertNotNull(id, order + " — 이 배치 순서의 열이 없다");
+            Schedule schedule = new Schedule("bm-order", "bm-order", "0 0 * * * ?");
+            schedule.setPlacementOrder(order);
+            BenchmarkColumns.EngineVariant v = variants.get(id);
+            assertNotNull(v, id + " 열이 없다");
+            assertSame(ScheduleExecutionService.orderFor(schedule), v.strategy().workloadOrder(), id + " — 운영 비교자 객체 그대로여야 한다");
+            assertEquals(PlacementStrategy.Kind.ENGINE, v.strategy().kind(), id);
+            assertEquals(PlacementStrategy.PolicyVariant.BASE, v.strategy().policy(), id);
+            assertTrue(v.override().isEmpty(), id + " — 순서는 엔진 노브가 아니다");
+            assertFalse(columns.overrides().containsKey(id), id + " — 설정 다이제스트에 들어가면 안 된다");
+            assertEquals(List.of("weighted"), BenchmarkCellAssembler.baseSetIds(List.of("weighted", id), columns.overrides().keySet()),
+                    id + " — 총량 짝 조건의 기준 집합 밖이어야 한다");
+        }
+
+        List<Workload> sample = List.of(orderWorkload("s1", 1, 0, Workload.WorkloadPriority.NORMAL),
+                orderWorkload("g4", 4, 1, Workload.WorkloadPriority.NORMAL), orderWorkload("b4", 4, 0, Workload.WorkloadPriority.HIGH),
+                orderWorkload("m2", 2, 0, Workload.WorkloadPriority.NORMAL), orderWorkload("s2", 1, 0, Workload.WorkloadPriority.NORMAL));
+        assertEquals(List.of("b4", "s1", "g4", "m2", "s2"), sample.stream()
+                        .sorted(variants.get(BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN).strategy().workloadOrder()).map(Workload::getName).toList(),
+                "등록 순 열 — 우선순위 뒤에는 표본 순서(생성 시각 동률)");
+        assertEquals(List.of("b4", "g4", "m2", "s1", "s2"), sample.stream()
+                        .sorted(variants.get(BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN).strategy().workloadOrder()).map(Workload::getName).toList(),
+                "크기 순 열 — 우선순위 뒤에는 요구 CPU · 메모리 큰 순, 같으면 표본 순서");
+    }
+
+    /**
+     * 열을 더하는 것만으로 기존 열의 값이 바뀌면 안 된다(BenchmarkRules.PAIRING_RULE). 같은 12지점에서 두 순서 열을 뺀 결과와, 두 순서 열의 배치
+     * 건수를 일부러 요구 건수보다 크게 바꾼 결과를 견준다 — 건수를 강제로 어긋나게 하므로 관측 결과와 무관하게 두 열이 기준 집합에 섞이면 잡힌다.
+     */
+    @DisplayName("스케줄 배치 순서 열을 빼거나 그 열의 건수를 어긋나게 해도 기존 열의 결과는 그대로다")
+    @Test
+    void schedule_order_columns_do_not_change_the_existing_columns() {
+        BenchmarkColumns columns = harnessColumns();
+        BenchmarkCellAssembler assembler = new BenchmarkCellAssembler(columns);
+        int checked = 0;
+        for (Map.Entry<String, Integer> target : List.of(Map.entry(BenchmarkClusters.ADVERSARIAL, 90), Map.entry(BenchmarkClusters.MAIN, 30))) {
+            List<BenchmarkPointRunner.PointOutcome> points = orderSweep(columns, target.getKey(), "heavytail", target.getValue());
+            GroundTruthOracle oracle = new GroundTruthOracle(new BenchmarkClusters().get(target.getKey()));
+            for (GroundTruthOracle.PowerControl mode : GroundTruthOracle.PowerControl.values()) {
+                Cell without = assembler.cell(target.getValue(), mode, withoutOrderColumns(points), oracle);
+                Cell shifted = assembler.cell(target.getValue(), mode, withShiftedOrderColumns(points), oracle);
+                String where = target.getKey() + " heavytail " + target.getValue() + "% " + mode;
+                assertEquals(without.strategies().size() + 2, shifted.strategies().size(), where);
+                assertEquals(without.totalsComparable(), shifted.totalsComparable(), where);
+                assertEquals(without.unmeasuredCaution(), shifted.unmeasuredCaution(), where);
+                assertEquals(without.probeExclusionReasons(), shifted.probeExclusionReasons(), where);
+                for (StrategyResult s : without.strategies()) {
+                    assertEquals(s, strategy(shifted, s.strategyId()), where + " " + s.strategyId() + " — 기존 열의 결과가 바뀌었다");
+                }
+                checked++;
+            }
+        }
+        assertEquals(4, checked, "두 셀 · 두 전원 상태를 모두 봐야 한다");
+    }
+
+    /**
+     * 순서 열이 기준 집합과 건수가 다른 지점은 override 열과 따로 문장으로 적는다 — override 열 문장은 바이트 그대로이고, 순서 열 문장이 뒤에 붙는다.
+     * 반증판 heavytail 90% 셀은 override 열 제외가 이미 있어 두 문장이 함께 나오는 경우를 본다.
+     */
+    @DisplayName("스케줄 배치 순서 열의 제외 지점은 override 열 문장 뒤에 따로 적히고 그 열의 총량은 사유를 단 무효다")
+    @Test
+    void schedule_order_column_drops_get_their_own_sentence() {
+        BenchmarkColumns columns = harnessColumns();
+        BenchmarkCellAssembler assembler = new BenchmarkCellAssembler(columns);
+        boolean sawOverrideSentence = false;
+        for (Map.Entry<String, Integer> target : List.of(Map.entry(BenchmarkClusters.ADVERSARIAL, 90), Map.entry(BenchmarkClusters.MAIN, 30))) {
+            List<BenchmarkPointRunner.PointOutcome> points = orderSweep(columns, target.getKey(), "heavytail", target.getValue());
+            GroundTruthOracle oracle = new GroundTruthOracle(new BenchmarkClusters().get(target.getKey()));
+            Cell without = assembler.cell(target.getValue(), GroundTruthOracle.PowerControl.AVAILABLE, withoutOrderColumns(points), oracle);
+            Cell shifted = assembler.cell(target.getValue(), GroundTruthOracle.PowerControl.AVAILABLE, withShiftedOrderColumns(points), oracle);
+            String where = target.getKey() + " heavytail " + target.getValue() + "%";
+            int usable = metric(strategy(without, "weighted"), BenchmarkRules.GENERATOR_POWER).samples();
+            assertTrue(usable > 0, where + " — 짝 지점이 있어야 제외 문장을 볼 수 있다");
+            String note = "스케줄 배치 순서 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: "
+                    + BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN + " " + usable + "곳 제외(표본 0), "
+                    + BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN + " " + usable + "곳 제외(표본 0) — 그 열의 총량 표본(samples)은 그만큼 적다";
+            String before = without.totalsIncomparableReason();
+            assertEquals(before == null ? note : before + ". " + note, shifted.totalsIncomparableReason(), where);
+            if (before != null && before.contains("override 열 중 ")) sawOverrideSentence = true;
+            for (String id : BenchmarkRules.SCHEDULE_ORDER_COLUMNS) {
+                MetricValue m = metric(strategy(shifted, id), BenchmarkRules.GENERATOR_POWER);
+                assertEquals(0, m.samples(), where + " " + id);
+                assertEquals("기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + usable + "곳)", m.invalidReason(), where + " " + id);
+            }
+        }
+        assertTrue(sawOverrideSentence, "override 열 제외 문장이 있는 셀을 봐야 두 문장이 갈리는지 알 수 있다");
+    }
+
+    /**
+     * 주 결과판의 두 순서 열 값 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정 · 결과보다 먼저 정한 값이 아니다). 짝 셀은 조각난 여유 비율,
+     * 110% 셀은 건수 · 코어 두 성공률이다. 두 전원 상태 셀은 배치가 같아 같은 값과 견준다. 허용 오차는 판정 규칙의 지점 비교 무시 폭과 같은 근거다.
+     */
+    @DisplayName("주 결과판에서 두 스케줄 배치 순서 열의 조각난 여유 비율과 110% 셀의 두 성공률이 관측 리터럴과 같다")
+    @Test
+    void schedule_order_columns_on_the_main_board_match_the_observed_literals() {
+        Map<String, double[]> fragmentation = new LinkedHashMap<>();   // 분포:부하율 → {등록 순, 크기 순}
+        fragmentation.put("heavytail:30", new double[]{23.0101, 23.0101});
+        fragmentation.put("heavytail:60", new double[]{39.3046, 41.9738});
+        fragmentation.put("heavytail:90", new double[]{75.7731, 74.2111});
+        fragmentation.put("uniform:30", new double[]{23.3503, 20.3357});
+        fragmentation.put("uniform:60", new double[]{37.8196, 41.1259});
+        Map<String, double[]> rates = new LinkedHashMap<>();           // 분포 → {등록 순 건수, 등록 순 코어, 크기 순 건수, 크기 순 코어}
+        rates.put("heavytail", new double[]{95.7405, 95.3757, 88.4615, 93.0636});
+        rates.put("uniform", new double[]{86.6253, 80.5874, 86.6253, 80.5874});
+        List<String> mismatches = new ArrayList<>();
+        int checked = 0;
+        for (String distribution : List.of("heavytail", "uniform")) {
+            for (Cell c : service.compare(BenchmarkClusters.MAIN, distribution).boards().get(0).cells()) {
+                StrategyResult age = strategy(c, BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN);
+                StrategyResult size = strategy(c, BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN);
+                String where = distribution + ":" + c.loadRatioPercent();
+                double[] want = fragmentation.get(where);
+                Double[] got = null;
+                if (want != null) {
+                    got = new Double[]{median(age, BenchmarkRules.FRAGMENTED_HEADROOM), median(size, BenchmarkRules.FRAGMENTED_HEADROOM)};
+                } else if (c.loadRatioPercent() == 110) {
+                    want = rates.get(distribution);
+                    got = new Double[]{median(age, BenchmarkRules.PLACEMENT_RATE), median(age, BenchmarkRules.CORE_PLACEMENT_RATE),
+                            median(size, BenchmarkRules.PLACEMENT_RATE), median(size, BenchmarkRules.CORE_PLACEMENT_RATE)};
+                }
+                if (want == null) continue;
+                for (int i = 0; i < want.length; i++) {
+                    if (got[i] == null || Math.abs(want[i] - got[i]) > BenchmarkRules.JUDGMENT_POINT_IGNORE_PP) {
+                        mismatches.add(where + ":" + c.powerControl() + " [" + i + "] 기대 " + want[i] + " · 실제 " + got[i]);
+                    }
+                }
+                checked++;
+            }
+        }
+        assertTrue(mismatches.isEmpty(), "관측 리터럴과 다르다:\n  " + String.join("\n  ", mismatches));
+        assertEquals((fragmentation.size() + rates.size()) * 2, checked, "짝 셀 다섯과 110% 두 셀을 두 전원 상태로 모두 봐야 한다");
+    }
+
+    /**
+     * 판독 규칙(rules 커밋 본문 · docs/14)의 지점별 부호 집계를 운영 부품으로 낸다 — 지점 집합 I 는 기준 집합 짝 지점 가운데 두 순서 열의 건수가
+     * 기준 건수와 같은 지점, 크기 효과 d 는 조각난 여유 비율(크기 순 − 등록 순), 우선순위 효과 p 는 (등록 순 − weighted)다. 무시 폭 안의 차는 동률이다.
+     * 값은 첫 실행 관측을 리터럴로 고정한 것이고 사전 추정은 테스트로 확인하지 않는다 — 빗나가면 노브를 돌릴 유인이 생긴다.
+     */
+    @DisplayName("주 결과판 짝 셀 다섯에서 두 스케줄 배치 순서 열의 같은 지점 차 부호 집계가 관측 리터럴과 같다")
+    @Test
+    void schedule_order_paired_sign_counts_match_the_observed_literals() {
+        BenchmarkColumns columns = harnessColumns();
+        Map<String, double[]> expected = new LinkedHashMap<>();   // 분포:부하율 → {|I|, d 음 · 동률 · 양, p 음 · 동률 · 양, d 중앙값, p 중앙값}
+        expected.put("heavytail:30", new double[]{12, 0, 12, 0, 0, 12, 0, 0, 0});
+        expected.put("heavytail:60", new double[]{12, 3, 5, 4, 1, 7, 4, 0, 0});
+        expected.put("heavytail:90", new double[]{8, 4, 1, 3, 4, 0, 4, -0.7708, 6.8954});
+        expected.put("uniform:30", new double[]{12, 10, 2, 0, 8, 1, 3, -3.6364, -3.6071});
+        expected.put("uniform:60", new double[]{2, 0, 1, 1, 2, 0, 0, 3.3063, -3.5739});
+        List<String> mismatches = new ArrayList<>();
+        for (Map.Entry<String, double[]> e : expected.entrySet()) {
+            String[] key = e.getKey().split(":");
+            List<BenchmarkPointRunner.PointOutcome> points = orderSweep(columns, BenchmarkClusters.MAIN, key[0], Integer.parseInt(key[1]));
+            List<String> base = BenchmarkCellAssembler.baseSetIds(points.get(0).byStrategy().keySet(), columns.overrides().keySet());
+            List<Double> d = new ArrayList<>();
+            List<Double> p = new ArrayList<>();
+            for (BenchmarkPointRunner.PointOutcome point : points) {
+                List<Integer> counts = base.stream().map(id -> point.byStrategy().get(id).placed()).toList();
+                if (!BenchmarkRules.totalsComparable(counts)) continue;
+                BenchmarkPointRunner.Placement age = point.byStrategy().get(BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN);
+                BenchmarkPointRunner.Placement size = point.byStrategy().get(BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN);
+                if (age.placed() != counts.get(0) || size.placed() != counts.get(0)) continue;
+                Double fAge = BenchmarkCellAssembler.fragmentedHeadroomRate(age);
+                Double fSize = BenchmarkCellAssembler.fragmentedHeadroomRate(size);
+                Double fWeighted = BenchmarkCellAssembler.fragmentedHeadroomRate(point.byStrategy().get("weighted"));
+                if (fAge == null || fSize == null || fWeighted == null) continue;
+                d.add(round4(fSize - fAge));
+                p.add(round4(fAge - fWeighted));
+            }
+            double[] got = {d.size(), below(d), ties(d), above(d), below(p), ties(p), above(p), medianOf(d), medianOf(p)};
+            for (int i = 0; i < got.length; i++) {
+                if (Math.abs(e.getValue()[i] - got[i]) > BenchmarkRules.JUDGMENT_POINT_IGNORE_PP) {
+                    mismatches.add(e.getKey() + " 기대 " + java.util.Arrays.toString(e.getValue()) + " · 실제 " + java.util.Arrays.toString(got));
+                    break;
+                }
+            }
+        }
+        assertTrue(mismatches.isEmpty(), "부호 집계가 관측 리터럴과 다르다:\n  " + String.join("\n  ", mismatches));
+    }
+
+    private BenchmarkColumns harnessColumns() {
+        return new BenchmarkColumns(new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(),
+                new TemperatureAwareScheduler())), properties, new PowerModel(properties), new ThermalModel(properties),
+                PlacementBenchmarkService.BASELINE_ORDER);
+    }
+
+    /** 한 셀의 시각 지점 전부를 서비스와 같은 부품(열 · 지점 · 표본 · 오라클)으로 돌린다. */
+    private List<BenchmarkPointRunner.PointOutcome> orderSweep(BenchmarkColumns columns, String board, String distribution, int loadRatio) {
+        SyntheticCluster cluster = new BenchmarkClusters().get(board);
+        BenchmarkWorkloads workloads = BenchmarkWorkloads.load("classpath:scheduler/benchmark-workloads-" + distribution + ".yml");
+        BenchmarkPointRunner runner = new BenchmarkPointRunner(properties, new PowerModel(properties), new ThermalModel(properties), columns);
+        GroundTruthOracle oracle = new GroundTruthOracle(cluster);
+        List<BenchmarkPointRunner.PointOutcome> points = new ArrayList<>();
+        for (long t : PlacementBenchmarkService.sweepPoints(cluster)) points.add(runner.runPoint(cluster, workloads, loadRatio, t, oracle));
+        return points;
+    }
+
+    private static List<BenchmarkPointRunner.PointOutcome> withoutOrderColumns(List<BenchmarkPointRunner.PointOutcome> points) {
+        return points.stream().map(p -> {
+            Map<String, BenchmarkPointRunner.Placement> kept = new LinkedHashMap<>(p.byStrategy());
+            BenchmarkRules.SCHEDULE_ORDER_COLUMNS.forEach(kept::remove);
+            return withPlacements(p, kept);
+        }).toList();
+    }
+
+    /** 두 순서 열의 배치 건수를 요구 건수보다 크게 바꾼다 — 기준 건수(요구 건수 이하)와 반드시 다르다. */
+    private static List<BenchmarkPointRunner.PointOutcome> withShiftedOrderColumns(List<BenchmarkPointRunner.PointOutcome> points) {
+        return points.stream().map(p -> {
+            Map<String, BenchmarkPointRunner.Placement> shifted = new LinkedHashMap<>(p.byStrategy());
+            for (String id : BenchmarkRules.SCHEDULE_ORDER_COLUMNS) {
+                BenchmarkPointRunner.Placement x = shifted.get(id);
+                shifted.put(id, new BenchmarkPointRunner.Placement(x.strategy(), x.requested() + 1, x.requested(), x.engineBelievedCostW(),
+                        x.usedNodes(), x.cpuAfterByNode(), x.unmeasuredPlacements(), x.thermalExclusions(), x.activeCountAfter(),
+                        x.measuredTempStdDev(), x.warnZoneNodes(), x.temperatureGated(), x.powerGated(), x.dataMdcPlacements(),
+                        x.remoteMdcPlacements(), x.headroomAfterCores(), x.fragmentedHeadroomCores(), x.placedCores()));
+            }
+            return withPlacements(p, shifted);
+        }).toList();
+    }
+
+    private static BenchmarkPointRunner.PointOutcome withPlacements(BenchmarkPointRunner.PointOutcome p,
+                                                                    Map<String, BenchmarkPointRunner.Placement> byStrategy) {
+        return new BenchmarkPointRunner.PointOutcome(p.headroomCores(), p.requestedWorkloads(), p.requestedCores(), p.cpuBeforeByNode(),
+                p.activeBefore(), p.activeCountBefore(), p.measuredNodeCount(), p.probeExclusions(), byStrategy, p.dataMdcAssigned());
+    }
+
+    private static Workload orderWorkload(String name, int cores, int gpus, Workload.WorkloadPriority priority) {
+        Workload w = new Workload(name, cores, cores * BenchmarkRules.MEMORY_MB_PER_CORE);
+        w.setRequiredGpu(gpus);
+        w.setPriority(priority);
+        return w;
+    }
+
+    private static double round4(double v) {
+        return Math.round(v * 10000.0) / 10000.0;
+    }
+
+    private static int below(List<Double> diffs) {
+        return (int) diffs.stream().filter(v -> v < -BenchmarkRules.JUDGMENT_POINT_IGNORE_PP).count();
+    }
+
+    private static int ties(List<Double> diffs) {
+        return (int) diffs.stream().filter(v -> Math.abs(v) <= BenchmarkRules.JUDGMENT_POINT_IGNORE_PP).count();
+    }
+
+    private static int above(List<Double> diffs) {
+        return (int) diffs.stream().filter(v -> v > BenchmarkRules.JUDGMENT_POINT_IGNORE_PP).count();
+    }
+
+    /** 중앙값 — 빈 목록이면 NaN(리터럴과 같지 않아 실패한다). */
+    private static double medianOf(List<Double> values) {
+        if (values.isEmpty()) return Double.NaN;
+        List<Double> sorted = values.stream().sorted().toList();
+        int mid = sorted.size() / 2;
+        return round4(sorted.size() % 2 == 1 ? sorted.get(mid) : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0);
     }
 
     // ── 총량 짝짓기 ───────────────────────────────────────────

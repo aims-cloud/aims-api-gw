@@ -39,11 +39,15 @@ import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
 import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 import com.innogrid.aims.scheduler.model.NodeResource;
+import com.innogrid.aims.scheduler.model.PlacementContext;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -1935,6 +1939,131 @@ class PlacementBenchmarkServiceTest {
             }
         }
         assertTrue(mismatches.isEmpty(), "부호 집계가 관측 리터럴과 다르다:\n  " + String.join("\n  ", mismatches));
+    }
+
+    // ── 전력 제약 개입 횟수 ─────────────────────────────────
+
+    /**
+     * 판 지표가 세는 전력 막힘 — 전력 계열 까닭 두 가지(여유 부족 · 배치 후 예상 전력 초과)를 하나씩 담은 후보에서 둘만 센다. 열 막힘(1) ·
+     * 막힌 후보 전체(3) · 전력 까닭 하나(1)와 값이 갈리게 후보를 놓아, 셈이 그중 무엇을 세도 여기서 잡힌다.
+     */
+    @DisplayName("전력 제약 개입 셈은 전력 까닭 두 가지를 세고 열 까닭과 막힌 후보 전체는 세지 않는다")
+    @Test
+    void power_intervention_count_counts_both_power_codes_only() {
+        SchedulingPolicy policy = new SchedulingPolicy("p", "d");
+        policy.setTemperatureAwareEnabled(true);
+        policy.setPowerAwareEnabled(true);
+        List<NodeResource> nodes = List.of(
+                new NodeResource("mdc-a", "n-hot", 64, 65536, 0, 10, 10, 15, 400, 1000, 90, 0, 0),
+                new NodeResource("mdc-a", "n-headroom", 64, 65536, 0, 10, 10, 15, 1000, 1000, 30, 0, 0),
+                new NodeResource("mdc-a", "n-predicted", 4, 65536, 0, 10, 10, 15, 850, 1000, 30, 0, 0),
+                new NodeResource("mdc-a", "n-ok", 64, 65536, 0, 10, 10, 15, 100, 1000, 30, 0, 0));
+        SchedulingResult r = new WeightedScoreScheduler().schedule(new Workload("w", 1, 512),
+                PlacementContext.of(nodes, policy, ConstraintEvaluator.withDefaults()));
+
+        Set<ExclusionReason> powerCodes = r.candidateScores().stream()
+                .map(SchedulingResult.NodeScore::exclusionCode).filter(c -> c != null && c.isPower()).collect(Collectors.toSet());
+        assertEquals(Set.of(ExclusionReason.POWER_HEADROOM_EXCEEDED, ExclusionReason.PREDICTED_POWER_EXCEEDED), powerCodes,
+                "후보가 전력 까닭 두 가지를 하나씩 담아야 이 테스트가 두 까닭을 다 본다");
+        assertEquals(3, r.candidateScores().stream().filter(s -> !s.eligible()).count(), "막힌 후보 전체는 셋 — 열 하나 · 전력 둘");
+        assertEquals(1, BenchmarkPointRunner.countThermalExclusions(r), "열 막힘은 하나");
+        assertEquals(2, BenchmarkPointRunner.countPowerExclusions(r),
+                "전력 막힘은 둘 — 막힌 후보 전체(3) · 열 막힘(1) · 전력 까닭 하나(1)를 세면 갈린다");
+    }
+
+    /**
+     * 전력 제약을 끈 변종의 개입 횟수는 항상 0 이고, 그 0 은 값이 아니라 게이트가 없다는 뜻이라 무효 · null 이어야 한다 — 온도 제약 개입 횟수와 같은 꼴이다.
+     */
+    @DisplayName("전력 제약을 끈 변종의 전력 제약 개입 횟수는 무효이고 숫자가 없다")
+    @Test
+    void the_ungated_variant_has_an_invalid_power_intervention_count_with_no_number() {
+        for (Cell c : service.compare(BenchmarkClusters.MAIN, "heavytail").boards().get(0).cells()) {
+            MetricValue m = metric(strategy(c, "resource-only-ungated"), BenchmarkRules.POWER_INTERVENTIONS);
+            String where = c.loadRatioPercent() + "% " + c.powerControl();
+            assertFalse(m.valid(), where + ": 게이트가 없는 전략의 개입 0 이 유효한 숫자로 나갔다");
+            assertNull(m.median(), where + ": 무효인데 0 이 실렸다 — 인용자에게는 '개입 0건'으로 읽힌다");
+            assertEquals("이 전략은 전력 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다", m.invalidReason(), where);
+            assertTrue(m.samples() > 0, where + ": 값이 나온 지점은 있었다는 사실은 남아야 한다");
+        }
+    }
+
+    /**
+     * 전력 제약 개입 횟수는 시도당 계수라 배치 성공률과 같은 지점 수를 센다 — 짝 지점이 없는 셀에서도 표본이 줄지 않아야 한다. 두 분포를 다 보아
+     * 총량 표본이 줄어든 셀이 실제로 있었는지도 확인한다.
+     */
+    @DisplayName("전력 제약 개입 횟수는 짝 지점이 줄어든 셀에서도 배치 성공률과 같은 지점 수를 센다")
+    @Test
+    void power_intervention_count_uses_every_point_like_the_placement_rate() {
+        boolean sawFewerTotals = false;
+        for (String distribution : List.of("heavytail", "uniform")) {
+            for (Cell c : service.compare(BenchmarkClusters.MAIN, distribution).boards().get(0).cells()) {
+                for (StrategyResult s : c.strategies()) {
+                    String where = distribution + " " + c.loadRatioPercent() + "% " + c.powerControl() + " " + s.strategyId();
+                    MetricValue power = metric(s, BenchmarkRules.POWER_INTERVENTIONS);
+                    assertEquals(BenchmarkRules.SWEEP_POINTS, power.samples(), where + ": 시도당 계수라 전 시각 지점을 센다");
+                    assertEquals(metric(s, BenchmarkRules.PLACEMENT_RATE).samples(), power.samples(),
+                            where + ": 배치 성공률과 같은 지점 수여야 한다");
+                    if (metric(s, BenchmarkRules.GENERATOR_POWER).samples() < BenchmarkRules.SWEEP_POINTS) sawFewerTotals = true;
+                }
+            }
+        }
+        assertTrue(sawFewerTotals, "총량 표본이 줄어든 셀이 없다 — 짝 지점 조건이 걸린 셀을 보지 못해 이 테스트가 아무것도 가르지 못했다");
+    }
+
+    /**
+     * 네 판(주 결과판 · 정격 어긋남판 · 오목판 · 반증판) heavytail 60 · 90 · 110% 셀의 weighted · power 전력 제약 개입 횟수 — 첫 실행에서 관측한 값을
+     * 리터럴로 고정한다(결과보다 먼저 정한 값이 아니다). 두 전원 상태 셀은 배치가 같아 같은 값과 견준다. 사전 추정은 테스트로 확인하지 않는다.
+     * 110% 셀은 실패한 시도가 있는 셀이라 셈이 성공 확인 앞에 있는지도 함께 본다 — 반증판은 값이 늘 0 이고 나머지 세 판의 60 · 90% 셀은 모든 시도가 성공해 그 자리를 가르지 못한다.
+     */
+    @DisplayName("네 판 heavytail 60 · 90 · 110% 셀의 weighted · power 전력 제약 개입 횟수 중앙값 · 최댓값이 관측 리터럴과 같다")
+    @Test
+    void power_intervention_counts_match_the_observed_literals() {
+        Map<String, double[]> want = new LinkedHashMap<>();   // 판:부하율:열 → {중앙값, 최댓값}
+        want.put("main:60:weighted", new double[]{7.0, 12.0});
+        want.put("main:60:power", new double[]{5.0, 13.0});
+        want.put("main:90:weighted", new double[]{15.5, 20.0});
+        want.put("main:90:power", new double[]{30.0, 44.0});
+        want.put("main:110:weighted", new double[]{25.0, 36.0});
+        want.put("main:110:power", new double[]{48.0, 65.0});
+        want.put("misrated:60:weighted", new double[]{66.0, 84.0});
+        want.put("misrated:60:power", new double[]{62.0, 87.0});
+        want.put("misrated:90:weighted", new double[]{114.5, 154.0});
+        want.put("misrated:90:power", new double[]{123.5, 185.0});
+        want.put("misrated:110:weighted", new double[]{177.0, 230.0});
+        want.put("misrated:110:power", new double[]{188.5, 276.0});
+        want.put("concave:60:weighted", new double[]{16.0, 81.0});
+        want.put("concave:60:power", new double[]{32.0, 83.0});
+        want.put("concave:90:weighted", new double[]{86.5, 187.0});
+        want.put("concave:90:power", new double[]{101.5, 186.0});
+        want.put("concave:110:weighted", new double[]{190.0, 315.0});
+        want.put("concave:110:power", new double[]{212.5, 297.0});
+        want.put("adversarial:60:weighted", new double[]{0.0, 0.0});
+        want.put("adversarial:60:power", new double[]{0.0, 0.0});
+        want.put("adversarial:90:weighted", new double[]{0.0, 0.0});
+        want.put("adversarial:90:power", new double[]{0.0, 0.0});
+        want.put("adversarial:110:weighted", new double[]{0.0, 0.0});
+        want.put("adversarial:110:power", new double[]{0.0, 0.0});
+        List<String> mismatches = new ArrayList<>();
+        int checked = 0;
+        for (String board : List.of(BenchmarkClusters.MAIN, BenchmarkClusters.MISRATED, BenchmarkClusters.CONCAVE, BenchmarkClusters.ADVERSARIAL)) {
+            for (Cell c : service.compare(board, "heavytail").boards().get(0).cells()) {
+                for (String id : List.of("weighted", "power")) {
+                    String where = board + ":" + c.loadRatioPercent() + ":" + id;
+                    double[] w = want.get(where);
+                    if (w == null) continue;
+                    MetricValue m = metric(strategy(c, id), BenchmarkRules.POWER_INTERVENTIONS);
+                    Double[] got = {m.median(), m.max()};
+                    for (int i = 0; i < w.length; i++) {
+                        if (got[i] == null || Math.abs(w[i] - got[i]) > BenchmarkRules.JUDGMENT_POINT_IGNORE_PP) {
+                            mismatches.add(where + ":" + c.powerControl() + " [" + i + "] 기대 " + w[i] + " · 실제 " + got[i]);
+                        }
+                    }
+                    checked++;
+                }
+            }
+        }
+        assertTrue(mismatches.isEmpty(), "관측 리터럴과 다르다:\n  " + String.join("\n  ", mismatches));
+        assertEquals(want.size() * 2, checked, "네 판 세 부하율 두 열을 두 전원 상태로 모두 봐야 한다");
     }
 
     private BenchmarkColumns harnessColumns() {

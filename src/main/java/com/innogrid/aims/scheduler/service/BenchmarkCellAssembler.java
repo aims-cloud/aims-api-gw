@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,15 +42,15 @@ final class BenchmarkCellAssembler {
         Map<String, Map<String, List<Double>>> samples = new LinkedHashMap<>();
         for (String id : strategyIds) samples.put(id, new LinkedHashMap<>());
 
-        // 총량 비교는 시각 지점마다 짝짓는다. 어떤 지점에서 기준 집합(override 없는 기본 설정 열) 전부의 배치 건수가 같다면
-        // 그 지점의 총량은 견줄 수 있다 — 다른 지점이 어긋났다는 이유로 그 지점까지 버리면 쓸 수 있는 짝을 통째로
-        // 잃고 주 지표가 중부하 이상에서 사라진다. 대신 몇 곳을 썼는지 밝힌다. override 열을 기준 집합에 넣지 않는 이유는
-        // BenchmarkRules.PAIRING_RULE — 열을 더하는 것만으로 기존 열의 값이 바뀌면 안 된다.
+        // 총량 비교는 시각 지점마다 짝짓는다. 어떤 지점에서 기준 집합(override 없는 기본 설정 열 · 스케줄 배치 순서 열 제외) 전부의 배치
+        // 건수가 같다면 그 지점의 총량은 견줄 수 있다 — 다른 지점이 어긋났다는 이유로 그 지점까지 버리면 쓸 수 있는 짝을 통째로
+        // 잃고 주 지표가 중부하 이상에서 사라진다. 대신 몇 곳을 썼는지 밝힌다. override 열과 스케줄 배치 순서 열을 기준 집합에 넣지 않는
+        // 이유는 BenchmarkRules.PAIRING_RULE — 열을 더하는 것만으로 기존 열의 값이 바뀌면 안 된다.
         Map<String, Map<String, String>> overrides = columns.overrides();
-        List<String> coreIds = strategyIds.stream().filter(id -> !overrides.containsKey(id)).toList();
+        List<String> coreIds = baseSetIds(strategyIds, overrides.keySet());
         int usablePoints = 0;
         Map<String, Integer> mismatchExample = Map.of();
-        // override 열이 기준 집합과 건수가 달라 총량을 내지 못한 지점 수 — PAIRING_RULE 이 응답 표기를 요구한다
+        // 기준 집합 밖 열이 기준 집합과 건수가 달라 총량을 내지 못한 지점 수 — PAIRING_RULE 이 응답 표기를 요구한다
         Map<String, Integer> droppedByRow = new LinkedHashMap<>();
 
         for (PointOutcome point : points) {
@@ -81,7 +82,7 @@ final class BenchmarkCellAssembler {
             for (String id : strategyIds) {
                 Placement p = point.byStrategy().get(id);
                 Map<String, List<Double>> into = samples.get(id);
-                // override 열은 기준 집합의 마스크를 받되 자기 건수가 기준 건수와 같아야 총량을 낸다
+                // 기준 집합 밖 열(override 열 · 스케줄 배치 순서 열)은 기준 집합의 마스크를 받되 자기 건수가 기준 건수와 같아야 총량을 낸다
                 boolean rowComparable = pointComparable && (coreIds.contains(id) || coreCount.equals(p.placed()));
                 if (pointComparable && !rowComparable) droppedByRow.merge(id, 1, Integer::sum);
 
@@ -130,11 +131,7 @@ final class BenchmarkCellAssembler {
         String incomparable = comparable ? null
                 : pairingNote(usablePoints, points.size(), mismatchExample);
         if (!droppedByRow.isEmpty()) {
-            final int usable = usablePoints;
-            List<String> parts = new ArrayList<>();
-            droppedByRow.forEach((id, k) -> parts.add(id + " " + k + "곳 제외(표본 " + (usable - k) + ")"));
-            String note = "override 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", parts)
-                    + " — 그 열의 총량 표본(samples)은 그만큼 적다";
+            String note = droppedNote(droppedByRow, usablePoints);
             incomparable = incomparable == null ? note : incomparable + ". " + note;
         }
 
@@ -195,6 +192,37 @@ final class BenchmarkCellAssembler {
                         + "(짝이 아닌 지점의 예: %s). %s",
                 total, usable, usable, BenchmarkRules.totalsIncomparableReason(mismatchExample),
                 GAP_PAIRING_NOTE);
+    }
+
+    /**
+     * 총량 짝 조건의 기준 집합 — override 없는 기본 설정 열에서 스케줄 배치 순서 열을 뺀 열이다({@link BenchmarkRules#PAIRING_RULE}).
+     *
+     * <p>같은 패키지의 테스트가 같은 기준 집합으로 지점별 차를 다시 센다 — 테스트가 사본을 두면 두 정의가 갈라져도 초록불이 된다.</p>
+     */
+    static List<String> baseSetIds(Collection<String> strategyIds, Set<String> overrideIds) {
+        return strategyIds.stream()
+                .filter(id -> !overrideIds.contains(id) && !BenchmarkRules.SCHEDULE_ORDER_COLUMNS.contains(id)).toList();
+    }
+
+    /**
+     * 기준 집합과 배치 건수가 달라 총량을 내지 못한 지점이 있는 열을 밝히는 문장 — override 열과 스케줄 배치 순서 열을 따로 적는다.
+     * override 열 문장은 스케줄 배치 순서 열이 생기기 전과 바이트가 같아야 한다 — 기존 셀의 문장이 바뀌면 기존 응답과의 대조가 깨진다.
+     */
+    private static String droppedNote(Map<String, Integer> droppedByRow, int usable) {
+        List<String> overrideParts = new ArrayList<>();
+        List<String> orderParts = new ArrayList<>();
+        droppedByRow.forEach((id, k) -> (BenchmarkRules.SCHEDULE_ORDER_COLUMNS.contains(id) ? orderParts : overrideParts)
+                .add(id + " " + k + "곳 제외(표본 " + (usable - k) + ")"));
+        List<String> sentences = new ArrayList<>(2);
+        if (!overrideParts.isEmpty()) {
+            sentences.add("override 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", overrideParts)
+                    + " — 그 열의 총량 표본(samples)은 그만큼 적다");
+        }
+        if (!orderParts.isEmpty()) {
+            sentences.add("스케줄 배치 순서 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", orderParts)
+                    + " — 그 열의 총량 표본(samples)은 그만큼 적다");
+        }
+        return String.join(". ", sentences);
     }
 
     /** 지표 값 목록 — 같은 패키지의 테스트가 직접 부른다. */

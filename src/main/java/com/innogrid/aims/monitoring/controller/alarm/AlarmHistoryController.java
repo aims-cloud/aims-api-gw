@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.log.PortalLog;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgeRequest;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmAcknowledgementResponse;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmChannel;
@@ -13,6 +14,7 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistoryListItemR
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmHistorySearchField;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmHistory.AlarmMessageDetailResponse;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.monitoring.service.alarm.AlarmHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +36,9 @@ import org.springframework.web.bind.annotation.RestController;
  * 알람 확인(쓰기)·확인 내역 모달을 제공한다 (docs/09 알람 설계).
  * 목록은 alarm_history 원장(구현 완료), 나머지는 전송 원장·확인 처리 구현 시 채운다.
  * 구 AlarmController 의 GET /history(명세서 §18)는 이 컨트롤러의 /histories 로 대체되어 제거됐다.
+ *
+ * 포털 로그(docs/08 §10.1 묶음 4): 조회는 {@code @PortalLog(ACCESS)} 로 남긴다(알람 단위 조회는 ref = ALARM_HISTORY).
+ * 확인(acknowledge)은 {@code AlarmHistoryService} 가 ALARM 타입으로 직접 기록하므로 애너테이션을 붙이지 않는다(중복 방지).
  */
 @Tag(name = "관측 > 알람 (발생 이력)", description = "알람 발생 이력 목록, 전송 이력, 메시지 상세, 알람 확인")
 @RestController
@@ -54,6 +59,10 @@ public class AlarmHistoryController {
                     + "컬럼 정렬, 페이징을 지원합니다. 역할 스코프는 토큰 역할 + 역할 없는 행(시스템·외부 알람)입니다. "
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식, from/to 는 YYYY-MM-DD(양끝 포함, 한쪽만 지정 가능, 미지정 시 전체)입니다. "
                     + "areaName 은 MDC 는 mdcId, Namespace 는 Tumblebug 표시명입니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람", action = "조회",
+               content = "'알람 발생 이력 조회 (레벨: ' + (#level ?: '전체') + ', 역할: ' + (#roleName ?: '전체') + ', 영역: ' + (#areaId ?: '전체')"
+                       + " + ', 자원: ' + (#resourceId ?: '전체') + ', 정책: ' + (#policyId ?: '전체') + ', 키워드: ' + (#keyword ?: '-')"
+                       + " + ', 기간: ' + (#from ?: '') + '~' + (#to ?: '') + ', ' + #page + '쪽)'")
     @GetMapping("/histories")
     public ApiResponse<PageResponse<AlarmHistoryListItemResponse>> getHistories(
             @RequestParam(required = false) List<AlarmLevel> level,
@@ -77,6 +86,8 @@ public class AlarmHistoryController {
             description = "목록 행 확장 서브테이블 — 대상(개인/조직)별 Email·SMS 전송 결과를 조회합니다. "
                     + "개인은 채널별 단일 상태, 조직은 채널별 성공/전송중/실패 카운트입니다. "
                     + "채널마다 deliveryId 가 다르며 메시지 상세는 그 id 로 엽니다. 전송이 없으면 빈 배열, 스코프 밖·없는 알람은 404.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람", action = "조회",
+               content = "'알람 전송 이력 조회: 알람 id ' + #alarmId", refType = "ALARM_HISTORY", refId = "#alarmId")
     @GetMapping("/histories/{alarmId}/deliveries")
     public ApiResponse<List<AlarmDeliveryResponse>> getDeliveries(@PathVariable Long alarmId) {
         return ApiResponse.ok(alarmHistoryService.getDeliveries(alarmId));
@@ -86,6 +97,9 @@ public class AlarmHistoryController {
             description = "전송 이력의 이메일/SMS 버튼 모달 — 정책명/대상 자원/알람 방식/전송 대상, "
                     + "발송 시점 제목·본문 스냅샷, 수신자 목록(수신 주소·전송 결과·실패 사유·전송 일시)을 조회합니다. "
                     + "channel 은 선택이며 전송 행의 채널과 다르면 400, 이 알람의 전송이 아니면 404.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람", action = "조회",
+               content = "'알람 메시지 상세 조회: 알람 id ' + #alarmId + ' (전송 ' + #deliveryId + (#channel != null ? ', ' + #channel : '') + ')'",
+               refType = "ALARM_HISTORY", refId = "#alarmId")
     @GetMapping("/histories/{alarmId}/deliveries/{deliveryId}/message")
     public ApiResponse<AlarmMessageDetailResponse> getMessageDetail(
             @PathVariable Long alarmId,
@@ -108,6 +122,8 @@ public class AlarmHistoryController {
     @Operation(summary = "알람 확인 내역",
             description = "확인 완료된 알람의 확인 내역 모달 — 발생 정보와 확인 일시/확인자/확인 내용을 조회합니다. "
                     + "미확인 알람이거나 역할 스코프 밖이면 404 입니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람", action = "조회",
+               content = "'알람 확인 내역 조회: 알람 id ' + #alarmId", refType = "ALARM_HISTORY", refId = "#alarmId")
     @GetMapping("/histories/{alarmId}/acknowledgement")
     public ApiResponse<AlarmAcknowledgementResponse> getAcknowledgement(@PathVariable Long alarmId) {
         return ApiResponse.ok(alarmHistoryService.getAcknowledgement(alarmId));

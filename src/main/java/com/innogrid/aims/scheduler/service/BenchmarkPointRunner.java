@@ -349,8 +349,8 @@ final class BenchmarkPointRunner {
      * 0 이 되는 자리였다. 이제 {@link ExclusionReason#isThermal()} 이 온도 계열 넷을 가른다 — 세는 조건이
      * 같아 값은 그대로다.</p>
      *
-     * <p>패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다 — 등록된 판은 온도 제약이
-     * 걸리지 않아 이 지표가 늘 0 이라, 판 응답만으로는 무엇을 세는지 가려낼 수 없다.</p>
+     * <p>패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다 — 등록된 판에서 이 지표의 중앙값은
+     * 모든 셀에서 0 이고 최댓값만 대부분의 셀에서 0 보다 커, 판 응답의 숫자만으로는 무엇을 세는지 가려낼 수 없다.</p>
      */
     static int countThermalExclusions(SchedulingResult result) {
         int count = 0;

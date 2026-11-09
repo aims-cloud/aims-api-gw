@@ -620,7 +620,7 @@ class PlacementBenchmarkServiceTest {
                             assertTrue(m.valid(), where + " — " + m.invalidReason());
                             assertTrue(m.median() >= 0 && m.median() <= 100, where + " 값 " + m.median());
                             valid++;
-                        } else if (!s.engineConfigOverride().isEmpty()
+                        } else if (outsideBaseSet(s)
                                 && metric(strategy(c, "power"), BenchmarkRules.ACTIVE_NODE_DELTA).samples() > 0) {
                             assertNull(m.median(), where);
                             assertFalse(m.valid(), where);
@@ -775,7 +775,7 @@ class PlacementBenchmarkServiceTest {
                 for (var cell : b.cells()) {
                     int core = strategy(cell, "power").metrics().stream().filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow().samples();
                     for (var s : cell.strategies()) {
-                        if (s.engineConfigOverride().isEmpty()) continue;
+                        if (!outsideBaseSet(s)) continue;
                         int mine = s.metrics().stream().filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow().samples();
                         if (mine < core) {
                             found++;
@@ -803,7 +803,8 @@ class PlacementBenchmarkServiceTest {
     @Test
     void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
         assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity",
-                "power-s250", "power-s1000", "power-s0", "power-idle-fixed"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+                "power-s250", "power-s1000", "power-s0", "power-idle-fixed",
+                "weighted-priority-age", "weighted-priority-size"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
         Map<String, Map<String, String>> expected = Map.of(
                 "weighted-affinity", Map.of("affinityEnabled", "true"),
                 "power-s250", Map.of("marginalScaleWatts", "250.0"),
@@ -1763,10 +1764,13 @@ class PlacementBenchmarkServiceTest {
             }
         }
 
+        // 스케줄 배치 순서 열은 기준 집합 밖이라 자기 건수가 어긋난 지점이 있으면 그 사실만 셀에 적힌다 — 기준 집합 · override 열 문장은 없어야 한다
         for (Cell c : board.cells().stream().filter(Cell::totalsComparable).toList()) {
-            assertNull(c.totalsIncomparableReason(),
-                    "짝이 온전한 셀에 사유가 붙었다: " + c.totalsIncomparableReason());
+            String reason = c.totalsIncomparableReason();
+            assertTrue(reason == null || reason.startsWith("스케줄 배치 순서 열 중 "),
+                    "짝이 온전한 셀에 사유가 붙었다: " + reason);
             for (StrategyResult s : c.strategies()) {
+                if (BenchmarkRules.SCHEDULE_ORDER_COLUMNS.contains(s.strategyId())) continue;
                 assertEquals(BenchmarkRules.SWEEP_POINTS, metric(s, BenchmarkRules.GENERATOR_POWER).samples(),
                         s.strategyId() + ": 짝이 온전한 셀인데 표본이 전 지점이 아니다");
             }
@@ -1832,7 +1836,7 @@ class PlacementBenchmarkServiceTest {
             for (Cell c : service.compare(boardId, "heavytail").boards().get(0).cells()) {
                 for (StrategyResult s : c.strategies()) {
                     if (metric(s, BenchmarkRules.GENERATOR_POWER).samples() > 0) continue;
-                    boolean overrideColumn = !s.engineConfigOverride().isEmpty();
+                    boolean overrideColumn = outsideBaseSet(s);
                     boolean droppedOnly = false;
                     for (String key : List.of(BenchmarkRules.WARN_ZONE_NODES, BenchmarkRules.TEMP_STDDEV)) {
                         MetricValue m = metric(s, key);
@@ -2714,6 +2718,11 @@ class PlacementBenchmarkServiceTest {
 
     private static Cell pick(List<Cell> cells, String powerControl) {
         return cells.stream().filter(c -> powerControl.equals(c.powerControl())).findFirst().orElseThrow();
+    }
+
+    /** 총량 짝 조건의 기준 집합 밖 열 — override 열과 스케줄 배치 순서 열(BenchmarkRules.PAIRING_RULE). */
+    private static boolean outsideBaseSet(StrategyResult s) {
+        return !s.engineConfigOverride().isEmpty() || BenchmarkRules.SCHEDULE_ORDER_COLUMNS.contains(s.strategyId());
     }
 
     private static StrategyResult strategy(Cell cell, String id) {

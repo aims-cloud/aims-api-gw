@@ -53,6 +53,8 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	// 테스트 JVM 기본 힙(512m)으로는 @MockitoBean 조합마다 따로 뜨는 스프링 컨텍스트(최대 32개 캐시)를 감당하지 못해 OOM 이 났다
+	maxHeapSize = "1g"
 	testLogging {
 		events("passed", "skipped", "failed")
 	}

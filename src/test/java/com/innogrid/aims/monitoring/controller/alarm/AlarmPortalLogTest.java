@@ -7,20 +7,11 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.monitoring.dto.log.PortalLogResult;
 import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.monitoring.entity.PortalLogEntry;
-import com.innogrid.aims.monitoring.repository.PortalLogRepository;
-import com.innogrid.aims.monitoring.service.alarm.AlarmHistoryService;
-import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyOptionService;
-import com.innogrid.aims.monitoring.service.alarm.AlarmPolicyService;
+import com.innogrid.aims.monitoring.log.PortalLogControllerTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,21 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 알람·정책 단위 조회는 ref 를 거는지, 실패가 FAILURE 와 사유로 남는지 MockMvc 로 본다.
  * 서비스는 대역. 로그는 REQUIRES_NEW 로 커밋되므로 테스트 트랜잭션을 쓰지 않고 직접 지운다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@WithMockUser(username = "admin@innogrid.com")
-class AlarmPortalLogTest {
-
-    @Autowired
-    MockMvc mockMvc;
-    @Autowired
-    PortalLogRepository repository;
-    @MockitoBean
-    AlarmHistoryService alarmHistoryService;
-    @MockitoBean
-    AlarmPolicyService alarmPolicyService;
-    @MockitoBean
-    AlarmPolicyOptionService alarmPolicyOptionService;
+class AlarmPortalLogTest extends PortalLogControllerTestSupport {
 
     @BeforeEach
     @AfterEach

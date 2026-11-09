@@ -4,26 +4,14 @@ import java.util.List;
 import java.util.Map;
 
 import com.innogrid.aims.common.exception.BusinessException;
-import com.innogrid.aims.dashboard.service.GpuDashboardService;
-import com.innogrid.aims.infra.service.RackService;
-import com.innogrid.aims.infra.service.VirtualAssetService;
 import com.innogrid.aims.monitoring.dto.log.PortalLogResult;
 import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.monitoring.entity.PortalLogEntry;
-import com.innogrid.aims.monitoring.repository.PortalLogRepository;
 import com.innogrid.aims.openstack.dto.TopologyDtos.DeployZone;
-import com.innogrid.aims.openstack.service.OpenStackTopologyDetailService;
-import com.innogrid.aims.openstack.service.OpenStackTopologyService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,25 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 화면명·내용 문구·ref 가 설계대로 남는지, 자동 갱신 대상인 GPU 대시보드 본문은 남기지 않는지, 실패가 FAILURE 로 남는지 MockMvc 로 본다.
  * 외부 연동(OpenStack·IPMI·Thanos) 서비스는 대역. 로그는 REQUIRES_NEW 로 커밋되므로 테스트 트랜잭션을 쓰지 않고 직접 지운다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@WithMockUser(username = "admin@innogrid.com")
-class ReadOnlyScreensPortalLogTest {
-
-    @Autowired
-    MockMvc mockMvc;
-    @Autowired
-    PortalLogRepository repository;
-    @MockitoBean
-    OpenStackTopologyService topologyService;
-    @MockitoBean
-    OpenStackTopologyDetailService topologyDetailService;
-    @MockitoBean
-    RackService rackService;
-    @MockitoBean
-    VirtualAssetService virtualAssetService;
-    @MockitoBean
-    GpuDashboardService gpuDashboardService;
+class ReadOnlyScreensPortalLogTest extends PortalLogControllerTestSupport {
 
     @BeforeEach
     @AfterEach

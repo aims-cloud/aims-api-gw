@@ -5,25 +5,15 @@ import java.util.List;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.infra.ipam.dto.IpamDtos.ZoneSummary;
-import com.innogrid.aims.infra.ipam.service.IpAddressService;
-import com.innogrid.aims.infra.ipam.service.NetworkAuditService;
-import com.innogrid.aims.infra.ipam.service.NetworkSubnetService;
-import com.innogrid.aims.infra.ipam.service.NetworkZoneService;
 import com.innogrid.aims.monitoring.dto.log.PortalLogResult;
 import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.monitoring.entity.PortalLogEntry;
-import com.innogrid.aims.monitoring.repository.PortalLogRepository;
+import com.innogrid.aims.monitoring.log.PortalLogControllerTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,23 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 남는지, 생성은 결과 id 를 ref 로 거는지, 범위 예약 내용 문구, 실패가 FAILURE 와 사유로 남는지 MockMvc 로 본다.
  * 서비스는 대역(OpenStack 동기화·DB 접근 차단). 로그는 REQUIRES_NEW 로 커밋되므로 테스트 트랜잭션을 쓰지 않고 직접 지운다.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@WithMockUser(username = "admin@innogrid.com")
-class IpamPortalLogTest {
-
-    @Autowired
-    MockMvc mockMvc;
-    @Autowired
-    PortalLogRepository repository;
-    @MockitoBean
-    NetworkZoneService zoneService;
-    @MockitoBean
-    NetworkSubnetService subnetService;
-    @MockitoBean
-    IpAddressService ipAddressService;
-    @MockitoBean
-    NetworkAuditService auditService;
+class IpamPortalLogTest extends PortalLogControllerTestSupport {
 
     @BeforeEach
     @AfterEach

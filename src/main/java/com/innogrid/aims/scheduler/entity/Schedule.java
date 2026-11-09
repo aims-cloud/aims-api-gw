@@ -91,8 +91,8 @@ public class Schedule {
     /**
      * 대상 워크로드를 배치하는 순서. null 이면 {@link PlacementOrder#PRIORITY_THEN_AGE}(현행).
      *
-     * <p>전력 통합은 빈 패킹이라 큰 워크로드부터 채워야 조각화가 준다. 우선순위는 어느 쪽이든
-     * 첫 기준이라 공정성과 충돌하지 않는다 — 크기 우선은 <b>같은 우선순위 안에서만</b> 큰 것부터다.</p>
+     * <p>크기 순은 빈 패킹의 first-fit-decreasing 에서 가져온 선택지이며, 기본 엔진에서의 조각화 효과는 배치 전략 비교로 합성 판에서만 쟀다(docs/14).
+     * 우선순위는 어느 쪽이든 첫 기준이라 공정성과 충돌하지 않는다 — 크기 우선은 <b>같은 우선순위 안에서만</b> 큰 것부터다.</p>
      */
     @Enumerated(EnumType.STRING)
     @Column(length = 30)

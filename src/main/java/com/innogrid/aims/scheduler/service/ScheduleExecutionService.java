@@ -83,8 +83,8 @@ public class ScheduleExecutionService {
 
     /**
      * 우선순위 높은 것부터, 같으면 요구 CPU → 요구 메모리가 큰 것부터, 그래도 같으면 먼저 등록된 것부터.
-     * 전력 통합에서 큰 워크로드를 먼저 채우면 노드 조각화가 준다(빈 패킹의 first-fit-decreasing). 우선순위가
-     * 첫 기준이라 공정성은 그대로다.
+     * 빈 패킹의 first-fit-decreasing 에서 가져온 선택지다. 기본 엔진(weighted)에서 조각화를 줄이는지는 배치 전략 비교의
+     * 스케줄 배치 순서 열로 합성 판에서만 쟀고 전력 엔진은 재지 않았다(docs/14). 우선순위가 첫 기준이라 공정성은 그대로다.
      */
     static final Comparator<Workload> BY_PRIORITY_THEN_SIZE =
             Comparator.comparingInt((Workload w) -> w.getPriority().ordinal()).reversed()

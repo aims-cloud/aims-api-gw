@@ -81,8 +81,8 @@ public final class BaselinePlacers {
     /**
      * 우선순위 → 크기 내림차순. 운영 비교자와 같은 <b>기준 순서</b>를 쓰되 마지막 동률 기준만 이름이다.
      *
-     * <p>우선순위가 첫 기준이면 큰 워크로드를 먼저 채우는 FFD 의 조각화 이점이 얼마나 남는지가
-     * {@link #BY_SIZE_DESC} 와의 차이로 드러난다.</p>
+     * <p>우선순위를 첫 기준으로 둔 크기 내림차순이다. 두 분포 모두 HIGH 가 대형뿐이라 {@link #BY_SIZE_DESC} 와의 차이로는
+     * 크기 순의 조각화 효과를 가르지 못한다(docs/14).</p>
      */
     public static final Comparator<Workload> BY_PRIORITY_THEN_SIZE_DESC =
             Comparator.comparingInt((Workload w) -> w.getPriority().ordinal()).reversed()

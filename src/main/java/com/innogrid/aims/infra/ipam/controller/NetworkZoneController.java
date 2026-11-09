@@ -109,7 +109,7 @@ public class NetworkZoneController {
     }
 
     @Operation(summary = "인터페이스 저장 (전체 교체)")
-    @PortalLog(screen = "네트워크 구역", action = "인터페이스 저장", content = "'네트워크 구역 인터페이스 저장: id ' + #zoneId + ' (' + #req.interfaces.size() + '개)'",
+    @PortalLog(screen = "네트워크 구역", action = "인터페이스 저장", content = "'네트워크 구역 인터페이스 저장: id ' + #zoneId + ' (' + (#req.interfaces?.size() ?: 0) + '개)'",
                refType = "NETWORK_ZONE", refId = "#zoneId")
     @PutMapping("/{zoneId}/interfaces")
     public ApiResponse<List<ZoneInterface>> saveInterfaces(@PathVariable Long zoneId,

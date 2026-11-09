@@ -114,7 +114,7 @@ public class VmGroupController {
     }
 
     @Operation(summary = "가상서버 추가")
-    @PortalLog(screen = "가상서버 그룹", action = "서버 추가", content = "'가상서버 그룹 서버 추가: id ' + #groupId + ' (' + #req.serverIds.size() + '대: ' + #req.serverIds + ')'",
+    @PortalLog(screen = "가상서버 그룹", action = "서버 추가", content = "'가상서버 그룹 서버 추가: id ' + #groupId + ' (' + (#req.serverIds?.size() ?: 0) + '대: ' + #req.serverIds + ')'",
                refType = "VM_GROUP", refId = "#groupId")
     @PostMapping("/{groupId}/servers")
     public ApiResponse<Void> addServers(@PathVariable Long groupId, @RequestBody AddServersRequest req,
@@ -144,7 +144,7 @@ public class VmGroupController {
     }
 
     @Operation(summary = "네트워크 맵 저장 (서버 연결 관리)", description = "연결 전체 교체")
-    @PortalLog(screen = "가상서버 그룹", action = "네트워크 맵 저장", content = "'가상서버 그룹 네트워크 맵 저장: id ' + #groupId + ' (연결 ' + #req.edges.size() + '개)'",
+    @PortalLog(screen = "가상서버 그룹", action = "네트워크 맵 저장", content = "'가상서버 그룹 네트워크 맵 저장: id ' + #groupId + ' (연결 ' + (#req.edges?.size() ?: 0) + '개)'",
                refType = "VM_GROUP", refId = "#groupId")
     @PutMapping("/{groupId}/network-map")
     public ApiResponse<NetworkMap> saveNetworkMap(@PathVariable Long groupId,

@@ -8,7 +8,9 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # create-drop 이면 컨텍스트가 닫히거나 기동에 실패할 때 스키마를 지운다. 테스트 컨텍스트 여러 개가 같은 H2(aims-test)를
+      # 함께 쓰므로, 하나가 닫히면 살아 있는 다른 컨텍스트가 "Table … not found" 로 깨진다. create 는 기동 때만 새로 만든다
+      ddl-auto: create
     database-platform: org.hibernate.dialect.H2Dialect
 
 cloud-barista:

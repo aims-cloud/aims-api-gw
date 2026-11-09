@@ -42,7 +42,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 조건 설정의 미리보기 차트는 자원 탐색기 trend API 를 재사용한다.
  * 구 AlarmController 의 규칙 CRUD(/rules)와 alarm_rules 원장은 이 컨트롤러·정책 원장으로 대체되어 제거됐다.
  *
- * 포털 로그: 생성·편집·복제·삭제는 {@code @PortalLog(AUDIT)} 로 남긴다(ref = ALARM_POLICY). 조회는 남기지 않는다.
+ * 포털 로그(docs/08 §10.1 묶음 4): 생성·편집·복제·삭제는 {@code @PortalLog(AUDIT)}, 조회는 {@code ACCESS} 로 남긴다
+ * (정책 단위는 ref = ALARM_POLICY). 정책 폼의 후보 목록(역할·영역·지표·수신자)도 화면이 부르는 조회라 남긴다.
  */
 @Tag(name = "관측 > 알람 (정책)", description = "알람 정책 목록·상세·CRUD·복제, 대상 자원/전송 대상, 생성 위저드 보조")
 @RestController
@@ -62,6 +63,9 @@ public class AlarmPolicyController {
                     + "역할·배포영역·자원 유형·특정 자원(resourceId — 자원 탐색기 알람 탭에서 해당 자원이 대상에 포함된 "
                     + "정책만 조회)·레벨·키워드 필터와 컬럼 정렬, 페이징을 지원합니다. "
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 목록 조회 (역할: ' + (#roleName ?: '전체') + ', 영역: ' + (#areaId ?: '전체') + ', 자원: ' + (#resourceId ?: '전체')"
+                       + " + ', 레벨: ' + (#level ?: '전체') + ', 키워드: ' + (#keyword ?: '-') + ', ' + #page + '쪽)'")
     @GetMapping
     public ApiResponse<PageResponse<AlarmPolicyListItemResponse>> getPolicies(
             @RequestParam(required = false) String roleName,
@@ -78,6 +82,8 @@ public class AlarmPolicyController {
 
     @Operation(summary = "알람 정책 상세",
             description = "하단 상세 탭과 알람 정책 상세 페이지 상단 표 — 기준/알림 방식/조건 지속 시간/설명 등을 조회합니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 조회: id ' + #policyId", refType = "ALARM_POLICY", refId = "#policyId")
     @GetMapping("/{policyId}")
     public ApiResponse<AlarmPolicyDetailResponse> getPolicy(@PathVariable Long policyId) {
         return ApiResponse.ok(alarmPolicyService.getPolicy(policyId));
@@ -126,6 +132,8 @@ public class AlarmPolicyController {
 
     @Operation(summary = "정책 대상 자원 목록",
             description = "대상 자원 탭 — 정책이 적용되는 자원(이름/별칭/ID) 목록. 키워드 필터와 페이징을 지원합니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 대상 자원 조회: id ' + #policyId + ' (키워드: ' + (#keyword ?: '-') + ', ' + #page + '쪽)'", refType = "ALARM_POLICY", refId = "#policyId")
     @GetMapping("/{policyId}/resources")
     public ApiResponse<PageResponse<AlarmPolicyResourceResponse>> getPolicyResources(
             @PathVariable Long policyId,
@@ -138,6 +146,8 @@ public class AlarmPolicyController {
 
     @Operation(summary = "정책 전송 대상 목록",
             description = "전송 대상 탭 — 정책의 수신자(이름/유형: 조직·개인) 목록을 조회합니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 수신자 조회: id ' + #policyId", refType = "ALARM_POLICY", refId = "#policyId")
     @GetMapping("/{policyId}/recipients")
     public ApiResponse<List<AlarmPolicyRecipientResponse>> getPolicyRecipients(@PathVariable Long policyId) {
         return ApiResponse.ok(alarmPolicyService.getPolicyRecipients(policyId));
@@ -147,6 +157,8 @@ public class AlarmPolicyController {
             description = "생성 위저드 적용 범위·이력/정책 탭 필터의 역할 드롭다운 — 토큰에 부여된 역할 전체(이름순). "
                     + "roleName 이 정책·필터에 보내는 값이고 name 은 표시명(roles.description, 없으면 roleName), "
                     + "areaCount 는 그 역할에서 고를 수 있는 배포영역(MDC+Namespace) 수입니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 역할 후보 조회'")
     @GetMapping("/role-candidates")
     public ApiResponse<List<AlarmRoleCandidateResponse>> getRoleCandidates() {
         return ApiResponse.ok(alarmPolicyOptionService.getRoleCandidates());
@@ -157,6 +169,8 @@ public class AlarmPolicyController {
                     + "없으면 토큰 역할 전체(행마다 roleName 포함). MDC 먼저, Namespace 다음, 각각 이름순입니다. "
                     + "areaId 가 정책·필터에 보내는 값이며 MDC 는 mdcId, Namespace 는 TB:{nsId} — 정책 원장·이력의 areaId 와 같은 체계입니다. "
                     + "자원 탐색기 트리의 MDC·Namespace 와 같은 원장을 쓰므로 목록이 항상 일치합니다. 토큰에 없는 역할은 404 입니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 영역 후보 조회 (역할: ' + (#roleName ?: '전체') + ')'")
     @GetMapping("/area-candidates")
     public ApiResponse<List<AlarmAreaCandidateResponse>> getAreaCandidates(
             @RequestParam(required = false) String roleName) {
@@ -168,6 +182,8 @@ public class AlarmPolicyController {
                     + "metric 은 정책에 저장하는 코드값(예: CPU_USED_PERCENT), displayName+unit 은 기준 문자열(CPU Used > 80%) 표기용입니다. "
                     + "resourceType(node|vm|gpu)을 주면 그 자원 유형에 쓸 수 있는 메트릭만 돌려주고, 모르는 유형은 400 입니다. "
                     + "미리보기 차트는 자원 탐색기 trend API 를 재사용합니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 지표 목록 조회 (자원 유형: ' + (#resourceType ?: '전체') + ')'")
     @GetMapping("/metric-catalog")
     public ApiResponse<List<AlarmMetricCatalogResponse>> getMetricCatalog(
             @RequestParam(required = false) String resourceType) {
@@ -178,6 +194,8 @@ public class AlarmPolicyController {
             description = "전송 설정의 수신자 선택 — 조직 트리(하위 조직·멤버)를 조회합니다. "
                     + "조직 원장 확정 전이라 users.organization 문자열을 1단계 조직으로 삼고(하위 조직 없음), 조직 없는 사용자는 '미지정'에 묶입니다. "
                     + "orgId 는 조직명 그대로이며 정책 수신자(ORGANIZATION)의 targetId 로 씁니다. keyword 는 조직명·이름·이메일 부분 일치.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "알람 정책", action = "조회",
+               content = "'알람 정책 수신자 후보 조회 (키워드: ' + (#keyword ?: '-') + ')'")
     @GetMapping("/recipient-candidates")
     public ApiResponse<AlarmRecipientCandidatesResponse> getRecipientCandidates(
             @RequestParam(required = false) String keyword) {

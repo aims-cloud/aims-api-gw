@@ -10,6 +10,7 @@ import com.innogrid.aims.auth.repository.UserRepository;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
  * [요구사항 #4] 관리자 사용자 추가
  * [요구사항 #5] 사용자 관리
  *
- * 포털 로그(docs/08 §10.1 묶음 2): 생성·수정·삭제·상태 변경·역할 부여/해제는 {@code @PortalLog(AUDIT)} 로 남긴다(ref = USER).
+ * 포털 로그(docs/08 §10.1 묶음 2): 생성·수정·삭제·상태 변경·역할 부여/해제는 {@code @PortalLog(AUDIT)}, 목록·상세 조회는 {@code ACCESS} 로 남긴다(ref = USER).
  * 조회는 남기지 않고, 비밀번호는 내용에 넣지 않는다.
  */
 @Tag(name = "사용자 관리", description = "사용자 CRUD, 역할 할당, 상태 변경")
@@ -40,6 +41,8 @@ public class UserController {
         this.passwordEncoder = passwordEncoder;
     }
 
+    @PortalLog(type = PortalLogType.ACCESS, screen = "사용자 관리", action = "조회",
+               content = "'사용자 목록 조회'")
     @GetMapping
     public ApiResponse<List<AuthDto.UserResponse>> listUsers() {
         List<AuthDto.UserResponse> users = userRepository.findAll().stream()
@@ -48,6 +51,9 @@ public class UserController {
         return ApiResponse.ok(users);
     }
 
+    @PortalLog(type = PortalLogType.ACCESS, screen = "사용자 관리", action = "조회",
+               content = "'사용자 조회: id ' + #p0",
+               refType = "USER", refId = "#p0")
     @GetMapping("/{userId}")
     public ApiResponse<AuthDto.UserResponse> getUser(@PathVariable Long userId) {
         User user = findUser(userId);

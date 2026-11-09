@@ -10,6 +10,7 @@ import com.innogrid.aims.auth.repository.RoleRepository;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.infra.service.RoleNamespaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,7 +22,8 @@ import org.springframework.web.bind.annotation.*;
  * [요구사항 #7] 역할 관리
  * [요구사항 #8] 자원 권한 조회
  *
- * 포털 로그(docs/08 §10.1 묶음 2): 역할 생성·수정·삭제·권한 추가·Namespace 배정·해제는 {@code @PortalLog(AUDIT)} 로 남긴다(ref = ROLE).
+ * 포털 로그(docs/08 §10.1 묶음 2): 역할 생성·수정·삭제·권한 추가·Namespace 배정·해제는 {@code @PortalLog(AUDIT)}, 목록·상세·권한 조회는 {@code ACCESS} 로
+ * 남긴다(ref = ROLE). Namespace 목록·후보 조회는 프론트가 아직 부르지 않아 화면이 붙을 때 함께 붙인다.
  * 조회는 남기지 않는다.
  */
 @Tag(name = "역할/권한", description = "역할 CRUD, 권한 관리")
@@ -40,6 +42,8 @@ public class RoleController {
         this.roleNamespaceService = roleNamespaceService;
     }
 
+    @PortalLog(type = PortalLogType.ACCESS, screen = "역할/권한", action = "조회",
+               content = "'역할 목록 조회'")
     @GetMapping
     public ApiResponse<List<AuthDto.RoleResponse>> listRoles() {
         List<AuthDto.RoleResponse> roles = roleRepository.findAll().stream()
@@ -57,6 +61,9 @@ public class RoleController {
         return ApiResponse.ok(toResponse(role));
     }
 
+    @PortalLog(type = PortalLogType.ACCESS, screen = "역할/권한", action = "조회",
+               content = "'역할 조회: id ' + #roleId",
+               refType = "ROLE", refId = "#roleId")
     @GetMapping("/{roleId}")
     public ApiResponse<AuthDto.RoleResponse> getRole(@PathVariable Long roleId) {
         Role role = findRole(roleId);
@@ -97,6 +104,9 @@ public class RoleController {
         return ApiResponse.ok(null);
     }
 
+    @PortalLog(type = PortalLogType.ACCESS, screen = "역할/권한", action = "조회",
+               content = "'역할 권한 조회: id ' + #roleId",
+               refType = "ROLE", refId = "#roleId")
     @GetMapping("/{roleId}/permissions")
     public ApiResponse<?> getPermissions(@PathVariable Long roleId) {
         Role role = findRole(roleId);

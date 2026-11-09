@@ -74,7 +74,8 @@ final class BenchmarkColumns {
     static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
             BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
             BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "250", BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "1000",
-            BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "0", BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN);
+            BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "0", BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN,
+            BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN, BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN);
 
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     static final String RANDOM_ID = "random";
@@ -93,7 +94,7 @@ final class BenchmarkColumns {
     static final String PABFD_ID = "pabfd";
 
     /**
-     * 비교할 전략 전부 — 운영 엔진 전량 + 자원전용 두 변종 + 대조군({@link #BASELINE_ORDER}).
+     * 비교할 전략 전부 — 운영 엔진 전량 + 엔진 쪽 변종 열({@link #ENGINE_VARIANT_ORDER} · 스케줄 배치 순서 2열 포함) + 대조군({@link #BASELINE_ORDER}).
      *
      * <p>엔진은 레지스트리가 밝히는 목록에서 가져온다 — 여기에 이름을 적어 두면 엔진이 늘 때 조용히
      * 빠진다. 순서는 식별자로 정렬해 응답 열 순서를 빈 등록 순서에서 떼어 놓는다.</p>
@@ -143,7 +144,8 @@ final class BenchmarkColumns {
 
     /**
      * 엔진 쪽 변종 열 전부 — {@link #ENGINE_VARIANT_ORDER} 순서. 자원전용 두 변종은 기본 엔진에 정책만 갈아 끼운 것이다 —
-     * 가중치를 안 봐도 제약이 막아 주는지, 제약까지 없으면 얼마나 나빠지는지를 갈라 본다.
+     * 가중치를 안 봐도 제약이 막아 주는지, 제약까지 없으면 얼마나 나빠지는지를 갈라 본다. 스케줄 배치 순서 두 열은 기본 엔진에 배치 순서만
+     * 운영 비교자로 바꾼 것이다 — 표본 순서로 돌리는 {@code weighted} 열과 견줘 우선순위 정렬과 크기 순 정렬의 효과를 갈라 본다.
      *
      * <p>순서 목록과 구현 맵의 집합이 같아야 한다 — 대조군 쪽 가드와 같은 이유로, 한쪽에만 있는 id 는 여기서 크게 실패한다.</p>
      */
@@ -175,6 +177,18 @@ final class BenchmarkColumns {
         variants.put(BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN, powerVariant(BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN,
                 "전력 인지(유휴 역산 차단 · 대체값 고정 · 독립 증거 아님)",
                 Map.of("idleFromMeasurement", "false"), p -> p.setIdleFromMeasurement(false)));
+        // 스케줄 배치 순서 2열 — 기본 엔진에 스케줄 실행의 운영 비교자 객체를 그대로 물린다(복사본이 아니라 같은 객체라 운영 순서가 바뀌면
+        // 열도 따라간다). 순서는 엔진 노브가 아니라 override 가 없지만 총량 짝 조건의 기준 집합에는 넣지 않는다(BenchmarkRules.PAIRING_RULE)
+        variants.put(BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN,
+                "가중 점수(스케줄 배치 순서: 우선순위 → 등록 순 · 기준 집합 밖 · 판정 자격 없음)",
+                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE,
+                ScheduleExecutionService.BY_PRIORITY_THEN_AGE, weighted::schedule),
+                Map.of(), powerModel));
+        variants.put(BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN,
+                "가중 점수(스케줄 배치 순서: 우선순위 → 크기 순 · 기준 집합 밖 · 판정 자격 없음)",
+                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE,
+                ScheduleExecutionService.BY_PRIORITY_THEN_SIZE, weighted::schedule),
+                Map.of(), powerModel));
 
         if (!variants.keySet().equals(Set.copyOf(ENGINE_VARIANT_ORDER))) {
             throw new IllegalStateException("엔진 변종 순서 목록과 구현이 다르다 — 열이 조용히 빠진다: "

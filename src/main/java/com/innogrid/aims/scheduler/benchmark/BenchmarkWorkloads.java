@@ -27,8 +27,8 @@ import com.innogrid.aims.scheduler.entity.Workload;
  *
  * <p><b>집합을 정하는 일과 배치 순서를 정하는 일을 분리한다.</b> {@link #sample(double)} 은 뽑힌
  * 순서 그대로 목록을 돌려주고 정렬하지 않는다 — 표본을 만들 때부터 우선순위·크기로 정렬하면 30% 판이
- * "가장 크고 우선순위 높은 것만"이 되어 표본 자체가 편향된다. 정렬은 표본을 다 뽑은 뒤 {@link
- * #inPlacementOrder(List)} 가 한다.</p>
+ * "가장 크고 우선순위 높은 것만"이 되어 표본 자체가 편향된다. 정렬은 배치 직전에 전략이 한다 — 스케줄 배치 순서 열은 운영
+ * 비교자를 쓰고, {@link #inPlacementOrder(List)} 는 그중 크기 순 비교자와 같은 순서임을 테스트가 확인한다.</p>
  */
 public final class BenchmarkWorkloads {
 

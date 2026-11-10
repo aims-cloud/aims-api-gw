@@ -80,6 +80,18 @@ public class ScheduleService {
     private static final DateTimeFormatter LOCAL_TIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * Excel 내보내기 한 번에 담는 행 상한. 5분 주기 스케줄이 보존 90일 동안 대상 있는 회차만으로 남기는 실행 이력
+     * 25,920행을 덮는다. 넘으면 400 으로 실제 건수를 알린다(검색어 · 필터 · 기간으로 좁히게).
+     */
+    static final int EXPORT_MAX_ROWS = 30_000;
+    private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    /** 스케줄 목록 화면의 열 — 순서 · 이름이 화면과 같다. */
+    private static final List<String> SCHEDULE_SHEET_HEADER = List.of(
+            "스케줄 ID", "스케줄명", "리소스 종류", "실행 주기", "설명", "자동 실행 여부", "사용 여부", "시작 시간", "종료 시간", "처리 상태");
+    /** 실행 이력 화면의 열. */
+    private static final List<String> RUN_SHEET_HEADER = List.of("스케줄 ID", "시작 시간", "종료 시간", "처리 상태", "메시지");
+
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
     private final SchedulingHistoryRepository historyRepository;
@@ -119,6 +131,46 @@ public class ScheduleService {
         return toPageResponse(found.map(ScheduleResponse::from), page, size);
     }
 
+    /**
+     * 목록 Excel 내보내기 — 같은 검색어 · 필터 · 정렬로 목록의 모든 쪽을 이어 붙인 행을 화면 표기로 쓴다.
+     * 행이 {@link #EXPORT_MAX_ROWS} 를 넘으면 400.
+     */
+    @Transactional(readOnly = true)
+    public ScheduleSheetWriter.Sheet exportSchedules(String keyword, Workload.ResourceType resourceType,
+                                                     Boolean enabled, String sort) {
+        return exportSchedules(keyword, resourceType, enabled, sort, EXPORT_MAX_ROWS);
+    }
+
+    /** 상한을 받는 판 — 같은 패키지의 테스트가 작은 상한을 넘겨 400 을 확인한다. */
+    ScheduleSheetWriter.Sheet exportSchedules(String keyword, Workload.ResourceType resourceType,
+                                              Boolean enabled, String sort, int cap) {
+        Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
+        Page<Schedule> found = scheduleRepository.findAll(
+                filter(keyword, resourceType, enabled), PageRequest.of(0, cap, order));
+        requireWithinExportCap(found.getTotalElements(), cap);
+        ZoneId zone = cronSupport.zone();
+        List<List<String>> rows = found.getContent().stream().map(s -> List.of(
+                ScheduleSheetWriter.text(s.getScheduleId()),
+                ScheduleSheetWriter.text(s.getName()),
+                ScheduleSheetWriter.text(s.getResourceType() == null ? null : s.getResourceType().name()),
+                ScheduleSheetWriter.text(s.getCronExpression()),
+                ScheduleSheetWriter.text(s.getDescription()),
+                ScheduleSheetWriter.yesNo(s.isAutoRun()),
+                ScheduleSheetWriter.yesNo(s.isEnabled()),
+                ScheduleSheetWriter.time(s.getLastRunAt(), zone),
+                ScheduleSheetWriter.time(s.getLastRunFinishedAt(), zone),
+                ScheduleSheetWriter.status(s.getLastRunStatus()))).toList();
+        String filename = "schedules-" + OffsetDateTime.now(zone).format(FILE_STAMP) + ".xlsx";
+        return ScheduleSheetWriter.write(filename, "스케줄", SCHEDULE_SHEET_HEADER, rows);
+    }
+
+    private static void requireWithinExportCap(long total, int cap) {
+        if (total > cap) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, String.format(Locale.ROOT,
+                    "내보낼 행이 %d건으로 상한 %,d건을 넘습니다 — 검색어 · 필터 · 기간으로 좁혀 주십시오", total, cap));
+        }
+    }
+
     @Transactional(readOnly = true)
     public ScheduleResponse get(Long id) {
         return ScheduleResponse.from(require(id));
@@ -144,6 +196,38 @@ public class ScheduleService {
         Page<ScheduleRun> found = runRepository.findAll(
                 runFilter(schedule.getId(), keyword, status, triggerType, from, to), PageRequest.of(page - 1, size, order));
         return toPageResponse(found.map(ScheduleRunResponse::from), page, size);
+    }
+
+    /**
+     * 실행 이력 Excel 내보내기 — 같은 검색어 · 필터 · 기간 · 정렬로 실행 이력의 모든 쪽을 이어 붙인 행을 화면 표기로 쓴다.
+     * 행이 {@link #EXPORT_MAX_ROWS} 를 넘으면 400. 스케줄이 없으면 404, 기간이 거꾸로면 400(실행 이력과 같은 검사).
+     */
+    @Transactional(readOnly = true)
+    public ScheduleSheetWriter.Sheet exportRuns(Long id, String keyword, ScheduleRun.RunStatus status,
+                                                ScheduleRun.TriggerType triggerType, OffsetDateTime from, OffsetDateTime to,
+                                                String sort) {
+        return exportRuns(id, keyword, status, triggerType, from, to, sort, EXPORT_MAX_ROWS);
+    }
+
+    /** 상한을 받는 판 — 같은 패키지의 테스트가 작은 상한을 넘겨 400 을 확인한다. */
+    ScheduleSheetWriter.Sheet exportRuns(Long id, String keyword, ScheduleRun.RunStatus status,
+                                         ScheduleRun.TriggerType triggerType, OffsetDateTime from, OffsetDateTime to,
+                                         String sort, int cap) {
+        Schedule schedule = require(id);
+        requireOrderedWindow(from, to);
+        Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, RUN_SORTABLE, DEFAULT_RUN_SORT));
+        Page<ScheduleRun> found = runRepository.findAll(
+                runFilter(schedule.getId(), keyword, status, triggerType, from, to), PageRequest.of(0, cap, order));
+        requireWithinExportCap(found.getTotalElements(), cap);
+        ZoneId zone = cronSupport.zone();
+        List<List<String>> rows = found.getContent().stream().map(r -> List.of(
+                ScheduleSheetWriter.text(r.getScheduleKey()),
+                ScheduleSheetWriter.time(r.getStartedAt(), zone),
+                ScheduleSheetWriter.time(r.getFinishedAt(), zone),
+                ScheduleSheetWriter.status(r.getStatus()),
+                ScheduleSheetWriter.text(r.getMessage()))).toList();
+        String filename = "schedule-runs-" + schedule.getScheduleId() + "-" + OffsetDateTime.now(zone).format(FILE_STAMP) + ".xlsx";
+        return ScheduleSheetWriter.write(filename, "실행 이력", RUN_SHEET_HEADER, rows);
     }
 
     private static void requireOrderedWindow(OffsetDateTime from, OffsetDateTime to) {

@@ -6,6 +6,8 @@ import java.util.Map;
 
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
+import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.scheduler.dto.CronPreviewResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleDryRunResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
@@ -46,6 +48,10 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>시각은 전부 UTC 로 주고받는다.</b> 표출 변환은 프런트가 한다. 다만 실행 주기
  * (cron) 는 시간대 정보를 담을 수 없어 <b>한국 시간(UTC+9) 입력으로 가정</b>해 해석한다
  * — 근거는 {@code CronSupport} 참고.</p>
+ *
+ * <p>포털 로그(docs/08 §10.1 묶음 5): 생성·수정·삭제는 {@code @PortalLog(AUDIT)}, 즉시 실행은 {@code ACTION}(동기),
+ * 목록·상세·실행 이력은 {@code ACCESS} 로 남긴다(화면 "스케줄러" · ref = SCHEDULE, 즉시 실행은 SCHEDULE_RUN).
+ * 미리보기·모의 실행·실행 주기 검증·실행 상세·실행 재생은 남기지 않는다.</p>
  */
 @Tag(name = "스케줄러 (스케줄)", description = "스케줄 목록·상세·CRUD, 즉시 실행, 실행 이력, 실행 주기 검증")
 @RestController
@@ -70,6 +76,9 @@ public class ScheduleController {
             description = "스케줄 ID/스케줄명/리소스 종류/실행 주기/설명/자동 실행/사용 여부/시작·종료 시간/처리 상태. "
                     + "검색어와 리소스 종류·사용 여부 필터, 컬럼 정렬, 페이징을 지원합니다. "
                     + "page 는 1부터, sort 는 '{필드},{asc|desc}' 형식입니다. " + "같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "조회",
+               content = "'스케줄 목록 조회 (키워드: ' + (#keyword ?: '-') + ', 리소스 종류: ' + (#resourceType ?: '전체')"
+                       + " + ', 사용 여부: ' + (#enabled == null ? '전체' : (#enabled ? '사용' : '미사용')) + ')'")
     @GetMapping
     public ApiResponse<PageResponse<ScheduleResponse>> getSchedules(
             @Parameter(description = "스케줄 ID·스케줄명·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
@@ -86,6 +95,9 @@ public class ScheduleController {
     @Operation(summary = "스케줄 상세",
             description = "하단 상세 탭과 상세 페이지에 쓰는 전체 필드를 조회합니다. "
                     + "화면 상세 카드에는 리소스 종류가 빠져 있지만 응답에는 포함됩니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "조회",
+               content = "'스케줄 조회: ' + (#result?.data?.scheduleId ?: '-') + ' (id ' + #id + ')'",
+               refType = "SCHEDULE", refId = "#id")
     @GetMapping("/{id}")
     public ApiResponse<ScheduleResponse> getSchedule(@PathVariable Long id) {
         return ApiResponse.ok(scheduleService.get(id));
@@ -98,6 +110,9 @@ public class ScheduleController {
                     + "엔진·정책·전력/온도 파라미터는 선택이며, 비우면 리소스 종류별 활성 정책을 따릅니다. "
                     + "스케줄 ID 가 중복되면 409, 실행 주기가 잘못되면 400 입니다. "
                     + "배치 순서(placementOrder)의 선택지와 뜻은 요청 스키마의 필드 설명을 따릅니다.")
+    @PortalLog(screen = "스케줄러", action = "생성",
+               content = "'스케줄 생성: ' + (#request?.scheduleId ?: '-') + ' (' + (#request?.name ?: '-') + ')'",
+               refType = "SCHEDULE", refId = "#result.data.id")
     @PostMapping
     public ApiResponse<ScheduleResponse> createSchedule(@RequestBody ScheduleRequest request) {
         return ApiResponse.ok(scheduleService.create(request));
@@ -113,6 +128,9 @@ public class ScheduleController {
                     + "본문이 없으면 400, 스케줄 ID 가 다르면 400, 칸 검증은 생성과 같은 규칙이며 한 칸이라도 400 이면 아무것도 바뀌지 않습니다. "
                     + "실행 주기나 사용 여부를 바꾸면 다음 실행 예정 시각이 현재 기준으로 다시 계산됩니다. "
                     + "실행 중에도 편집할 수 있으며 최근 실행 상태·시각·메시지 칸은 편집이 쓰지 않습니다(편집 응답의 그 칸은 편집 시점 값).")
+    @PortalLog(screen = "스케줄러", action = "수정",
+               content = "'스케줄 수정: ' + (#result?.data?.scheduleId ?: '-') + ' (id ' + #id + ')'",
+               refType = "SCHEDULE", refId = "#id")
     @PutMapping("/{id}")
     public ApiResponse<ScheduleResponse> updateSchedule(@PathVariable Long id,
                                                         @RequestBody(required = false) ScheduleUpdateRequest request) {
@@ -123,6 +141,9 @@ public class ScheduleController {
             description = "목록 체크박스로 선택한 스케줄들을 삭제합니다. ids 는 콤마 구분 다중 지정입니다. "
                     + "실행 중인 스케줄이 하나라도 포함되면 409 로 전체를 거부하며, 없는 ID 는 무시합니다. "
                     + "실행 이력은 함께 지우고 배치 결정 이력은 연결만 끊습니다.")
+    @PortalLog(screen = "스케줄러", action = "삭제",
+               content = "'스케줄 삭제: ' + (#ids?.size() ?: 0) + '건 (id ' + #ids + ')'",
+               refType = "SCHEDULE", refId = "#ids")
     @DeleteMapping
     public ApiResponse<Void> deleteSchedules(@RequestParam List<Long> ids) {
         scheduleService.delete(ids);
@@ -185,6 +206,10 @@ public class ScheduleController {
             description = "선택한 스케줄을 지금 한 번 실행하고 완료된 실행 이력을 돌려줍니다(동기). "
                     + "사용 여부가 꺼져 있거나 이미 실행 중이면 409 입니다. "
                     + "대상 워크로드가 없어도 정상이며 '대상 없음' 으로 기록됩니다.")
+    @PortalLog(type = PortalLogType.ACTION, screen = "스케줄러", action = "실행",
+               content = "#result == null ? '스케줄 즉시 실행: id ' + #id"
+                       + " : '스케줄 즉시 실행: ' + #result.data.scheduleKey + ' (id ' + #id + ') · 처리 상태 ' + #result.data.status",
+               refType = "SCHEDULE_RUN", refId = "#result.data.runId")
     @PostMapping("/{id}/run")
     public ApiResponse<ScheduleRunResponse> runNow(@PathVariable Long id) {
         ScheduleActorResolver.Actor actor = actorResolver.current();
@@ -198,6 +223,9 @@ public class ScheduleController {
                     + "sort 는 '{필드},{asc|desc}' 형식이고 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
                     + "자동 실행이 대상 0건으로 끝난 경우는 이력을 남기지 않습니다 — "
                     + "그 사실은 스케줄 상세의 최근 실행 메시지에서 확인할 수 있습니다.")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "조회",
+               content = "'스케줄 실행 이력 조회: id ' + #id + ' (상태: ' + (#status ?: '전체') + ', 실행 주체: ' + (#triggerType ?: '전체') + ')'",
+               refType = "SCHEDULE", refId = "#id")
     @GetMapping("/{id}/runs")
     public ApiResponse<PageResponse<ScheduleRunResponse>> getRuns(
             @PathVariable Long id,

@@ -214,7 +214,7 @@ class SchedulePortalLogApiTest {
                 "공백뿐인 검색어는 주지 않은 것과 같다");
     }
 
-    @DisplayName("포털 로그는 스케줄러 컨트롤러 열두 개 가운데 화면이 부르는 여덟 곳에만 붙어 있다")
+    @DisplayName("포털 로그는 스케줄러 컨트롤러 열두 개 가운데 화면이 부르는 열 곳에만 붙어 있다")
     @Test
     void portal_log_is_attached_only_to_screen_endpoints() throws Exception {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
@@ -241,6 +241,8 @@ class SchedulePortalLogApiTest {
                 "ScheduleController#deleteSchedules AUDIT 삭제 스케줄러 async=false ref=SCHEDULE",
                 "ScheduleController#runNow ACTION 실행 스케줄러 async=false ref=SCHEDULE_RUN",
                 "ScheduleController#getRuns ACCESS 조회 스케줄러 async=false ref=SCHEDULE",
+                "ScheduleController#exportSchedules ACCESS 내보내기 스케줄러 async=false ref=",
+                "ScheduleController#exportRuns ACCESS 내보내기 스케줄러 async=false ref=SCHEDULE",
                 "SchedulerController#getResourceTypes ACCESS 조회 스케줄러 async=false ref=")), attached);
     }
 

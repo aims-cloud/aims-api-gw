@@ -73,6 +73,8 @@ class SchedulerResponseTypeApiTest {
     private static final double LIMIT = 75.0;
     private static final String REF = "#/components/schemas/";
     private static final Set<String> METHODS = Set.of("get", "post", "put", "patch", "delete");
+    /** Excel 내보내기 응답의 미디어 형식 — 이 형식으로 200 을 선언한 작업은 래퍼 검사에서 뺀다. */
+    private static final String XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     /** 양쪽이 함께 써도 되는 라이브러리 스키마. 공용 타입을 일부러 함께 쓰게 되면 여기에 더한다. */
     private static final Set<String> LIBRARY = Set.of("JsonNode");
 
@@ -294,12 +296,17 @@ class SchedulerResponseTypeApiTest {
         JsonNode schemas = doc.get("components").get("schemas");
         int checked = 0;
         List<String> loose = new ArrayList<>();
+        List<String> files = new ArrayList<>();
         for (Entry<String, JsonNode> path : doc.get("paths").properties()) {
             if (!scheduler(path.getKey())) continue;
             for (Entry<String, JsonNode> op : path.getValue().properties()) {
                 if (!METHODS.contains(op.getKey())) continue;
                 checked++;
                 JsonNode content = op.getValue().path("responses").path("200").path("content");
+                if (content.has(XLSX)) {   // 본문이 파일인 작업은 래퍼가 없다 — 정확히 내보내기 두 경로뿐인지 아래에서 본다
+                    files.add(op.getKey() + " " + path.getKey() + " " + content.get(XLSX).path("schema").path("format").asString());
+                    continue;
+                }
                 JsonNode ref = content.size() > 0 ? content.properties().iterator().next().getValue().path("schema").get("$ref") : null;
                 String name = ref == null ? null : ref.asString().substring(REF.length());
                 if ("ApiResponseVoid".equals(name)) continue;   // 본문 없는 작업의 래퍼
@@ -309,6 +316,8 @@ class SchedulerResponseTypeApiTest {
         }
         assertTrue(checked >= 75, "스케줄러 작업을 모두 훑었다: " + checked + " — 작업을 일부러 줄였으면 하한을 고친다");
         assertEquals(List.of(), loose, "data 가 정체 없는 object 다 — 반환형을 레코드·기본 타입으로 명시한다");
+        assertEquals(List.of("get /api/v1/scheduler/schedules/export binary", "get /api/v1/scheduler/schedules/{id}/runs/export binary"),
+                files.stream().sorted().toList(), "본문이 xlsx 파일인 작업은 Excel 내보내기 두 경로뿐이다");
     }
 
     @DisplayName("스케줄러 작업과 다른 작업은 공용 래퍼 말고는 같은 스키마 이름에 닿지 않고 스케줄러는 이름 없는 Summary 를 쓰지 않는다")

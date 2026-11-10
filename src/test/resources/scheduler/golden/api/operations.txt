@@ -49,6 +49,7 @@ POST /api/v1/scheduler/schedules
 DELETE /api/v1/scheduler/schedules
 POST /api/v1/scheduler/schedules/cron/validate
 POST /api/v1/scheduler/schedules/dry-run
+GET /api/v1/scheduler/schedules/export
 POST /api/v1/scheduler/schedules/preview
 GET /api/v1/scheduler/schedules/{id}
 PUT /api/v1/scheduler/schedules/{id}
@@ -56,6 +57,7 @@ POST /api/v1/scheduler/schedules/{id}/dry-run
 GET /api/v1/scheduler/schedules/{id}/preview
 POST /api/v1/scheduler/schedules/{id}/run
 GET /api/v1/scheduler/schedules/{id}/runs
+GET /api/v1/scheduler/schedules/{id}/runs/export
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}/replay
 GET /api/v1/scheduler/schedules/{id}/runs/{runId}/replay/engines

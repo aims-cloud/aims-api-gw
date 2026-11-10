@@ -23,12 +23,19 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.service.ScheduleActorResolver;
 import com.innogrid.aims.scheduler.service.ScheduleExecutionService;
 import com.innogrid.aims.scheduler.service.ScheduleService;
+import com.innogrid.aims.scheduler.service.ScheduleSheetWriter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -90,6 +97,26 @@ public class ScheduleController {
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
         return ApiResponse.ok(scheduleService.list(keyword, resourceType, enabled, page, size, sort));
+    }
+
+    @Operation(summary = "스케줄 목록 Excel 내보내기",
+            description = "목록과 같은 검색어 · 필터 · 정렬로 모든 쪽을 이어 붙인 행을 xlsx 한 장으로 돌려줍니다(page · size 없음). "
+                    + "열과 표기는 목록 화면과 같습니다 — 값 없음은 -, 자동 실행 여부 · 사용 여부는 예/아니오, 처리 상태는 Completed/Running/Failed(실행 전 Pending), "
+                    + "시각은 스케줄러 시간대의 yyyy-MM-dd HH:mm:ss. 행이 30,000건을 넘으면 400 이고, 오류 응답은 목록과 같은 JSON 입니다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "xlsx 파일(Content-Disposition attachment)",
+            content = @Content(mediaType = ScheduleSheetWriter.CONTENT_TYPE, schema = @Schema(type = "string", format = "binary")))
+    @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "내보내기",
+               content = "'스케줄 목록 내보내기 (키워드: ' + (#keyword ?: '-') + ', 리소스 종류: ' + (#resourceType ?: '전체')"
+                       + " + ', 사용 여부: ' + (#enabled == null ? '전체' : (#enabled ? '사용' : '미사용')) + ')'")
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportSchedules(
+            @Parameter(description = "스케줄 ID·스케줄명·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "리소스 종류. VM 은 종류를 비워 둔 스케줄도 포함합니다. 비우면 전체")
+            @RequestParam(required = false) Workload.ResourceType resourceType,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(defaultValue = "createdAt,desc") String sort) {
+        return xlsx(scheduleService.exportSchedules(keyword, resourceType, enabled, sort));
     }
 
     @Operation(summary = "스케줄 상세",
@@ -246,6 +273,41 @@ public class ScheduleController {
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "startedAt,desc") String sort) {
         return ApiResponse.ok(scheduleService.runs(id, keyword, status, triggerType, from, to, page, size, sort));
+    }
+
+    @Operation(summary = "실행 이력 Excel 내보내기",
+            description = "실행 이력과 같은 검색어 · 필터 · 기간 · 정렬로 모든 쪽을 이어 붙인 행을 xlsx 한 장으로 돌려줍니다(page · size 없음). "
+                    + "열과 표기는 실행 이력 화면과 같습니다 — 스케줄 ID · 시작 시간 · 종료 시간 · 처리 상태 · 메시지, 값 없음은 -, 시각은 스케줄러 시간대의 yyyy-MM-dd HH:mm:ss. "
+                    + "행이 30,000건을 넘으면 400 이고, 오류 응답(400 · 404)은 실행 이력과 같은 JSON 입니다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "xlsx 파일(Content-Disposition attachment)",
+            content = @Content(mediaType = ScheduleSheetWriter.CONTENT_TYPE, schema = @Schema(type = "string", format = "binary")))
+    @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "내보내기",
+               content = "'스케줄 실행 이력 내보내기: id ' + #id + ' (상태: ' + (#status ?: '전체') + ', 실행 주체: ' + (#triggerType ?: '전체')"
+                       + " + (#keyword == null or #keyword.isBlank() ? '' : ', 키워드: ' + #keyword.trim()) + ')'",
+               refType = "SCHEDULE", refId = "#id")
+    @GetMapping("/{id}/runs/export")
+    public ResponseEntity<byte[]> exportRuns(
+            @PathVariable Long id,
+            @Parameter(description = "실행 메시지·스케줄 ID(업무 키)의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "처리 상태 — RUNNING·COMPLETED·FAILED. 비우면 전체")
+            @RequestParam(required = false) ScheduleRun.RunStatus status,
+            @Parameter(description = "실행 주체 — AUTO·MANUAL. 비우면 전체")
+            @RequestParam(required = false) ScheduleRun.TriggerType triggerType,
+            @Parameter(description = "시작 시각(startedAt) 창의 시작, 포함 (ISO-8601, 오프셋 필수). 비우면 하한 없음")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @Parameter(description = "시작 시각(startedAt) 창의 끝, 미포함 (ISO-8601, 오프셋 필수). 비우면 상한 없음. from 이 to 보다 뒤면 400")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+            @RequestParam(defaultValue = "startedAt,desc") String sort) {
+        return xlsx(scheduleService.exportRuns(id, keyword, status, triggerType, from, to, sort));
+    }
+
+    /** xlsx 본문 · 첨부 파일 이름(ASCII) — 오류는 이 메서드에 닿기 전에 JSON 으로 나간다. */
+    private static ResponseEntity<byte[]> xlsx(ScheduleSheetWriter.Sheet sheet) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(ScheduleSheetWriter.CONTENT_TYPE))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(sheet.filename()).build().toString())
+                .body(sheet.content());
     }
 
     @Operation(summary = "실행 상세",

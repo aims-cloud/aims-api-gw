@@ -51,7 +51,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 스케줄 화면 API 의 포털 로그 — 붙인 여덟 곳(목록·상세·실행 이력·리소스 종류 ACCESS, 생성·수정·삭제 AUDIT, 즉시 실행 ACTION)이
+ * 스케줄 화면 API 의 포털 로그 — 붙인 열 곳(목록·상세·실행 이력·리소스 종류 조회와 목록·실행 이력 내보내기 ACCESS, 생성·수정·삭제 AUDIT,
+ * 즉시 실행 ACTION)이
  * 유형·작업·내용·결과·연결을 그대로 남기고, 미리보기·모의 실행·실행 주기 검증·실행 상세·실행 재생은 남기지 않는지 본다.
  *
  * <p>행은 요청마다 단 {@code X-Request-Id} 로 고른다. 공유 H2 에 다른 테스트가 남긴 행이나 요청 ID 가 없는 SYSTEM 행이 있어도
@@ -212,6 +213,35 @@ class SchedulePortalLogApiTest {
         assertEquals("스케줄 실행 이력 조회: id " + id + " (상태: 전체, 실행 주체: 전체, 키워드: abc)", onlyRow("plog-t10-1").getContent());
         assertEquals("스케줄 실행 이력 조회: id " + id + " (상태: 전체, 실행 주체: 전체)", onlyRow("plog-t10-2").getContent(),
                 "공백뿐인 검색어는 주지 않은 것과 같다");
+    }
+
+    @DisplayName("목록 · 실행 이력 Excel 내보내기는 「내보내기」 ACCESS 행으로 남고 실행 이력 쪽만 스케줄을 연결하며 거절은 FAILURE 다")
+    @Test
+    void exports_leave_access_rows() throws Exception {
+        long id = createViaService("t12", Workload.ResourceType.NPU, false);
+        send(get(BASE + "/export").param("keyword", "plog-t12").param("resourceType", "NPU").param("enabled", "false"), "plog-t12-1", 200);
+        send(get(BASE + "/" + id + "/runs/export").param("status", "FAILED").param("keyword", " abc "), "plog-t12-2", 200);
+        send(get(BASE + "/" + id + "/runs/export").param("sort", "engineId,asc"), "plog-t12-3", 400);
+
+        PortalLogEntry list = onlyRow("plog-t12-1");
+        PortalLogEntry runs = onlyRow("plog-t12-2");
+        PortalLogEntry rejected = onlyRow("plog-t12-3");
+        for (PortalLogEntry row : List.of(list, runs, rejected)) {
+            assertEquals(PortalLogType.ACCESS, row.getType());
+            assertEquals("내보내기", row.getAction());
+            assertEquals(SCREEN, row.getScreen());
+        }
+        assertEquals(PortalLogResult.SUCCESS, list.getResult());
+        assertEquals("스케줄 목록 내보내기 (키워드: plog-t12, 리소스 종류: NPU, 사용 여부: 미사용)", list.getContent());
+        assertNull(list.getRefId());
+        assertEquals(PortalLogResult.SUCCESS, runs.getResult());
+        assertEquals("스케줄 실행 이력 내보내기: id " + id + " (상태: FAILED, 실행 주체: 전체, 키워드: abc)", runs.getContent());
+        assertEquals("SCHEDULE", runs.getRefType());
+        assertEquals(String.valueOf(id), runs.getRefId());
+        assertEquals(PortalLogResult.FAILURE, rejected.getResult());
+        assertEquals("스케줄 실행 이력 내보내기: id " + id + " (상태: 전체, 실행 주체: 전체)", rejected.getContent());
+        assertNotNull(rejected.getDescription());
+        assertNull(rejected.getRefType(), "거절된 요청은 연결을 비운다");
     }
 
     @DisplayName("포털 로그는 스케줄러 컨트롤러 열두 개 가운데 화면이 부르는 열 곳에만 붙어 있다")

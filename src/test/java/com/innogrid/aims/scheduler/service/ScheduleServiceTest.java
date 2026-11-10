@@ -1,8 +1,13 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +24,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.entity.Schedule;
+import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
@@ -332,6 +338,48 @@ class ScheduleServiceTest {
         assertEquals(HttpStatus.BAD_REQUEST,
                 assertThrows(BusinessException.class,
                         () -> scheduleService.list(null, null, null, 1, 10, "createdBy,asc")).getStatus());
+    }
+
+    // ── Excel 내보내기 상한 ─────────────────────────────────────
+
+    /**
+     * 상한을 받는 판으로 행 수가 상한과 같을 때와 하나 넘을 때를 본다. 상한과 같은 행 수면 첫 쪽이 꽉 차서
+     * Spring Data 가 건수 질의를 실제로 돌린다(덜 차면 건수 질의를 건너뛰어 비교가 늘 통과한다).
+     */
+    @DisplayName("내보내기는 상한과 같은 행 수까지 파일로 주고 하나라도 넘으면 실제 건수를 담은 400 이다")
+    @Test
+    void export_cap_allows_equal_rows_and_rejects_one_more() throws IOException {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) ids.add(scheduleService.create(request("cap-" + i, "0 0 2 * * ?")).id());
+
+        assertEquals(4, dataRows(scheduleService.exportSchedules(null, null, null, null, 4)));
+        BusinessException over = assertThrows(BusinessException.class,
+                () -> scheduleService.exportSchedules(null, null, null, null, 3));
+        assertEquals(HttpStatus.BAD_REQUEST, over.getStatus());
+        assertTrue(over.getMessage().startsWith("내보낼 행이 4건으로 상한 3건을 넘습니다"), over.getMessage());
+        assertEquals(1, dataRows(scheduleService.exportSchedules("cap-1", null, null, null, 1)), "필터로 좁히면 같은 상한 아래로 들어옴");
+
+        for (int i = 0; i < 4; i++) {
+            runRepository.save(new ScheduleRun(ids.get(0), "cap-1", ScheduleRun.TriggerType.MANUAL, "tester"));
+        }
+        assertEquals(4, dataRows(scheduleService.exportRuns(ids.get(0), null, null, null, null, null, null, 4)));
+        BusinessException runsOver = assertThrows(BusinessException.class,
+                () -> scheduleService.exportRuns(ids.get(0), null, null, null, null, null, null, 3));
+        assertEquals(HttpStatus.BAD_REQUEST, runsOver.getStatus());
+        assertTrue(runsOver.getMessage().startsWith("내보낼 행이 4건으로 상한 3건을 넘습니다"), runsOver.getMessage());
+    }
+
+    /** 파일의 자료 행 수 — 시트의 행에서 머리글 한 줄을 뺀다. */
+    private static int dataRows(ScheduleSheetWriter.Sheet sheet) throws IOException {
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(sheet.content()))) {
+            for (ZipEntry e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
+                if (e.getName().equals("xl/worksheets/sheet1.xml")) {
+                    String xml = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+                    return xml.split("<row ", -1).length - 2;
+                }
+            }
+        }
+        throw new AssertionError("시트 부품 없음");
     }
 
     // ── 삭제 ───────────────────────────────────────────────────

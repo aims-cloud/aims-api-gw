@@ -8,6 +8,8 @@ import java.util.Set;
 import com.innogrid.aims.common.dto.ApiResponse;
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.exception.BusinessException;
+import com.innogrid.aims.common.log.PortalLog;
+import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
@@ -162,6 +164,7 @@ public class SchedulerController {
     }
 
     @Operation(summary = "리소스 종류 목록", description = "워크로드·스케줄 생성 화면의 선택지")
+    @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "조회", content = "'리소스 종류 목록 조회'")
     @GetMapping("/workloads/resource-types")
     public ApiResponse<List<ResourceTypeOptionResponse>> getResourceTypes() {
         return ApiResponse.ok(java.util.Arrays.stream(Workload.ResourceType.values())

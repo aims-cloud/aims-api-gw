@@ -202,6 +202,18 @@ class SchedulePortalLogApiTest {
         assertNull(types.getRefId());
     }
 
+    @DisplayName("실행 이력 조회 행은 검색어를 줬을 때만 내용의 괄호 안 끝에 키워드를 붙이고 앞뒤 공백은 지운다")
+    @Test
+    void runs_access_log_appends_keyword_only_when_given() throws Exception {
+        long id = createViaService("t10", Workload.ResourceType.NPU, true);
+        send(get(BASE + "/" + id + "/runs").param("keyword", " abc "), "plog-t10-1", 200);
+        send(get(BASE + "/" + id + "/runs").param("keyword", "   "), "plog-t10-2", 200);
+
+        assertEquals("스케줄 실행 이력 조회: id " + id + " (상태: 전체, 실행 주체: 전체, 키워드: abc)", onlyRow("plog-t10-1").getContent());
+        assertEquals("스케줄 실행 이력 조회: id " + id + " (상태: 전체, 실행 주체: 전체)", onlyRow("plog-t10-2").getContent(),
+                "공백뿐인 검색어는 주지 않은 것과 같다");
+    }
+
     @DisplayName("포털 로그는 스케줄러 컨트롤러 열두 개 가운데 화면이 부르는 여덟 곳에만 붙어 있다")
     @Test
     void portal_log_is_attached_only_to_screen_endpoints() throws Exception {

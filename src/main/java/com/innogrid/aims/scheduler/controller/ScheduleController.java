@@ -221,14 +221,19 @@ public class ScheduleController {
             description = "스케줄 ID/시작 시간/종료 시간/처리 상태/메시지와 집계 건수를 조회합니다. "
                     + "status·triggerType·from·to 필터는 선택이고 AND 로 겹칩니다(totalElements 는 필터를 반영). "
                     + "sort 는 '{필드},{asc|desc}' 형식이고 같은 값으로 정렬된 행은 id 로 한 번 더 정렬해 페이지 경계에서 겹치거나 빠지지 않습니다. "
+                    + "keyword 는 실행 메시지·스케줄 ID 의 부분 일치이고 다른 필터와 AND 로 겹칩니다. "
+                    + "정렬 가능 필드: startedAt·finishedAt·status·triggerType·targetCount·successCount·failedCount·message·scheduleKey. "
                     + "자동 실행이 대상 0건으로 끝난 경우는 이력을 남기지 않습니다 — "
                     + "그 사실은 스케줄 상세의 최근 실행 메시지에서 확인할 수 있습니다.")
     @PortalLog(type = PortalLogType.ACCESS, screen = "스케줄러", action = "조회",
-               content = "'스케줄 실행 이력 조회: id ' + #id + ' (상태: ' + (#status ?: '전체') + ', 실행 주체: ' + (#triggerType ?: '전체') + ')'",
+               content = "'스케줄 실행 이력 조회: id ' + #id + ' (상태: ' + (#status ?: '전체') + ', 실행 주체: ' + (#triggerType ?: '전체')"
+                       + " + (#keyword == null or #keyword.isBlank() ? '' : ', 키워드: ' + #keyword.trim()) + ')'",
                refType = "SCHEDULE", refId = "#id")
     @GetMapping("/{id}/runs")
     public ApiResponse<PageResponse<ScheduleRunResponse>> getRuns(
             @PathVariable Long id,
+            @Parameter(description = "실행 메시지·스케줄 ID(업무 키)의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
+            @RequestParam(required = false) String keyword,
             @Parameter(description = "처리 상태 — RUNNING·COMPLETED·FAILED. 대문자 그대로, 다른 값은 400. 비우면 전체")
             @RequestParam(required = false) ScheduleRun.RunStatus status,
             @Parameter(description = "실행 주체 — AUTO(주기 실행)·MANUAL(즉시 실행). 대문자 그대로, 다른 값은 400. 비우면 전체")
@@ -240,7 +245,7 @@ public class ScheduleController {
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "startedAt,desc") String sort) {
-        return ApiResponse.ok(scheduleService.runs(id, status, triggerType, from, to, page, size, sort));
+        return ApiResponse.ok(scheduleService.runs(id, keyword, status, triggerType, from, to, page, size, sort));
     }
 
     @Operation(summary = "실행 상세",

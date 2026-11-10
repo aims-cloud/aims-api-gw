@@ -70,9 +70,10 @@ public class ScheduleService {
             "nextRunAt", "createdAt", "updatedAt");
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+    /** 실행 이력 정렬 허용 필드. message · scheduleKey 는 화면의 「메시지」 · 「스케줄 ID」 열이 보내는 이름이다. */
     private static final Set<String> RUN_SORTABLE = Set.of(
             "startedAt", "finishedAt", "status", "triggerType", "targetCount",
-            "successCount", "failedCount");
+            "successCount", "failedCount", "message", "scheduleKey");
     private static final Sort DEFAULT_RUN_SORT = Sort.by(Sort.Direction.DESC, "startedAt");
 
     private static final Pattern SCHEDULE_ID = Pattern.compile(Schedule.ID_PATTERN);
@@ -129,15 +130,19 @@ public class ScheduleService {
      * <p>필터는 전부 선택이고 AND 로 겹친다. {@code from}·{@code to} 는 시작 시각({@code startedAt})의
      * 반개구간 {@code [from, to)} 이며 기본 창이 없다 — 배치 이력 페이징과 같은 규칙이다.
      * 시작이 끝보다 뒤면 400.</p>
+     *
+     * <p>{@code keyword} 는 실행 메시지와 스케줄 ID(업무 키)의 부분 일치다. 규칙은 스케줄 목록 검색어와 같다 — 앞뒤 공백 제거 ·
+     * 대소문자 무시 · {@code %}·{@code _} 는 문자 그대로. 처리 상태와 시각은 {@code status}·{@code from}·{@code to} 로 찾는다.</p>
      */
     @Transactional(readOnly = true)
-    public PageResponse<ScheduleRunResponse> runs(Long id, ScheduleRun.RunStatus status, ScheduleRun.TriggerType triggerType,
-                                                  OffsetDateTime from, OffsetDateTime to, int page, int size, String sort) {
+    public PageResponse<ScheduleRunResponse> runs(Long id, String keyword, ScheduleRun.RunStatus status,
+                                                  ScheduleRun.TriggerType triggerType, OffsetDateTime from, OffsetDateTime to,
+                                                  int page, int size, String sort) {
         Schedule schedule = require(id);
         requireOrderedWindow(from, to);
         Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, RUN_SORTABLE, DEFAULT_RUN_SORT));
         Page<ScheduleRun> found = runRepository.findAll(
-                runFilter(schedule.getId(), status, triggerType, from, to), PageRequest.of(page - 1, size, order));
+                runFilter(schedule.getId(), keyword, status, triggerType, from, to), PageRequest.of(page - 1, size, order));
         return toPageResponse(found.map(ScheduleRunResponse::from), page, size);
     }
 
@@ -148,12 +153,19 @@ public class ScheduleService {
     }
 
     /** 스케줄은 필수, 나머지는 null 이면 조건 없음. */
-    private static Specification<ScheduleRun> runFilter(Long scheduleId, ScheduleRun.RunStatus status,
+    private static Specification<ScheduleRun> runFilter(Long scheduleId, String keyword, ScheduleRun.RunStatus status,
                                                         ScheduleRun.TriggerType triggerType,
                                                         OffsetDateTime from, OffsetDateTime to) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("scheduleId"), scheduleId));
+            if (keyword != null && !keyword.isBlank()) {
+                // 목록 검색어와 같은 규칙 — 메시지가 없는 실행 중 행은 빈 문자열로 보고 업무 키로만 걸린다
+                String like = LikePatterns.contains(keyword.trim().toLowerCase(Locale.ROOT));
+                predicates.add(cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("message"), "")), like, LikePatterns.ESCAPE),
+                        cb.like(cb.lower(cb.coalesce(root.get("scheduleKey"), "")), like, LikePatterns.ESCAPE)));
+            }
             if (status != null) predicates.add(cb.equal(root.get("status"), status));
             if (triggerType != null) predicates.add(cb.equal(root.get("triggerType"), triggerType));
             if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("startedAt"), from));

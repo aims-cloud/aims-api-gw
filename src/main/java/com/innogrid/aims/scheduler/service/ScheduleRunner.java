@@ -17,6 +17,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
+import com.innogrid.aims.monitoring.dto.log.PortalLogResult;
+import com.innogrid.aims.monitoring.log.IntegrationHealth;
+import com.innogrid.aims.monitoring.log.PortalLogService;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
@@ -42,11 +45,17 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
  * <p>기동 직후 {@code initial-delay-seconds}(기본 30초) 동안은 아무것도 하지 않는다.
  * DB·외부 연동이 준비되기 전에 도는 것을 막고, 테스트 컨텍스트에서도 폴링이 일어나지
  * 않게 한다.</p>
+ *
+ * <p>자동 실행의 실패 · 복구는 포털 로그에 SYSTEM 행으로 남긴다(화면 「스케줄 자동 실행」). 상태가 바뀔 때만 1행이고,
+ * 판정은 포털 로그 모듈의 {@link IntegrationHealth} 를 그대로 쓴다. 기동 때 실행 권한을 회수했으면 요약 1행을 남긴다.</p>
  */
 @Component
 public class ScheduleRunner implements SmartLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(ScheduleRunner.class);
+
+    /** 포털 로그 화면 이름 — 팀의 SYSTEM 행 관례대로 하위 시스템 이름을 쓴다(「Thanos 연동」 · 「알람 평가기」와 같은 꼴) */
+    static final String PORTAL_LOG_SCREEN = "스케줄 자동 실행";
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleRunRepository runRepository;
@@ -55,6 +64,9 @@ public class ScheduleRunner implements SmartLifecycle {
     private final PlacementInputRepository placementInputRepository;
     private final ScheduleExecutionService executionService;
     private final SchedulerProperties properties;
+    private final PortalLogService portalLogService;
+    /** 자동 실행 실패 · 복구 전이 — 스케줄 PK 별로 상태가 바뀔 때만 SYSTEM 행 1개. 빈이 아니라 이 러너 안에서 만든다 */
+    private final IntegrationHealth autoRunHealth;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -76,7 +88,8 @@ public class ScheduleRunner implements SmartLifecycle {
                           ScheduleRunInputRepository inputRepository,
                           PlacementInputRepository placementInputRepository,
                           ScheduleExecutionService executionService,
-                          SchedulerProperties properties) {
+                          SchedulerProperties properties,
+                          PortalLogService portalLogService) {
         this.scheduleRepository = scheduleRepository;
         this.runRepository = runRepository;
         this.historyRepository = historyRepository;
@@ -84,6 +97,8 @@ public class ScheduleRunner implements SmartLifecycle {
         this.placementInputRepository = placementInputRepository;
         this.executionService = executionService;
         this.properties = properties;
+        this.portalLogService = portalLogService;
+        this.autoRunHealth = new IntegrationHealth(portalLogService, PORTAL_LOG_SCREEN);
     }
 
     // ── 수명 주기 ───────────────────────────────────────────────
@@ -113,12 +128,30 @@ public class ScheduleRunner implements SmartLifecycle {
      *
      * <p>중복 {@code start()} 로 두 번 돌지 않도록 {@code running} 을 세운 뒤에 부른다. 폴링 시작 전에
      * 끝나야 회수 대상이 폴러와 겹치지 않는다.</p>
+     *
+     * <p>회수한 스케줄이 1건 이상이면 포털 로그에 요약 SYSTEM 행 1개를 남긴다. 재기동으로 끊긴 실행은 메모리의 전이 상태가
+     * 비어 있어 실패 행이 남지 않기 때문이다. 같은 패키지의 테스트가 직접 부른다.</p>
      */
-    private void recoverStuckRunsQuietly() {
+    void recoverStuckRunsQuietly() {
+        int recovered;
         try {
-            executionService.recoverStuckRuns();
+            recovered = executionService.recoverStuckRuns();
         } catch (Throwable t) {
             log.error("기동 회수 실패 — 스케줄러는 계속 기동한다", t);
+            return;
+        }
+        recordRecoverySummary(recovered);
+    }
+
+    /** 기동 회수 요약 행. 기동 경로라 어떤 예외도 밖으로 내보내지 않는다 */
+    private void recordRecoverySummary(int recovered) {
+        if (recovered <= 0) return;
+        try {
+            portalLogService.system(PORTAL_LOG_SCREEN, "회수",
+                    "기동 회수: 실행 중으로 남아 있던 스케줄 " + recovered + "건을 실패로 마감",
+                    PortalLogResult.FAILURE, ScheduleExecutionService.RECOVERED_MESSAGE);
+        } catch (Throwable t) {
+            log.warn("기동 회수 포털 로그 기록 실패: {}", t.getMessage());
         }
     }
 
@@ -196,19 +229,23 @@ public class ScheduleRunner implements SmartLifecycle {
      * 사라진다. 같은 패키지의 테스트가 폴링 사본을 들고 직접 부른다.</p>
      */
     void executeQuietly(Schedule polled) {
+        Schedule schedule = null;
+        OffsetDateTime finishedBefore = null;
+        ScheduleRun run = null;
         try {
             Optional<Schedule> fresh = scheduleRepository.findById(polled.getId());
             if (fresh.isEmpty()) {
                 log.info("자동 실행 건너뜀 — 차례를 기다리는 사이 삭제됨: schedule={}", polled.getScheduleId());
                 return;
             }
-            Schedule schedule = fresh.get();
+            schedule = fresh.get();
             if (!schedule.isAutoRunnable()) {
                 log.info("자동 실행 건너뜀 — 차례를 기다리는 사이 사용 안 함 또는 자동 실행 해제: schedule={}",
                         schedule.getScheduleId());
                 return;
             }
-            ScheduleRun run = executionService.execute(
+            finishedBefore = schedule.getLastRunFinishedAt();
+            run = executionService.execute(
                     schedule, ScheduleRun.TriggerType.AUTO, ScheduleActorResolver.SYSTEM);
             if (run == null) {
                 log.debug("자동 실행 대상 없음: schedule={}", schedule.getScheduleId());
@@ -220,6 +257,46 @@ public class ScheduleRunner implements SmartLifecycle {
             // 실행 서비스가 이미 상태를 정리하고 이력에 사유를 남긴다. 여기서는 기록만 한다.
             log.warn("자동 실행 실패: schedule={}, reason={}",
                     polled.getScheduleId(), e.getMessage());
+        }
+        if (schedule != null) {
+            observeAutoRun(schedule, finishedBefore, run);
+        }
+    }
+
+    /**
+     * 자동 실행 1회의 결과를 포털 로그 전이로 남긴다(docs/08 §6 의 요청 없는 기록 · {@link IntegrationHealth}).
+     *
+     * <p>{@code ScheduleExecutionService.complete} 는 들고 있는 엔티티에도 결과를 반영한다. 그래서 실행 이력을 돌려줬든,
+     * 대상 0건으로 null 이든, 실패를 마감한 뒤 예외든 엔티티 하나로 읽는다. 마무리 시각이 그대로면(실행 권한을 못 잡은 409)
+     * 이번 회차는 끝난 것이 아니라 보지 않는다.</p>
+     *
+     * <p>실패는 FAILED 이고, 복구는 실행 이력이 있는 COMPLETED 만이다. 대상 0건으로 끝난 회차(대상 없음 · 재시도 대기)는
+     * 상태를 바꾸지 않는다 — 배치할 수 없는 워크로드가 재시도 간격마다 장애 · 복구 짝을 되풀이하지 않게 하려는 것이다.
+     * 관측이 실패해도 자동 실행은 그대로다.</p>
+     */
+    private void observeAutoRun(Schedule schedule, OffsetDateTime finishedBefore, ScheduleRun run) {
+        try {
+            OffsetDateTime finishedAfter = schedule.getLastRunFinishedAt();
+            if (finishedAfter == null || finishedAfter.equals(finishedBefore)) return;
+            String key = "schedule:" + schedule.getId();
+            String what = schedule.getScheduleId() + " (id " + schedule.getId() + ")";
+            if (schedule.getLastRunStatus() == ScheduleRun.RunStatus.FAILED) {
+                autoRunHealth.failed(key, what, new AutoRunFailure(schedule.getLastRunMessage()));
+            } else if (schedule.getLastRunStatus() == ScheduleRun.RunStatus.COMPLETED && run != null) {
+                autoRunHealth.recovered(key, what);
+            }
+        } catch (RuntimeException e) {
+            log.warn("자동 실행 포털 로그 관측 실패: schedule={}, reason={}", schedule.getScheduleId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 실패 사유 운반용 — {@link IntegrationHealth#failed} 가 예외 메시지를 사유로 쓴다. 던지지 않고 스택도 만들지 않는다.
+     * 사유가 비어 있으면 「사유 없음」으로 둔다(문자열 "null" 이 남지 않게).
+     */
+    private static final class AutoRunFailure extends RuntimeException {
+        AutoRunFailure(String message) {
+            super(message == null || message.isBlank() ? "사유 없음" : message, null, false, false);
         }
     }
 

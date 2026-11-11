@@ -109,7 +109,7 @@ class SchedulerResponseTypeApiTest {
                     "totalPowerWatts", "totalCapacityWatts", "gradeAvailable", "gradeUnavailableReason")),
             Map.entry(PowerEfficiencyResponse.NodeEfficiency.class, List.of("mdcId", "nodeId", "evaluable", "cpuUsagePercent", "powerWatts",
                     "powerCapacityWatts", "idlePowerWatts", "headroomPercent", "peiRaw", "peiNormalized", "proportionality", "grade", "rank",
-                    "powerSource", "recommendation")),
+                    "powerSource", "recommendation", "totalCpu", "usedCoresPerKw", "coreRank")),
             Map.entry(PowerEfficiencyTrendResponse.class, List.of("nodeId", "from", "to", "step", "points", "message")),
             Map.entry(PowerEfficiencyTrendResponse.Point.class, List.of("at", "powerWatts", "cpuUsagePercent", "peiRaw")),
             Map.entry(PowerOptimizationResponse.class, List.of("evaluatedAt", "cluster", "mdcs", "findings", "summary")),

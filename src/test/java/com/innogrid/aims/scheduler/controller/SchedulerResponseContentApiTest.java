@@ -3,6 +3,7 @@ package com.innogrid.aims.scheduler.controller;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -194,6 +195,20 @@ class SchedulerResponseContentApiTest {
                 .param("from", "2026-09-01T00:00:00Z").param("to", "2026-09-01T01:00:00Z").param("step", "5m"))
                 .andExpect(status().isOk()).andReturn());
         assertArrayEquals(objectMapper.writeValueAsBytes(ApiResponse.ok(powerEfficiencyService.trend(NODE, from, to, "5m"))), trend, "효율 추세");
+    }
+
+    @DisplayName("전력 효율 노드 행은 코어 수 · 사용 코어 환산 효율 · 코어 기준 순위를 키 끝에 싣는다")
+    @Test
+    void power_efficiency_row_carries_core_basis() throws Exception {
+        JsonNode row = data(mockMvc.perform(get(BASE + "/nodes/power-efficiency")).andExpect(status().isOk()).andReturn()).get("nodes").get(0);
+
+        assertEquals(NODE, row.get("nodeId").asString());
+        assertEquals(8, row.get("totalCpu").asInt(), "수집 노드 8코어");
+        assertEquals(8.0, row.get("usedCoresPerKw").asDouble(), 1e-9, "10% × 8코어 ÷ 0.1kW");
+        assertEquals(1, row.get("coreRank").asInt());
+        List<String> keys = new ArrayList<>();
+        row.propertyNames().forEach(keys::add);
+        assertEquals(List.of("totalCpu", "usedCoresPerKw", "coreRank"), keys.subList(keys.size() - 3, keys.size()), "새 키는 끝에 붙는다");
     }
 
     @DisplayName("전력 효율·전력 최적화·통합 진단은 평가 시각을 뺀 값이 서비스 결과와 같다")

@@ -325,8 +325,81 @@ class PowerEfficiencyServiceTest {
         assertEquals(before.headroomPercent(), after.headroomPercent(), EPS);
     }
 
+    // ── 코어 기준 효율 · 순위 ──────────────────────────────────
+
+    @DisplayName("사용 코어 환산 효율은 CPU 사용률 × 코어 수를 kW 로 나눈 값이고 코어 수를 함께 싣는다")
+    @Test
+    void used_cores_per_kw_is_cpu_times_cores_over_kw() {
+        NodeEfficiency n = evaluateOne(node("n1", 8, 80, 200));
+
+        assertEquals(8, n.totalCpu());
+        assertEquals(32.0, n.usedCoresPerKw(), EPS, "0.8 × 8코어 ÷ 0.2kW");
+        assertEquals(1, n.coreRank());
+    }
+
+    @DisplayName("전력이나 코어 수를 모르면 사용 코어 환산 효율과 코어 기준 순위를 비우고 코어 수는 그대로 싣는다")
+    @Test
+    void unknown_power_or_cores_clear_core_basis() {
+        NodeEfficiency noPower = evaluateOne(node("n9", 8, 50, 0));
+        assertEquals(8, noPower.totalCpu());
+        assertNull(noPower.usedCoresPerKw());
+        assertNull(noPower.coreRank());
+        assertNull(noPower.peiRaw(), "기존 파생 지표도 그대로 비어 있다");
+        assertNull(noPower.rank());
+
+        // 수집기는 코어 수가 0 이하인 노드를 빼지만(NodeResourceCollector) 평가는 받은 스냅샷을 그대로 쓰므로 여기서 막는다
+        NodeEfficiency noCores = evaluateOne(node("n0", 0, 50, 200));
+        assertEquals(0, noCores.totalCpu());
+        assertTrue(noCores.evaluable(), "전력이 있으니 원값 지표는 낸다");
+        assertEquals(1, noCores.rank());
+        assertNull(noCores.usedCoresPerKw(), "코어 수를 모르면 일의 양을 모른다");
+        assertNull(noCores.coreRank());
+    }
+
+    /**
+     * 코어 수가 섞이면 두 순위가 갈린다. 원값 순위는 사용률 ÷ W 라 16코어 70% 395W(0.1772)가 32코어 35% 314W(0.1115)보다 앞서지만,
+     * 일한 코어 수로 보면 32코어 쪽(11.2코어 ÷ 0.314kW = 35.67)이 16코어 쪽(11.2코어 ÷ 0.395kW = 28.35)보다 앞선다.
+     * 64코어 20% 380W 는 코어 기준 2위(33.68)인데 원값은 꼴찌(0.0526 · D)라, 원값 기준이면 저부하 권고가 붙고 코어 기준이면 붙지 않는다 —
+     * 권고가 어느 기준을 따르는지 이 노드로 가려낸다.
+     */
+    @DisplayName("코어 수가 섞이면 코어 기준 순위가 원값 순위와 갈리고 등급과 권고는 원값 기준 그대로다")
+    @Test
+    void mixed_cores_split_core_rank_from_raw_rank() {
+        PowerEfficiencyResponse result = service.evaluate(List.of(
+                node("big", 32, 35, 314), node("mid", 16, 70, 395), node("small", 8, 60, 200), node("wide", 64, 20, 380)));
+
+        assertEquals(List.of(3, 2, 1, 4), List.of(find(result, "big").rank(), find(result, "mid").rank(),
+                find(result, "small").rank(), find(result, "wide").rank()), "원값 순위: small 0.3 · mid 0.1772 · big 0.1115 · wide 0.0526");
+        assertEquals(List.of(1, 3, 4, 2), List.of(find(result, "big").coreRank(), find(result, "mid").coreRank(),
+                find(result, "small").coreRank(), find(result, "wide").coreRank()), "코어 기준: big 35.67 · wide 33.68 · mid 28.35 · small 24");
+        assertEquals(35.6688, find(result, "big").usedCoresPerKw(), EPS);
+        assertEquals(33.6842, find(result, "wide").usedCoresPerKw(), EPS);
+        assertEquals(28.3544, find(result, "mid").usedCoresPerKw(), EPS);
+        assertEquals(List.of("C", "B", "A", "D"), List.of(grade(result, "big"), grade(result, "mid"), grade(result, "small"), grade(result, "wide")),
+                "등급은 원값 순위로 매긴다");
+        assertEquals("저부하로 전력 효율이 낮습니다. 워크로드 통합을 검토하세요", find(result, "wide").recommendation(),
+                "코어 기준 2위여도 원값 D · 사용률 20% 라 저부하 권고가 붙는다");
+    }
+
+    @DisplayName("코어 수가 모두 같으면 코어 기준 순위가 원값 순위와 같고 동점은 노드 ID 순이다")
+    @Test
+    void same_cores_keep_core_rank_equal_to_rank() {
+        PowerEfficiencyResponse result = service.evaluate(List.of(
+                node("d", 8, 50, 200), node("c", 8, 50, 200), node("b", 8, 70, 200), node("a", 8, 30, 200)));
+
+        for (NodeEfficiency n : result.nodes()) {
+            assertEquals(n.rank(), n.coreRank(), n.nodeId());
+        }
+        assertEquals(2, find(result, "c").coreRank(), "c · d 동점 — 넣은 순서(d 먼저)와 관계없이 노드 ID 순");
+        assertEquals(3, find(result, "d").coreRank());
+    }
+
     private NodeResource node(String id, double cpuPercent, double powerWatts) {
-        NodeResource node = new NodeResource("mdc-01", id, 8, 16384, 0,
+        return node(id, 8, cpuPercent, powerWatts);
+    }
+
+    private NodeResource node(String id, int cores, double cpuPercent, double powerWatts) {
+        NodeResource node = new NodeResource("mdc-01", id, cores, 16384, 0,
                 cpuPercent, 50, 30, powerWatts, 500, 40, 0, 0);
         node.setPowerSource(powerWatts > 0
                 ? NodeResource.PowerSource.IPMI : NodeResource.PowerSource.NONE);

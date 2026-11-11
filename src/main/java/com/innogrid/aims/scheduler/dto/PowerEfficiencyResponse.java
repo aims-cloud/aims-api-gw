@@ -55,6 +55,10 @@ public record PowerEfficiencyResponse(
      * @param grade           클러스터 내 4분위 상대 등급 A~D. 표본이 모자라면 null
      * @param rank            PEI 내림차순 순위. 평가 불가 노드는 null
      * @param recommendation  운영 권고 한 줄. 해당 없으면 null
+     * @param totalCpu        노드 코어 수 — 노드 조회의 totalCpu 와 같은 수집 값
+     * @param usedCoresPerKw  사용 코어 환산 효율(코어/kW) = CPU 사용률/100 × 코어 수 ÷ 소비 전력(kW). PEI 원값과 달리 코어 수를 본다.
+     *                        평가 불가 노드와 코어 수가 0 이하인 노드는 null
+     * @param coreRank        usedCoresPerKw 내림차순 순위. 동점이면 노드 ID 사전순. 값이 없는 노드는 null
      */
     @Schema(name = "PowerEfficiencyNodeEfficiency")
     public record NodeEfficiency(
@@ -75,14 +79,19 @@ public record PowerEfficiencyResponse(
             String grade,
             Integer rank,
             String powerSource,
-            String recommendation
+            String recommendation,
+
+            int totalCpu,
+            Double usedCoresPerKw,
+            Integer coreRank
     ) {
         /** 순위·등급을 채운 사본. 레코드라 새로 만들어 돌려준다. */
         public NodeEfficiency ranked(Integer rank, String grade) {
             return new NodeEfficiency(mdcId, nodeId, evaluable,
                     cpuUsagePercent, powerWatts, powerCapacityWatts,
                     idlePowerWatts, headroomPercent, peiRaw, peiNormalized, proportionality,
-                    grade, rank, powerSource, recommendation);
+                    grade, rank, powerSource, recommendation,
+                    totalCpu, usedCoresPerKw, coreRank);
         }
 
         /** 권고를 채운 사본. */
@@ -90,7 +99,17 @@ public record PowerEfficiencyResponse(
             return new NodeEfficiency(mdcId, nodeId, evaluable,
                     cpuUsagePercent, powerWatts, powerCapacityWatts,
                     idlePowerWatts, headroomPercent, peiRaw, peiNormalized, proportionality,
-                    grade, rank, powerSource, recommendation);
+                    grade, rank, powerSource, recommendation,
+                    totalCpu, usedCoresPerKw, coreRank);
+        }
+
+        /** 코어 기준 순위를 채운 사본. */
+        public NodeEfficiency coreRanked(Integer coreRank) {
+            return new NodeEfficiency(mdcId, nodeId, evaluable,
+                    cpuUsagePercent, powerWatts, powerCapacityWatts,
+                    idlePowerWatts, headroomPercent, peiRaw, peiNormalized, proportionality,
+                    grade, rank, powerSource, recommendation,
+                    totalCpu, usedCoresPerKw, coreRank);
         }
     }
 }

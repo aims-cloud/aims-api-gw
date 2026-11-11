@@ -88,7 +88,7 @@ public class ScheduleController {
                        + " + ', 사용 여부: ' + (#enabled == null ? '전체' : (#enabled ? '사용' : '미사용')) + ')'")
     @GetMapping
     public ApiResponse<PageResponse<ScheduleResponse>> getSchedules(
-            @Parameter(description = "스케줄 ID·스케줄명·리소스 종류·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). 리소스 종류는 저장된 코드(VM·GPU·NPU·CONTAINER)를 찾고 종류를 비워 둔 스케줄은 검색어로 찾지 않습니다. % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
+            @Parameter(description = "스케줄 ID·스케줄명·리소스 종류·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). 리소스 종류는 저장된 코드(VM·GPU·NPU·CONTAINER)를 찾으며, 종류를 비워 둔 스케줄은 리소스 종류로는 걸리지 않고 스케줄 ID·스케줄명·설명으로는 찾습니다. % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
             @RequestParam(required = false) String keyword,
             @Parameter(description = "리소스 종류. VM 은 종류를 비워 둔 스케줄(생성 때 생략)도 포함합니다(실행이 VM 으로 해석하는 것과 같음). 비우면 전체")
             @RequestParam(required = false) Workload.ResourceType resourceType,
@@ -110,7 +110,7 @@ public class ScheduleController {
                        + " + ', 사용 여부: ' + (#enabled == null ? '전체' : (#enabled ? '사용' : '미사용')) + ')'")
     @GetMapping("/export")
     public ResponseEntity<byte[]> exportSchedules(
-            @Parameter(description = "스케줄 ID·스케줄명·리소스 종류·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). 리소스 종류는 저장된 코드(VM·GPU·NPU·CONTAINER)를 찾고 종류를 비워 둔 스케줄은 검색어로 찾지 않습니다. % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
+            @Parameter(description = "스케줄 ID·스케줄명·리소스 종류·설명의 부분 일치(대소문자 무시 · 앞뒤 공백 제거). 리소스 종류는 저장된 코드(VM·GPU·NPU·CONTAINER)를 찾으며, 종류를 비워 둔 스케줄은 리소스 종류로는 걸리지 않고 스케줄 ID·스케줄명·설명으로는 찾습니다. % 와 _ 는 문자 그대로 찾습니다. 비우면 필터 없음")
             @RequestParam(required = false) String keyword,
             @Parameter(description = "리소스 종류. VM 은 종류를 비워 둔 스케줄도 포함합니다. 비우면 전체")
             @RequestParam(required = false) Workload.ResourceType resourceType,

@@ -75,7 +75,11 @@ final class BenchmarkColumns {
             BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
             BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "250", BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "1000",
             BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + "0", BenchmarkRules.IDLE_RECONSTRUCTION_DISABLED_COLUMN,
-            BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN, BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN);
+            BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN, BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN,
+            BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
+
+    /** 온도 상한 열이 정책 사본에서 바꾸는 노브 이름 — 응답의 {@code engineConfigOverride} 와 설정 다이제스트에 같은 이름으로 실린다. */
+    static final String TEMPERATURE_LIMIT_KNOB = "maxTemperatureCelsius";
 
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     static final String RANDOM_ID = "random";
@@ -189,6 +193,12 @@ final class BenchmarkColumns {
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE,
                 ScheduleExecutionService.BY_PRIORITY_THEN_SIZE, weighted::schedule),
                 Map.of(), powerModel));
+        // 온도 상한을 낮춘 열 — 기본 엔진에 기준 정책 사본의 온도 상한 하나만 낮춘다(운영 스케줄 온도 상한과 같은 필드). override 열이라
+        // 총량 짝 조건의 기준 집합 밖이다(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN_RULE)
+        variants.put(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN,
+                "가중 점수(온도 상한 65℃ · 스케줄 온도 상한과 같은 정책 사본 · 판정 자격 없음)",
+                PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),
+                Map.of(TEMPERATURE_LIMIT_KNOB, String.valueOf(BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS)), powerModel));
 
         if (!variants.keySet().equals(Set.copyOf(ENGINE_VARIANT_ORDER))) {
             throw new IllegalStateException("엔진 변종 순서 목록과 구현이 다르다 — 열이 조용히 빠진다: "
@@ -224,14 +234,17 @@ final class BenchmarkColumns {
     }
 
     /**
-     * 이 전략이 볼 정책 — 변종 사본에 열 override 를 얹는다. 지금 정책 노브 override 는 {@code affinityEnabled} 하나다.
-     * 어떤 경우에도 <b>영속되지 않는 사본</b>이다.
+     * 이 전략이 볼 정책 — 변종 사본에 열 override 를 얹는다. 지금 정책 노브 override 는 {@code affinityEnabled} 와
+     * 온도 상한({@link #TEMPERATURE_LIMIT_KNOB}) 둘이다. 어떤 경우에도 <b>영속되지 않는 사본</b>이다.
      */
     static SchedulingPolicy policyFor(PlacementStrategy strategy, Map<String, String> override) {
         SchedulingPolicy policy = policyFor(strategy.policy());
-        if ("true".equals(override.get("affinityEnabled"))) {
+        boolean affinity = "true".equals(override.get("affinityEnabled"));
+        String temperatureLimit = override.get(TEMPERATURE_LIMIT_KNOB);
+        if (affinity || temperatureLimit != null) {
             policy = policy.detachedCopy();
-            policy.setAffinityEnabled(true);
+            if (affinity) policy.setAffinityEnabled(true);
+            if (temperatureLimit != null) policy.setMaxTemperatureCelsius(Double.parseDouble(temperatureLimit));
         }
         return policy;
     }

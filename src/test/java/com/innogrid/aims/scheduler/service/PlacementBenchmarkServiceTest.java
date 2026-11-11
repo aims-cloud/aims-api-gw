@@ -339,13 +339,13 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·변종 7 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
-     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762} 였다.
+     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·override 열 6 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
+     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762}, 온도 상한 열 추가 전의 값은 {@code 1487c10f4e97} 이었다.
      */
     @DisplayName("기본 설정의 configDigest 리터럴이 고정된다 — 바뀌면 계약 §10 행이 따른다")
     @Test
     void the_default_config_digest_is_pinned() {
-        assertEquals("1487c10f4e97", service.compare("main", "heavytail").engineConfig().configDigest(),
+        assertEquals("b8f222c123d1", service.compare("main", "heavytail").engineConfig().configDigest(),
                 "설정 다이제스트가 바뀌었다 — canonical 성분·열·노브가 바뀐 것이며 계약 §10 에 옛 → 새 행을 적는다");
     }
 
@@ -810,13 +810,14 @@ class PlacementBenchmarkServiceTest {
     void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
         assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity",
                 "power-s250", "power-s1000", "power-s0", "power-idle-fixed",
-                "weighted-priority-age", "weighted-priority-size"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+                "weighted-priority-age", "weighted-priority-size", "weighted-temp-65"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
         Map<String, Map<String, String>> expected = Map.of(
                 "weighted-affinity", Map.of("affinityEnabled", "true"),
                 "power-s250", Map.of("marginalScaleWatts", "250.0"),
                 "power-s1000", Map.of("marginalScaleWatts", "1000.0"),
                 "power-s0", Map.of("marginalScaleWatts", "0.0"),
-                "power-idle-fixed", Map.of("idleFromMeasurement", "false"));
+                "power-idle-fixed", Map.of("idleFromMeasurement", "false"),
+                "weighted-temp-65", Map.of("maxTemperatureCelsius", "65.0"));
         var cell = service.compare("main", "heavytail").boards().get(0).cells().get(0);
         for (var s : cell.strategies()) {
             assertEquals(expected.getOrDefault(s.strategyId(), Map.of()), s.engineConfigOverride(), s.strategyId());

@@ -103,7 +103,7 @@ class PlacementBenchmarkApiTest {
                 "전력·온도가 실측이 아니라 식의 출력임을 전제 블록이 말해야 한다");
     }
 
-    @DisplayName("셀마다 전략 열 열여덟 개가 사전 등록된 지표 전량을 싣는다")
+    @DisplayName("셀마다 전략 열 열아홉 개가 사전 등록된 지표 전량을 싣는다")
     @Test
     void every_cell_carries_eleven_strategies_with_every_declared_metric() throws Exception {
         Set<String> declared = BenchmarkRules.METRICS.stream()
@@ -111,7 +111,7 @@ class PlacementBenchmarkApiTest {
 
         for (JsonNode cell : body(URL).path("data").path("boards").path(0).path("cells")) {
             JsonNode strategies = cell.path("strategies");
-            assertEquals(18, strategies.size(), "엔진 3 + 변종 7(자원전용 2 · 링크 게이트 1 · 눈금 3 · 역산 차단 1) + 스케줄 배치 순서 2 + 대조군 6 = 열여덟 열이어야 한다");
+            assertEquals(19, strategies.size(), "엔진 3 + 변종 8(자원전용 2 · 링크 게이트 1 · 눈금 3 · 역산 차단 1 · 온도 상한 1) + 스케줄 배치 순서 2 + 대조군 6 = 열아홉 열이어야 한다");
 
             for (JsonNode s : strategies) {
                 Set<String> keys = new TreeSet<>();

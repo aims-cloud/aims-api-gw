@@ -68,9 +68,9 @@ class ThermalInertiaSensitivityReportTest {
             assertEquals(EXPECTED[i][0], j, BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, "판정 셀 중앙값이 사전 등록 리터럴과 다르다: k=" + k);
             assertEquals(EXPECTED[i][1], d, BenchmarkRules.JUDGMENT_POINT_IGNORE_PP, "방향 셀 중앙값이 사전 등록 리터럴과 다르다: k=" + k);
             if (k == DEFAULT_K) {
-                assertEquals("1487c10f4e97", judgment.engineConfig().configDigest(), "기본 계수 행은 기본 설정 다이제스트여야 한다");
+                assertEquals("b8f222c123d1", judgment.engineConfig().configDigest(), "기본 계수 행은 기본 설정 다이제스트여야 한다");
             } else {
-                assertNotEquals("1487c10f4e97", judgment.engineConfig().configDigest(), "다른 계수 행은 설정 다이제스트가 달라 판정 자격이 없어야 한다 — 계수가 다이제스트 성분에서 빠졌다");
+                assertNotEquals("b8f222c123d1", judgment.engineConfig().configDigest(), "다른 계수 행은 설정 다이제스트가 달라 판정 자격이 없어야 한다 — 계수가 다이제스트 성분에서 빠졌다");
             }
         }
         Files.createDirectories(OUT.getParent());

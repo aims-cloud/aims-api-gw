@@ -791,11 +791,18 @@ public class ScheduleService {
             var predicates = new ArrayList<Predicate>();
             if (keyword != null && !keyword.isBlank()) {
                 // %·_ 는 문자 그대로 — 워크로드 페이징과 같은 이스케이프 규칙(escape 인자를 명시해 DB 기본값에 기대지 않는다)
-                String like = LikePatterns.contains(keyword.trim().toLowerCase(Locale.ROOT));
-                predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("scheduleId")), like, LikePatterns.ESCAPE),
-                        cb.like(cb.lower(root.get("name")), like, LikePatterns.ESCAPE),
-                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, LikePatterns.ESCAPE)));
+                String needle = keyword.trim().toLowerCase(Locale.ROOT);
+                String like = LikePatterns.contains(needle);
+                var anyField = new ArrayList<Predicate>();
+                anyField.add(cb.like(cb.lower(root.get("scheduleId")), like, LikePatterns.ESCAPE));
+                anyField.add(cb.like(cb.lower(root.get("name")), like, LikePatterns.ESCAPE));
+                anyField.add(cb.like(cb.lower(cb.coalesce(root.get("description"), "")), like, LikePatterns.ESCAPE));
+                // 리소스 종류는 저장된 코드만 본다 — 종류를 비워 둔 스케줄은 검색어로 걸리지 않는다(아래 VM 필터와 다름)
+                List<Workload.ResourceType> types = resourceTypesContaining(needle);
+                if (!types.isEmpty()) {
+                    anyField.add(root.get("resourceType").in(types));
+                }
+                predicates.add(cb.or(anyField.toArray(new Predicate[0])));
             }
             if (resourceType != null) {
                 Predicate same = cb.equal(root.get("resourceType"), resourceType);
@@ -809,6 +816,17 @@ public class ScheduleService {
             return predicates.isEmpty() ? cb.conjunction()
                     : cb.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    /** 저장 코드(소문자)가 검색어를 포함하는 리소스 종류. 걸리는 종류가 없으면 빈 목록이라 검색 조건은 세 필드 그대로다. */
+    private static List<Workload.ResourceType> resourceTypesContaining(String needle) {
+        List<Workload.ResourceType> types = new ArrayList<>();
+        for (Workload.ResourceType type : Workload.ResourceType.values()) {
+            if (type.name().toLowerCase(Locale.ROOT).contains(needle)) {
+                types.add(type);
+            }
+        }
+        return types;
     }
 
     private BusinessException badRequest(String message) {

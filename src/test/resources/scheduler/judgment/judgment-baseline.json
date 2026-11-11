@@ -1,7 +1,7 @@
 {
   "schemaVersion" : 3,
   "provenance" : {
-    "gitHead" : "d34725e6abe80a2642d5f80fd5992de0c90542e6 (refs/heads/rules/judgment-target-retire-pei-per-core)",
+    "gitHead" : "d1df80f15cad6593e649cd5495c86f1622d4d845 (refs/heads/feat/scheduler-benchmark-temperature-limit-column)",
     "productionPath" : "저장소 시험 · 코드 기본 SchedulerProperties · compareFresh(캐시 우회) — 배포 env 의 덮어쓰기는 반영하지 않는다",
     "distribution" : "heavytail",
     "boardDigests" : {
@@ -12,7 +12,7 @@
       "main-independent" : "ef2d4c7b28b7"
     },
     "workloadDigest" : "5cb1baa7e752",
-    "configDigest" : "1487c10f4e97",
+    "configDigest" : "b8f222c123d1",
     "engineIds" : [
       "power",
       "temperature",
@@ -23,8 +23,8 @@
       "boards" : "9ab95b89dc3e",
       "judgment" : "ae0b48b8f9a7",
       "measured" : "0189eec53480",
-      "metrics" : "0435607b4998",
-      "prose" : "d259678dfd94",
+      "metrics" : "8845c99fe402",
+      "prose" : "5d128fcaeb0d",
       "sensitivity" : "3741559c00dd",
       "sweep" : "559301d27583"
     },

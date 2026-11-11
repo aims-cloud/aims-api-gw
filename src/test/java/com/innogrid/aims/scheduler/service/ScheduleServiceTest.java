@@ -332,6 +332,38 @@ class ScheduleServiceTest {
         assertEquals(2, scheduleService.list(null, null, true, 1, 10, null).totalElements());
     }
 
+    @DisplayName("검색어는 리소스 종류 코드도 대소문자 무시 부분 일치로 찾고 종류를 비운 스케줄은 찾지 않는다")
+    @Test
+    void keyword_matches_resource_type_code() {
+        seedResourceTypes();
+
+        assertEquals(List.of("r1"), keywordIds("gpu", null, null));
+        assertEquals(List.of("r1", "r2"), keywordIds("pu", null, null), "GPU · NPU");
+        assertEquals(List.of("r2", "r3"), keywordIds("n", null, null), "한 글자도 종류로 찾는다 — NPU · CONTAINER");
+        assertEquals(List.of("r3"), keywordIds("  CONT ", null, null), "앞뒤 공백 제거 · 대소문자 무시");
+        assertEquals(List.of("r4"), keywordIds("vm", null, null), "종류를 비운 r5 는 검색어 vm 으로 찾지 않는다");
+        assertEquals(List.of("r5"), keywordIds("마", null, null), "종류가 비어도 이름으로는 찾는다");
+        for (String none : List.of("gpux", "g_u", "%")) {
+            assertEquals(List.of(), keywordIds(none, null, null), none);
+        }
+        assertEquals(2, scheduleService.list("pu", null, null, 1, 10, null).totalElements());
+    }
+
+    @DisplayName("리소스 종류로 걸린 검색어도 리소스 종류 · 사용 여부 필터와 AND 로 겹친다")
+    @Test
+    void resource_type_keyword_combines_with_filters() {
+        seedResourceTypes();
+
+        assertEquals(List.of("r2"), keywordIds("pu", null, false), "사용 안 함은 NPU 하나");
+        assertEquals(List.of("r2"), keywordIds("pu", Workload.ResourceType.NPU, null));
+        assertEquals(List.of(), keywordIds("gpu", Workload.ResourceType.VM, null));
+        assertEquals(List.of("r4"), keywordIds("vm", Workload.ResourceType.VM, null),
+                "VM 필터는 종류를 비운 r5 를 넣지만 검색어가 빼므로 r4 하나");
+        PageResponse<ScheduleResponse> first = scheduleService.list("pu", null, null, 1, 1, "scheduleId,asc");
+        assertEquals(2, first.totalElements());
+        assertEquals(2, first.totalPages(), "총건수와 쪽 수에도 종류 검색이 반영된다");
+    }
+
     @DisplayName("허용하지 않는 정렬 필드는 400 이다")
     @Test
     void disallowed_sort_field_400() {
@@ -415,6 +447,22 @@ class ScheduleServiceTest {
         assertEquals("월요일", preview.nextRuns().get(0).dayOfWeek());
         assertTrue(preview.nextRuns().get(0).localTime().endsWith("02:00:00"),
                 preview.nextRuns().get(0).localTime());
+    }
+
+    /** 업무 키 r1~r5 · 이름 가~마 · 종류 GPU · NPU · CONTAINER · VM · 없음(키와 이름에는 이 테스트의 검색어가 들어 있지 않다) · NPU 만 사용 안 함. */
+    private void seedResourceTypes() {
+        Workload.ResourceType[] types = {Workload.ResourceType.GPU, Workload.ResourceType.NPU,
+                Workload.ResourceType.CONTAINER, Workload.ResourceType.VM, null};
+        String[] names = {"가", "나", "다", "라", "마"};
+        for (int i = 0; i < types.length; i++) {
+            scheduleService.create(new ScheduleRequest("r" + (i + 1), names[i], types[i], "0 0 2 * * ?",
+                    null, types[i] != Workload.ResourceType.NPU, null, null, null, null, null));
+        }
+    }
+
+    private List<String> keywordIds(String keyword, Workload.ResourceType type, Boolean enabled) {
+        return scheduleService.list(keyword, type, enabled, 1, 10, "scheduleId,asc").items().stream()
+                .map(ScheduleResponse::scheduleId).toList();
     }
 
     private ScheduleRequest request(String scheduleId, String cron) {

@@ -170,6 +170,23 @@ class ScheduleExportApiTest {
         }
     }
 
+    @DisplayName("목록 내보내기도 검색어로 리소스 종류를 찾고 행은 목록의 모든 쪽과 같다")
+    @Test
+    void list_export_keyword_matches_resource_type() throws Exception {
+        Schedules s = seedSchedules();
+        try {
+            assertEquals(List.of(s.keys().get(3)), ownKeys(assertListExportMatchesPages("keyword", "npu"), s));
+            List<List<String>> pu = ownRows(assertListExportMatchesPages("keyword", "pu"), s);
+            assertEquals(List.of(s.keys().get(3), s.keys().get(1)), column(pu, 0),
+                    "기본 정렬 createdAt,desc — 나중에 만든 bravo(NPU) 가 먼저");
+            assertEquals(List.of("NPU", "GPU"), column(pu, 2));
+            assertEquals(List.of(s.keys().get(2)), ownKeys(assertListExportMatchesPages("keyword", "vm"), s),
+                    "종류를 비운 delta 는 검색어 vm 으로 찾지 않는다");
+        } finally {
+            for (long id : s.ids()) mockMvc.perform(delete(BASE).param("ids", String.valueOf(id)));
+        }
+    }
+
     @DisplayName("= · + · @ 로 시작하는 값과 XML 특수 문자는 수식 없이 글자 그대로 남고 XML 이 허용하지 않는 제어 문자만 빠진다")
     @Test
     void formula_like_values_stay_text_and_control_chars_are_dropped() throws Exception {
@@ -405,6 +422,15 @@ class ScheduleExportApiTest {
 
     private static List<String> column(List<List<String>> rows, int index) {
         return rows.stream().map(r -> r.get(index)).toList();
+    }
+
+    /** 공유 DB 의 다른 행을 빼고 이 테스트가 심은 업무 키의 행만 순서대로 고른다. */
+    private static List<List<String>> ownRows(List<List<String>> rows, Schedules s) {
+        return rows.stream().filter(r -> r.get(0).startsWith(s.prefix())).toList();
+    }
+
+    private static List<String> ownKeys(List<List<String>> rows, Schedules s) {
+        return column(ownRows(rows, s), 0);
     }
 
     private static int count(String text, String regex) {

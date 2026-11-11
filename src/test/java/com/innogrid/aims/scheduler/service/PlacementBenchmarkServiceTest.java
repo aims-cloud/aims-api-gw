@@ -339,13 +339,13 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·변종 7 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
-     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762} 였다.
+     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·override 열 6 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
+     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762}, 온도 상한 열 추가 전의 값은 {@code 1487c10f4e97} 이었다.
      */
     @DisplayName("기본 설정의 configDigest 리터럴이 고정된다 — 바뀌면 계약 §10 행이 따른다")
     @Test
     void the_default_config_digest_is_pinned() {
-        assertEquals("1487c10f4e97", service.compare("main", "heavytail").engineConfig().configDigest(),
+        assertEquals("b8f222c123d1", service.compare("main", "heavytail").engineConfig().configDigest(),
                 "설정 다이제스트가 바뀌었다 — canonical 성분·열·노브가 바뀐 것이며 계약 §10 에 옛 → 새 행을 적는다");
     }
 
@@ -810,13 +810,14 @@ class PlacementBenchmarkServiceTest {
     void engine_variant_order_is_pinned_and_default_columns_have_no_override() {
         assertEquals(List.of("resource-only-gated", "resource-only-ungated", "weighted-affinity",
                 "power-s250", "power-s1000", "power-s0", "power-idle-fixed",
-                "weighted-priority-age", "weighted-priority-size"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
+                "weighted-priority-age", "weighted-priority-size", "weighted-temp-65"), PlacementBenchmarkService.ENGINE_VARIANT_ORDER);
         Map<String, Map<String, String>> expected = Map.of(
                 "weighted-affinity", Map.of("affinityEnabled", "true"),
                 "power-s250", Map.of("marginalScaleWatts", "250.0"),
                 "power-s1000", Map.of("marginalScaleWatts", "1000.0"),
                 "power-s0", Map.of("marginalScaleWatts", "0.0"),
-                "power-idle-fixed", Map.of("idleFromMeasurement", "false"));
+                "power-idle-fixed", Map.of("idleFromMeasurement", "false"),
+                "weighted-temp-65", Map.of("maxTemperatureCelsius", "65.0"));
         var cell = service.compare("main", "heavytail").boards().get(0).cells().get(0);
         for (var s : cell.strategies()) {
             assertEquals(expected.getOrDefault(s.strategyId(), Map.of()), s.engineConfigOverride(), s.strategyId());
@@ -1851,6 +1852,141 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
+     * 온도 상한 열의 정책은 기준 정책 사본에서 온도 상한 하나만 다르다 — 다른 필드가 함께 바뀌면 열 차이가 운영 스케줄 온도 상한의 효과가 아니게 된다.
+     * 선언 필드 전량을 반사로 견주고(SchedulingPolicyCopyTest 와 같은 방식), 다른 열의 정책은 기본 임계 그대로인지 함께 본다.
+     */
+    @DisplayName("온도 상한 열은 기준 정책 사본에서 온도 상한만 기본 경고 온도로 낮추고 다른 열의 정책은 그대로 둔다")
+    @Test
+    void temperature_limit_column_lowers_only_the_policy_limit() throws IllegalAccessException {
+        BenchmarkColumns columns = harnessColumns();
+        BenchmarkColumns.EngineVariant lowered = columns.engineVariants().stream()
+                .filter(v -> v.strategy().id().equals(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN)).findFirst().orElseThrow();
+        SchedulingPolicy policy = BenchmarkColumns.policyFor(lowered.strategy(), lowered.override());
+        SchedulingPolicy base = BenchmarkColumns.policyFor(lowered.strategy(), Map.of());
+        List<String> differing = new ArrayList<>();
+        for (java.lang.reflect.Field f : SchedulingPolicy.class.getDeclaredFields()) {
+            if (f.isSynthetic() || java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+            f.setAccessible(true);
+            if (!Objects.equals(f.get(policy), f.get(base))) differing.add(f.getName());
+        }
+        assertEquals(List.of("maxTemperatureCelsius"), differing, "온도 상한 말고 바뀐 필드가 있다");
+        assertEquals(BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS, policy.getMaxTemperatureCelsius());
+        assertNull(policy.getWarningTemperatureCelsius(), "경고 온도는 비워 기본 경고 온도를 쓴다");
+        for (BenchmarkColumns.EngineVariant other : columns.engineVariants()) {
+            if (other.strategy().id().equals(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN)) continue;
+            assertEquals(base.getMaxTemperatureCelsius(), BenchmarkColumns.policyFor(other.strategy(), other.override()).getMaxTemperatureCelsius(),
+                    other.strategy().id() + " — 다른 열은 기본 임계 그대로");
+        }
+    }
+
+    /**
+     * 주 결과판에서 기본 임계 75℃ 의 weighted 열은 온도 제약 개입이 0 이고, 상한을 65℃ 로 낮춘 열에서는 개입이 생긴다 — 이 열이 그 제약이
+     * 작동하는 자리를 보이는지의 확인이다. 개입 횟수는 현재 온도 초과 제외와 배치 후 예상 온도 초과 제외의 합이다(규칙 문장).
+     */
+    @DisplayName("주 결과판에서 온도 상한 열만 온도 제약 개입이 생기고 weighted 열은 0 그대로다")
+    @Test
+    void temperature_limit_column_engages_thermal_constraint_on_main_board() {
+        int checked = 0;
+        for (String distribution : List.of("heavytail", "uniform")) {
+            for (Cell c : service.compare(BenchmarkClusters.MAIN, distribution).boards().get(0).cells()) {
+                String where = distribution + " " + c.loadRatioPercent() + "% " + c.powerControl();
+                StrategyResult lowered = strategy(c, BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
+                assertEquals(Map.of("maxTemperatureCelsius", "65.0"), lowered.engineConfigOverride(), where);
+                assertEquals(0.0, median(strategy(c, "weighted"), BenchmarkRules.C3_INTERVENTIONS), where + " — 기본 임계 75℃ 에서는 개입이 없다");
+                assertTrue(median(lowered, BenchmarkRules.C3_INTERVENTIONS) > 0, where + " — 상한 65℃ 에서는 개입이 생긴다");
+                checked++;
+            }
+        }
+        assertEquals(BenchmarkRules.LOAD_RATIOS.size() * 2 * 2, checked, "두 분포 · 네 부하율 · 두 전원 상태를 모두 봐야 한다");
+    }
+
+    /**
+     * 온도 상한 열을 더하는 것만으로 기존 열의 값이 바뀌면 안 된다(BenchmarkRules.PAIRING_RULE). 같은 12지점에서 이 열을 뺀 결과와, 이 열의 배치 건수를
+     * 일부러 요구 건수보다 크게 바꾼 결과를 견준다 — 건수를 강제로 어긋나게 하므로 관측 결과와 무관하게 이 열이 기준 집합에 섞이면 잡힌다.
+     */
+    @DisplayName("온도 상한 열을 빼거나 그 열의 건수를 어긋나게 해도 기존 열의 결과는 그대로다")
+    @Test
+    void temperature_limit_column_does_not_change_the_existing_columns() {
+        BenchmarkColumns columns = harnessColumns();
+        BenchmarkCellAssembler assembler = new BenchmarkCellAssembler(columns);
+        int checked = 0;
+        for (Map.Entry<String, Integer> target : List.of(Map.entry(BenchmarkClusters.ADVERSARIAL, 90), Map.entry(BenchmarkClusters.MAIN, 30))) {
+            List<BenchmarkPointRunner.PointOutcome> points = orderSweep(columns, target.getKey(), "heavytail", target.getValue());
+            GroundTruthOracle oracle = new GroundTruthOracle(new BenchmarkClusters().get(target.getKey()));
+            for (GroundTruthOracle.PowerControl mode : GroundTruthOracle.PowerControl.values()) {
+                Cell without = assembler.cell(target.getValue(), mode, withoutTemperatureLimitColumn(points), oracle);
+                Cell shifted = assembler.cell(target.getValue(), mode, withShiftedTemperatureLimitColumn(points), oracle);
+                String where = target.getKey() + " heavytail " + target.getValue() + "% " + mode;
+                assertEquals(without.strategies().size() + 1, shifted.strategies().size(), where);
+                assertEquals(without.totalsComparable(), shifted.totalsComparable(), where);
+                assertEquals(without.unmeasuredCaution(), shifted.unmeasuredCaution(), where);
+                assertEquals(without.probeExclusionReasons(), shifted.probeExclusionReasons(), where);
+                for (StrategyResult s : without.strategies()) {
+                    assertEquals(s, strategy(shifted, s.strategyId()), where + " " + s.strategyId() + " — 기존 열의 결과가 바뀌었다");
+                }
+                checked++;
+            }
+        }
+        assertEquals(4, checked, "두 셀 · 두 전원 상태를 모두 봐야 한다");
+    }
+
+    /**
+     * 온도 상한 열이 기준 집합과 건수가 다른 지점은 셋째 문장으로 끝에 붙는다 — 앞의 override 열 · 스케줄 배치 순서 열 문장은 바이트 그대로다.
+     * 반증판 heavytail 90% 셀은 override 열 제외가 이미 있어, 세 문장이 함께 나올 때의 순서도 본다.
+     */
+    @DisplayName("온도 상한 열의 제외 지점은 셋째 문장으로 끝에 붙고 그 열의 총량은 사유를 단 무효다")
+    @Test
+    void temperature_limit_column_drops_get_their_own_sentence() {
+        BenchmarkColumns columns = harnessColumns();
+        BenchmarkCellAssembler assembler = new BenchmarkCellAssembler(columns);
+        boolean sawThreeSentences = false;
+        for (Map.Entry<String, Integer> target : List.of(Map.entry(BenchmarkClusters.ADVERSARIAL, 90), Map.entry(BenchmarkClusters.MAIN, 30))) {
+            List<BenchmarkPointRunner.PointOutcome> points = orderSweep(columns, target.getKey(), "heavytail", target.getValue());
+            GroundTruthOracle oracle = new GroundTruthOracle(new BenchmarkClusters().get(target.getKey()));
+            Cell without = assembler.cell(target.getValue(), GroundTruthOracle.PowerControl.AVAILABLE, withoutTemperatureLimitColumn(points), oracle);
+            Cell shifted = assembler.cell(target.getValue(), GroundTruthOracle.PowerControl.AVAILABLE, withShiftedTemperatureLimitColumn(points), oracle);
+            String where = target.getKey() + " heavytail " + target.getValue() + "%";
+            int usable = metric(strategy(without, "weighted"), BenchmarkRules.GENERATOR_POWER).samples();
+            assertTrue(usable > 0, where + " — 짝 지점이 있어야 제외 문장을 볼 수 있다");
+            String note = "온도 상한을 낮춘 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: "
+                    + BenchmarkRules.TEMPERATURE_LIMIT_COLUMN + " " + usable + "곳 제외(표본 0) — 그 열의 총량 표본(samples)은 그만큼 적다";
+            String before = without.totalsIncomparableReason();
+            assertEquals(before == null ? note : before + ". " + note, shifted.totalsIncomparableReason(), where);
+            MetricValue m = metric(strategy(shifted, BenchmarkRules.TEMPERATURE_LIMIT_COLUMN), BenchmarkRules.GENERATOR_POWER);
+            assertEquals(0, m.samples(), where);
+            assertEquals("기준 집합과 배치 건수가 다른 지점뿐이라 총량을 낼 수 없다(제외 " + usable + "곳)", m.invalidReason(), where);
+
+            String all = assembler.cell(target.getValue(), GroundTruthOracle.PowerControl.AVAILABLE,
+                    withShiftedTemperatureLimitColumn(withShiftedOrderColumns(points)), oracle).totalsIncomparableReason();
+            int override = all.indexOf("override 열 중 ");
+            int order = all.indexOf("스케줄 배치 순서 열 중 ");
+            int temperature = all.indexOf("온도 상한을 낮춘 열 중 ");
+            assertTrue(order >= 0 && temperature > order && (override < 0 || override < order), where + " — 문장 순서: " + all);
+            if (override >= 0) sawThreeSentences = true;
+        }
+        assertTrue(sawThreeSentences, "override 열 제외 문장이 있는 셀을 봐야 세 문장의 순서를 알 수 있다");
+    }
+
+    /**
+     * 비교는 전략마다 새 제약 평가기를 쓰므로, 상한을 낮춰 온도 제약이 걸려도 서비스에 준 운영 온도 모델에는 냉각 표시가 남지 않아야 한다 —
+     * 남으면 진단 호출이 운영 배치의 냉각 대기를 만든다.
+     */
+    @DisplayName("온도 상한 열을 돌려도 서비스에 준 운영 온도 모델에 냉각 표시가 남지 않는다")
+    @Test
+    void temperature_limit_column_leaves_no_cooldown_marks_on_the_operating_thermal_model() {
+        SchedulerProperties props = new SchedulerProperties();
+        ThermalModel operating = new ThermalModel(props);
+        PlacementBenchmarkService fresh = new PlacementBenchmarkService(
+                new EngineRegistry(List.of(new WeightedScoreScheduler(), new PowerAwareScheduler(), new TemperatureAwareScheduler())),
+                props, new BenchmarkClusters(), new PowerModel(props), operating);
+        Cell cell = pick(fresh.compareFresh(BenchmarkClusters.MAIN, "heavytail").boards().get(0).cells().stream()
+                .filter(c -> c.loadRatioPercent() == 110).toList(), "AVAILABLE");
+        assertTrue(median(strategy(cell, BenchmarkRules.TEMPERATURE_LIMIT_COLUMN), BenchmarkRules.C3_INTERVENTIONS) > 0,
+                "온도 제약이 걸린 실행이어야 냉각 표시가 남는지 볼 수 있다");
+        assertTrue(operating.cooldownMarks().isEmpty(), "운영 온도 모델에 냉각 표시가 남았다: " + operating.cooldownMarks());
+    }
+
+    /**
      * 주 결과판의 두 순서 열 값 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정 · 결과보다 먼저 정한 값이 아니다). 짝 셀은 조각난 여유 비율,
      * 110% 셀은 건수 · 코어 두 성공률이다. 두 전원 상태 셀은 배치가 같아 같은 값과 견준다. 허용 오차는 판정 규칙의 지점 비교 무시 폭과 같은 근거다.
      */
@@ -2102,6 +2238,27 @@ class PlacementBenchmarkServiceTest {
                         x.measuredTempStdDev(), x.warnZoneNodes(), x.temperatureGated(), x.powerGated(), x.dataMdcPlacements(),
                         x.remoteMdcPlacements(), x.headroomAfterCores(), x.fragmentedHeadroomCores(), x.placedCores()));
             }
+            return withPlacements(p, shifted);
+        }).toList();
+    }
+
+    private static List<BenchmarkPointRunner.PointOutcome> withoutTemperatureLimitColumn(List<BenchmarkPointRunner.PointOutcome> points) {
+        return points.stream().map(p -> {
+            Map<String, BenchmarkPointRunner.Placement> kept = new LinkedHashMap<>(p.byStrategy());
+            kept.remove(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
+            return withPlacements(p, kept);
+        }).toList();
+    }
+
+    /** 온도 상한 열의 배치 건수를 요구 건수보다 크게 바꾼다 — 기준 건수(요구 건수 이하)와 반드시 다르다. */
+    private static List<BenchmarkPointRunner.PointOutcome> withShiftedTemperatureLimitColumn(List<BenchmarkPointRunner.PointOutcome> points) {
+        return points.stream().map(p -> {
+            Map<String, BenchmarkPointRunner.Placement> shifted = new LinkedHashMap<>(p.byStrategy());
+            BenchmarkPointRunner.Placement x = shifted.get(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
+            shifted.put(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN, new BenchmarkPointRunner.Placement(x.strategy(), x.requested() + 1, x.requested(),
+                    x.engineBelievedCostW(), x.usedNodes(), x.cpuAfterByNode(), x.unmeasuredPlacements(), x.thermalExclusions(), x.powerExclusions(),
+                    x.activeCountAfter(), x.measuredTempStdDev(), x.warnZoneNodes(), x.temperatureGated(), x.powerGated(), x.dataMdcPlacements(),
+                    x.remoteMdcPlacements(), x.headroomAfterCores(), x.fragmentedHeadroomCores(), x.placedCores()));
             return withPlacements(p, shifted);
         }).toList();
     }

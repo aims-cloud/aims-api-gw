@@ -332,7 +332,7 @@ class ScheduleServiceTest {
         assertEquals(2, scheduleService.list(null, null, true, 1, 10, null).totalElements());
     }
 
-    @DisplayName("검색어는 리소스 종류 코드도 대소문자 무시 부분 일치로 찾고 종류를 비운 스케줄은 찾지 않는다")
+    @DisplayName("검색어는 리소스 종류 코드도 대소문자 무시 부분 일치로 찾고 종류를 비운 스케줄은 리소스 종류로는 걸리지 않는다")
     @Test
     void keyword_matches_resource_type_code() {
         seedResourceTypes();

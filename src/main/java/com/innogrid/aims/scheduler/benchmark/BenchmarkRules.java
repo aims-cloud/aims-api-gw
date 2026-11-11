@@ -177,6 +177,40 @@ public final class BenchmarkRules {
     public static final List<String> SCHEDULE_ORDER_COLUMNS = List.of(SCHEDULE_ORDER_AGE_COLUMN, SCHEDULE_ORDER_SIZE_COLUMN);
 
     /**
+     * 온도 상한을 낮춘 열 id — 기본 엔진(weighted)에 기준 정책 사본의 온도 상한({@code maxTemperatureCelsius}) 하나만
+     * {@link #LOWERED_TEMPERATURE_LIMIT_CELSIUS} 로 낮춘 override 열이다. 운영의 스케줄 온도 상한도 정책 사본의 같은 필드 하나를 바꾸므로,
+     * 그 기능이 배치를 어떻게 바꾸는지를 합성 판에서 보인다. 판정 자격이 없다. 규칙 문장은 {@link #TEMPERATURE_LIMIT_COLUMN_RULE}.
+     */
+    public static final String TEMPERATURE_LIMIT_COLUMN = "weighted-temp-65";
+
+    /**
+     * 온도 상한 열의 상한 — 결과를 보기 전부터 코드에 있던 기본 경고 온도(SchedulerProperties.Thermal 의 defaultWarningCelsius)와 같은 값이다.
+     * 판 결과를 보고 고른 값이 아니다. 계약 테스트가 「기본 경고 온도와 같고 정책 기본 임계보다 낮다」를 고정한다.
+     */
+    public static final double LOWERED_TEMPERATURE_LIMIT_CELSIUS = 65.0;
+
+    /**
+     * 온도 상한 열 규칙 — 열 정의 · 읽는 순서 · 결과 전 추정 · 축 등록을 결과보다 먼저 적는다. 표기 축(prose)에 봉인한다.
+     *
+     * <p>민감도 축이 아니라 표기 축에 두는 이유: 이 열은 전력 눈금 민감도 표에 속하지 않고, 민감도 축에 넣으면 기준선의 민감도 표가 판정
+     * 불가가 된다. 판정 자격이 없는 관측 열이라 지목 정정의 노브 변경도 아니다.</p>
+     */
+    public static final String TEMPERATURE_LIMIT_COLUMN_RULE =
+            "온도 상한 열 규칙. 온도 상한 열(" + TEMPERATURE_LIMIT_COLUMN + ")은 기본 엔진 weighted 에 기준 정책 사본의 온도 상한(maxTemperatureCelsius) "
+                    + "하나만 " + LOWERED_TEMPERATURE_LIMIT_CELSIUS + "℃ 로 낮춘 override 열이다 — 운영의 스케줄 온도 상한이 바꾸는 필드와 같다. "
+                    + "경고 온도(warningTemperatureCelsius)는 비워 두어 기본 경고 온도를 쓰므로 경고 구간 노드 수를 세는 기준 온도는 열마다 같다. "
+                    + "상한 값은 결과 전부터 있던 코드 기본 경고 온도이고 판 결과를 보고 고르지 않는다. "
+                    + "override 열이라 총량 짝 조건의 기준 집합 밖이며, 기준 집합과 배치 건수가 다른 지점은 다른 override 열 · 스케줄 배치 순서 열과 따로 "
+                    + "셋째 문장으로 싣는다 — 기존 두 문장은 이 열이 생기기 전과 바이트가 같다. 판정 자격이 없다. "
+                    + "열 차이는 온도 제약 C3 의 제외(현재 온도 초과와 배치 후 예상 온도 초과)와 weighted 점수의 온도 여유 항(상한이 분모)이 함께 움직인 값이며 "
+                    + "둘을 가르지 않는다 — 운영의 스케줄 온도 상한도 둘을 함께 바꾼다. "
+                    + "읽는 순서: 1. 온도 제약 개입 횟수(" + BenchmarkRules.C3_INTERVENTIONS + " — 현재 온도 초과 제외와 배치 후 예상 온도 초과 제외의 합) "
+                    + "2. 배치 성공률(건수 · 코어) 3. 짝 지점의 경고 구간 노드 수와 총전력. "
+                    + "결과 전 추정: 코어 손실은 작고, 대가는 고부하 셀의 GPU 워크로드 실패와 짝 지점의 생성식 총전력 증가로 나타난다 — "
+                    + "반대로 나와도 이 규칙을 고치지 않고 그대로 적는다. 판의 온도는 생성식 값이라 실장비 온도 제어의 효과가 아니다. "
+                    + "이 열 id 는 민감도 축에 넣지 않는다 — 전력 눈금 민감도 표에 속하지 않고, 넣으면 기준선의 민감도 표가 판정 불가가 된다.";
+
+    /**
      * 위상 독립 판 2장 — 방향판·판정판과 노드 블록이 바이트 동일하고 {@code phaseMode: independent}·{@code seeds:} 만 다르다.
      * legacy 위상은 {@code (seed·31^L + hash(nodeId)) mod 1000} 이라 nodeId 길이가 같은 판에서 seed 는 전 노드에 같은 상수만 더한다 —
      * seed 를 늘려도 표본이 늘지 않는 결함이고, 판정 경로(두 판) 에서 그 결함을 닫는 것이 이 두 판의 존재 이유다.
@@ -355,7 +389,8 @@ public final class BenchmarkRules {
                 + "|sensitivityRule=" + SENSITIVITY_RULE.replaceAll("\\s+", " ") + "|phaseRule=" + PHASE_RULE.replaceAll("\\s+", " ")
                 + "|concaveConclusion=" + CONCAVE_CONCLUSION_TEMPLATE.replaceAll("\\s+", " ")
                 + "|pairingRule=" + PAIRING_RULE.replaceAll("\\s+", " ")
-                + "|axisGradeRule=" + AXIS_GRADE_RULE.replaceAll("\\s+", " "));
+                + "|axisGradeRule=" + AXIS_GRADE_RULE.replaceAll("\\s+", " ")
+                + "|temperatureLimitRule=" + TEMPERATURE_LIMIT_COLUMN_RULE.replaceAll("\\s+", " "));
         return axes;
     }
 
@@ -702,7 +737,8 @@ public final class BenchmarkRules {
                     + "보고에 적되 판정은 저장소 실행으로 한다. "
                     + "기준선 재사용: 1~4항 판정을 게시하는 PR 은 기준선 파일을 수정하지 않는다(B 는 N 이전에 이미 머지된 파일이어야 한다 — 저장소 밖 검사라 리뷰 항목이다). "
                     + "기준선 갱신은 판정 보고를 게시한 뒤 별도 커밋으로 하고 판정의 성패와 무관하게 직전 머지 리비전으로 한다. "
-                    + "예외: 판정 무효화 축이나 판·워크로드 정의를 바꾸는 PR 은 그 변경으로 기존 기준선이 이미 판정 불가가 되므로, 그 PR 이 1~4항 판정을 게시하지 않는 한 "
+                    + "예외: 판정 무효화 축이나 판·워크로드 정의를 바꾸는 PR, 또는 override 열을 더해 설정 다이제스트만 바뀌고 두 셀 power 행 지점 배열이 "
+                    + "직전 기준선과 지점별로 같은 PR 은 그 변경으로 기존 기준선이 이미 판정 불가가 되므로, 그 PR 이 1~4항 판정을 게시하지 않는 한 "
                     + "같은 PR 에서 기준선을 다시 뜨고 이력 행에 재산출 사유와 옛 기준선과의 두 셀 중앙값 차를 적는다 — 판정과 기준선 갱신이 한 PR 에 함께 있으면 안 된다는 것이 "
                     + "이 규칙의 목적이고 판정 없는 재산출은 그 목적을 건드리지 않는다. 부수 보고 무효화 축의 변경은 기준선을 무효화하지 않는다(민감도 표만 판정 불가). "
                     + "이력 행에는 봉인 다이제스트·날짜·사유·엔진 동등 리비전·산출 HEAD·직전 B 와의 두 셀 중앙값 차를 적는다 — 판정 없는 변경이 기준을 얼마나 밀었는지가 보여야 하고, "
@@ -952,10 +988,12 @@ public final class BenchmarkRules {
                     + "방향의 보고도 있다. 판 사이의 차이를 원인으로 읽으려면 그 판들이 주 결과판과 노드 구성이 같아야 한다. "
                     + "전원 제어가 없는 현 시스템(UNAVAILABLE)에서 통합으로 아낄 전력은 정의상 0 이고, 아낄 수 있는 "
                     + "판(AVAILABLE)은 존재하지 않는 전원 제어를 가정한다. 온도 축의 대조군은 재평가 없는 최저 온도 우선 "
-                    + "한 종뿐이고(다른 대조군은 열을 점수에 넣지 않으며, 온도 제약 C3 는 제약을 켠 전 전략이 똑같이 받는다 — "
-                    + "제약 해제 변종은 그 사실을 열마다 밝힌다), "
+                    + "한 종뿐이고(다른 대조군은 열을 점수에 넣지 않으며, 온도 제약 C3 는 제약을 켠 전 전략이 같은 상한으로 받는다 — "
+                    + "온도 상한을 낮춘 열 하나만 낮춘 상한으로 받고, 제약 해제 변종은 그 사실을 열마다 밝힌다), "
                     + "기본 임계 75℃ 에서는 배치 후 예상 온도 제약이 시원한 노드에 작동하지 않아 그 전략은 초기 온도로 정렬한 "
                     + "통합에 가깝다 — 자원 최밀집(bfd) 열과의 차이가 곧 정렬 기준에 온도를 넣은 효과의 전부다. "
+                    + "온도 상한을 기본 경고 온도 65℃ 로 낮춘 열은 그 제약이 작동하는 자리와 배치 대가를 보이지만, 판의 온도가 생성식 값이라 "
+                    + "실장비 온도 제어의 효과가 아니며 판정 자격이 없다. "
                     + "따라서 열 지표는 헤드라인이 아니며, 이 API 는 "
                     + "전력 기반 배치·온도 제어의 효과를 결론 수준으로 증명하지 않는다. "
                     + "배포 환경은 실존 노드가 한 대라 실환경 비교는 성립하지 않는다.";

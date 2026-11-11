@@ -22,6 +22,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
+import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -97,7 +98,10 @@ class BenchmarkRulesContractTest {
                     new AxisSeal("6ceae632b3b6", "2026-10-27", "다음 회차 지목 인용 갱신(공석 → 지목). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("d259678dfd94", "2026-10-27", "소비된 회차 목록에 회차 4 문장 추가(정정 범위·평균 후보 범위는 소비 쪽 과거형으로)와 다음 회차 지목 인용 갱신(공석). 산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
                     new AxisSeal("b3f33d5fd5f6", "2026-11-05", "총량 짝 조건 규칙에 자원 조각화 비율 문장 추가 — 총량은 아니지만 같은 마스크로 짝 지점에서만 낸다. 총량 지표의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
-                    new AxisSeal("b00719f78b89", "2026-11-09", "총량 짝 조건 규칙에 스케줄 배치 순서 열(weighted-priority-age · weighted-priority-size) 문장 추가 — override 가 없어도 기준 집합에 넣지 않고 override 열과 같은 마스크를 받으며 제외 지점은 따로 문장으로 싣는다. 기존 열의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
+                    new AxisSeal("b00719f78b89", "2026-11-09", "총량 짝 조건 규칙에 스케줄 배치 순서 열(weighted-priority-age · weighted-priority-size) 문장 추가 — override 가 없어도 기준 집합에 넣지 않고 override 열과 같은 마스크를 받으며 제외 지점은 따로 문장으로 싣는다. 기존 열의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변"),
+                    new AxisSeal("5d128fcaeb0d", "2026-11-11", "온도 상한 열(weighted-temp-65) 규칙 문장 신설(정의 · 상한 65℃ = 코드 기본 경고 온도 · 읽는 순서 · 결과 전 추정 · 민감도 축에 넣지 않는 이유)과 "
+                            + "기준선 재취득 예외에 「override 열을 더해 설정 다이제스트만 바뀌고 두 셀 power 행 지점 배열이 직전 기준선과 지점별로 같은 PR」 추가. "
+                            + "기존 열의 짝 조건·산출값 불변, 판정 셀·중앙값 문턱·격차 정의·판정 자격 불변")));
 
     @DisplayName("사전 등록된 지표 키 집합이 고정된다 — 정렬 키 목록과 그 다이제스트 둘 다로")
     @Test
@@ -125,6 +129,28 @@ class BenchmarkRulesContractTest {
         }
         assertTrue(changed.isEmpty(), () -> "규칙 축이 바뀌었다 — 이력에 행(새 값·날짜·사유)을 더하는 'rules:' 커밋을 결과 코드보다 앞에 둔다\n  "
                 + String.join("\n  ", changed));
+    }
+
+    /**
+     * 온도 상한 열의 상한은 결과 전부터 있던 코드 기본 경고 온도다 — 판 결과를 보고 고른 값이 아니라는 사실을 값의 출처로 묶는다. 열 규칙은 표기 축에만
+     * 봉인하고 민감도 축에는 넣지 않으며, 응답의 한계 문장은 「C3 를 전 전략이 똑같이 받는다」 대신 이 열이 낮춘 상한으로 받는다는 사실을 밝힌다.
+     */
+    @DisplayName("온도 상한 열의 상한은 코드 기본 경고 온도이고 정책 기본 임계보다 낮으며 규칙 · 한계 문장이 그 열을 밝힌다")
+    @Test
+    void lowered_temperature_limit_is_the_default_warning_temperature() {
+        assertEquals(new SchedulerProperties().getThermal().getDefaultWarningCelsius(), BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS);
+        assertTrue(BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS < new SchedulingPolicy("p", "d").getMaxTemperatureCelsius(),
+                "상한은 정책 기본 임계보다 낮아야 제약이 작동하는 자리를 보인다");
+        assertTrue(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN.endsWith("-" + (long) BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS), "열 id 의 숫자는 상한 값이다");
+        assertTrue(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN_RULE.contains(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN));
+        assertTrue(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN_RULE.contains("판정 자격이 없다"));
+        assertTrue(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN_RULE.contains("생성식"));
+        assertTrue(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN_RULE.contains(BenchmarkRules.C3_INTERVENTIONS), "읽는 순서의 첫 지표가 문장에 있어야 한다");
+        assertTrue(BenchmarkRules.ruleAxes().get("prose").contains("|temperatureLimitRule="), "열 규칙은 표기 축에 봉인한다");
+        assertFalse(BenchmarkRules.ruleAxes().get("sensitivity").contains(BenchmarkRules.TEMPERATURE_LIMIT_COLUMN), "민감도 축에는 넣지 않는다");
+        assertTrue(BenchmarkRules.LIMITATION.contains("같은 상한으로 받는다"), "C3 절이 새 열을 반영해야 한다");
+        assertTrue(BenchmarkRules.LIMITATION.contains("온도 상한을 기본 경고 온도 65℃ 로 낮춘 열"));
+        assertFalse(BenchmarkRules.LIMITATION.contains("똑같이 받는다"), "새 열이 생긴 뒤 「전 전략이 똑같이 받는다」는 거짓이다");
     }
 
     /** 판정 주어(회차 지목) 이력 — 회차 · 지목 문장 조각 · 등록한 rules: 커밋의 성격. 마지막 행이 현 규칙 문장에 그대로 있어야 한다. */

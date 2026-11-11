@@ -206,21 +206,28 @@ final class BenchmarkCellAssembler {
     }
 
     /**
-     * 기준 집합과 배치 건수가 달라 총량을 내지 못한 지점이 있는 열을 밝히는 문장 — override 열과 스케줄 배치 순서 열을 따로 적는다.
-     * override 열 문장은 스케줄 배치 순서 열이 생기기 전과 바이트가 같아야 한다 — 기존 셀의 문장이 바뀌면 기존 응답과의 대조가 깨진다.
+     * 기준 집합과 배치 건수가 달라 총량을 내지 못한 지점이 있는 열을 밝히는 문장 — override 열 · 스케줄 배치 순서 열 · 온도 상한 열을 따로 적는다.
+     * 앞의 두 문장은 뒤 열이 생기기 전과 바이트가 같아야 한다 — 기존 셀의 문장이 바뀌면 기존 응답과의 대조가 깨진다. 온도 상한 열은 override 열이지만
+     * 첫 문장에 섞으면 제외 지점 순서에 따라 기존 열 사이에 끼어 그 문장이 바뀌므로 셋째 문장으로 끝에 붙인다.
      */
     private static String droppedNote(Map<String, Integer> droppedByRow, int usable) {
         List<String> overrideParts = new ArrayList<>();
         List<String> orderParts = new ArrayList<>();
-        droppedByRow.forEach((id, k) -> (BenchmarkRules.SCHEDULE_ORDER_COLUMNS.contains(id) ? orderParts : overrideParts)
+        List<String> temperatureLimitParts = new ArrayList<>();
+        droppedByRow.forEach((id, k) -> (BenchmarkRules.SCHEDULE_ORDER_COLUMNS.contains(id) ? orderParts
+                : BenchmarkRules.TEMPERATURE_LIMIT_COLUMN.equals(id) ? temperatureLimitParts : overrideParts)
                 .add(id + " " + k + "곳 제외(표본 " + (usable - k) + ")"));
-        List<String> sentences = new ArrayList<>(2);
+        List<String> sentences = new ArrayList<>(3);
         if (!overrideParts.isEmpty()) {
             sentences.add("override 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", overrideParts)
                     + " — 그 열의 총량 표본(samples)은 그만큼 적다");
         }
         if (!orderParts.isEmpty()) {
             sentences.add("스케줄 배치 순서 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", orderParts)
+                    + " — 그 열의 총량 표본(samples)은 그만큼 적다");
+        }
+        if (!temperatureLimitParts.isEmpty()) {
+            sentences.add("온도 상한을 낮춘 열 중 기준 집합과 배치 건수가 다른 지점을 뺀 열: " + String.join(", ", temperatureLimitParts)
                     + " — 그 열의 총량 표본(samples)은 그만큼 적다");
         }
         return String.join(". ", sentences);

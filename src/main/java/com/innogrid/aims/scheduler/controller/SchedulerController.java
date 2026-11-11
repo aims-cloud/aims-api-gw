@@ -325,7 +325,8 @@ public class SchedulerController {
     @Operation(summary = "서버별 전력 효율성 평가",
                description = "노드별 전력 효율 지표(PEI)·전력 비례성·여유율과 클러스터 내 상대 등급(A~D)·순위·권고를 조회합니다. "
                        + "전력 메트릭이 없는 노드는 evaluable=false 이고 파생 지표가 null 입니다. "
-                       + "상대 등급은 평가 가능한 노드가 4대 이상일 때만 매겨집니다.")
+                       + "상대 등급은 평가 가능한 노드가 4대 이상일 때만 매겨집니다. "
+                       + "코어 수가 다른 서버를 견줄 때는 usedCoresPerKw(사용 코어/kW)·coreRank 를 보십시오. 등급·순위·권고는 PEI 원값 기준 그대로입니다.")
     @GetMapping("/nodes/power-efficiency")
     public ApiResponse<PowerEfficiencyResponse> getPowerEfficiency() {
         return ApiResponse.ok(powerEfficiencyService.evaluateCurrent());

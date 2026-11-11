@@ -38,6 +38,10 @@ import com.innogrid.aims.scheduler.model.NodeResource;
  * IPMI 가 없는 노드에도 그럴듯한 값을 돌려준다. 예를 들어 CPU 13%·전력 0W·용량 500W 이면
  * 비례성 0.61 이 나온다. 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로,
  * 평가 불가 노드는 파생 지표를 모두 {@code null} 로 비운다.</p>
+ *
+ * <p><b>순위는 둘이다.</b> 등급·순위·권고·요약은 PEI 원값(사용률 ÷ W) 기준이라 코어 수를 보지 않는다. 코어 수가 다른 서버를 견주도록
+ * 사용 코어 환산 효율({@code usedCoresPerKw})과 그 순위({@code coreRank})를 함께 낸다. 노드 배치 스코어의 PEI 항은 판정 회차 4 에서
+ * 코어 비율을 곱하게 고쳤고, 예약이 없는 같은 스냅샷에서 그 항이 상한 1.0 에 걸리지 않으면 이 값의 순서가 그것과 같다.</p>
  */
 @Service
 public class PowerEfficiencyService {
@@ -124,6 +128,7 @@ public class PowerEfficiencyService {
         }
 
         assignRanksAndGrades(evaluated);
+        assignCoreRanks(evaluated);
         List<PowerEfficiencyResponse.NodeEfficiency> withAdvice =
                 evaluated.stream().map(this::withRecommendation).toList();
 
@@ -144,7 +149,8 @@ public class PowerEfficiencyService {
                     node.getMdcId(), node.getNodeId(), false,
                     node.getCpuUsagePercent(), node.getPowerWatts(), node.getPowerCapacityWatts(),
                     null, null, null, null, null,
-                    null, null, String.valueOf(node.getPowerSource()), null);
+                    null, null, String.valueOf(node.getPowerSource()), null,
+                    node.getTotalCpu(), null, null);
         }
 
         return new PowerEfficiencyResponse.NodeEfficiency(
@@ -155,7 +161,19 @@ public class PowerEfficiencyService {
                 round(powerModel.rawPei(node)),
                 round(normalizedPei(node)),
                 round(powerModel.proportionality(node)),
-                null, null, String.valueOf(node.getPowerSource()), null);
+                null, null, String.valueOf(node.getPowerSource()), null,
+                node.getTotalCpu(), usedCoresPerKw(node), null);
+    }
+
+    /**
+     * 사용 코어 환산 효율(코어/kW) — CPU 사용률/100 × 코어 수 ÷ (소비 전력/1000) = 사용률 × 코어 × 10 ÷ W.
+     * PEI 원값(사용률 ÷ W)은 코어 수를 보지 않아, 같은 사용률·같은 W 면 8코어와 64코어가 같은 값을 받는다.
+     * 코어 수를 곱하면 예약이 없을 때 순서가 노드 배치 스코어의 PEI 항(코어 비율을 곱한 값)과 같아진다 — 비율의 분모(후보 평균 코어)는 호출마다 공통인 양수다.
+     * 전력이 0 이하인 노드는 호출하지 않는다. 코어 수가 0 이하이면 일의 양을 모르므로 null 이다.
+     */
+    private Double usedCoresPerKw(NodeResource node) {
+        if (node.getTotalCpu() <= 0) return null;
+        return round(node.getCpuUsagePercent() * node.getTotalCpu() * 10.0 / node.getPowerWatts());
     }
 
     /**
@@ -191,6 +209,25 @@ public class PowerEfficiencyService {
             PowerEfficiencyResponse.NodeEfficiency target = ranked.get(i);
             int index = nodes.indexOf(target);
             nodes.set(index, target.ranked(i + 1, gradable ? gradeOf(i, ranked.size()) : null));
+        }
+    }
+
+    /**
+     * 사용 코어 환산 효율 내림차순 순위(coreRank). 값이 없는 노드는 대상에서 빠진다.
+     *
+     * <p>등급·권고는 PEI 원값 순위 그대로 두고 이 순위만 더한다 — 코어 수가 다른 서버를 견줄 때 쓴다.
+     * 동점이면 노드 ID 사전순으로 안정 정렬하고, 순위를 채운 사본으로 바꿔 가며 찾으므로 같은 행이 겹쳐도 한 번씩만 매긴다.</p>
+     */
+    private void assignCoreRanks(List<PowerEfficiencyResponse.NodeEfficiency> nodes) {
+        List<PowerEfficiencyResponse.NodeEfficiency> ranked = nodes.stream()
+                .filter(n -> n.usedCoresPerKw() != null)
+                .sorted(Comparator
+                        .comparingDouble((PowerEfficiencyResponse.NodeEfficiency n) -> n.usedCoresPerKw()).reversed()
+                        .thenComparing(PowerEfficiencyResponse.NodeEfficiency::nodeId))
+                .toList();
+        for (int i = 0; i < ranked.size(); i++) {
+            PowerEfficiencyResponse.NodeEfficiency target = ranked.get(i);
+            nodes.set(nodes.indexOf(target), target.coreRanked(i + 1));
         }
     }
 

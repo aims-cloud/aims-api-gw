@@ -115,6 +115,28 @@ class SyntheticModeScenarioTest {
         assertNotNull(diag.findings());
     }
 
+    @DisplayName("전력 효율 코어 기준 — 8대 모두 코어 수를 싣고, 계측 5대만 사용 코어 환산 효율과 1~5 의 코어 기준 순위를 받는다")
+    @Test
+    void efficiency_core_basis() {
+        java.util.Map<String, Integer> cores = collector.collect().nodes().stream()
+                .collect(Collectors.toMap(NodeResource::getNodeId, NodeResource::getTotalCpu));
+        PowerEfficiencyResponse eff = efficiency.evaluateCurrent();
+
+        for (PowerEfficiencyResponse.NodeEfficiency n : eff.nodes()) {
+            assertEquals(cores.get(n.nodeId()), n.totalCpu(), n.nodeId() + " 코어 수는 수집 값");
+            if (n.evaluable()) {
+                // 시각과 무관한 성질 — 같은 응답의 사용률 · 전력으로 다시 계산한 값과 같다
+                double expected = Math.round(n.cpuUsagePercent() * n.totalCpu() * 10.0 / n.powerWatts() * 10000.0) / 10000.0;
+                assertEquals(expected, n.usedCoresPerKw(), 1e-9, n.nodeId());
+            } else {
+                assertNull(n.usedCoresPerKw(), n.nodeId());
+                assertNull(n.coreRank(), n.nodeId());
+            }
+        }
+        assertEquals(Set.of(1, 2, 3, 4, 5), eff.nodes().stream().map(PowerEfficiencyResponse.NodeEfficiency::coreRank)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet()), "계측 5대가 1~5 를 한 번씩");
+    }
+
     @DisplayName("추세 — 24시간/5분 은 289 지점, 지점마다 노드 8·계측 5·전력 합 > 0 이고 measured 다")
     @Test
     void trend_points() {

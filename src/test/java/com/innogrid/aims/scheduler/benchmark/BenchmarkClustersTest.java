@@ -53,6 +53,24 @@ class BenchmarkClustersTest {
         }
     }
 
+    /**
+     * 원격 MDC 배치 비율은 워크로드에 데이터 MDC 를 배정한 판에서만 값이 있다 — 서비스가 이 지표를 유효로 내는 조건과 같다.
+     * 판 설명이 이 지표를 적는 판과 실제로 데이터 MDC 를 배정한 판이 어긋나면, 응답을 읽는 사람은 값이 없는 판에서 이 지표를
+     * 찾거나 값이 있는 판에서 이 지표를 놓친다. 지표 이름은 등록부의 label 을 그대로 쓴다.
+     */
+    @DisplayName("데이터 MDC 를 배정한 판만 설명에 원격 MDC 배치 비율을 적는다")
+    @Test
+    void only_boards_with_data_mdc_mention_the_remote_mdc_rate_in_their_role() {
+        String label = BenchmarkRules.METRICS.stream()
+                .filter(m -> BenchmarkRules.REMOTE_MDC_RATE.equals(m.key()))
+                .findFirst().orElseThrow().label();
+        for (String boardId : clusters.boardIds()) {
+            boolean hasDataMdc = !clusters.get(boardId).workloadDataMdcIds().isEmpty();
+            assertEquals(hasDataMdc, clusters.roleOf(boardId).contains(label),
+                    boardId + " 판: 데이터 MDC 배정 " + hasDataMdc + " 인데 설명의 「" + label + "」 언급이 어긋난다");
+        }
+    }
+
     @DisplayName("주 결과판은 열네 대 전부 계측이다")
     @Test
     void main_board_has_fourteen_measured_nodes() {

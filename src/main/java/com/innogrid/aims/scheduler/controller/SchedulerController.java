@@ -249,7 +249,9 @@ public class SchedulerController {
                        + "상태·배정·재시도·시각 키는 무시하므로 상세 조회 응답을 그대로 보내면 아무것도 바뀌지 않습니다. "
                        + "PENDING·FAILED 만 편집할 수 있고 SCHEDULED·RUNNING·COMPLETED 는 409 입니다(SCHEDULED 는 먼저 예약 취소). "
                        + "재시도 횟수·사유·배정은 바뀌지 않습니다. 오류 순서는 404 → 409 → 400 이고, "
-                       + "깨진 JSON 처럼 본문을 읽지 못한 400 은 그보다 먼저 납니다.")
+                       + "깨진 JSON 처럼 본문을 읽지 못한 400 은 그보다 먼저 납니다. "
+                       + "저장 직전에 상태를 다시 확인하므로, 읽은 뒤 그 사이 배치되거나 실행 중·완료로 바뀌면 409, 지워지면 404 이고 "
+                       + "편집은 반영되지 않습니다(이때의 409·404 는 본문 검증 뒤라 400 이 먼저일 수 있습니다).")
     @PutMapping("/workloads/{workloadId}")
     public ApiResponse<WorkloadResponse> updateWorkload(@PathVariable Long workloadId,
                                                        @RequestBody(required = false) WorkloadUpdateRequest request) {

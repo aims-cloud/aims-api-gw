@@ -1,5 +1,9 @@
 package com.innogrid.aims.scheduler.service;
 
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,6 +32,10 @@ public class WorkloadService {
     static final int NAME_MAX = 100;
     static final int DESCRIPTION_MAX = 300;
     static final int MDC_ID_MAX = 50;
+
+    /** 편집할 수 있는 상태({@link Workload.WorkloadStatus#isEditable}) — 편집 저장 직전에 이 상태일 때만 행을 잡는다. */
+    private static final Set<Workload.WorkloadStatus> EDITABLE = EnumSet.copyOf(Arrays.stream(Workload.WorkloadStatus.values())
+            .filter(Workload.WorkloadStatus::isEditable).toList());
 
     private final WorkloadRepository workloadRepository;
 
@@ -113,22 +121,17 @@ public class WorkloadService {
      *
      * <p>재시도 회계(횟수·마지막 실패 시각)와 배정·사유·시각 칸은 건드리지 않는다. 회계를 지우는 길은 명시적 되살리기
      * (FAILED→PENDING · 일괄 재개)와 완료뿐이다 — 편집이 지우면 재시도 상한을 우회하는 숨은 되살리기가 된다.</p>
+     *
+     * <p><b>저장 직전에 상태를 다시 확인하고 행을 잡는다</b>({@link #lockForEdit}). 읽은 뒤 그 사이 단건 배치·스케줄 실행이
+     * 배치를 커밋했거나 워크로드가 지워졌으면 읽은 사본을 저장하지 않고 409·404 로 끝낸다 — 엔티티에 동적 갱신·행 버전이
+     * 없어 읽은 사본을 그대로 저장하면 모든 열이 읽을 때의 값으로 덮여 막 끝난 배치가 대기로 돌아간다. 그 사이의 실패 결정·
+     * 되살리기처럼 편집할 수 있는 상태 안의 변화는 다시 읽은 값 위에 보낸 키만 얹어 보존한다. 이 확인은 본문 검증 뒤라
+     * 겹칠 때는 400 이 409·404 보다 먼저일 수 있다.</p>
      */
     @Transactional
     public Workload update(Long id, WorkloadUpdateRequest request) {
-        Workload workload = workloadRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다: " + id));
-
-        Workload.WorkloadStatus status = workload.getStatus();
-        if (!status.isEditable()) {
-            throw new BusinessException(HttpStatus.CONFLICT, switch (status) {
-                case SCHEDULED -> String.format("배치된 워크로드는 편집할 수 없습니다 (상태 SCHEDULED, 노드 %s). "
-                        + "먼저 예약 취소(POST /workloads/{id}/release)로 배정을 푸세요", workload.getAssignedNodeId());
-                case RUNNING -> String.format("실행 중인 워크로드는 편집할 수 없습니다 (상태 RUNNING, 노드 %s)",
-                        workload.getAssignedNodeId());
-                default -> "완료된 워크로드는 실행 기록이라 편집할 수 없습니다 — 다시 돌리려면 새로 생성하세요";
-            });
-        }
+        Workload current = workloadRepository.findById(id).orElseThrow(() -> notFound(id));
+        if (!current.getStatus().isEditable()) throw notEditable(current);
         if (request == null) throw badRequest("요청 본문이 필요합니다");
 
         // 먼저 전부 검증해 지역 값에 담는다
@@ -150,6 +153,9 @@ public class WorkloadService {
         Clearable<Double> temperature = clearablePositive(request.maxTemperatureCelsius(), "온도 상한(°C)");
         Clearable<Double> bandwidth = clearablePositive(request.requiredBandwidthMbps(), "요구 대역폭(Mbps)");
 
+        // 저장 직전에 행을 잡고 다시 읽는다 — 값은 반드시 그 뒤에 얹는다(앞에서 바꾸면 읽은 사본이 먼저 저장된다)
+        Workload workload = lockForEdit(id);
+
         // 그다음 한꺼번에 반영한다
         if (name != null) workload.setName(name);
         if (cpu != null) workload.setRequiredCpu(cpu);
@@ -165,6 +171,38 @@ public class WorkloadService {
         if (temperature.sent()) workload.setMaxTemperatureCelsius(temperature.value());
         if (bandwidth.sent()) workload.setRequiredBandwidthMbps(bandwidth.value());
         return workloadRepository.save(workload);
+    }
+
+    /**
+     * 편집 저장 직전 — 아직 편집할 수 있는 상태일 때만 행을 잡고, 최신 값을 다시 읽어 돌려준다. 잡은 행은 이 트랜잭션이 끝날
+     * 때까지 다른 쪽이 바꾸지 못한다.
+     *
+     * <p>잡지 못했으면(0행) 다시 읽어 사유를 정한다 — 지워졌으면 404, 배치·실행 중·완료로 바뀌었으면 처음 확인과 같은 409.
+     * 다시 읽었더니 편집할 수 있는 상태라면 그 사이 상태가 두 번 바뀐 것이라 409 로 다시 조회를 요청한다.</p>
+     */
+    private Workload lockForEdit(Long id) {
+        if (workloadRepository.lockIfStatusIn(id, EDITABLE) == 0) {
+            Workload now = workloadRepository.findById(id).orElse(null);
+            if (now == null) throw notFound(id);
+            if (!now.getStatus().isEditable()) throw notEditable(now);
+            throw new BusinessException(HttpStatus.CONFLICT, "편집하는 사이 상태가 바뀌었습니다 — 다시 조회한 뒤 편집하세요");
+        }
+        return workloadRepository.findById(id).orElseThrow(() -> notFound(id));
+    }
+
+    private static BusinessException notFound(Long id) {
+        return new BusinessException(HttpStatus.NOT_FOUND, "워크로드를 찾을 수 없습니다: " + id);
+    }
+
+    /** 편집할 수 없는 상태의 409 — 처음 확인과 저장 직전 확인이 같은 문구를 쓴다. */
+    private static BusinessException notEditable(Workload workload) {
+        return new BusinessException(HttpStatus.CONFLICT, switch (workload.getStatus()) {
+            case SCHEDULED -> String.format("배치된 워크로드는 편집할 수 없습니다 (상태 SCHEDULED, 노드 %s). "
+                    + "먼저 예약 취소(POST /workloads/{id}/release)로 배정을 푸세요", workload.getAssignedNodeId());
+            case RUNNING -> String.format("실행 중인 워크로드는 편집할 수 없습니다 (상태 RUNNING, 노드 %s)",
+                    workload.getAssignedNodeId());
+            default -> "완료된 워크로드는 실행 기록이라 편집할 수 없습니다 — 다시 돌리려면 새로 생성하세요";
+        });
     }
 
     /**

@@ -140,6 +140,22 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
                          @Param("next") Workload.WorkloadStatus next);
 
     /**
+     * 상태가 {@code expected} 중 하나일 때만 행을 잡는다(값은 바꾸지 않는 조건부 갱신) — 워크로드 편집이 읽은 뒤 저장하기 전에
+     * 그 사이 단건 배치·스케줄 실행이 커밋한 배치와 삭제를 편집 전 값으로 덮지 않게 한다.
+     *
+     * <p>{@link #updateStatusIfIn} 처럼 호출자의 트랜잭션 안에서만 부른다({@code MANDATORY}) — 잡은 행의 잠금이 그 트랜잭션이
+     * 끝날 때까지 남아야 그 사이 다른 쪽이 행을 바꾸지 못한다. 실행 전에 미뤄 둔 쓰기를 내보내고 실행 뒤 영속성 컨텍스트를
+     * 비우므로, 호출자는 반드시 다시 읽은 엔티티에 값을 반영해야 한다(먼저 읽은 사본은 분리된다).</p>
+     *
+     * @return 잡은 행 수. 0 이면 그 사이 상태가 바뀌었거나 지워졌다
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Workload w set w.status = w.status where w.id = :id and w.status in :expected")
+    int lockIfStatusIn(@Param("id") Long id,
+                       @Param("expected") Collection<Workload.WorkloadStatus> expected);
+
+    /**
      * 지금 상태 — 조건부 갱신이 0 행이었을 때 건너뛴 사유를 적으려고 읽는다. 엔티티가 아니라 값만 읽는다(영속성 컨텍스트에
      * 올리지 않는다).
      */

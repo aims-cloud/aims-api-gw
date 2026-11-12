@@ -32,7 +32,7 @@ public class WorkloadRetryPolicyController {
     @Operation(summary = "워크로드 재시도 정책",
                description = "재시도 상한(maxRetryCount)과 간격(retryBackoffMinutes, 분)을 돌려줍니다. "
                        + "재시도 소진 = status 가 FAILED 이고 retryCount 가 상한 이상 — 스케줄 실행 대상에서 빠집니다. 되살리려면 상태 전이(FAILED→PENDING, 단건)나 일괄 재개(/workloads/resume-exhausted)를 씁니다. "
-                       + "재시도 대기 = FAILED 이고 소진이 아니며 lastFailedAt 에서 간격이 지나지 않음. 단건 배치(/workloads/{id}/schedule)는 둘 다 보지 않습니다. 2필드.")
+                       + "재시도 대기 = status 가 PENDING 또는 FAILED 이고 retryCount 가 상한 미만이며 lastFailedAt 에서 간격이 지나지 않음 — 예약 취소는 lastFailedAt 을 지우지 않으므로 예약 취소로 PENDING 이 된 워크로드도 들어갑니다. 단건 배치(/workloads/{id}/schedule)는 둘 다 보지 않습니다. 2필드.")
     @GetMapping("/retry-policy")
     public ApiResponse<RetryPolicyResponse> retryPolicy() {
         return ApiResponse.ok(RetryPolicyResponse.from(properties));

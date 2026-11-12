@@ -9,8 +9,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>화면이 "재시도 소진" 배지와 "재시도 대기" 상태를 서버 값으로 그리게 한다. 소진은 {@code status = FAILED} 이고
  * {@code retryCount >= maxRetryCount} 인 행이며(스케줄 실행 대상에서 빠진다 — 단건 배치는 이 값을 보지 않는다),
- * 대기는 {@code FAILED} 이고 소진이 아니며 마지막 실패 뒤 {@code retryBackoffMinutes} 가 지나지 않은 행이다. 값은
- * 설정({@link SchedulerProperties})을 그대로 읽는다.</p>
+ * 대기는 {@code PENDING} 또는 {@code FAILED} 이고 재시도 횟수가 상한 미만이며 마지막 실패 뒤 {@code retryBackoffMinutes} 가 지나지 않은
+ * 행이다(예약 취소는 마지막 실패 시각을 지우지 않는다). 값은 설정({@link SchedulerProperties})을 그대로 읽는다.</p>
  */
 @Schema(description = "워크로드 재시도 정책 — 스케줄 실행이 실패한 워크로드를 다시 시도하는 상한과 간격")
 public record RetryPolicyResponse(

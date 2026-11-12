@@ -130,6 +130,8 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
      * <p>호출자의 트랜잭션 안에서만 부른다({@code MANDATORY}). 갱신한 행의 잠금이 그 트랜잭션이 끝날 때까지 남아야, 같은 행을
      * 노리는 다른 실행이 이 배치가 커밋된 뒤의 상태로 조건을 다시 본다. 트랜잭션 밖에서 부르면 잠금이 곧바로 풀려 막지 못한다.</p>
      *
+     * <p>스케줄 실행의 배치 저장은 1행이면 같은 트랜잭션에서 그 행을 다시 읽어 재시도 회계를 이어받은 뒤 저장한다.</p>
+     *
      * @return 갱신한 행 수. 0 이면 그 사이 상태가 바뀌었거나 지워졌다
      */
     @Transactional(propagation = Propagation.MANDATORY)

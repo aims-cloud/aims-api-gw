@@ -77,7 +77,9 @@ public class PlacementService {
      * 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.</p>
      *
      * <p>{@code scheduleRunId} 가 있고 저장된 워크로드면 저장 직전에 상태가 아직 대기·실패일 때만 결정한 상태로 옮긴다. 그 사이
-     * 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip} 으로 건너뜀 한 건만 남긴다.</p>
+     * 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip} 으로 건너뜀 한 건만 남긴다. 옮겼으면 그
+     * 행을 다시 읽어 재시도 회계(횟수 · 마지막 실패 시각)를 이어받은 뒤 결정을 얹는다 — 그 사이 겹친 실패 결정 · 되살리기가 바꾼
+     * 회계를 덮지 않는다.</p>
      */
     @Transactional
     public SchedulingResult place(Workload workload, PlacementContext context, String engineId,
@@ -101,6 +103,9 @@ public class PlacementService {
                         .orElse("배치 건너뜀 — 배치하는 사이 삭제됨");
                 return recordSkip(workload, context, engineId, scheduleRunId, reason);
             }
+            // 잡은 행의 재시도 회계를 이어받는다 — 이 트랜잭션은 앞서 이 워크로드를 읽지 않았으므로(받은 것은 분리된 사본 · 실행
+            // 클래스에 트랜잭션이 없고 open-in-view 는 꺼져 있다) 여기서 읽는 행은 잡은 뒤의 최신 값이다.
+            workloadRepository.findById(workload.getId()).ifPresent(workload::continueRetryAccountingFrom);
         }
 
         if (result.success()) {

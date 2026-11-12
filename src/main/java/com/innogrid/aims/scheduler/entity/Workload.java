@@ -178,6 +178,15 @@ public class Workload {
     }
 
     /**
+     * 스케줄 실행의 배치 저장이 잡은 행의 재시도 회계(횟수 · 마지막 실패 시각)를 이 사본에 이어받는다. 실행은 배치 직전에 읽은
+     * 사본에 결정을 얹어 저장하므로, 그 사이 겹친 실패 결정 · 되살리기가 바꾼 회계를 이어받지 않으면 덮어쓴다. 다른 필드는 건드리지 않는다.
+     */
+    public void continueRetryAccountingFrom(Workload current) {
+        this.retryCount = current.retryCount;
+        this.lastFailedAt = current.lastFailedAt;
+    }
+
+    /**
      * 실행 계층이 배치 요청을 거부했거나 닿지 못했다 — 실패로 돌리고 <b>배정을 해제</b>한다.
      *
      * <p>엔진 실패({@link #markFailed})는 배정 컬럼을 건드리지 않지만, 이 경로는 이미 노드가 정해진 뒤 실행이 무산된

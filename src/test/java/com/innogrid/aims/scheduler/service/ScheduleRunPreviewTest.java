@@ -123,6 +123,26 @@ class ScheduleRunPreviewTest {
         assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus(), "소진은 실행이 실패로 기록");
     }
 
+    @DisplayName("예약 취소로 대기로 돌아간 워크로드도 마지막 실패 뒤 간격 안이면 재시도 대기로 센다")
+    @Test
+    void released_workload_within_backoff_counts_as_waiting() {
+        policyRepository.save(active("common", null));
+        Workload w = failedTimes(vm("취소"), 1);                  // 간격 안의 실패 기록
+        w.assignTo("mdc-01", "n1:9100", 0.5, "배치");            // 배치됐다가
+        assertTrue(w.release("예약 취소"));                       // 예약 취소로 대기 — 마지막 실패 시각은 남는다
+        workloadRepository.save(w);
+        Schedule schedule = save(scheduleOf("released"));
+
+        ScheduleRunPreviewResponse p = executionService.preview(schedule.getId());
+
+        assertEquals(Workload.WorkloadStatus.PENDING, w.getStatus());
+        assertNotNull(w.getLastFailedAt(), "예약 취소는 마지막 실패 시각을 지우지 않는다");
+        assertEquals(0, p.targetCount(), "간격 안이라 대상이 아니다");
+        assertEquals(1, p.waitingCount(), "대기 상태라도 간격 안이면 재시도 대기로 센다");
+        assertEquals(EmptyReason.WAITING, p.emptyReason());
+        assertTrue(p.emptyMessage().contains("재시도 대기 1건"), p.emptyMessage());
+    }
+
     // ── 정책 · 엔진 ────────────────────────────────────────────
 
     @DisplayName("정책과 엔진이 실행 이력의 값과 같고 고른 단계가 정확하다")

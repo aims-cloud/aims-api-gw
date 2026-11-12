@@ -26,6 +26,7 @@ import com.innogrid.aims.scheduler.dispatch.RecordingPlacementDispatcher;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.WorkloadUpdateRequest;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.Workload;
@@ -436,6 +437,96 @@ class WorkloadChangeDuringRunTest {
         assertTrue(workloadRepository.findById(target.getId()).isEmpty());
     }
 
+    // ── 배치하는 사이 커밋된 실패 결정 · 되살리기와 재시도 기록 ───────────────────
+
+    @DisplayName("배치하는 사이 다른 스케줄 실행이 실패를 기록해도 이 실행의 실패가 그 위에 쌓인다")
+    @Test
+    void overlapping_run_failure_is_counted_on_top_of_this_run_failure() {
+        Workload target = save(PREFIX + "rc-run", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        long other = schedule(PREFIX + "s-rc-other");
+        failAllPlacementsAfter(() -> executionService.runNow(other, "tester"));
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-rc-this"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertEquals(2, after.resolveRetryCount(), "겹친 두 실패가 모두 쌓여야 한다 — 한 번 덜 쌓이면 안 된다");
+        assertNotNull(after.getLastFailedAt());
+        List<SchedulingHistory> mine = historiesOf(run, target.getId());
+        assertEquals(1, mine.size());
+        assertFalse(mine.get(0).getSuccess());
+        long others = historyRepository.findAll().stream()
+                .filter(h -> target.getId().equals(h.getWorkloadId()) && !run.getId().equals(h.getScheduleRunId()))
+                .count();
+        assertEquals(1, others, "다른 실행도 실패 결정 한 건을 남긴다");
+    }
+
+    @DisplayName("배치하는 사이 단건 배치가 실패를 기록해도 이 실행의 실패가 그 위에 쌓인다")
+    @Test
+    void single_placement_failure_while_placing_is_counted() {
+        Workload target = save(PREFIX + "rc-one", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        failAllPlacementsAfter(() -> schedulingService.scheduleWorkload(target.getId(), null));
+
+        executionService.runNow(schedule(PREFIX + "s-rc-one"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertEquals(2, after.resolveRetryCount(), "단건 배치의 실패 위에 이 실행의 실패가 쌓여야 한다");
+    }
+
+    @DisplayName("배치하는 사이 되살린 워크로드는 이 실행이 실패해도 재시도 횟수가 1 이다")
+    @Test
+    void revive_while_placing_keeps_cleared_retry_count_under_failure() {
+        Workload failed = new Workload(PREFIX + "rc-revive", 1, 64);
+        failed.setResourceType(Workload.ResourceType.NPU);
+        failed.markFailed("앞선 실패 1");
+        failed.markFailed("앞선 실패 2");
+        OffsetDateTime old = OffsetDateTime.now().minusMinutes(20);   // 재시도 간격이 지났다
+        ReflectionTestUtils.setField(failed, "lastFailedAt", old);
+        Workload saved = workloadRepository.saveAndFlush(failed);
+        nodeThen(10, () -> { });
+        failAllPlacementsAfter(() -> schedulingService.changeStatus(saved.getId(), Workload.WorkloadStatus.PENDING));
+
+        executionService.runNow(schedule(PREFIX + "s-rc-revive"), "tester");
+
+        Workload after = reload(saved);
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus());
+        assertEquals(1, after.resolveRetryCount(), "되살리기가 지운 횟수 위에 이번 실패 한 번만 쌓인다");
+        assertTrue(after.getLastFailedAt().isAfter(old.plusMinutes(10)), "마지막 실패 시각은 이번 실패 시각이다");
+    }
+
+    @DisplayName("배치하는 사이 커밋된 실패 결정의 재시도 횟수와 실패 시각은 이 실행의 배치 뒤에도 남는다")
+    @Test
+    void failure_committed_while_placing_survives_this_run_success() {
+        Workload target = save(PREFIX + "rc-ok", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        OffsetDateTime[] failedAt = new OffsetDateTime[1];
+        elsewhereWhilePlacing(() -> {
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                Workload w = workloadRepository.findById(target.getId()).orElseThrow();
+                w.markFailed("겹친 실패 결정");
+                workloadRepository.saveAndFlush(w);
+            });
+            failedAt[0] = workloadRepository.findById(target.getId()).orElseThrow().getLastFailedAt();   // DB 에 저장된 값
+        }, false);
+
+        ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-rc-ok"), "tester");
+
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals(NODE, after.getAssignedNodeId());
+        assertEquals(1, after.resolveRetryCount(), "커밋된 실패 결정의 재시도 횟수가 배치 저장으로 되돌아가면 안 된다");
+        assertNotNull(after.getLastFailedAt(), "커밋된 실패 시각이 배치 저장으로 지워지면 안 된다");
+        assertEquals(failedAt[0].toInstant(), after.getLastFailedAt().toInstant());
+        List<PlacementDispatch> dispatches = dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId());
+        assertEquals(1, dispatches.size());
+        assertEquals(NODE, dispatches.get(0).getNodeId());
+        assertTrue(PlacementDispatchService.isCurrentDecision(dispatches.get(0), after), "전달 기록이 지금 결정의 기록이다");
+        assertEquals(1, run.getSuccessCount());
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────────────
 
     /** 노드 수집 대역 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between} 을 커밋한다. */
@@ -496,6 +587,25 @@ class WorkloadChangeDuringRunTest {
             }
         });
         return thrown[0];
+    }
+
+    /**
+     * 엔진 스파이 — 모든 배치 판단을 실패로 돌려주고, 첫 호출(배치 직전에 다시 읽은 뒤 · 저장 전)에서 {@code elsewhere} 를 별도
+     * 스레드로 끝까지 커밋한 뒤 이어 간다. {@code elsewhere} 안의 다른 실행 · 단건 배치도 같은 스파이를 지나 실패를 기록한다.
+     */
+    private void failAllPlacementsAfter(Runnable elsewhere) {
+        AtomicBoolean once = new AtomicBoolean(true);
+        doAnswer(inv -> {
+            if (once.getAndSet(false)) {
+                ExecutorService other = Executors.newSingleThreadExecutor();
+                try {
+                    other.submit(elsewhere).get(30, TimeUnit.SECONDS);
+                } finally {
+                    other.shutdownNow();
+                }
+            }
+            return SchedulingResult.failure("자원 부족", "default");
+        }).when(weighted).schedule(any(Workload.class), any(PlacementContext.class));
     }
 
     private Workload save(String name, int cpu, Workload.WorkloadPriority priority) {

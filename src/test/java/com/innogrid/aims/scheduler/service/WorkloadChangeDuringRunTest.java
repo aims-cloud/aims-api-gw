@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -338,6 +339,103 @@ class WorkloadChangeDuringRunTest {
                 "저장에 실패한 배치의 예약이 실행 후 스냅샷에 남으면 안 된다");
     }
 
+    // ── 편집이 읽은 뒤 커밋된 다른 쓰기 ────────────────────────────────────
+
+    @DisplayName("편집이 읽은 뒤 단건 배치가 커밋되면 편집은 409 이고 배치와 전달 기록은 그대로다")
+    @Test
+    void edit_after_single_placement_commit_is_rejected_and_keeps_placement() {
+        Workload target = save(PREFIX + "ed-one", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        Workload[] placed = new Workload[1];
+
+        BusinessException e = editAfter(target.getId(), "{\"name\":\"" + PREFIX + "ed-one-b\"}", () -> {
+            schedulingService.scheduleWorkload(target.getId(), null);
+            placed[0] = workloadRepository.findById(target.getId()).orElseThrow();
+        });
+
+        assertNotNull(e, "편집이 막 끝난 배치를 편집 전 대기로 되돌리면 안 된다");
+        assertEquals(HttpStatus.CONFLICT, e.getStatus(), e.getMessage());
+        assertTrue(e.getMessage().startsWith("배치된 워크로드는 편집할 수 없습니다"), e.getMessage());
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals(placed[0].getAssignedNodeId(), after.getAssignedNodeId());
+        assertEquals(placed[0].getScheduledAt().toInstant(), after.getScheduledAt().toInstant(), "배정 시각도 그대로");
+        assertEquals(PREFIX + "ed-one", after.getName(), "막힌 편집은 반영되지 않는다");
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId()).size());
+    }
+
+    @DisplayName("편집이 읽은 뒤 스케줄 실행이 배치를 커밋하면 편집은 409 이고 배치는 그대로다")
+    @Test
+    void edit_after_scheduled_run_placement_commit_is_rejected_and_keeps_placement() {
+        Workload target = save(PREFIX + "ed-run", 1, Workload.WorkloadPriority.NORMAL);
+        nodeThen(10, () -> { });
+        long scheduleId = schedule(PREFIX + "s-ed-run");   // 스케줄은 편집 트랜잭션 밖에서 미리 만든다
+
+        BusinessException e = editAfter(target.getId(), "{\"requiredCpu\":2}",
+                () -> executionService.runNow(scheduleId, "tester"));
+
+        assertNotNull(e, "편집이 막 끝난 배치를 편집 전 대기로 되돌리면 안 된다");
+        assertEquals(HttpStatus.CONFLICT, e.getStatus(), e.getMessage());
+        assertTrue(e.getMessage().startsWith("배치된 워크로드는 편집할 수 없습니다"), e.getMessage());
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, after.getStatus());
+        assertEquals(NODE, after.getAssignedNodeId());
+        assertEquals(1, after.getRequiredCpu(), "막힌 편집은 반영되지 않는다");
+        assertEquals(1, dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId()).size());
+    }
+
+    @DisplayName("편집이 읽은 뒤 커밋된 실패 결정은 편집이 되돌리지 않는다")
+    @Test
+    void edit_after_failure_decision_keeps_failure_and_retry_count() {
+        Workload target = save(PREFIX + "ed-fail", 1, Workload.WorkloadPriority.NORMAL);
+
+        BusinessException e = editAfter(target.getId(), "{\"name\":\"" + PREFIX + "ed-fail-b\"}", () ->
+                new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                    Workload w = workloadRepository.findById(target.getId()).orElseThrow();
+                    w.markFailed("겹친 실패 결정");
+                    workloadRepository.saveAndFlush(w);
+                }));
+
+        assertNull(e, () -> "편집할 수 있는 상태 안의 변화는 편집을 막지 않는다: " + e);
+        Workload after = reload(target);
+        assertEquals(Workload.WorkloadStatus.FAILED, after.getStatus(), "실패 결정이 편집 전 대기로 돌아가면 안 된다");
+        assertEquals(1, after.resolveRetryCount(), "재시도 횟수가 편집 전 값으로 돌아가면 안 된다");
+        assertNotNull(after.getLastFailedAt());
+        assertEquals(PREFIX + "ed-fail-b", after.getName(), "편집은 반영된다");
+    }
+
+    @DisplayName("편집이 읽은 뒤 커밋된 되살리기는 편집이 되돌리지 않는다")
+    @Test
+    void edit_after_revive_keeps_cleared_retry_count() {
+        Workload failed = new Workload(PREFIX + "ed-revive", 1, 64);
+        failed.setResourceType(Workload.ResourceType.NPU);
+        failed.markFailed("앞선 실패 1");
+        failed.markFailed("앞선 실패 2");
+        Workload saved = workloadRepository.saveAndFlush(failed);
+
+        BusinessException e = editAfter(saved.getId(), "{\"requiredCpu\":2}",
+                () -> schedulingService.changeStatus(saved.getId(), Workload.WorkloadStatus.PENDING));
+
+        assertNull(e, () -> "편집할 수 있는 상태 안의 변화는 편집을 막지 않는다: " + e);
+        Workload after = reload(saved);
+        assertEquals(Workload.WorkloadStatus.PENDING, after.getStatus(), "되살리기가 편집 전 실패로 돌아가면 안 된다");
+        assertEquals(0, after.resolveRetryCount(), "되살리기가 지운 재시도 횟수가 돌아오면 안 된다");
+        assertNull(after.getLastFailedAt());
+        assertEquals(2, after.getRequiredCpu(), "편집은 반영된다");
+    }
+
+    @DisplayName("편집이 읽은 뒤 지워진 워크로드의 편집은 404 다")
+    @Test
+    void edit_after_delete_is_not_found() {
+        Workload target = save(PREFIX + "ed-del", 1, Workload.WorkloadPriority.NORMAL);
+
+        BusinessException e = editAfter(target.getId(), "{\"requiredCpu\":2}", () -> workloadService.delete(target.getId()));
+
+        assertNotNull(e, "지워진 워크로드의 편집이 데이터베이스 오류로 끝나면 안 된다");
+        assertEquals(HttpStatus.NOT_FOUND, e.getStatus(), e.getMessage());
+        assertTrue(workloadRepository.findById(target.getId()).isEmpty());
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────────────
 
     /** 노드 수집 대역 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between} 을 커밋한다. */
@@ -370,6 +468,34 @@ class WorkloadChangeDuringRunTest {
             }
             return inv.callRealMethod();
         }).when(weighted).schedule(any(Workload.class), any(PlacementContext.class));
+    }
+
+    /**
+     * 편집이 워크로드를 읽은 뒤 · 저장하기 전에 {@code elsewhere} 가 커밋하는 창 — 바깥 트랜잭션에서 워크로드를 먼저 읽어 두고
+     * (편집이 같은 트랜잭션에서 그 사본을 받는다) {@code elsewhere} 를 별도 스레드로 끝까지 커밋한 뒤 같은 트랜잭션에서 편집한다.
+     * 바깥 트랜잭션은 읽기만 했으므로 다른 쪽이 막히지 않는다. 편집이 {@link BusinessException} 을 내면 롤백하고 그 예외를
+     * 돌려준다(없으면 null · 그 밖의 예외는 그대로 던진다).
+     */
+    private BusinessException editAfter(Long workloadId, String json, Runnable elsewhere) {
+        BusinessException[] thrown = new BusinessException[1];
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            workloadRepository.findById(workloadId).orElseThrow();
+            ExecutorService other = Executors.newSingleThreadExecutor();
+            try {
+                other.submit(elsewhere).get(30, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                throw new IllegalStateException("겹친 쓰기가 끝나지 않았다", e);
+            } finally {
+                other.shutdownNow();
+            }
+            try {
+                workloadService.update(workloadId, body(json));
+            } catch (BusinessException e) {
+                thrown[0] = e;
+                status.setRollbackOnly();
+            }
+        });
+        return thrown[0];
     }
 
     private Workload save(String name, int cpu, Workload.WorkloadPriority priority) {

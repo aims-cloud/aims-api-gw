@@ -1,8 +1,10 @@
 package com.innogrid.aims.scheduler.controller;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -39,6 +41,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code codes[CODE].decisions}" 가 이 스위트의 오라클이다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징(LIKE)에는 걸리고 합계에서는
  * {@code skipped} 로 빠지므로 그 차이도 함께 고정한다. 시드는 이 테스트 전용 워크로드 id 로만 심고, {@code createdAt} 은
  * {@code @PrePersist} 가 덮어쓰므로 창 테스트는 JPQL 일괄 갱신으로 과거로 옮긴다.</p>
+ *
+ * <p>시드는 심은 뒤 모두 1초 전으로 옮긴다 — 기본 창의 끝이 조회 시각이고 끝은 포함하지 않으므로, 심은 시각이 조회와 같은 시계
+ * 눈금에 걸리면 마지막 행이 합계에서 빠진다(결정 수 7 대신 6). 1초보다 크게 옮기면 기본 창 끝을 몇십 초 당기는 결함을 기본 창
+ * 테스트의 60초 허용 폭이 가리므로 1초만 옮긴다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,6 +58,10 @@ class HistoryExclusionSummaryApiTest {
     /** 이 테스트 전용 — 다른 이력 테스트의 9_900_00x 대역과 겹치지 않는다. */
     private static final long WORKLOAD_F = 9_900_006L;
     private static final String W = String.valueOf(WORKLOAD_F);
+    /** 심은 시드를 옮기는 폭 — 시계 눈금(Windows 최대 약 16ms)과 마이크로초 반올림보다 충분히 크다. */
+    private static final Duration SEEDED_BEFORE = Duration.ofSeconds(1);
+    /** 심은 시드가 심은 직후보다 적어도 이만큼 앞서야 기본 창 끝과 같은 눈금에 걸리지 않는다. */
+    private static final Duration SEEDED_MARGIN = Duration.ofMillis(500);
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -61,8 +71,9 @@ class HistoryExclusionSummaryApiTest {
 
     private final List<Long> seeded = new ArrayList<>();
     private long ir2Id, noneId;
+    private OffsetDateTime seededAt;
 
-    /** 성공 4(집계 2 · 없음 1 · 빈 객체 1) · 실패 3(집계 1 · 형식 깨짐 2 — 하나는 코드 토큰을 품는다). */
+    /** 성공 4(집계 2 · 없음 1 · 빈 객체 1) · 실패 3(집계 1 · 형식 깨짐 2 — 하나는 코드 토큰을 품는다). 심은 뒤 모두 1초 전으로 옮긴다. */
     @BeforeEach
     void seed() {
         ir2Id = save("hs-ir2", true, "{\"INSUFFICIENT_RESOURCE\":2}");
@@ -72,6 +83,8 @@ class HistoryExclusionSummaryApiTest {
         save("hs-te", false, "{\"TEMPERATURE_EXCEEDED\":1}");
         save("hs-broken", false, "not-json");                            // 토큰 없음 — 페이징에도 안 걸린다
         save("hs-broken-token", false, "{\"TEMPERATURE_EXCEEDED\":x}");   // 토큰 있음 — 페이징 LIKE 에는 걸린다
+        seededAt = OffsetDateTime.now();
+        for (long id : seeded) backdate(id, seededAt.minus(SEEDED_BEFORE));
     }
 
     @AfterEach
@@ -177,6 +190,15 @@ class HistoryExclusionSummaryApiTest {
         mockMvc.perform(get(SUMMARY).param("from", "yesterday")).andExpect(status().isBadRequest());
         mockMvc.perform(get(SUMMARY).param("from", "2026-09-01T00:00:00")).andExpect(status().isBadRequest());   // 오프셋 없음
         mockMvc.perform(get(PAGE).param("to", "2026-09-01T00:00:00")).andExpect(status().isBadRequest());
+    }
+
+    @DisplayName("심은 이력은 모두 심은 직후보다 0.5초 넘게 앞서 기본 창 끝과 같은 시계 눈금에 걸리지 않는다")
+    @Test
+    void seeded_rows_precede_default_window_end() {
+        OffsetDateTime latest = repository.findAllById(seeded).stream()
+                .map(SchedulingHistory::getCreatedAt).max(Comparator.naturalOrder()).orElseThrow();
+        assertTrue(latest.isBefore(seededAt.minus(SEEDED_MARGIN)),
+                () -> "가장 늦은 시드 " + latest + " · 심은 직후 " + seededAt + " — 기본 창 끝(조회 시각)과 같은 눈금이면 합계에서 빠진다");
     }
 
     @DisplayName("집계 문자열 역파싱은 쓰는 쪽 형식과 짝이고, 어긋나거나 음수·중복 키·공백 섞임이면 비어 있다")

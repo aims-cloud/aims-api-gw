@@ -134,7 +134,7 @@ final class RunInputReplay {
     }
 
     /**
-     * 엔진만 바꿔 대상 순서대로 다시 배치한다. 건너뜀과 예약 되돌림은 기록 엔진과 같게 따른다 — 건너뜀은 배치 직전 다시 읽은
+     * 엔진만 바꿔 대상 순서대로 다시 배치한다. 건너뜀과 예약 되돌림은 기록 엔진과 같게 따른다 — 건너뜀은 배치 직전 다시 읽기나 저장 직전 확인에서 본
      * 워크로드 상태로 정해져 엔진과 무관하고, 되돌림은 워크로드 단위로 적용한다(실행 계층이 노드마다 다르게 받을 수 있다면 가정이다).
      */
     static List<Step> replay(RunInputCapture.RunInputs in, String engineId, List<SchedulingHistory> history, Set<Long> rolledBack) {
@@ -244,7 +244,7 @@ final class RunInputReplay {
         return same ? Outcome.MATCH : Outcome.MISMATCH;
     }
 
-    /** 실행이 배치 직전에 다시 읽어 건너뛴 워크로드의 이력 행 — 후보 0 · 선택 노드 없음. */
+    /** 실행이 배치 직전 다시 읽기나 저장 직전 확인으로 건너뛴 워크로드의 이력 행 — 후보 0 · 선택 노드 없음. */
     private static boolean isSkip(SchedulingHistory h) {
         return h != null && h.getCandidateCount() == 0 && h.getSelectedNodeId() == null;
     }

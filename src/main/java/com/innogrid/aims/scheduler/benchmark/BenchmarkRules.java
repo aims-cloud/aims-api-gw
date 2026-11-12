@@ -157,9 +157,9 @@ public final class BenchmarkRules {
 
     /**
      * 링크 판 id. 주 결과판의 노드 블록을 바이트 그대로 재사용하고 {@code links:} 절과 워크로드 데이터 MDC 순환 배정만 더한 판이다.
-     * 링크 점수를 섞는 엔진은 {@code weighted} 하나뿐이라 이 판에서 값이 달라지는 열은 {@code weighted} 계열뿐이며, 비교는 판 사이가
-     * 아니라 <b>같은 판 안의 게이트 on/off 열 쌍</b>({@code weighted} · {@code weighted-affinity})으로 한다 — netScore 경로의
-     * 작동 확인이며 전력 판정과 무관하다.
+     * 링크 스코어를 노드 배치 스코어에 섞는 열은 링크 게이트를 켠 {@code weighted-affinity} 하나라, 비교는 판 사이가 아니라
+     * <b>같은 판 안의 게이트 on/off 열 쌍</b>({@code weighted} · {@code weighted-affinity})으로 한다 — netScore 경로의 작동 확인이며
+     * 전력 판정과 무관하다. 원격 MDC 배치 비율은 데이터 MDC 를 배정한 이 판에서만 모든 열에 값이 있다.
      */
     public static final String LINK_BOARD = "link";
 

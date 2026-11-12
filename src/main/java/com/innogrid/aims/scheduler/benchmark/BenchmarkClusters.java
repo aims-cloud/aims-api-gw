@@ -121,9 +121,11 @@ public class BenchmarkClusters {
                     + "재현되지 않는다."),
             new Board(LINK, "classpath:scheduler/benchmark-cluster-link.yml",
                     "링크 판(부록) — 주 결과판과 노드 구성이 같고 links 절(a-b UP 8ms · a-c DEGRADED 45ms/1.5% · b-c 미등록)과 워크로드 "
-                    + "데이터 MDC 순환 배정만 더했다. 링크 점수를 섞는 엔진은 weighted 하나뿐이라 이 판에서 값이 달라지는 열은 weighted 계열이고, "
-                    + "비교는 같은 판 안의 게이트 on/off 열 쌍(weighted · weighted-affinity)으로 한다 — netScore 경로의 작동 확인이며 전력 "
-                    + "판정과 무관하다. 판정·방향 판정 자격 없음. 링크는 이 판 파일이 원장 노릇을 하고 DB 원장(0건)과 무관하다."),
+                    + "데이터 MDC 순환 배정만 더했다. 링크 스코어를 노드 배치 스코어에 섞는 열은 링크 게이트를 켠 weighted-affinity 하나라, "
+                    + "게이트 효과는 같은 판 안의 게이트 on/off 열 쌍(weighted · weighted-affinity)으로 읽는다 — netScore 경로의 작동 확인이며 전력 "
+                    + "판정과 무관하다. 워크로드에 데이터 MDC 를 배정한 판은 이것뿐이라 원격 MDC 배치 비율은 이 판에서만 모든 열에 값이 있고, "
+                    + "게이트를 끈 열의 값은 링크를 보지 않은 배치의 지역성이다. "
+                    + "판정·방향 판정 자격 없음. 링크는 이 판 파일이 원장 노릇을 하고 DB 원장(0건)과 무관하다."),
             new Board(MAIN_INDEPENDENT, "classpath:scheduler/benchmark-cluster-main-independent.yml",
                     "주 결과판의 위상 독립 짝(부록) — 노드 블록은 주 결과판과 같고 phaseMode: independent 와 seeds 3 만 다르다. legacy 위상은 "
                     + "seed 가 전 노드에 같은 상수만 더해 seed 를 늘려도 표본이 늘지 않는 결함이 있어, 노드별 위상을 seed·nodeId 혼합으로 다시 뽑아 "

@@ -27,6 +27,7 @@ import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.EmptyReason;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
@@ -393,7 +394,7 @@ public class ScheduleExecutionService {
 
     private static ScheduleDryRunResponse response(Schedule schedule, Workload.ResourceType type, PolicyChoice policy,
                                                    EngineChoice engine, ScheduleRun.RunStatus status, String message,
-                                                   ScheduleRunPreviewResponse.EmptyReason emptyReason, int targets, int success,
+                                                   EmptyReason emptyReason, int targets, int success,
                                                    boolean truncated, ScheduleRunDetailResponse.ClusterSnapshot snapshot,
                                                    List<ScheduleDryRunResponse.DryRunDecision> decisions) {
         return new ScheduleDryRunResponse(
@@ -587,17 +588,17 @@ public class ScheduleExecutionService {
         if (exhausted > 0) {
             return new EmptyTargetOutcome(ScheduleRun.RunStatus.FAILED, String.format(
                     "대상 없음 (재시도 소진 %d건 — 일괄 재개가 필요합니다)", exhausted),
-                    ScheduleRunPreviewResponse.EmptyReason.EXHAUSTED);
+                    EmptyReason.EXHAUSTED);
         }
         long waiting = waitingSupplier.getAsLong();
         if (waiting > 0) {
             return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, String.format(
                     "대상 없음 (재시도 대기 %d건 — %d분 뒤 다시 시도합니다)",
                     waiting, properties.getRetryBackoffMinutes()),
-                    ScheduleRunPreviewResponse.EmptyReason.WAITING);
+                    EmptyReason.WAITING);
         }
         return new EmptyTargetOutcome(ScheduleRun.RunStatus.COMPLETED, "대상 없음",
-                ScheduleRunPreviewResponse.EmptyReason.NONE);
+                EmptyReason.NONE);
     }
 
     /**
@@ -609,7 +610,7 @@ public class ScheduleExecutionService {
      * <b>할 일 없음</b>은 그냥 정상이다. 실행 상태 값 집합은 늘리지 않는다(FAILED·COMPLETED 그대로).</p>
      */
     record EmptyTargetOutcome(ScheduleRun.RunStatus status, String message,
-                              ScheduleRunPreviewResponse.EmptyReason reason) {}
+                              EmptyReason reason) {}
 
     /**
      * 스케줄이 지정한 정책, 없으면 리소스 종류별 활성 정책 — 출처와 함께.

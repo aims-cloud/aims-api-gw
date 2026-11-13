@@ -23,6 +23,8 @@ import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.EmptyReason;
+import com.innogrid.aims.scheduler.model.EngineSource;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
 import com.innogrid.aims.scheduler.repository.ScheduleRepository;
@@ -104,7 +106,7 @@ class ScheduleDryRunTest {
         assertNull(dry.emptyReason());
         assertEquals(preview.policySource(), dry.policySource(), "정책을 고른 단계는 실행 전 미리보기와 같다");
         assertEquals(preview.policyName(), dry.policyName());
-        assertEquals(ScheduleRunPreviewResponse.EngineSource.SCHEDULE, dry.engineSource());
+        assertEquals(EngineSource.SCHEDULE, dry.engineSource());
         assertEquals(run.getEngineId(), dry.engine());
         assertEquals(run.getPolicyName(), dry.policyName());
 
@@ -244,7 +246,7 @@ class ScheduleDryRunTest {
 
         assertEquals(ScheduleRun.RunStatus.COMPLETED, dry.status());
         assertEquals("대상 없음", dry.message());
-        assertEquals(ScheduleRunPreviewResponse.EmptyReason.NONE, dry.emptyReason());
+        assertEquals(EmptyReason.NONE, dry.emptyReason());
         assertEquals(0, dry.targetCount());
         assertEquals(0, dry.successCount());
         assertEquals(0, dry.failedCount());
@@ -297,7 +299,7 @@ class ScheduleDryRunTest {
 
         assertFalse(dry.enabled());
         assertEquals(ScheduleRun.RunStatus.COMPLETED, dry.status());
-        assertEquals(ScheduleRunPreviewResponse.EmptyReason.NONE, dry.emptyReason());
+        assertEquals(EmptyReason.NONE, dry.emptyReason());
     }
 
     @DisplayName("없는 스케줄과 지정 정책이 지워진 스케줄은 404 다")

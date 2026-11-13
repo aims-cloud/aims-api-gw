@@ -5,7 +5,7 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse.EngineSource;
+import com.innogrid.aims.scheduler.model.EngineSource;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 

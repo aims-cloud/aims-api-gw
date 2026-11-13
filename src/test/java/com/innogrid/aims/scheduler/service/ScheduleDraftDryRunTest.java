@@ -23,6 +23,7 @@ import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.EmptyReason;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.repository.PlacementDispatchRepository;
@@ -289,7 +290,7 @@ class ScheduleDraftDryRunTest {
         assertNull(ok.id());
         assertNull(ok.scheduleId());
         assertEquals(ScheduleRun.RunStatus.COMPLETED, ok.status());
-        assertEquals(ScheduleRunPreviewResponse.EmptyReason.NONE, ok.emptyReason());
+        assertEquals(EmptyReason.NONE, ok.emptyReason());
     }
 
     @DisplayName("키를 빼면 기본값으로 읽고 정책·엔진 출처는 같은 본문의 미리보기와 같다")

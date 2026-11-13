@@ -906,6 +906,29 @@ class BenchmarkRulesContractTest {
     }
 
     /**
+     * 원격 MDC 배치 비율은 link 판에서만 모든 열에 값이 있다 — 판 목록에서 그 판을 설명하는 항목에 이 지표가 없으면 읽는 사람은
+     * 값이 왜 이 판에만 있는지 알 수 없다. 언급이 다른 판 항목으로 옮겨 가도 잡히도록 link 항목(「link(」부터 다음 판 이름 앞까지)만
+     * 잘라 본다. 스프링을 띄우지 않고 애노테이션을 반사로 읽는다.
+     */
+    @DisplayName("배치 비교 설명의 link 항목에 원격 MDC 배치 비율이 있다")
+    @Test
+    void the_swagger_link_board_entry_names_the_remote_mdc_rate() throws Exception {
+        String description = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class)
+                .description();
+        String label = BenchmarkRules.METRICS.stream()
+                .filter(m -> BenchmarkRules.REMOTE_MDC_RATE.equals(m.key()))
+                .findFirst().orElseThrow().label();
+
+        int from = description.indexOf("link(");
+        int to = description.indexOf("main-independent", from);
+        assertTrue(from >= 0 && to > from, "배치 비교 설명의 판 목록에서 link 항목을 찾지 못했다");
+        assertTrue(description.substring(from, to).contains(label),
+                "배치 비교 설명의 link 항목에 「" + label + "」 언급이 없다: " + description.substring(from, to));
+    }
+
+    /**
      * 판의 생성식과 엔진의 전력 모델이 <b>서로를 모른다</b>. 엔진이 판의 지수를 알게 되면 "엔진 가정과
      * 생성식의 격차"는 정의상 0 이 되고, 이 비교가 재는 것이 사라진다.
      *

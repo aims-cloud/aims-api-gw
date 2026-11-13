@@ -208,6 +208,7 @@ public class ScheduleExecutionService {
             int success = 0;
             int attempted = 0;
             String firstFailure = null;
+            Long runId = run.getId();
             try {
                 for (Workload polled : targets) {
                     // 대상은 실행 시작 때 읽은 사본이라 노드 수집과 앞 워크로드의 배치·전달을 도는 사이 낡는다.
@@ -221,18 +222,10 @@ public class ScheduleExecutionService {
                         if (firstFailure == null) firstFailure = skip;
                         continue;
                     }
-                    SchedulingResult placed = placementService.place(workload, context, engineId, run.getId());
-                    if (placed.success()) {
-                        // 예약은 결정이 커밋된 뒤에 잡는다 — 배치 안에서 잡으면 저장·커밋이 실패해도 예약이 남아
-                        // 그 예외로 루프가 끝난 뒤 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.
-                        context.reserve(placed.selectedNodeId(), workload);
-                    }
-                    SchedulingResult result = schedulingService.dispatch(workload, placed, run.getId());
-                    if (placed.success() && !result.success()) {
-                        // 실행 계층이 받지 않은 배치 — DB 쪽은 디스패치가 이미 FAILED 로 돌렸지만, 이 실행의 컨텍스트에
-                        // 잡힌 예약은 여기서 되돌려야 같은 실행의 다음 워크로드와 실행 후 스냅샷이 없는 예약을 보지 않는다.
-                        context.unreserve(placed.selectedNodeId(), workload);
-                    }
+                    // 결정 → 예약 → 전달 → 받지 않으면 예약 되돌림. 순서와 그 이유는 PlaceAndDispatch 가 갖는다.
+                    SchedulingResult result = PlaceAndDispatch.run(context, workload,
+                            () -> placementService.place(workload, context, engineId, runId),
+                            placed -> schedulingService.dispatch(workload, placed, runId)).delivered();
                     attempted++;
                     if (result.success()) {
                         success++;

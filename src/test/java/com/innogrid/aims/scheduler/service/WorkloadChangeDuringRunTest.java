@@ -340,6 +340,32 @@ class WorkloadChangeDuringRunTest {
                 "저장에 실패한 배치의 예약이 실행 후 스냅샷에 남으면 안 된다");
     }
 
+    @DisplayName("전달 기록 마감 저장이 실패하면 커밋된 배치의 예약은 실행 후 스냅샷에 남는다")
+    @Test
+    void failed_dispatch_settle_keeps_reservation_in_after_snapshot() {
+        Workload target = save(PREFIX + "settle-fail", 5, Workload.WorkloadPriority.NORMAL);
+        nodeThen(1, () -> { });   // CPU 1% — 5코어를 예약하면 가동 노드가 0 → 1 이 된다
+        // 실행 계층은 받지만 응답 메시지가 전달 기록 열(500자)보다 길어 전달 기록 마감 저장이 실패한다.
+        // PlacementDispatch.accept 가 메시지를 자르지 않는 지금 동작에 기댄 실패 유발이다. 자르기를 더하면 유발 방법을 바꾼다.
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) { return Outcome.accepted(null, "가".repeat(600)); }
+        });
+
+        long scheduleId = schedule(PREFIX + "s-settle");
+        assertThrows(BusinessException.class, () -> executionService.runNow(scheduleId, "tester"));
+
+        ScheduleRun run = runRepository.findByScheduleId(scheduleId).get(0);
+        assertEquals(ScheduleRun.RunStatus.FAILED, run.getStatus());
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, reload(target).getStatus(), "배치 결정은 전달 전에 이미 커밋됐다");
+        List<PlacementDispatch> records = dispatchRepository.findByWorkloadIdOrderByRequestedAtDescIdDesc(target.getId());
+        assertEquals(1, records.size());
+        assertEquals(PlacementDispatch.DispatchStatus.REQUESTED, records.get(0).getStatus(), "마감 저장이 되돌아가 요청 상태로 남는다");
+        assertEquals(Integer.valueOf(0), run.getSnapshotActiveNodesBefore());
+        assertEquals(Integer.valueOf(1), run.getSnapshotActiveNodesAfter(),
+                "커밋된 배치의 예약은 전달이 예외로 끝나도 되돌리지 않는다");
+    }
+
     // ── 편집이 읽은 뒤 커밋된 다른 쓰기 ────────────────────────────────────
 
     @DisplayName("편집이 읽은 뒤 단건 배치가 커밋되면 편집은 409 이고 배치와 전달 기록은 그대로다")

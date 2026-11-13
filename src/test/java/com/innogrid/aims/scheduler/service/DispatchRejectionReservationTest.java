@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.innogrid.aims.scheduler.dispatch.DispatcherRegistry;
 import com.innogrid.aims.scheduler.dispatch.PlacementDispatcher;
@@ -98,6 +99,33 @@ class DispatchRejectionReservationTest {
         Workload second = workloadRepository.findById(w2.getId()).orElseThrow();
         assertNotEquals(Workload.WorkloadStatus.SCHEDULED, second.getStatus());
         assertNull(second.getAssignedNodeId());
+    }
+
+    @DisplayName("즉시 실행이 실행 계층을 부를 때는 트랜잭션이 없고 배치 결정은 이미 커밋돼 있다")
+    @Test
+    void dispatcher_runs_outside_transaction_after_placement_commit() {
+        eightCoreNode();
+        boolean[] inTransaction = {true};
+        Workload.WorkloadStatus[] committedStatus = {null};
+        String[] committedNode = {null};
+        when(registry.current()).thenReturn(new PlacementDispatcher() {
+            @Override public String getMode() { return "test"; }
+            @Override public Outcome dispatch(Request request) {
+                inTransaction[0] = TransactionSynchronizationManager.isActualTransactionActive();
+                Workload seen = workloadRepository.findById(request.workloadId()).orElseThrow();
+                committedStatus[0] = seen.getStatus();
+                committedNode[0] = seen.getAssignedNodeId();
+                return Outcome.accepted(null, "ok");
+            }
+        });
+        save("drr-t1", Workload.WorkloadPriority.NORMAL);
+
+        ScheduleRun run = executionService.runNow(schedule("drr-s3"), "tester");
+
+        assertEquals(1, run.getSuccessCount());
+        assertFalse(inTransaction[0], "전달은 배치 결정이 커밋된 뒤 트랜잭션 밖에서 불려야 한다");
+        assertEquals(Workload.WorkloadStatus.SCHEDULED, committedStatus[0], "전달 전에 배치 결정이 커밋돼 있어야 한다");
+        assertEquals(NODE, committedNode[0]);
     }
 
     @DisplayName("노드 자원 — 예약을 되돌리면 네 축이 모두 원래 값으로 돌아오고 음수 디스크도 예약과 같은 보정을 받는다")

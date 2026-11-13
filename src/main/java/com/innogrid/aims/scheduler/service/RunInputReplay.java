@@ -147,20 +147,16 @@ final class RunInputReplay {
                 continue;
             }
             Workload w = workload(row);
-            SchedulingResult result;
-            try {
-                result = rebuilt.engine().schedule(w, rebuilt.context());
-            } catch (RuntimeException e) {
-                // 어느 워크로드에서 났는지 붙여 다시 던진다 — 호출자가 오류 응답에 싣는다
-                throw new IllegalStateException("워크로드 " + row.id() + " 재계산 중 오류: " + e, e);
-            }
-            if (result.success()) {
-                rebuilt.context().reserve(result.selectedNodeId(), w);
-                if (rolledBack.contains(row.id())) {
-                    rebuilt.context().unreserve(result.selectedNodeId(), w);
+            // 실행과 같은 PlaceAndDispatch 를 거친다. 실제 전달은 없고, 실행이 예약을 되돌린 워크로드만 실행 계층이 받지 않은 것으로 본다
+            PlaceAndDispatch.Done done = PlaceAndDispatch.run(rebuilt.context(), w, () -> {
+                try {
+                    return rebuilt.engine().schedule(w, rebuilt.context());
+                } catch (RuntimeException e) {
+                    // 어느 워크로드에서 났는지 붙여 다시 던진다 — 호출자가 오류 응답에 싣는다
+                    throw new IllegalStateException("워크로드 " + row.id() + " 재계산 중 오류: " + e, e);
                 }
-            }
-            steps.add(new Step(row.id(), false, result));
+            }, placed -> rolledBack.contains(row.id()) ? SchedulingResult.failure("실행이 예약을 되돌린 워크로드") : placed);
+            steps.add(new Step(row.id(), false, done.placed()));
         }
         return steps;
     }

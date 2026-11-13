@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.controller;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +28,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
@@ -127,6 +129,43 @@ class ScheduleDryRunApiTest {
         assertNotNull(schemas.get("DryRunDecision"));
         assertTrue(schemas.get("ScheduleDryRunResponse").get("properties").get("clusterSnapshot").get("$ref").asString().endsWith("/ClusterSnapshot"));
         assertNotNull(doc.get("paths").get(BASE + "/{id}/run"), "기존 즉시 실행 경로 유지");
+    }
+
+    @DisplayName("Swagger 의 미리보기 · 모의 실행 스키마는 세 열거형 속성을 값 목록으로 직접 싣고 열거형 스키마를 따로 만들지 않는다")
+    @Test
+    void swagger_enum_properties_are_inline() throws Exception {
+        JsonNode schemas = objectMapper.readTree(mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("components").get("schemas");
+        List<String> policySource = List.of("SCHEDULE", "RESOURCE_TYPE", "COMMON", "DEFAULT");
+        List<String> engineSource = List.of("SCHEDULE", "POLICY", "DEFAULT");
+        List<String> emptyReason = List.of("NONE", "WAITING", "EXHAUSTED");
+        for (String schema : List.of("ScheduleRunPreviewResponse", "ScheduleDryRunResponse")) {
+            JsonNode properties = schemas.get(schema).get("properties");
+            assertInlineEnum(schema, properties.get("policySource"), policySource);
+            assertInlineEnum(schema, properties.get("engineSource"), engineSource);
+            assertInlineEnum(schema, properties.get("emptyReason"), emptyReason);
+        }
+        // 따로 만든 열거형 스키마는 이름이 아니라 값 목록으로 찾는다 — 짧은 이름은 다른 영역의 스키마가 쓸 수 있다
+        for (Map.Entry<String, JsonNode> entry : schemas.properties()) {
+            assertFalse(List.of(policySource, engineSource, emptyReason).contains(enumValues(entry.getValue())),
+                    "열거형 스키마가 따로 생기면 Swagger 가 바뀐다: " + entry.getKey());
+        }
+    }
+
+    private static void assertInlineEnum(String schema, JsonNode property, List<String> values) {
+        assertNotNull(property, schema);
+        assertTrue(property.get("$ref") == null, schema + " 의 열거형 속성이 참조로 바뀌었다");
+        assertEquals("string", property.get("type").asString(), schema);
+        assertEquals(values, enumValues(property), schema);
+    }
+
+    private static List<String> enumValues(JsonNode node) {
+        List<String> values = new ArrayList<>();
+        JsonNode array = node.get("enum");
+        if (array != null) {
+            array.forEach(v -> values.add(v.asString()));
+        }
+        return values;
     }
 
     private static List<String> names(JsonNode node) {

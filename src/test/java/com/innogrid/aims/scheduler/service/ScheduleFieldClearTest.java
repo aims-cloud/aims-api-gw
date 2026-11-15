@@ -16,7 +16,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ScheduleRequest;
 import com.innogrid.aims.scheduler.dto.ScheduleResponse;
 import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse;
-import com.innogrid.aims.scheduler.dto.ScheduleRunPreviewResponse.EngineSource;
+import com.innogrid.aims.scheduler.model.EngineSource;
 import com.innogrid.aims.scheduler.dto.ScheduleUpdateRequest;
 import com.innogrid.aims.scheduler.entity.Schedule;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;

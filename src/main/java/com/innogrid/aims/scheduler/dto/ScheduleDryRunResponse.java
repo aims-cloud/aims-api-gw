@@ -4,6 +4,8 @@ import java.util.List;
 
 import com.innogrid.aims.scheduler.entity.ScheduleRun;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.EmptyReason;
+import com.innogrid.aims.scheduler.model.EngineSource;
 import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
@@ -37,13 +39,13 @@ public record ScheduleDryRunResponse(
         @Schema(description = "적용된 엔진 ID", example = "weighted")
         String engine,
         @Schema(description = "엔진을 고른 단계 — SCHEDULE · POLICY · DEFAULT")
-        ScheduleRunPreviewResponse.EngineSource engineSource,
+        EngineSource engineSource,
         @Schema(description = "지금 실행하면 남을 처리 상태. 한 건이라도 배치되면 COMPLETED, 전부 실패·대상 없음(재시도 소진)·노드 없음이면 FAILED")
         ScheduleRun.RunStatus status,
         @Schema(description = "실행이 남길 메시지와 같은 문구", example = "대상 3건 / 성공 2건 / 실패 1건")
         String message,
         @Schema(description = "대상이 0건일 때의 사유. 대상이 있으면 null. 화면 분기는 이 값으로")
-        ScheduleRunPreviewResponse.EmptyReason emptyReason,
+        EmptyReason emptyReason,
         @Schema(description = "모의로 놓아 본 워크로드 수(실행 1회 상한 적용 뒤 — 실행 이력의 targetCount 와 같은 뜻)", example = "3")
         int targetCount,
         @Schema(description = "배치된 수", example = "2")

@@ -1,6 +1,8 @@
 package com.innogrid.aims.scheduler.dto;
 
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.EmptyReason;
+import com.innogrid.aims.scheduler.model.EngineSource;
 import com.innogrid.aims.scheduler.model.PolicyChoice;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -43,24 +45,4 @@ public record ScheduleRunPreviewResponse(
         @Schema(description = "대상이 0건일 때 실행이 남길 메시지와 같은 문구. 대상이 있으면 null", example = "대상 없음 (재시도 대기 1건 — 15분 뒤 다시 시도합니다)")
         String emptyMessage
 ) {
-
-    /** 엔진을 고른 단계. */
-    public enum EngineSource {
-        /** 스케줄이 지정한 엔진 */
-        SCHEDULE,
-        /** 정책의 기본 엔진(등록된 엔진일 때만) */
-        POLICY,
-        /** 서버 기본 엔진 */
-        DEFAULT
-    }
-
-    /** 대상 0건의 사유. 실행이 메시지를 고르는 우선순위와 같다 — 소진 &gt; 대기 &gt; 없음. */
-    public enum EmptyReason {
-        /** 대상이 될 워크로드가 없다(정상) */
-        NONE,
-        /** 재시도 간격이 지나지 않은 워크로드만 있다(시간이 지나면 풀림) */
-        WAITING,
-        /** 재시도 상한에 걸린 워크로드가 있다(일괄 재개가 필요 · 실행은 FAILED 로 기록) */
-        EXHAUSTED
-    }
 }

@@ -1,0 +1,19 @@
+{
+  "availabilityZoneInfo": [
+    {
+      "zoneName": "internal",
+      "zoneState": { "available": true },
+      "hosts": { "controller": { "nova-conductor": { "available": true, "active": true } } }
+    },
+    {
+      "zoneName": "az-a",
+      "zoneState": { "available": true },
+      "hosts": { "compute-a": { "nova-compute": { "available": true, "active": true } } }
+    },
+    {
+      "zoneName": "az-b",
+      "zoneState": { "available": true },
+      "hosts": { "compute-b": { "nova-compute": { "available": true, "active": true } } }
+    }
+  ]
+}

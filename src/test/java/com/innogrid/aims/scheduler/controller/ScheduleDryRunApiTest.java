@@ -145,7 +145,7 @@ class ScheduleDryRunApiTest {
             assertInlineEnum(schema, properties.get("engineSource"), engineSource);
             assertInlineEnum(schema, properties.get("emptyReason"), emptyReason);
         }
-        // 따로 만든 열거형 스키마는 이름이 아니라 값 목록으로 찾는다 — 짧은 이름은 다른 영역의 스키마가 쓸 수 있다
+        // 따로 만든 열거형 스키마는 이름이 아니라 값 목록으로 찾는다 — 짧은 이름은 다른 패키지의 같은 이름 클래스가 쓸 수 있다
         for (Map.Entry<String, JsonNode> entry : schemas.properties()) {
             assertFalse(List.of(policySource, engineSource, emptyReason).contains(enumValues(entry.getValue())),
                     "열거형 스키마가 따로 생기면 Swagger 가 바뀐다: " + entry.getKey());

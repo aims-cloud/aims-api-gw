@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,7 @@ import com.innogrid.aims.scheduler.controller.PlacementBenchmarkController;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Assumptions;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.MetricValue;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.TemperatureLimitCheck;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
@@ -999,6 +1001,26 @@ class BenchmarkRulesContractTest {
         }
         assertTrue(description.contains(BenchmarkRules.GAP_VS_PABFD),
                 "격차 지표의 키가 설명에 없다 — 판정에 쓸 열이라 뜻이 문서에 있어야 한다");
+    }
+
+    /**
+     * 노드별 온도 상한 대조 행의 필드 이름도 설명에 전부 있어야 한다 — 판의 필드와 같은 이유다(판 필드 테스트는 판 성분만 본다).
+     * 이름을 낱말로 찾는다 — {@code measured} 는 설명에 원래 있던 {@code measuredNodeCount} 의 앞부분과 겹친다.
+     */
+    @DisplayName("노드별 온도 상한 대조 행의 필드 이름이 하나도 빠짐없이 배치 비교 설명에 등장한다")
+    @Test
+    void every_temperature_limit_check_field_is_named_in_the_swagger_description() throws Exception {
+        String description = PlacementBenchmarkController.class
+                .getDeclaredMethod("comparePlacement", String.class, String.class)
+                .getAnnotation(Operation.class)
+                .description();
+
+        for (RecordComponent component : TemperatureLimitCheck.class.getRecordComponents()) {
+            Pattern word = Pattern.compile("(?<![A-Za-z])" + component.getName() + "(?![A-Za-z])");
+            assertTrue(word.matcher(description).find(),
+                    "온도 상한 대조 행에 필드 " + component.getName() + " 이 있는데 설명에 없다 — "
+                            + "응답에만 있고 문서에 없는 열은 읽는 사람에게는 정체 불명의 숫자다");
+        }
     }
 
     /** 금지 조각이 어디에도 없는지 — 검사할 조각의 출처를 테스트마다 다시 적지 않는다. */

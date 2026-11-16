@@ -6,9 +6,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;

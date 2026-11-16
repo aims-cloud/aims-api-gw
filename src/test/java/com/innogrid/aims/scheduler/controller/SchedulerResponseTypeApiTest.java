@@ -36,8 +36,8 @@ import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.service.NodeResourceCollector;
 

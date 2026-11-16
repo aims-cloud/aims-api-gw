@@ -10,10 +10,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;

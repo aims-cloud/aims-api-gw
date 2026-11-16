@@ -323,6 +323,23 @@ class PlacementBenchmarkApiTest {
         assertEquals(history, historyRepository.count(), "비교가 배치 이력을 남겼다");
     }
 
+    // ── 온도 상한 ─────────────────────────────────────────────
+
+    @DisplayName("응답에서 기준 정책의 온도 상한 75℃ 와 온도 상한 열이 낮춘 65℃ 를 읽을 수 있다")
+    @Test
+    void both_temperature_limits_are_readable_from_the_response() throws Exception {
+        JsonNode data = body(URL).path("data");
+        JsonNode base = stream(data.path("engineConfig").path("policies"))
+                .filter(p -> "BASE".equals(p.path("variant").asString()))
+                .findFirst().orElseThrow();
+        assertEquals(75.0, base.path("maxTemperatureCelsius").asDouble());
+        JsonNode column = stream(data.path("boards").path(0).path("cells").path(0).path("strategies"))
+                .filter(s -> BenchmarkRules.TEMPERATURE_LIMIT_COLUMN.equals(s.path("strategyId").asString()))
+                .findFirst().orElseThrow();
+        assertEquals(String.valueOf(BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS),
+                column.path("engineConfigOverride").path("maxTemperatureCelsius").asString());
+    }
+
     // ── 도움 메서드 ───────────────────────────────────────────
 
     /** 이름을 {@code get} 으로 두면 정적 임포트한 요청 빌더를 가려 컴파일이 엉킨다. */

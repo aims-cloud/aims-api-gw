@@ -245,6 +245,7 @@ public record PlacementBenchmarkResponse(
      * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식(℃·K 두 눈금)과 생성식을 나란히.
      *                              격차·비율·판정은 없다. 두 엔진 값이 다르다는 것이 척도 의존의 증거다
      * @param wakeupReconstructionCheck 유휴 노드의 깨우기 비용 역산 — 선언값과 엔진 역산의 범위를 나란히
+     * @param temperatureLimitCheck 노드별 온도 상한 대조 — 엔진이 보는 온도가 낮춘 상한과 정책 상한을 넘은 지점 수
      * @param phaseMode             위상 방식 — {@code LEGACY}(옛 식) 또는 {@code INDEPENDENT}(seed·nodeId 혼합). 같은 판의 Board 가
      *                              여럿이면 전부 INDEPENDENT 이고 서로 독립 복제다 — 지점 지수는 Board 안에서만 뜻이 있다
      * @param phaseSeed             이 Board 의 위상 seed. legacy 판은 파일의 seed 하나
@@ -263,6 +264,7 @@ public record PlacementBenchmarkResponse(
             List<IdleGap> idleAssumptionGaps,
             List<ThermalRiseScale> thermalRiseScaleCheck,
             List<WakeupReconstruction> wakeupReconstructionCheck,
+            List<TemperatureLimitCheck> temperatureLimitCheck,
             List<Cell> cells
     ) {
         public Board {
@@ -270,6 +272,7 @@ public record PlacementBenchmarkResponse(
             thermalRiseScaleCheck = thermalRiseScaleCheck == null ? List.of() : List.copyOf(thermalRiseScaleCheck);
             wakeupReconstructionCheck = wakeupReconstructionCheck == null
                     ? List.of() : List.copyOf(wakeupReconstructionCheck);
+            temperatureLimitCheck = temperatureLimitCheck == null ? List.of() : List.copyOf(temperatureLimitCheck);
             cells = cells == null ? List.of() : List.copyOf(cells);
         }
     }
@@ -303,6 +306,32 @@ public record PlacementBenchmarkResponse(
             double engineFallbackWatts,
             double engineWakeupMinWatts,
             double engineWakeupMaxWatts
+    ) {
+    }
+
+    /**
+     * 노드 한 대의 <b>온도 상한 대조</b> — 엔진이 보는 온도가 두 상한을 넘은 지점 수와 생성식 온도의 범위를 나란히.
+     *
+     * <p>지점 수는 엔진이 실제로 보는 배치 전 스냅샷의 온도로 센다. 미계측 노드는 그 스냅샷에서 0℃ 라 어느 상한에도
+     * 걸리지 않는다. 엔진의 현재 온도 검사처럼 상한과 같은 온도는 넘지 않은 것으로 센다. 배치 후 예상 온도로 거르는
+     * 몫은 워크로드 크기와 앞선 배치에 걸려 이 표에 없고, 셀의 온도 제약 개입 횟수가 그 몫까지 센다.</p>
+     *
+     * <p>두 상한 값은 응답에 이미 있다 — 낮춘 상한은 온도 상한 열({@code weighted-temp-65})의 {@code engineConfigOverride},
+     * 정책 상한은 {@code engineConfig.policies} 의 BASE 행이다. 판정·비율 열은 만들지 않는다.</p>
+     *
+     * @param measured                온도가 계측되는 노드인가. 거짓이면 두 지점 수가 언제나 0 이다
+     * @param minTemperatureC         생성식 온도의 12지점 최솟값(℃). 계측 여부와 무관하다
+     * @param maxTemperatureC         생성식 온도의 12지점 최댓값(℃). 판 파일 머리말의 최고 온도는 곡선 꼭짓점이라 이 값보다 조금 높을 수 있다
+     * @param pointsAboveLoweredLimit 엔진이 보는 온도가 온도 상한 열의 낮춘 상한을 넘은 지점 수(0~12)
+     * @param pointsAbovePolicyLimit  엔진이 보는 온도가 기준 정책의 온도 상한을 넘은 지점 수(0~12)
+     */
+    public record TemperatureLimitCheck(
+            String nodeId,
+            boolean measured,
+            double minTemperatureC,
+            double maxTemperatureC,
+            int pointsAboveLoweredLimit,
+            int pointsAbovePolicyLimit
     ) {
     }
 

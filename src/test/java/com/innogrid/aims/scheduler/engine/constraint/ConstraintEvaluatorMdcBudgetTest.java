@@ -14,7 +14,6 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 
 /**
  * C6 MDC 전력 예산 — MDC 한 곳의 합계 상한.

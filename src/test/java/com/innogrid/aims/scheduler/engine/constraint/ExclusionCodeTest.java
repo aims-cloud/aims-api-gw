@@ -11,9 +11,9 @@ import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
 import com.innogrid.aims.scheduler.entity.MdcLink;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 

@@ -22,6 +22,7 @@ import com.innogrid.aims.scheduler.engine.SchedulingEngine;
 import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.engine.model.NetworkModel;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
@@ -35,7 +36,6 @@ import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 import tools.jackson.databind.DeserializationFeature;

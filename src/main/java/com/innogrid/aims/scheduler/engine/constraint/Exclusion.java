@@ -1,5 +1,7 @@
 package com.innogrid.aims.scheduler.engine.constraint;
 
+import com.innogrid.aims.scheduler.model.ExclusionReason;
+
 /**
  * 제외 한 건 — 기계가 읽는 {@link ExclusionReason 까닭}과 사람이 읽는 문장을 함께 든다.
  *

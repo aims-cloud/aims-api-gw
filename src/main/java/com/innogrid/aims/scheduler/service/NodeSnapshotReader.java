@@ -10,9 +10,9 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownReleaseResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 
 /**
  * 스케줄링 서비스에서 떼어 낸 <b>노드 조회</b> — 열 상태를 붙인 노드 스냅샷, 노드 한 대 찾기(수집 제외 사유를 담은 404),

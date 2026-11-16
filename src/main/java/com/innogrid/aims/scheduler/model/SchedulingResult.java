@@ -3,8 +3,6 @@ package com.innogrid.aims.scheduler.model;
 import java.util.List;
 import java.util.Map;
 
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
-
 /**
  * 스케줄링 엔진의 결정 결과.
  *

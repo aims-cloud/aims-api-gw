@@ -14,10 +14,10 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -153,7 +153,7 @@ class PlaceAndDispatchTest {
             long n = release.matcher(text).results().count();
             if (n > 0) callers.put(file, n);
         });
-        assertEquals(Map.of("model/PlacementContext.java", 1L, "service/PlaceAndDispatch.java", 1L), callers,
+        assertEquals(Map.of("engine/constraint/PlacementContext.java", 1L, "service/PlaceAndDispatch.java", 1L), callers,
                 "예약 되돌림 호출은 PlacementContext.unreserve 본문(노드로 넘김)과 PlaceAndDispatch 한 번뿐이어야 한다");
 
         assertTrue(code.get("service/ScheduleExecutionService.java").contains("PlaceAndDispatch.run("), "실행 루프가 PlaceAndDispatch 를 거쳐야 한다");

@@ -37,6 +37,7 @@ import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.service.NodeResourceCollector;
 
@@ -417,6 +418,52 @@ class SchedulerResponseTypeApiTest {
             }
         }
         return found;
+    }
+
+    @DisplayName("단건 배치 응답의 NodeScore.exclusionCode 는 열거형 스키마를 가리키지 않고 제외 사유 코드 값 목록을 직접 싣는다")
+    @Test
+    void node_score_exclusion_code_is_inline_enum() throws Exception {
+        JsonNode schemas = apiDocs().get("components").get("schemas");
+        assertInlineExclusionCodes("NodeScore.exclusionCode", schemas.get("NodeScore").get("properties").get("exclusionCode"));
+        assertNoExclusionCodeSchema(schemas);
+    }
+
+    @DisplayName("배치 이력 페이지 조회의 exclusionCode 매개변수는 열거형 스키마를 가리키지 않고 제외 사유 코드 값 목록을 직접 싣는다")
+    @Test
+    void history_exclusion_code_parameter_is_inline_enum() throws Exception {
+        JsonNode doc = apiDocs();
+        JsonNode param = null;
+        for (JsonNode p : doc.get("paths").get(BASE + "/history/page").get("get").get("parameters")) {
+            if ("exclusionCode".equals(p.get("name").asString())) param = p;
+        }
+        assertNotNull(param, "배치 이력 페이지 조회에 exclusionCode 매개변수가 있다");
+        assertInlineExclusionCodes("history/page exclusionCode", param.get("schema"));
+        assertNoExclusionCodeSchema(doc.get("components").get("schemas"));
+    }
+
+    /** 제외 사유 코드 자리가 $ref 없이 문자열 값 목록을 선언 순서 그대로 싣는다. */
+    private static void assertInlineExclusionCodes(String where, JsonNode schema) {
+        assertNotNull(schema, where);
+        assertFalse(schema.has("$ref"), where + " 는 열거형 스키마를 가리키지 않는다");
+        assertEquals("string", schema.path("type").asString(), where);
+        assertEquals(exclusionCodes(), enumValues(schema), where + " 값 목록 = ExclusionReason 선언 순서");
+    }
+
+    /** 같은 값 목록을 가진 열거형 스키마가 따로 생기면 Swagger 문서가 바뀐다. */
+    private static void assertNoExclusionCodeSchema(JsonNode schemas) {
+        for (Entry<String, JsonNode> e : schemas.properties()) {
+            assertFalse(exclusionCodes().equals(enumValues(e.getValue())), "제외 사유 코드 열거형 스키마가 따로 생겼다: " + e.getKey());
+        }
+    }
+
+    private static List<String> exclusionCodes() {
+        return Arrays.stream(ExclusionReason.values()).map(Enum::name).toList();
+    }
+
+    private static List<String> enumValues(JsonNode schema) {
+        List<String> values = new ArrayList<>();
+        schema.path("enum").forEach(v -> values.add(v.asString()));
+        return values;
     }
 
     @DisplayName("스케줄러 컨트롤러의 응답 선언에 와일드카드·타입 변수·원시 제네릭이 없다")

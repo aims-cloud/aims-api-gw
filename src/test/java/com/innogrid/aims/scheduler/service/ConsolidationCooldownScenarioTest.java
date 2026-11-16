@@ -13,12 +13,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse.Candidate;
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse.Move;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import static org.junit.jupiter.api.Assertions.*;

@@ -10,10 +10,10 @@ import java.util.random.RandomGenerator;
 import com.innogrid.aims.scheduler.benchmark.PlacementStrategy.Kind;
 import com.innogrid.aims.scheduler.benchmark.PlacementStrategy.PolicyVariant;
 import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 

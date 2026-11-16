@@ -22,8 +22,8 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.util.SortSupport;
 import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
 import com.innogrid.aims.scheduler.dto.SchedulingHistoryResponse;
-import com.innogrid.aims.scheduler.engine.constraint.ExclusionReason;
 import com.innogrid.aims.scheduler.entity.SchedulingHistory;
+import com.innogrid.aims.scheduler.model.ExclusionReason;
 import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 
 import jakarta.persistence.EntityManager;

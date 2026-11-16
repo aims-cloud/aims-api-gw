@@ -1,4 +1,4 @@
-package com.innogrid.aims.scheduler.engine.constraint;
+package com.innogrid.aims.scheduler.model;
 
 /**
  * 노드가 후보에서 빠진 <b>까닭</b>을 기계가 읽는 이름으로 나눈 것.

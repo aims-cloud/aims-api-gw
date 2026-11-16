@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 주석 안의 전체 이름은 의존이 아니므로 세지 않는다(javadoc 링크가 거짓 순환을 만든다). 문자열은 그대로 두어,
  * 잘못 걸리더라도 의존이 더 잡히는 쪽으로 틀린다.</p>
  *
- * <p>규칙은 둘이다. 패키지 사이에 순환이 없어야 하고, 아래 패키지(model·metrics·engine·benchmark)가
+ * <p>규칙은 둘이다. 패키지 사이에 순환이 없어야 하고, 아래 패키지(model·metrics·engine·benchmark·inventory)가
  * 위 패키지를 가리키지 않아야 한다. 의도한 새 방향이 생기면 {@link #FORBIDDEN}과 모듈 개요 문서(docs/15)의 의존 방향 문장을 함께 고친다.</p>
  */
 class SchedulerPackageDependencyTest {
@@ -48,7 +48,8 @@ class SchedulerPackageDependencyTest {
             "model", Set.of("engine", "service", "controller", "dto", "repository", "benchmark", "metrics", "dispatch"),
             "metrics", Set.of("benchmark", "service", "controller", "dto", "repository"),
             "engine", Set.of("service", "controller", "dto", "repository", "benchmark"),
-            "benchmark", Set.of("service", "controller", "dto", "repository"));
+            "benchmark", Set.of("service", "controller", "dto", "repository"),
+            "inventory", Set.of("engine", "service", "controller", "dto", "repository", "benchmark", "dispatch"));
 
     @DisplayName("스케줄러 운영 코드의 패키지 사이에 순환 의존이 없다")
     @Test
@@ -67,7 +68,7 @@ class SchedulerPackageDependencyTest {
         assertEquals(List.of(), cycles, "패키지 순환이 있다 — 클래스를 짝과 같은 패키지로 옮기거나 의존을 한 방향으로 되돌린다" + why);
     }
 
-    @DisplayName("model·metrics·engine·benchmark 패키지는 금지한 위 패키지를 가리키지 않는다")
+    @DisplayName("model·metrics·engine·benchmark·inventory 패키지는 금지한 위 패키지를 가리키지 않는다")
     @Test
     void lower_packages_do_not_import_upper_packages() throws IOException {
         List<String> violations = new ArrayList<>();

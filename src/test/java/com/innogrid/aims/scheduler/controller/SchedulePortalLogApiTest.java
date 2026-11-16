@@ -244,13 +244,13 @@ class SchedulePortalLogApiTest {
         assertNull(rejected.getRefType(), "거절된 요청은 연결을 비운다");
     }
 
-    @DisplayName("포털 로그는 스케줄러 컨트롤러 열두 개 가운데 화면이 부르는 열 곳에만 붙어 있다")
+    @DisplayName("포털 로그는 스케줄러 컨트롤러 열세 개 가운데 화면이 부르는 열 곳에만 붙어 있다")
     @Test
     void portal_log_is_attached_only_to_screen_endpoints() throws Exception {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
         Set<BeanDefinition> controllers = scanner.findCandidateComponents("com.innogrid.aims.scheduler.controller");
-        assertEquals(12, controllers.size(), "스케줄러 컨트롤러 수");
+        assertEquals(13, controllers.size(), "스케줄러 컨트롤러 수");
 
         Set<String> attached = new TreeSet<>();
         for (BeanDefinition controller : controllers) {

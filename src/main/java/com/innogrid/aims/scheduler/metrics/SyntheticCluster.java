@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
 
-import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import com.innogrid.aims.scheduler.entity.MdcLink;
 
 import org.springframework.core.io.DefaultResourceLoader;

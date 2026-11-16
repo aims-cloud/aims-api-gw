@@ -2,6 +2,7 @@ package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Board;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.Cell;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.EngineConfigSnapshot;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.IdleGap;
+import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.TemperatureLimitCheck;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.ThermalRiseScale;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WakeupReconstruction;
 import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.WorkloadClassShare;
@@ -283,7 +285,8 @@ public class PlacementBenchmarkService {
         return new Board(boardId, clusters.roleOf(boardId), cluster.name(), clusters.digest(boardId),
                 cluster.phaseMode().name(), cluster.seed(),
                 cluster.nodes().size(), (int) measured, cluster.powerExponent(),
-                idleGaps(oracle), thermalRiseScale(oracle), wakeupReconstruction(cluster), cells);
+                idleGaps(oracle), thermalRiseScale(oracle), wakeupReconstruction(cluster),
+                temperatureLimitCheck(cluster, loweredTemperatureLimit(), policyTemperatureLimit()), cells);
     }
 
     /**
@@ -363,6 +366,63 @@ public class PlacementBenchmarkService {
                     n.believedCapacityWatts() * idleRatio, minMax[0], minMax[1]));
         }
         return rowsOut;
+    }
+
+    /**
+     * 노드별 온도 상한 대조표. {@link #wakeupReconstruction} 과 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
+     *
+     * <p>지점 수는 엔진이 보는 배치 전 스냅샷({@link #nodesAt})의 온도로 센다. 미계측 노드는 0℃ 로 실려 넘는 지점이 없고,
+     * 상한과 같은 온도는 넘지 않은 것으로 센다(엔진의 현재 온도 검사와 같은 비교). 범위는 계측 여부와 무관하게 생성식 온도로 잰다.
+     * 행은 nodeId 오름차순이다.</p>
+     *
+     * <p>{@code private} 이 아닌 이유는 같은 패키지의 테스트가 임시 판을 직접 만들어 부르고, 판마다 다시 훑은 값과 견주기 때문이다.</p>
+     */
+    static List<TemperatureLimitCheck> temperatureLimitCheck(SyntheticCluster cluster, double loweredLimit, double policyLimit) {
+        List<Long> sweep = sweepPoints(cluster);
+        List<Map<String, NodeResource>> snapshots = new ArrayList<>(sweep.size());
+        for (long t : sweep) {
+            Map<String, NodeResource> snapshot = new LinkedHashMap<>();
+            for (NodeResource node : nodesAt(cluster, t)) {
+                snapshot.put(node.getNodeId(), node);
+            }
+            snapshots.add(snapshot);
+        }
+
+        List<SyntheticCluster.Node> nodes = cluster.nodes().stream()
+                .sorted(Comparator.comparing(SyntheticCluster.Node::nodeId))
+                .toList();
+        List<TemperatureLimitCheck> rows = new ArrayList<>(nodes.size());
+        for (SyntheticCluster.Node n : nodes) {
+            double min = Double.POSITIVE_INFINITY;
+            double max = Double.NEGATIVE_INFINITY;
+            int aboveLowered = 0;
+            int abovePolicy = 0;
+            for (int i = 0; i < sweep.size(); i++) {
+                double generated = cluster.temperature(n, sweep.get(i));
+                double seen = snapshots.get(i).get(n.nodeId()).getTemperatureCelsius();
+                min = Math.min(min, generated);
+                max = Math.max(max, generated);
+                if (seen > loweredLimit) aboveLowered++;
+                if (seen > policyLimit) abovePolicy++;
+            }
+            rows.add(new TemperatureLimitCheck(n.nodeId(), n.ipmi(), min, max, aboveLowered, abovePolicy));
+        }
+        return rows;
+    }
+
+    /** 온도 상한 열이 실제로 돌린 정책의 온도 상한 — 그 열의 override 를 얹은 정책 사본에서 읽는다(응답의 engineConfigOverride 와 같은 출처). */
+    private double loweredTemperatureLimit() {
+        for (BenchmarkColumns.EngineVariant v : columns.engineVariants()) {
+            if (BenchmarkRules.TEMPERATURE_LIMIT_COLUMN.equals(v.strategy().id())) {
+                return BenchmarkColumns.policyFor(v.strategy(), v.override()).getMaxTemperatureCelsius();
+            }
+        }
+        throw new IllegalStateException("온도 상한 열이 없다: " + BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
+    }
+
+    /** 기준 정책의 온도 상한 — 응답 {@code engineConfig.policies} 의 BASE 행과 같은 출처. */
+    private static double policyTemperatureLimit() {
+        return BenchmarkColumns.baseline().getMaxTemperatureCelsius();
     }
 
     // ── 전략과 정책 ──────────────────────────────────────────

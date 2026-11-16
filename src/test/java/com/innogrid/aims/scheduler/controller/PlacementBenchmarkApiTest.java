@@ -323,6 +323,46 @@ class PlacementBenchmarkApiTest {
         assertEquals(history, historyRepository.count(), "비교가 배치 이력을 남겼다");
     }
 
+    // ── 온도 상한 ─────────────────────────────────────────────
+
+    @DisplayName("응답에서 기준 정책의 온도 상한 75℃ 와 온도 상한 열이 낮춘 65℃ 를 읽을 수 있다")
+    @Test
+    void both_temperature_limits_are_readable_from_the_response() throws Exception {
+        JsonNode data = body(URL).path("data");
+        JsonNode base = stream(data.path("engineConfig").path("policies"))
+                .filter(p -> "BASE".equals(p.path("variant").asString()))
+                .findFirst().orElseThrow();
+        assertEquals(75.0, base.path("maxTemperatureCelsius").asDouble());
+        JsonNode column = stream(data.path("boards").path(0).path("cells").path(0).path("strategies"))
+                .filter(s -> BenchmarkRules.TEMPERATURE_LIMIT_COLUMN.equals(s.path("strategyId").asString()))
+                .findFirst().orElseThrow();
+        assertEquals(String.valueOf(BenchmarkRules.LOWERED_TEMPERATURE_LIMIT_CELSIUS),
+                column.path("engineConfigOverride").path("maxTemperatureCelsius").asString());
+    }
+
+    @DisplayName("주 결과판과 계측 공백판의 응답에 노드별 온도 상한 대조가 노드 수만큼 실리고, 주 결과판 bm-02 는 낮춘 상한만 9지점 넘으며 미계측 노드는 0 이다")
+    @Test
+    void main_and_sparse_boards_carry_a_temperature_limit_check_per_node() throws Exception {
+        JsonNode main = body(URL).path("data").path("boards").path(0);
+        JsonNode rows = main.path("temperatureLimitCheck");
+        assertEquals(main.path("nodeCount").asInt(), rows.size());
+        JsonNode hot = stream(rows).filter(r -> "bm-02:9100".equals(r.path("nodeId").asString()))
+                .findFirst().orElseThrow();
+        assertTrue(hot.path("measured").asBoolean());
+        assertEquals(9, hot.path("pointsAboveLoweredLimit").asInt());
+        assertEquals(0, hot.path("pointsAbovePolicyLimit").asInt());
+
+        JsonNode sparse = body(URL + "?board=sparse").path("data").path("boards").path(0);
+        assertEquals(sparse.path("nodeCount").asInt(), sparse.path("temperatureLimitCheck").size());
+        List<JsonNode> unmeasured = stream(sparse.path("temperatureLimitCheck"))
+                .filter(r -> !r.path("measured").asBoolean()).toList();
+        assertEquals(sparse.path("nodeCount").asInt() - sparse.path("measuredNodeCount").asInt(), unmeasured.size());
+        for (JsonNode row : unmeasured) {
+            assertEquals(0, row.path("pointsAboveLoweredLimit").asInt(), row.path("nodeId").asString());
+            assertEquals(0, row.path("pointsAbovePolicyLimit").asInt(), row.path("nodeId").asString());
+        }
+    }
+
     // ── 도움 메서드 ───────────────────────────────────────────
 
     /** 이름을 {@code get} 으로 두면 정적 임포트한 요청 빌더를 가려 컴파일이 엉킨다. */

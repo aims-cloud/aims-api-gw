@@ -11,12 +11,12 @@ import com.innogrid.aims.scheduler.dto.ConsolidationResponse;
 import com.innogrid.aims.scheduler.dto.ConsolidationResponse.Candidate;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
 import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 

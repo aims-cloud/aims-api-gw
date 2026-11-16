@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.MdcLink;
 import com.innogrid.aims.scheduler.entity.ScheduleRunInput;
@@ -22,7 +23,6 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 
 import tools.jackson.databind.JsonNode;

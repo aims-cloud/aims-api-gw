@@ -12,10 +12,10 @@ import org.springframework.test.context.TestPropertySource;
 import com.innogrid.aims.scheduler.dto.MdcPowerBudgetRequest;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse;
 import com.innogrid.aims.scheduler.dto.PowerOptimizationResponse.Mdc;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.entity.MdcPowerBudget;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.NodeResource;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
 
 import static org.junit.jupiter.api.Assertions.*;

@@ -3,8 +3,8 @@ package com.innogrid.aims.scheduler.benchmark;
 import java.util.Comparator;
 
 import com.innogrid.aims.scheduler.engine.SchedulingEngine;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.entity.Workload;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 /**

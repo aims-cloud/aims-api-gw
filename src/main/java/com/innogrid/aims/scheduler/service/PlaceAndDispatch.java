@@ -3,8 +3,8 @@ package com.innogrid.aims.scheduler.service;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.entity.Workload;
-import com.innogrid.aims.scheduler.model.PlacementContext;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 /**

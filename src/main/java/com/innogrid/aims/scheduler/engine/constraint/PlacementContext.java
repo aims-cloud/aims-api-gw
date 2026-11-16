@@ -1,15 +1,17 @@
-package com.innogrid.aims.scheduler.model;
+package com.innogrid.aims.scheduler.engine.constraint;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
-import com.innogrid.aims.scheduler.engine.constraint.Exclusion;
 import com.innogrid.aims.scheduler.engine.model.PowerModel;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
+import com.innogrid.aims.scheduler.model.ExcludedNode;
+import com.innogrid.aims.scheduler.model.LinkMatrix;
+import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
+import com.innogrid.aims.scheduler.model.NodeResource;
 
 /**
  * 한 번의 스케줄링 실행에서 공유하는 배치 컨텍스트.

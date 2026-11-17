@@ -112,7 +112,10 @@ public class NovaDryRunService {
                     elapsedMs(start), 0, targets.size(), excluded);
         }
         if (targets.isEmpty()) {
-            return NovaDryRunResponse.notRun(NovaDryRunStatus.NO_VMS, inventoryStatus, snapshot.unavailable(), checkedAt,
+            // 쓸 수 있는 호스트 위 VM의 flavor를 못 읽어 대상이 빈 것은 「VM 0대」가 아니라 연동 실패다
+            NovaDryRunStatus status = flavorUnreadOnUsableHost(snapshot.servers(), usable)
+                    ? NovaDryRunStatus.INVENTORY_FAILED : NovaDryRunStatus.NO_VMS;
+            return NovaDryRunResponse.notRun(status, inventoryStatus, snapshot.unavailable(), checkedAt,
                     elapsedMs(start), usable.size(), 0, excluded);
         }
 
@@ -199,6 +202,16 @@ public class NovaDryRunService {
                     overLimit));
         }
         return rows;
+    }
+
+    /**
+     * 쓸 수 있는 호스트 위 VM 가운데 flavor를 못 읽어 요구 자원을 모르는 것이 있는지 — 게이트웨이의 flavor 조회 실패 · 조회 상한 초과
+     * (flavor id는 있고 요구 자원이 없음). 「flavor 없음」은 Nova가 flavor를 주지 않은 경우라 flavor id가 없어 들지 않는다.
+     */
+    private static boolean flavorUnreadOnUsableHost(List<NovaInventorySnapshot.Server> servers,
+                                                    Map<String, NovaInventorySnapshot.Node> usable) {
+        return servers.stream().anyMatch(s -> !s.convertible() && s.flavorId() != null && s.requiredCpu() == null
+                && s.hypervisorHostname() != null && usable.containsKey(s.hypervisorHostname()));
     }
 
     /** 응답에 싣는 사용률 — 소수 둘째 자리 반올림(0.5는 올림). 상한 비교에는 쓰지 않는다. */

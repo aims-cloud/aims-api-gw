@@ -201,6 +201,7 @@ class NovaDryRunServiceTest {
                 vm("e", "h9", 2, 2_048));
         NovaDryRunResponse r = run(ok(List.of(node("h1", 16, 65_536), disabled("h2", 64, 131_072)), servers));
 
+        assertEquals(NovaDryRunStatus.OK, r.status(), "flavor 를 못 읽은 VM 이 있어도 다른 VM 이 남으면 OK");
         assertEquals(1, r.nodeCount());
         assertEquals(1, r.vmCount());
         assertEquals(4, r.excludedCount());
@@ -230,6 +231,35 @@ class NovaDryRunServiceTest {
         assertNull(r.placedCount());
         assertNull(r.overLimitNodeCount());
         assertTrue(r.decisions().isEmpty());
+    }
+
+    @DisplayName("쓸 수 있는 호스트 위 VM 의 flavor 를 못 읽어 대상이 비면 VM 0대가 아니라 INVENTORY_FAILED 이고 대상 밖 사유는 남는다")
+    @Test
+    void flavor_unread_on_usable_host_is_inventory_failed() {
+        NovaDryRunResponse r = run(flavorTrouble(List.of(node("h1", 16, 65_536)), List.of(flavorFailed("d", "h1"))));
+
+        assertEquals(NovaDryRunStatus.INVENTORY_FAILED, r.status());
+        assertEquals(InventoryStatus.OK, r.inventoryStatus(), "목록은 읽었다");
+        assertEquals(List.of("flavors"), r.unavailable());
+        assertEquals(1, r.nodeCount());
+        assertEquals(0, r.vmCount(), "VM 목록 실패(null)와 가르는 값");
+        assertEquals(1, r.excludedCount());
+        assertEquals("변환 불가: flavor 조회 실패: f9", r.excluded().get(0).reason());
+        assertNull(r.placedCount());
+        assertNull(r.overLimitNodeCount());
+    }
+
+    @DisplayName("flavor 를 못 읽은 VM 이 쓸 수 없는 호스트에만 있거나 Nova 가 flavor 를 주지 않은 것이면 NO_VMS 다")
+    @Test
+    void flavor_trouble_elsewhere_or_missing_flavor_stays_no_vms() {
+        NovaDryRunResponse elsewhere = run(flavorTrouble(List.of(node("h1", 16, 65_536), disabled("h2", 64, 131_072)),
+                List.of(flavorFailed("d", "h2"))));
+        assertEquals(NovaDryRunStatus.NO_VMS, elsewhere.status(), "쓸 수 없는 호스트 위 VM 은 어차피 대상 밖");
+
+        NovaDryRunResponse missing = run(ok(List.of(node("h1", 16, 65_536)),
+                List.of(new Server("m", "vm-m", "ACTIVE", "h1", null, null, null, null, false, "flavor 없음"))));
+        assertEquals(NovaDryRunStatus.NO_VMS, missing.status(), "flavor id 가 없으면 조회 실패가 아니다");
+        assertEquals(1, missing.excludedCount());
     }
 
     @DisplayName("인벤토리 조회가 실패하면 조회 상태를 그대로 싣고 노드 수는 모른다")
@@ -370,6 +400,16 @@ class NovaDryRunServiceTest {
 
     private static NovaInventorySnapshot ok(List<Node> nodes, List<Server> servers) {
         return new NovaInventorySnapshot(InventoryStatus.OK, T0, 5, List.of(), nodes, true, servers);
+    }
+
+    /** 게이트웨이가 flavor 조회에 실패했을 때의 모양 — unavailable에 flavors가 있다. */
+    private static NovaInventorySnapshot flavorTrouble(List<Node> nodes, List<Server> servers) {
+        return new NovaInventorySnapshot(InventoryStatus.OK, T0, 5, List.of("flavors"), nodes, true, servers);
+    }
+
+    /** flavor 조회에 실패한 VM — flavor id는 있고 요구 자원이 없으며 변환 불가(게이트웨이 모양). */
+    private static Server flavorFailed(String id, String host) {
+        return new Server(id, "vm-" + id, "ACTIVE", host, "f9", null, null, null, false, "flavor 조회 실패: f9");
     }
 
     private static Node node(String host, int cpu, long memoryMb) {

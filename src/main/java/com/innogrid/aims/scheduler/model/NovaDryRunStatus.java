@@ -11,7 +11,10 @@ public enum NovaDryRunStatus {
     OK("Nova 인벤토리로 모의 배치를 했습니다(자원 가용성만 반영 · 전력 · 온도는 계측 없음)"),
     /** 기능 플래그가 꺼져 있어 Nova를 부르지 않았다 */
     DISABLED("모의 배치가 꺼져 있습니다(aims.scheduler.inventory.simulation-enabled=false)"),
-    /** 하이퍼바이저 목록이나 VM 목록을 읽지 못했다 — inventoryStatus · unavailable에 이유가 있다 */
+    /**
+     * 하이퍼바이저 목록이나 VM 목록을 읽지 못했거나, 쓸 수 있는 호스트 위 VM의 flavor를 못 읽어 다시 놓을 VM이 없다 —
+     * inventoryStatus · unavailable에 이유가 있다(flavor 경우는 inventoryStatus OK · vmCount 0 · unavailable에 flavors)
+     */
     INVENTORY_FAILED("Nova 인벤토리를 읽지 못해 모의 배치를 하지 않았습니다"),
     /** 하이퍼바이저는 읽었지만 쓸 수 있는 노드가 없다 */
     NO_NODES("쓸 수 있는 하이퍼바이저가 없어 모의 배치를 하지 않았습니다"),

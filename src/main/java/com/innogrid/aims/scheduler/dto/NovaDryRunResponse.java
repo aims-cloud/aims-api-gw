@@ -19,7 +19,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record NovaDryRunResponse(
         @Schema(description = "결과 출처. 실 인벤토리 결과는 NOVA(합성 모드는 GET /metrics-source 의 synthetic)", example = "NOVA")
         String source,
-        @Schema(description = "OK(모의 배치함) · DISABLED(플래그 꺼짐 · Nova 를 부르지 않음) · INVENTORY_FAILED(하이퍼바이저나 VM 목록을 못 읽음) · "
+        @Schema(description = "OK(모의 배치함) · DISABLED(플래그 꺼짐 · Nova 를 부르지 않음) · INVENTORY_FAILED(하이퍼바이저나 VM 목록을 못 읽음, "
+                + "또는 쓸 수 있는 호스트 위 VM의 flavor를 못 읽어 다시 놓을 VM이 0 — 이때는 inventoryStatus OK · vmCount 0 · unavailable에 flavors) · "
                 + "NO_NODES(쓸 수 있는 하이퍼바이저 0) · NO_VMS(다시 놓을 VM 0)")
         NovaDryRunStatus status,
         @Schema(description = "상태별 고정 안내 문구", example = "Nova 인벤토리로 모의 배치를 했습니다(자원 가용성만 반영 · 전력 · 온도는 계측 없음)")

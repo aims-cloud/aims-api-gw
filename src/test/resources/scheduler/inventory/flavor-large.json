@@ -1,0 +1,10 @@
+{
+  "flavor": {
+    "id": "f-large",
+    "name": "m1.large",
+    "vcpus": 8,
+    "ram": 16384,
+    "disk": 160,
+    "OS-FLV-EXT-DATA:ephemeral": 0
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "servers": [
+    {
+      "id": "c3c3c3c3-0000-0000-0000-000000000003",
+      "name": "vm-c",
+      "status": "SHELVED_OFFLOADED",
+      "OS-EXT-SRV-ATTR:hypervisor_hostname": null,
+      "flavor": { "id": "f-large", "links": [] }
+    },
+    {
+      "id": "b2b2b2b2-0000-0000-0000-000000000002",
+      "name": "vm-b",
+      "status": "ACTIVE",
+      "OS-EXT-SRV-ATTR:hypervisor_hostname": "compute-b.local",
+      "flavor": { "id": "f-small", "links": [] }
+    },
+    {
+      "id": "a1a1a1a1-0000-0000-0000-000000000001",
+      "name": "vm-a",
+      "status": "SHUTOFF",
+      "OS-EXT-SRV-ATTR:hypervisor_hostname": "compute-a.local",
+      "flavor": { "id": "f-small", "links": [] }
+    }
+  ]
+}

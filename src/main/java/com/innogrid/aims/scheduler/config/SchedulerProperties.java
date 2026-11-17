@@ -112,6 +112,7 @@ public class SchedulerProperties {
     private final Thermal thermal = new Thermal();
     private final Network network = new Network();
     private final Dispatch dispatch = new Dispatch();
+    private final Inventory inventory = new Inventory();
 
     public String getNodeJob() { return nodeJob; }
     public boolean isMockEnabled() { return mockEnabled; }
@@ -145,6 +146,7 @@ public class SchedulerProperties {
     public Power getPower() { return power; }
     public Thermal getThermal() { return thermal; }
     public Network getNetwork() { return network; }
+    public Inventory getInventory() { return inventory; }
 
     /** 전력 모델 설정. */
     public static class Power {
@@ -432,5 +434,19 @@ public class SchedulerProperties {
         public void setMode(String v) { this.mode = v; }
         public int getTimeoutMinutes() { return timeoutMinutes; }
         public void setTimeoutMinutes(int v) { this.timeoutMinutes = v; }
+    }
+
+    /**
+     * Nova 인벤토리 조회 — OpenStack 클라이언트(다른 담당 파일)에 응답 시간 상한이 없어 스케줄러 쪽에서 기다리기를 멈춘다.
+     *
+     * <p>배치 비교의 설정 다이제스트(전력 · 온도 · 네트워크)에 들어가지 않는다.</p>
+     */
+    public static class Inventory {
+
+        /** 조회 전체(하이퍼바이저 · 가용영역 · VM · flavor) 상한(ms). 넘으면 TIMEOUT 으로 돌려준다. */
+        private long timeoutMs = 5_000;
+
+        public long getTimeoutMs() { return timeoutMs; }
+        public void setTimeoutMs(long v) { this.timeoutMs = v; }
     }
 }

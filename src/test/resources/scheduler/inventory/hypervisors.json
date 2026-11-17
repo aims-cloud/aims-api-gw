@@ -1,0 +1,34 @@
+{
+  "hypervisors": [
+    {
+      "id": 2,
+      "hypervisor_hostname": "compute-b.local",
+      "hypervisor_type": "QEMU",
+      "state": "up",
+      "status": "enabled",
+      "service": { "host": "compute-b", "id": 12, "disabled_reason": null },
+      "vcpus": 32,
+      "vcpus_used": 40,
+      "memory_mb": 131072,
+      "memory_mb_used": 65536,
+      "local_gb": 900,
+      "local_gb_used": 300,
+      "running_vms": 5
+    },
+    {
+      "id": 1,
+      "hypervisor_hostname": "compute-a.local",
+      "hypervisor_type": "QEMU",
+      "state": "up",
+      "status": "enabled",
+      "service": { "host": "compute-a", "id": 11, "disabled_reason": null },
+      "vcpus": 16,
+      "vcpus_used": 4,
+      "memory_mb": 65536,
+      "memory_mb_used": 8192,
+      "local_gb": 450,
+      "local_gb_used": 40,
+      "running_vms": 2
+    }
+  ]
+}

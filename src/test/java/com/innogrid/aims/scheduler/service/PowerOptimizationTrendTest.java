@@ -305,7 +305,7 @@ class PowerOptimizationTrendTest {
     @DisplayName("MDC 를 넘어 같은 IPMI 시리즈를 가리킨 두 노드는 MDC 추세에서도 미계측이다")
     @Test
     void ipmi_shared_across_mdcs_stays_unmeasured_in_mdc_trend() {
-        // 원장: n1(mdc-a) 이 n2(mdc-b)의 IPMI를 가리킨다 → n2의 호스트명 일치와 충돌. 판정은 클러스터 전체로 해야 한다 —
+        // 원장: n1(mdc-a)이 n2(mdc-b)의 IPMI를 가리킨다 → n2의 호스트명 일치와 충돌. 판정은 클러스터 전체로 해야 한다 —
         // mdc-a 노드만 보고 판정하면 충돌이 보이지 않아 n1이 n2의 100W를 가져간다.
         NodeExporterMapping m = new NodeExporterMapping("n1:9100");
         m.setIpmiInstance("n2:9290");

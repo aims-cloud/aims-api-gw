@@ -44,7 +44,7 @@ import static org.mockito.Mockito.when;
  * <pre>
  * 노드      8코어 1대 (수집기 대역), CPU 10% → 가용 7.2코어, 100W / 정격 500W
  * 워크로드  GPU 종류 3건: w1 HIGH 5코어 · w2 NORMAL 5코어 · w3 LOW 1코어 (우선순위 순)
- * 기대      w1 배치 → w2 는 w1 의 예약 때문에 자원 부족 → w3 배치. 모의와 실제 실행의 결정·문구·스냅샷이 같다
+ * 기대      w1 배치 → w2는 w1의 예약 때문에 자원 부족 → w3 배치. 모의와 실제 실행의 결정·문구·스냅샷이 같다
  * </pre>
  */
 @SpringBootTest

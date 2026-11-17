@@ -39,10 +39,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * ④  B activate                                       200  activated=B, deactivated=[A]
  * ⑤  B PUT active:false                               200  공통 활성 0
  * ⑥  활성 0 상태에서 정책 해석(dryRun 경로)            정책명 default, 정책 행 수 +1 (default 없으므로 생성)
- * ⑦  default PUT active:false → 다시 해석             정책명 default, 행 수 불변 (비활성 default 를 저장 없이 사용)
+ * ⑦  default PUT active:false → 다시 해석             정책명 default, 행 수 불변 (비활성 default를 저장 없이 사용)
  * ⑧  GPU 정책 G 생성                                  200  active=true  (종류 분리)
- * ⑨  G PUT resourceType:null (공통으로)                200  공통 활성이 0 이라 허용
- * ⑨' A activate 후 G PUT resourceType:null 재시도      409  공통 활성 A 와 충돌 → G 는 GPU 그대로
+ * ⑨  G PUT resourceType:null (공통으로)                200  공통 활성이 0이라 허용
+ * ⑨' A activate 후 G PUT resourceType:null 재시도      409  공통 활성 A와 충돌 → G는 GPU 그대로
  * ⑩  이력 30건 page=2 size=10                          200  items 10, totalPages 3
  * </pre>
  */

@@ -49,7 +49,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Nova 인벤토리 모의 배치 — 실물 엔진(가중 점수)과 실물 제약 평가기로 스냅샷을 직접 넣어 확인한다(스프링 없음).
  *
- * <p>정책 저장소만 가짜다 — 비어 있으면 저장하지 않은 기본 정책(CPU 80% · 메모리 85%)을 고른다.
+ * <p>정책 저장소 · 워크로드 저장소 · 배치 서비스 · 게이트웨이는 가짜다 — 정책 저장소가 비어 있으면 저장하지 않은 기본 정책(CPU 80% · 메모리 85%)을 고른다.
  * 서버 모양 골든은 배포 서버 판독을 순서를 지켜 익명화한 입력이다({@code scheduler/inventory/dry-run-server-shape.json}).</p>
  */
 class NovaDryRunServiceTest {

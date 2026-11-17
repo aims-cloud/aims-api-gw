@@ -154,8 +154,8 @@ public class PlacementBenchmarkService {
     /**
      * 판 하나를 부하율 네 지점 × 전원 상태 두 가정으로 비교한다.
      *
-     * @param boardId      {@code main}(주 결과) · {@code adversarial}(반증) · {@code sparse}(계측 공백) ·
-     *                     {@code convex}(볼록 생성식) · {@code misrated}(정격 어긋남) · {@code convex-misrated}(복합·판정)
+     * @param boardId      {@link BenchmarkClusters#boardIds()}의 판 이름. 비우면 {@link BenchmarkClusters#MAIN}이고,
+     *                     모르는 이름은 400으로 거절한다
      * @param distribution {@code heavytail} 또는 {@code uniform}
      */
     public PlacementBenchmarkResponse compare(String boardId, String distribution) {
@@ -205,7 +205,7 @@ public class PlacementBenchmarkService {
 
     /**
      * 캐시·동시 제한을 거치지 않는 계산 — <b>테스트 전용</b>(패키지 밖에서 보이지 않는다). 결정론 테스트가 "두 번 계산해도 같은
-     * 숫자" 를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
+     * 숫자"를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
      */
     PlacementBenchmarkResponse compareFresh(String boardId, String distribution) {
         String board = blank(boardId) ? BenchmarkClusters.MAIN : boardId;

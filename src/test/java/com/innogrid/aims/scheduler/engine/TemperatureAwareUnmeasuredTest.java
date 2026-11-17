@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * </ul>
  *
  * <p><b>겹1만 고치고 겹2를 고치지 않으면 여전히 미계측 노드가 이긴다.</b> 미계측 노드 U는
- * 가드 덕에 스스로 0.5를 받지만, 계측 노드 M의 균형 점수는 여전히 "U 의 0°C 가 섞인 평균"을
+ * 가드 덕에 스스로 0.5를 받지만, 계측 노드 M의 균형 점수는 여전히 "U의 0°C가 섞인 평균"을
  * 분모로 계산된다 — 2노드(M=40°C, U=0°C)에서 그 평균은 20이 되어 M의 균형이
  * {@code 1 − 0.5×40/20 = 0}으로 잘리고, M 총점은 0.4581로 주저앉는다. 반대로 U는 겹1 가드로
  * 0.5500을 받으므로 U가 여전히 이긴다({@link #unmeasured_not_favored_mixed_ipmi} 주석 참고).
@@ -45,8 +45,9 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>균형 항을 검증하려면 최소 2노드가 있어야 한다 — 노드가 하나뿐이면 평균이 0이 되어
  * {@code ThermalModel.balanceScore}의 기존 가드({@code averageTemperature <= 0 → 0.5})에
- * 걸려, 새 가드가 없어도 균형이 0.5로 나온다(증명력이 없다). 그래서 8번 메서드를 제외한
- * 나머지는 모두 2노드 픽스처를 쓴다. 계측 노드가 <b>1대</b>뿐이면 평균이 곧 그 노드의 온도라
+ * 걸려, 새 가드가 없어도 균형이 0.5로 나온다(증명력이 없다). 그래서 노드 1대 픽스처는
+ * {@link #lone_unmeasured_node_total_score_pinned}·{@link #negative_temperature_treated_as_unmeasured}뿐이고
+ * 나머지는 2대 이상을 쓴다. 계측 노드가 <b>1대</b>뿐이면 평균이 곧 그 노드의 온도라
  * 균형이 자명하게 0.5가 나오므로, 평균 수정을 점수에서 실제로 관측하려면 계측 2대가 필요하다
  * ({@link #average_over_two_measured_nodes_shapes_balance}).</p>
  *
@@ -203,8 +204,8 @@ class TemperatureAwareUnmeasuredTest {
     @DisplayName("음수 온도는 미계측으로 다룬다")
     @Test
     void negative_temperature_treated_as_unmeasured() {
-        // 가드가 "0 인가"가 아니라 "0 보다 큰가"여야 하는 이유. 센서가 음수를 돌려주는 경우
-        // (오프셋 오류·부호 반전)도 판단 근거가 없기는 마찬가지다. 0 만 걸러내면 -5°C가
+        // 가드가 "0인가"가 아니라 "0보다 큰가"여야 하는 이유. 센서가 음수를 돌려주는 경우
+        // (오프셋 오류·부호 반전)도 판단 근거가 없기는 마찬가지다. 0만 걸러내면 -5°C가
         // 계측값으로 들어가고, headroomScore에는 상한 클램프가 없어 (75−(−5))/75 = 1.0667로
         // 1.0을 넘는 점수가 나온다 — 만점보다 더한 만점이다.
         SchedulingResult result = scheduler.schedule(new Workload("w", 1, 512),
@@ -407,7 +408,7 @@ class TemperatureAwareUnmeasuredTest {
     @DisplayName("계측 노드가 둘이면 평균이 두 노드의 균형 점수를 가른다")
     @Test
     void average_over_two_measured_nodes_shapes_balance() {
-        // 다른 손 픽스처는 계측 노드가 1대라 평균이 곧 자기 온도가 되어 균형이 자명하게 0.5다.
+        // 미계측 노드를 섞은 다른 손 픽스처는 계측 노드가 1대 이하라 균형이 자명하게 0.5다.
         // 계측 2대를 넣어야 "평균을 계측 노드만으로 낸다"(겹2)가 점수에서 실제로 관측된다.
         //   계측만의 평균 (40+60)/2 = 50 → M1 0.5+0.5×10/50 = 0.6, M2 0.5−0.5×10/50 = 0.4
         //   U의 0°C를 섞었다면 평균 33.3 → M1 0.4, M2 0.1로 둘 다 달라진다.

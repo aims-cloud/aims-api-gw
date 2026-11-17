@@ -21,9 +21,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 워크로드 목록·배치 이력·정책 목록이 달라지지 않는다. 서비스가 같은 입력의 응답 본문을 메모리에 보관하지만
  * 그것은 프로세스 안의 캐시라 재시작하면 사라진다.</p>
  *
- * <p><b>{@code SchedulerController}와 별도 클래스로 둔다.</b> 그쪽은 {@code /nodes/{nodeId}} 같은 경로
- * 변수를 잡고 있어 같은 클래스에 리터럴 경로를 더하면 어느 쪽이 먼저 잡히는지가 매핑 순서에 걸린다.
- * 접두어를 {@code /benchmark}로 갈라 두면 그 경합이 생기지 않는다.</p>
+ * <p><b>{@code SchedulerController}와 별도 클래스로 둔다.</b> 접두어를 {@code /benchmark}로 갈라 그쪽 경로와
+ * 겹치지 않는다. 리터럴 경로와 경로 변수가 겹쳐도 스프링은 선언 순서와 상관없이 리터럴 경로를 먼저
+ * 고른다({@code PowerEfficiencyApiTest}가 {@code /nodes/power-efficiency}로 확인한다).</p>
  */
 @Tag(name = "스케줄러 (배치 전략 비교)",
      description = "우리 엔진과 대조군(선착순 두 변종·엔진 전력식 공유 ΔP 단독·자원 최밀집·단순 규칙·무작위)을 같은 판·같은 워크로드·같은 제약에서 비교")

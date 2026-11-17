@@ -220,7 +220,7 @@ public class SchedulingService {
 
     /**
      * 현재 노드 자원 상태를 조회한다 (스케줄링 전 미리보기).
-     * 제외 노드는 담지 않는다 — 이 목록은 DTO 없이 그대로 응답으로 나가 필드를 늘릴 수 없다.
+     * 제외 노드는 담지 않는다 — 노드 목록 응답은 배열 그대로 두고, 제외 노드는 {@code /nodes/excluded}가 돌려준다.
      */
     public List<NodeResource> getNodeResources() {
         return nodeSnapshot().nodes();

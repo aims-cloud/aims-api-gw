@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * "모델을 조회 응답과 혼동하지 않게 하는 관례"다. 그 전제가 지켜지는지도 함께 확인한다.</p>
  *
  * <p>스프링이 구성한 {@code ObjectMapper}를 그대로 주입받아 쓴다. 이 프로젝트는 Jackson 2와 3이
- * 함께 올라와 있고 <b>HTTP 응답을 만드는 것은 Jackson 3({@code tools.jackson})</b> 이다.</p>
+ * 함께 올라와 있고 <b>HTTP 응답을 만드는 것은 Jackson 3({@code tools.jackson})</b>이다.</p>
  */
 @SpringBootTest
 class NodeResourceSerializationTest {

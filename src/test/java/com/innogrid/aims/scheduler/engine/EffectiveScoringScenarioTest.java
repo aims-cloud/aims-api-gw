@@ -42,7 +42,7 @@ class EffectiveScoringScenarioTest {
      *
      * <pre>
      * 입력   A cpu10% · B 20% · C 30% · D 40%  (mem 20%, 전력 200~350W/500W, 온도 45~60°C)
-     * 예상   세 엔진 모두 8건 성공. weighted·temperature 는 3대 이상에 나눠 담고
+     * 예상   세 엔진 모두 8건 성공. weighted·temperature는 3대 이상에 나눠 담고
      *        한 노드가 4건을 넘지 않는다 — 수정 전에는 첫 선택 노드로 [A,A,A,…] 몰렸다.
      * </pre>
      */
@@ -83,8 +83,8 @@ class EffectiveScoringScenarioTest {
      *
      * <pre>
      * 입력   M1(200W·40°C) · M2(220W·45°C) 계측  /  U1 · U2 미계측(0W·0°C).  1코어 6건, weighted
-     * 예상   첫 선택은 계측 노드 M1 (여유 60%·46.7% 는 중립 0.5 보다 낫다).
-     *        계측 노드가 합쳐 2건 이상 받는다 — 수정 전에는 미계측이 만점(1.0·1.0)이라 6건 전부 U 로.
+     * 예상   첫 선택은 계측 노드 M1 (여유 60%·46.7%는 중립 0.5보다 낫다).
+     *        계측 노드가 합쳐 2건 이상 받는다 — 수정 전에는 미계측이 만점(1.0·1.0)이라 6건 전부 U로.
      * </pre>
      */
     @DisplayName("시나리오2 IPMI 혼합 클러스터에서 미계측 노드가 독식하지 않는다")
@@ -116,9 +116,9 @@ class EffectiveScoringScenarioTest {
      * 시나리오 3 — 수집기부터 엔진까지. 3대 중 1대의 CPU 질의가 실패한다.
      *
      * <pre>
-     * 입력   n1 정상 · n2 CPU 질의 예외(HTTP 400) · n3 정상.  weighted 로 2코어 4건
-     * 예상   수집 결과 2대(n2 제외). 4건 전부 성공하며 n2 는 한 번도 선택되지 않는다.
-     *        수정 전에는 n2 가 "CPU 0%" 로 들어와 첫 선택을 독식했다.
+     * 입력   n1 정상 · n2 CPU 질의 예외(HTTP 400) · n3 정상.  weighted로 2코어 4건
+     * 예상   수집 결과 2대(n2 제외). 4건 전부 성공하며 n2는 한 번도 선택되지 않는다.
+     *        수정 전에는 n2가 "CPU 0%"로 들어와 첫 선택을 독식했다.
      * </pre>
      */
     @DisplayName("시나리오3 수집 실패 노드는 후보에서 빠지고 나머지로 배치된다")
@@ -167,7 +167,7 @@ class EffectiveScoringScenarioTest {
      * 입력   n1 정상 · n2 CPU 질의 예외 · n3 정상.  실제 SchedulingService → PowerOptimizationService
      * 예상   cluster.totalNodes=2 (판단 가능한 노드), excludedNodes=1,
      *        excluded[0] = n2:9100 / "핵심 메트릭 판단 불가: cpu사용률 …"
-     *        — 수정 전에는 totalNodes=3 에 n2 가 CPU 0% 의 유휴 노드로 들어갔다(g4 이전),
+     *        — 수정 전에는 totalNodes=3에 n2가 CPU 0%의 유휴 노드로 들어갔다(g4 이전),
      *        g4 직후에는 totalNodes=2 만 보여 1대가 조용히 사라졌다.
      * </pre>
      */

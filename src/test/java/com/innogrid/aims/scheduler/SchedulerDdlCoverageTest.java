@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <ul>
  *   <li>배포 VM은 환경파일이 {@code ddl-auto=update}로 덮어써 Hibernate가 테이블을 자동으로 만든다.
  *       리포 기본값은 {@code validate}라, <b>그 환경변수 한 줄이 빠진 새 DB에서는 앱 전체가 기동하지 않는다.</b></li>
- *   <li>테스트는 H2를 {@code create-drop}으로 쓰므로 {@code deploy/sql}을 <b>한 번도 읽지 않는다.</b>
+ *   <li>테스트는 H2를 {@code create}로 쓰므로 {@code deploy/sql}을 <b>한 번도 읽지 않는다.</b>
  *       즉 DDL 부채를 잡아 줄 자동 방어선이 0건이었다.</li>
  * </ul>
  *

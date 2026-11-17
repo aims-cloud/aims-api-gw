@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   busy-y : 정격 900W, 실측 500W,                CPU 50%  → 가동 중
  *
  *   marginalPower     (고전 선형, 깨우기 비용 없음)   idle-x  87.5W  <  busy-y 157.5W
- *   realMarginalPower (유휴 가산 — 계측된 유휴 노드는 실측 역산 153.1W 를 절편·깨우기항에)  idle-x 239.8W  >  busy-y 157.5W
+ *   realMarginalPower (유휴 가산 — 계측된 유휴 노드는 실측 역산 153.1W를 절편·깨우기항에)  idle-x 239.8W  >  busy-y 157.5W
  * </pre>
  *
  * <p>두 수식의 부등호가 <b>반대</b>다. 그래서 PABFD는 빈 노드를, 우리 엔진은 가동 중인 노드를

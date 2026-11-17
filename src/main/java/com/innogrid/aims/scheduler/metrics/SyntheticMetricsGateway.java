@@ -19,9 +19,9 @@ import java.util.regex.Pattern;
  * 실환경에서 "메트릭 없음"이 어떻게 처리되는지(핵심은 제외, 부가는 0)를 그대로 재현하기 위해서다.
  * 해석할 수 없는 질의도 빈 결과다.</p>
  *
- * <p>스케줄러가 쓰는 질의(2026-09-03 기준 13종): {@code up}, CPU 사용률(idle 역산), 코어 수, MemTotal/MemAvailable,
+ * <p>스케줄러가 쓰는 질의: {@code up}, CPU 사용률(idle 역산), 코어 수, MemTotal/MemAvailable,
  * filesystem size/avail, IPMI 전력, IPMI 온도(avg), 네트워크 rx/tx(sum irate), DCGM GPU 수(count by instance),
- * 그리고 CPU·전력의 구간 질의.</p>
+ * DCGM GPU 사용률·온도·전력(avg·max·sum by instance), 그리고 CPU·전력의 구간 질의.</p>
  *
  * <p><b>익스포터별 instance 형식을 실환경대로 낸다.</b> 노드 익스포터 시리즈는 {@code host:9100}, DCGM은
  * {@code host:9400}, IPMI는 {@code host:9290}이다. 예전에는 모든 시리즈에 노드 id 하나를 붙여, 수집기가 노드

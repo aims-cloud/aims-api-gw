@@ -159,7 +159,7 @@ public class PlacementDispatchService {
      *
      * <pre>
      * 없는 id                 → 404
-     * status 없음·모르는 값    → 400 (RUNNING·COMPLETED·FAILED 만)
+     * status 없음·모르는 값    → 400 (RUNNING·COMPLETED·FAILED만)
      * 같은 상태 재보고         → 200 무변경 (멱등)
      * 전이표 밖               → 409
      * 옛 결정의 기록           → 200 · 기록만 전이표대로 갱신(비고 표지 "옛 결정의 기록 — 워크로드는 바꾸지 않음") · 워크로드 불변
@@ -227,7 +227,7 @@ public class PlacementDispatchService {
      * <pre>
      * 행 없음(전달 기능 이전의 배정)        → null
      * REQUESTED(전달 중) · RUNNING(실행 중) → 409
-     * ACCEPTED                             → 디스패처 취소 훅 → FAILED 로 마감(비고 "예약 취소 — …")
+     * ACCEPTED                             → 디스패처 취소 훅 → FAILED로 마감(비고 "예약 취소 — …")
      * 끝 상태(FAILED·REJECTED·…)           → 그대로
      * </pre>
      * 옛 결정의 행(멱등키가 다른 행)은 건드리지 않는다 — 같은 워크로드가 여러 번 배치될 수 있어서다.

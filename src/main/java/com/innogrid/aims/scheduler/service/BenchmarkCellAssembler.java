@@ -322,8 +322,8 @@ final class BenchmarkCellAssembler {
                                         boolean baselinePresent, boolean paired, boolean dataMdcAssigned) {
         BenchmarkMetricKind kind = BenchmarkMetricKind.of(metric.key());
         if (kind == BenchmarkMetricKind.GAP) {
-            // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0 이나 빈 값을 내면 "격차가
-            // 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
+            // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0이나 빈 값을 내면
+            // "격차가 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
             if (!baselinePresent) {
                 return "기준 전략(전력 인지 최적적합)이 이 실행에 없다";
             }
@@ -382,7 +382,7 @@ final class BenchmarkCellAssembler {
     }
 
     /**
-     * 한 시각 지점의 원격 MDC 배치 비율(%). 데이터 MDC 가 있는 배치가 0건이면 <b>0 이 아니라 null</b> 이다 — 0 은 "모두 데이터 MDC
+     * 한 시각 지점의 원격 MDC 배치 비율(%). 데이터 MDC가 있는 배치가 0건이면 <b>0이 아니라 null</b>이다 — 0은 "모두 데이터 MDC
      * 안에 놓았다"로 읽힌다. 분모는 요청 건수도 배치 건수도 아니고 원격 여부를 말할 수 있는 배치 건수다.
      *
      * <p>같은 패키지의 테스트가 직접 부른다 — 등록된 판에서는 배치 건수와 분모가 늘 같아 응답으로는 분모를 가려낼 수 없다.</p>

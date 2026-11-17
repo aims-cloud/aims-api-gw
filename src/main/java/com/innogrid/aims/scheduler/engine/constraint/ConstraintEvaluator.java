@@ -27,12 +27,12 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * 같은 방식으로 적용되게 한다. 엔진은 이 평가를 통과한 노드만 점수화한다.</p>
  *
  * <pre>
- * C1 자원 가용성 (예약분 반영 — CPU·메모리, GPU 는 요구할 때만, 디스크는 총량을 아는 노드에서만)
+ * C1 자원 가용성 (예약분 반영 — CPU·메모리, GPU는 요구할 때만, 디스크는 총량을 아는 노드에서만)
  * C2 사용률 임계 (CPU / 메모리)
  * C3 열 상태     (쿨다운 — 같거나 높은 상한의 대기만, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
  * C4 전력        (여유율, 워크로드 예산, 배치 후 예상 전력)
- * C5 MDC 링크    (데이터 MDC ↔ 노드 MDC 링크가 DOWN 이면 제외 — 정책 affinityEnabled + 워크로드 dataMdcId 일 때만)
- * C6 MDC 전력 예산 (그 MDC 의 전력 합계가 예산을 넘으면 제외 — 예산 원장에 등록된 MDC 일 때만)
+ * C5 MDC 링크    (데이터 MDC ↔ 노드 MDC 링크가 DOWN이면 제외 — 정책 affinityEnabled + 워크로드 dataMdcId일 때만)
+ * C6 MDC 전력 예산 (그 MDC의 전력 합계가 예산을 넘으면 제외 — 예산 원장에 등록된 MDC일 때만)
  * </pre>
  *
  * <p>C6을 <b>맨 뒤에</b> 둔 이유: C1~C5는 노드 한 대만 보지만 C6은 같은 MDC의 형제 노드를 전부 훑는

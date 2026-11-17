@@ -29,7 +29,7 @@ public record NovaInventorySnapshot(
         List<Server> servers) {
 
     /**
-     * 하이퍼바이저 한 대. 필드 이름은 스케줄러 노드 입력({@code NodeResource})과 맞춘다.
+     * 하이퍼바이저 한 대. 총량 필드({@code totalCpu} · {@code totalMemoryMb} · {@code diskCapacityGb}) 이름은 스케줄러 노드 입력({@code NodeResource})과 맞춘다.
      *
      * <p>{@code allocatedCpu}는 VM에 할당한 vCPU 합(Nova {@code vcpus_used})이라 사용률이 아니고,
      * 오버커밋이면 {@code totalCpu}를 넘을 수 있다 — 값은 그대로 둔다.</p>

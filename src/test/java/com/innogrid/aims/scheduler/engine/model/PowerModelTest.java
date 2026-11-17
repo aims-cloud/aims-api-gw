@@ -259,7 +259,7 @@ class PowerModelTest {
         assertEquals(0.32, model.normalizedPei(noCapacity), 1e-9, "진단용은 정격과 무관하게 실측 (40 / 250) / 0.5");
     }
 
-    /** 설정이 0이면 min(1, x/0) 이 사용률 &gt; 0 노드에 1.0, 사용률 0 노드에 NaN(엔진 반올림에서 0.0)을 준다 — 대체값으로 되돌린다. */
+    /** 설정이 0이면 min(1, x/0)이 사용률 &gt; 0 노드에 1.0, 사용률 0 노드에 NaN(엔진 반올림에서 0.0)을 준다 — 대체값으로 되돌린다. */
     @DisplayName("PEI 정규화 상수가 0 이하이면 두 PEI 모두 대체값 0.5 로 정규화한다")
     @Test
     void pei_normalizer_at_or_below_zero_falls_back() {
@@ -471,7 +471,7 @@ class PowerModelTest {
     @Test
     void wakeup_power_recovers_declared_idle_from_a_measured_idle_node() {
         // 정격 500, 선언 유휴 100을 가정한 생성식 P = 100 + 400·u, u=0.02 → P=108.
-        // 대체값(정격 × idleRatio=0.3=150)도, 보정 없는 실측 108 도 아니고 역산한 100.0이어야 한다.
+        // 대체값(정격 × idleRatio=0.3=150)도, 보정 없는 실측 108도 아니고 역산한 100.0이어야 한다.
         NodeResource node = node(2, 108, 500);
 
         assertEquals(100.0, model.wakeupPower(node), 1e-9,

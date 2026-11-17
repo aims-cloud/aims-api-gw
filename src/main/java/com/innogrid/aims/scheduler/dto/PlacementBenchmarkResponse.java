@@ -483,7 +483,7 @@ public record PlacementBenchmarkResponse(
     ) {
         public MetricValue {
             // null 요소를 담아야 하므로 List.copyOf를 쓸 수 없다 — 그쪽은 null 원소에서 NPE다.
-            // 채우지 않은 지표는 null을 그대로 두어 "지점값이 없다"와 "지점값이 전부 null 이다"를 가른다.
+            // 채우지 않은 지표는 null을 그대로 두어 "지점값이 없다"와 "지점값이 전부 null이다"를 가른다.
             points = points == null ? null : Collections.unmodifiableList(new ArrayList<>(points));
         }
     }

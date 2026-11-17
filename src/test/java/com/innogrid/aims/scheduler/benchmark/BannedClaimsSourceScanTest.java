@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 주석이나 어노테이션 설명에 "볼록하기 때문이다" 같은 단정이 되돌아와도 아무 테스트가 깨지지 않았다 — 문구 <!-- ban-ok: 예시 --> 정정
  * PR의 효과가 다음 편집에서 조용히 사라질 수 있었다. 이 테스트는 {@code src/main}·{@code src/test}의 스케줄러 소스를
  * 텍스트로 읽어 <b>주석 블록</b>(javadoc 블록 · 일반 블록 주석 · 줄 주석)과 <b>설명 어노테이션</b>
- * ({@code @Tag}·{@code @Operation}·{@code @Schema})의 문자열을 검사한다. 예외 메시지 같은 일반 문자열 리터럴은
+ * ({@code @Tag}·{@code @Operation}·{@code @Schema}·{@code @Parameter}·{@code @ApiResponse}·{@code @ApiResponses})의
+ * {@code description}·{@code summary} 인자 문자열을 검사한다. 예외 메시지 같은 일반 문자열 리터럴은
  * 대상이 아니다 — 그것은 사용자에게 가는 문장이 아니라 코드 안의 값이다.</p>
  *
  * <p><b>줄바꿈으로 갈린 조각도 잡는다.</b> 이 저장소는 긴 문장을 여러 줄 javadoc이나 {@code +}로 이어 붙이므로
@@ -31,8 +32,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p><b>의도된 인용은 {@code ban-ok} 마커로 건너뛴다.</b> 마커가 있는 <b>줄과 그 앞뒤 한 줄</b>만 제외한다 — 금지 조각을
  * 정의하거나 "이렇게 부르지 않는다"고 설명하는 자리가 그 예다. 블록 전체를 면제하면 연구 서술이 가장 긴 클래스 javadoc이
  * 통째로 사각지대가 되므로 줄 단위로 좁혔고, 면제된 줄 수에는 상한을 둔다. 금지 조각을 열거하는 자리 하나만
- * 블록 마커({@code ban-ok-block}을 HTML 주석으로)로 블록 전체를 면제한다. 마커는 {@code <!-- ban-ok}로 시작하는 HTML 주석만
- * 인식하므로 이 문장처럼 이름을 언급하는 것은 면제가 아니다.</p>
+ * 블록 마커({@code ban-ok-block}을 HTML 주석으로)로 블록 전체를 면제한다. 마커는 {@code <!-- ban-ok} 글자가 든 줄로
+ * 인식한다. 그래서 앞 문장의 표기도 그 줄과 앞뒤 줄을 면제하고, {@code ban-ok}처럼 이름만 적은 줄은 면제하지 않는다.</p>
  *
  * <p>대상은 {@code src/main}·{@code src/test}의 스케줄러 패키지 전부다 — 테스트 주석에 남은 금지 문구 조각도 같은 규칙으로 잡는다.</p>
  */
@@ -139,7 +140,7 @@ class BannedClaimsSourceScanTest {
         String withoutStrings = withoutBlocks;
         Matcher lc = LINE_COMMENT.matcher(withoutStrings);
         while (lc.find()) out.add(new Block(lc.start(), lc.group()));
-        // 설명 어노테이션: 여는 괄호부터 짝이 맞는 닫는 괄호까지의 문자열 리터럴을 이어 붙인다
+        // 설명 어노테이션: 여는 괄호와 짝이 맞는 닫는 괄호 사이에서 description·summary 인자의 문자열 리터럴을 이어 붙인다
         Matcher an = DESCRIPTION_ANNOTATION.matcher(withoutBlocks);
         while (an.find()) {
             int open = an.end() - 1;
@@ -156,7 +157,7 @@ class BannedClaimsSourceScanTest {
                 Matcher sl = STRING_LITERAL.matcher(tail);
                 int cursor = 0;
                 while (sl.find(cursor)) {
-                    // 인자 값은 리터럴을 + 로 잇는다. 다음 인자 이름(쉼표 뒤 식별자 =) 이 나오기 전까지만 취한다
+                    // 인자 값은 리터럴을 + 로 잇는다. 다음 인자 이름(쉼표 뒤 식별자 =)이 나오기 전까지만 취한다
                     String between = tail.substring(cursor, sl.start());
                     if (between.matches("(?s).*,\\s*\\w+\\s*=.*")) break;
                     joined.append(sl.group(1)).append(' ');

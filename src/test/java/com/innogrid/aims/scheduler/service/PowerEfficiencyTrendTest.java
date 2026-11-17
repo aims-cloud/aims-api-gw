@@ -128,7 +128,7 @@ class PowerEfficiencyTrendTest {
     @Test
     void missing_power_explains_empty_pei() {
         // 배포 VM이 실제로 이 상태다 — CPU 시계열은 있고 IPMI만 없다.
-        // 사유가 없으면 화면은 "PEI 가 왜 전부 비었는지" 알 길이 없다.
+        // 사유가 없으면 화면은 "PEI가 왜 전부 비었는지" 알 길이 없다.
         stub("ipmi_dcmi_power", List.of());
         stub("node_cpu_seconds_total", series(1756684800L, 80.0, 1756685100L, 50.0));
 

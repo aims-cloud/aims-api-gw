@@ -22,8 +22,8 @@ import static org.mockito.Mockito.when;
 /**
  * 수집기가 "조회 실패·시리즈 없음"과 "값 0"을 구분하는지.
  *
- * <p>배포 저장소 실증(2026-09-02): 없는 instance 의 CPU 질의 → result 0건, 문법 오류 →
- * HTTP 400. 둘 다 예전 코드에서는 CPU 0% 로 읽혔다. 전력은 운영에서 실제로 이 상태다.</p>
+ * <p>배포 저장소 실증(2026-09-02): 없는 instance의 CPU 질의 → result 0건, 문법 오류 →
+ * HTTP 400. 둘 다 예전 코드에서는 CPU 0%로 읽혔다. 전력은 운영에서 실제로 이 상태다.</p>
  */
 class NodeResourceCollectorTest {
 
@@ -33,7 +33,7 @@ class NodeResourceCollectorTest {
     private VictoriaMetricsClient vm;
     private NodeResourceCollector collector;
 
-    /** 질의 문자열의 일부 → 응답. 값이 null 이면 빈 결과, RuntimeException 이면 예외. */
+    /** 질의 문자열의 일부 → 응답. 값이 null이면 빈 결과, RuntimeException이면 예외. */
     private final Map<String, Object> answers = new HashMap<>();
 
     @BeforeEach
@@ -125,7 +125,7 @@ class NodeResourceCollectorTest {
     void no_power_thermal_node_flagged() {
         up(N1);
         healthy(N1, 12.67, 2, 4e9, 1.25e9);
-        // 전력·온도는 safeQuery(queryScalar) → 0.0 이 기본. 제외 대상이 아니다.
+        // 전력·온도는 safeQuery(queryScalar) → 0.0이 기본. 제외 대상이 아니다.
 
         List<NodeResource> nodes = collector.collectAll();
 

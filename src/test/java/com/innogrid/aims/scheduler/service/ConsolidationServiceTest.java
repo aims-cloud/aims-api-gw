@@ -412,7 +412,7 @@ class ConsolidationServiceTest {
         when(w.getRequiredGpu()).thenReturn(0);
         when(w.getStatus()).thenReturn(Workload.WorkloadStatus.RUNNING);
         // Mockito는 Double 반환 메서드에 null이 아니라 0.0을 돌려준다. 그대로 두면
-        // "0℃ 보다 뜨거운 노드 금지" · "0W 초과 금지"가 되어 모든 노드가 제외된다.
+        // "0℃보다 뜨거운 노드 금지" · "0W 초과 금지"가 되어 모든 노드가 제외된다.
         // 실제 엔티티는 이 두 값이 null이므로 명시적으로 맞춰 준다.
         when(w.getMaxTemperatureCelsius()).thenReturn(null);
         when(w.getMaxPowerBudgetWatts()).thenReturn(null);

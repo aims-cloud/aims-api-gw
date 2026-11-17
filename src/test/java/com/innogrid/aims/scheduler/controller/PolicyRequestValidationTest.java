@@ -23,8 +23,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 배치 정책 요청 검증과 부분 수정 의미.
  *
- * <p>최소 검증 — 저장하면 확실히 망가지는 값만 거부한다. 합≠1 은 허용(비율 원칙). 부분 수정은 "키가 있으면
- * 반영, 없으면 유지" 이고, 비울 수 있는 세 필드는 명시적 null 로 비운다.</p>
+ * <p>최소 검증 — 저장하면 확실히 망가지는 값만 거부한다. 합≠1은 허용(비율 원칙). 부분 수정은 "키가 있으면
+ * 반영, 없으면 유지"이고, 비울 수 있는 세 필드는 명시적 null로 비운다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

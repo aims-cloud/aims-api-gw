@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
  * 워크로드  GPU 종류 3건: 4·2·2 코어 (정책 사용률 상한 80% → 12.8 코어 여유, 전부 배치 가능)
  * 실행      스케줄 즉시 실행 1회 → 결정 3건 → 디스패치 3행(실행 id 연결, ACCEPTED, SYSTEM)
  * 콜백      w1 RUNNING → COMPLETED, w2 RUNNING
- * 예약      다음 컨텍스트에서 예약 CPU = w2(2) + w3(2) = 4 — COMPLETED 는 빠진다
+ * 예약      다음 컨텍스트에서 예약 CPU = w2(2) + w3(2) = 4 — COMPLETED는 빠진다
  * </pre>
  */
 @SpringBootTest

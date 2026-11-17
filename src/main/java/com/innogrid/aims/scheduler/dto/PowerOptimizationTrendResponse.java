@@ -17,7 +17,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p><b>다만 일부 노드만 결손인 시각은 그 노드를 0 W로 세어 합한다.</b> 그래서 {@code totalPowerWatts}는 그 시각
  * 전력을 읽은 노드들의 합이고, {@code totalNodes}와 {@code evaluableNodes}가 다르면 결손이 있었다는 뜻이다.
- * 이 배열을 그대로 적분하면 결손이 "0 W 를 썼다"로 읽히므로, 구간 에너지는 {@link Energy}로 따로 낸다.</p>
+ * 이 배열을 그대로 적분하면 결손이 "0 W를 썼다"로 읽히므로, 구간 에너지는 {@link Energy}로 따로 낸다.</p>
  *
  * @param energy  구간 전체의 에너지 요약. 낼 수 없으면 null
  * @param message 결손·조회 실패 사유. 정상이면 null
@@ -42,7 +42,7 @@ public record PowerOptimizationTrendResponse(
      * 구간 전체의 에너지 요약 — 지점 배열을 클라이언트가 적분하지 않아도 되게 한다.
      *
      * <p><b>지점 배열을 더해서 낸 값이 아니다.</b> 지점의 총 전력은 그 시각에 전력을 못 읽은 노드를 0으로 채워
-     * 만든 값이라, 그 배열을 적분하면 결손이 "0 W 를 썼다"로 읽혀 조용히 적게 나온다. 대신 <b>0을 채우기 전의
+     * 만든 값이라, 그 배열을 적분하면 결손이 "0 W를 썼다"로 읽혀 조용히 적게 나온다. 대신 <b>0을 채우기 전의
      * 원시 구간 시계열</b>을 노드별로 적분한다 — 그 맵에는 결손 자리가 아예 없다. 소비와 회수 가능이 같은 방식이고,
      * 회수 가능 쪽만 시각마다 가동 판정과 유휴 역산을 한 번 더 거친다.</p>
      *
@@ -52,10 +52,10 @@ public record PowerOptimizationTrendResponse(
      * @param consumedKwh            실측 전력의 소비 에너지(kWh). 실측 노드가 없으면 null
      * @param reclaimableKwh         유휴 노드를 반납했다면 아꼈을 에너지(kWh). 적분할 표본이 없으면 null
      * @param reclaimableEstimatedKwh 그중 실측이 아닌 값에서 온 몫(kWh) — 정격으로 어림한 미계측 노드가 여기 든다
-     * @param integratedFrom         실제로 적분이 걸친 구간의 시작. 없으면 null
-     * @param integratedTo           실제로 적분이 걸친 구간의 끝. 없으면 null
-     * @param integratedHours        실제로 적분이 걸친 시간(시). 끊긴 구멍은 빠져 있다
-     * @param integratedNodes        적분에 쓴 노드 수
+     * @param integratedFrom         회수 가능 적분이 실제로 걸친 구간의 시작. 없으면 null
+     * @param integratedTo           회수 가능 적분이 실제로 걸친 구간의 끝. 없으면 null
+     * @param integratedHours        회수 가능 적분에서 한 노드가 덮은 시간 중 가장 긴 것(시). 끊긴 구멍은 빠져 있다
+     * @param integratedNodes        회수 가능 적분에 쓴 노드 수
      * @param gaps                   표본이 멀어 잇지 않고 끊은 횟수
      * @param reason                 값이 비거나 좁아진 까닭. 정상이면 null
      */

@@ -40,7 +40,7 @@ import com.sun.net.httpserver.HttpServer;
  *
  * <p>스프링 없이 실제 Keystone · Nova 클라이언트를 만들고, 테스트 안에서 띄운 HTTP 서버가 Keystone 토큰과 Nova 응답을 흉내 낸다.
  * 그래서 클라이언트가 실제로 던지는 예외 종류(401 · 403 · 5xx · 연결 거부 · 응답 지연)로 상태 분류를 확인한다.
- * 응답 본문은 Nova 2.1 문서 모양을 따른 {@code scheduler/inventory/*.json}이다.</p>
+ * 응답 본문은 Nova 2.1 문서 모양을 따른 {@code scheduler/inventory/}의 {@code hypervisors.json} · {@code availability-zones.json} · {@code servers.json} · {@code flavor-small.json} · {@code flavor-large.json}이다.</p>
  */
 class NovaInventoryGatewayTest {
 

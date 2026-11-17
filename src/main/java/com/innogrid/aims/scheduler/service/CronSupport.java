@@ -40,7 +40,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
  * <b>조용히 다른 날 실행</b>되는 형태로 나타난다. 아래는 Spring 7.0.8로 직접 확인한 값이다.</p>
  *
  * <pre>
- * 입력                        Quartz 의미        Spring 이 그대로 해석하면
+ * 입력                        Quartz 의미        Spring이 그대로 해석하면
  * ─────────────────────────  ─────────────────  ────────────────────────
  * 0 0 2 ? * 1                일요일              월요일
  * 0 0 2 ? * 2                월요일              화요일
@@ -51,7 +51,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
  * 0 0 2 1 * MON              (Quartz 는 금지)     1일이면서 월요일 = 2027-02-01
  * </pre>
  *
- * <p>요일 번호 대응은 <b>Spring = Quartz − 1</b> 이다(Quartz {@code 1}=일 … {@code 7}=토,
+ * <p>요일 번호 대응은 <b>Spring = Quartz − 1</b>이다(Quartz {@code 1}=일 … {@code 7}=토,
  * Spring {@code 0}=일 … {@code 6}=토). 요일 <b>이름</b>({@code MON}~{@code SUN})은 양쪽이
  * 같으므로 변환하지 않는다.</p>
  *

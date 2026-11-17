@@ -34,7 +34,7 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
  * 자동 실행 러너 — 실행할 때가 된 스케줄을 찾아 돌린다.
  *
  * <p><b>{@code @Scheduled}를 쓰지 않는다.</b> 이 앱의 작업 스케줄러 풀 크기는 기본값 1
- * 이고, 미터링 집계·알람 평가 등 다른 담당자의 작업 5건이 그 스레드 하나를 함께 쓴다.
+ * 이고, 미터링 집계·알람 평가 등 다른 담당자의 {@code @Scheduled} 작업이 모두 그 스레드 하나를 함께 쓴다.
  * 여기에 배치 작업을 얹으면 노드 메트릭 조회가 끝날 때까지 그 작업들이 밀린다. 그래서
  * 전용 executor 두 개(폴링용·실행용)를 따로 만든다.</p>
  *

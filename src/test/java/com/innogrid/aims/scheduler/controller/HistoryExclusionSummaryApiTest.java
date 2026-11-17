@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 배치 이력 제외 사유 코드 합계({@code /history/exclusion-summary})와 페이징의 기간 창({@code from}·{@code to}).
  *
  * <p>합계와 페이징은 같은 조건식을 쓴다 — 그래서 "응답의 창을 그대로 넘긴 같은 필터의 {@code exclusionCode=CODE} 총건수 ==
- * {@code codes[CODE].decisions}" 가 이 스위트의 오라클이다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징(LIKE)에는 걸리고 합계에서는
+ * {@code codes[CODE].decisions}"가 이 스위트의 오라클이다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징(LIKE)에는 걸리고 합계에서는
  * {@code skipped}로 빠지므로 그 차이도 함께 고정한다. 시드는 이 테스트 전용 워크로드 id로만 심고, {@code createdAt}은
  * {@code @PrePersist}가 덮어쓰므로 창 테스트는 JPQL 일괄 갱신으로 과거로 옮긴다.</p>
  *

@@ -252,6 +252,43 @@ class NovaInventoryGatewayTest {
         assertEquals(InventoryStatus.OK, snapshot.status(), "flavor 실패는 전체 실패가 아니다");
     }
 
+    @DisplayName("본문을 JSON 으로 읽을 수 없으면 목록 키 없음과 같은 MALFORMED 다")
+    @Test
+    void unreadable_json_body_is_malformed() {
+        stub.reply(HYPERVISORS, 200, "<html>proxy error</html>");
+
+        NovaInventorySnapshot snapshot = gateway(5_000).read();
+
+        assertEquals(InventoryStatus.MALFORMED, snapshot.status(), "클라이언트가 본문 읽기 실패를 RestClientException 으로 감싼다");
+        assertTrue(snapshot.nodes().isEmpty());
+        assertFalse(snapshot.serversRead());
+    }
+
+    @DisplayName("한 번의 조회에서 따로 읽는 flavor 는 50종까지이고 넘은 flavor 를 쓰는 VM 만 변환하지 않는다")
+    @Test
+    void flavor_lookups_stop_at_fifty_kinds() {
+        StringBuilder servers = new StringBuilder("{\"servers\":[");
+        for (int i = 0; i <= NovaInventoryGateway.FLAVOR_LOOKUP_LIMIT; i++) {
+            if (i > 0) servers.append(',');
+            servers.append("{\"id\":\"s").append(i).append("\",\"name\":\"vm").append(i)
+                    .append("\",\"status\":\"ACTIVE\",\"OS-EXT-SRV-ATTR:hypervisor_hostname\":\"h\",\"flavor\":{\"id\":\"f-").append(i).append("\"}}");
+            stub.reply("/v2.1/flavors/f-" + i, 200, "{\"flavor\":{\"id\":\"f-" + i + "\",\"vcpus\":1,\"ram\":512,\"disk\":1}}");
+        }
+        stub.reply(SERVERS, 200, servers.append("]}").toString());
+
+        NovaInventorySnapshot snapshot = gateway(15_000).read();
+
+        String last = "f-" + NovaInventoryGateway.FLAVOR_LOOKUP_LIMIT;
+        assertEquals(0, stub.hits("/v2.1/flavors/" + last), "51번째 종류는 읽지 않는다");
+        assertEquals(1, stub.hits("/v2.1/flavors/f-0"));
+        Server over = snapshot.servers().stream().filter(s -> last.equals(s.flavorId())).findFirst().orElseThrow();
+        assertFalse(over.convertible());
+        assertEquals("flavor 조회 상한 초과", over.skipReason());
+        assertEquals(NovaInventoryGateway.FLAVOR_LOOKUP_LIMIT, snapshot.servers().stream().filter(Server::convertible).count());
+        assertEquals(List.of("flavors"), snapshot.unavailable());
+        assertEquals(InventoryStatus.OK, snapshot.status());
+    }
+
     @DisplayName("가용영역 · VM 목록 질의가 실패해도 노드는 그대로 싣고 실패한 질의 이름만 적는다")
     @Test
     void partial_query_failure_keeps_nodes() {

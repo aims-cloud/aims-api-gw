@@ -446,7 +446,15 @@ public class SchedulerProperties {
         /** 조회 전체(하이퍼바이저 · 가용영역 · VM · flavor) 상한(ms). 넘으면 TIMEOUT 으로 돌려준다. */
         private long timeoutMs = 5_000;
 
+        /**
+         * Nova 인벤토리 모의 배치를 켠다(기본 꺼짐). 꺼져 있으면 모의 배치 경로는 Nova 를 부르지 않고 DISABLED 를 돌려준다.
+         * 실행 경로의 노드 입력은 이 값과 관계없이 그대로다 — 메트릭 수집 · 합성 모드는 바뀌지 않는다.
+         */
+        private boolean simulationEnabled = false;
+
         public long getTimeoutMs() { return timeoutMs; }
         public void setTimeoutMs(long v) { this.timeoutMs = v; }
+        public boolean isSimulationEnabled() { return simulationEnabled; }
+        public void setSimulationEnabled(boolean v) { this.simulationEnabled = v; }
     }
 }

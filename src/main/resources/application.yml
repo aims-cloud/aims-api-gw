@@ -135,6 +135,9 @@ aims:
   scheduler:
     # 모의 메트릭 모드 — 1세부 데이터가 없는 동안 가상 클러스터로 시연·검증. 배포는 항상 false.
     mock-enabled: ${AIMS_SCHEDULER_MOCK_ENABLED:false}
+    inventory:
+      # Nova 인벤토리 모의 배치(POST /api/v1/scheduler/inventory/nova/dry-run) — 꺼져 있으면 Nova 를 부르지 않고 DISABLED. 실행 경로와 무관
+      simulation-enabled: ${AIMS_SCHEDULER_INVENTORY_SIMULATION_ENABLED:false}
   gpu-dashboard:
     # TODO:: 실제 Thanos 연동이 완료되면 Mock 설정 제거
     mock-enabled: ${AIMS_GPU_DASHBOARD_MOCK_ENABLED:false}

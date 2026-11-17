@@ -136,6 +136,20 @@ class NovaInventoryApiTest {
         JsonNode node = schemas.path("NovaDryRunNode").path("properties");
         assertTrue(node.has("simulatedCpuUsagePercent") && node.has("simulatedMemoryUsagePercent") && node.has("overLimit"),
                 "놓은 뒤 사용률 · 상한 초과");
+
+        // 설명 문구 — 놓기 전 상한 · 놓은 뒤 초과 · 엔진 차이의 원인 · flavor를 못 읽은 경우 · 반올림 전 판정 · 총량 0
+        String post = docs.path("paths").path(DRY_RUN).path("post").path("description").asString();
+        assertFalse(post.contains("엔진에 따른 차이도 없습니다"), "엔진에 따라 VM별 결정이 다를 수 있다");
+        assertTrue(post.contains("놓은 뒤 사용률은 상한을 넘을 수 있고") && post.contains("VM별 결정은 다를 수 있습니다"), post);
+        assertTrue(post.contains("반올림 뒤 동점 여부가 엔진마다 달라") && !post.contains("점수가 같을 때"), post);
+        String response = schemas.path("NovaDryRunResponse").path("description").asString();
+        assertFalse(response.contains("정책 상한 아래"), response);
+        assertTrue(response.contains("놓기 전 값"), response);
+        assertTrue(props.path("engine").path("description").asString().contains("VM별 결정은 다를 수 있다"));
+        assertTrue(props.path("engine").path("description").asString().contains("반올림 뒤 동점 여부가 엔진마다 달라"));
+        assertTrue(props.path("status").path("description").asString().contains("flavor를 못 읽어"));
+        assertTrue(node.path("overLimit").path("description").asString().contains("반올림 전"));
+        assertTrue(node.path("overLimit").path("description").asString().contains("물리 총량이 0인 자원은 넘지 않은 것으로 본다"));
     }
 
     private JsonNode dryRun() throws Exception {

@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.io.InputStream;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,7 +24,11 @@ import org.junit.jupiter.api.Test;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.NovaDryRunResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
+import com.innogrid.aims.scheduler.engine.PowerAwareScheduler;
+import com.innogrid.aims.scheduler.engine.SchedulingEngine;
+import com.innogrid.aims.scheduler.engine.TemperatureAwareScheduler;
 import com.innogrid.aims.scheduler.engine.WeightedScoreScheduler;
+import com.innogrid.aims.scheduler.engine.constraint.PlacementContext;
 import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.inventory.NovaInventoryGateway;
@@ -32,6 +37,7 @@ import com.innogrid.aims.scheduler.inventory.NovaInventorySnapshot.Node;
 import com.innogrid.aims.scheduler.inventory.NovaInventorySnapshot.Server;
 import com.innogrid.aims.scheduler.model.InventoryStatus;
 import com.innogrid.aims.scheduler.model.NovaDryRunStatus;
+import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 
 import tools.jackson.databind.JsonNode;
@@ -379,7 +385,98 @@ class NovaDryRunServiceTest {
         assertEquals(r.nodes(), again.nodes());
     }
 
+    @DisplayName("정책의 기본 엔진으로 실제 평가한다 — 응답의 engine 과 평가에 쓰인 엔진이 같다")
+    @Test
+    void evaluates_with_the_policy_engine() {
+        CountingEngine temperature = new CountingEngine(new TemperatureAwareScheduler());
+        NovaDryRunService withEngines = serviceWith(new WeightedScoreScheduler(), temperature, new PowerAwareScheduler());
+        useVmPolicyWithEngine("temperature");
+
+        NovaDryRunResponse r = withEngines.simulate(ok(List.of(node("h1", 16, 65_536), node("h2", 16, 65_536)),
+                List.of(vm("a", "h1", 2, 2_048), vm("b", "h2", 4, 4_096))), T0, System.nanoTime());
+
+        assertEquals("temperature", r.engine());
+        assertEquals(2, temperature.calls, "두 VM 모두 정책 엔진으로 평가");
+    }
+
+    @DisplayName("서버 모양 입력을 엔진 셋으로 놓으면 노드별 합과 놓인 수는 같지만 VM 별 결정은 엔진에 따라 다를 수 있다")
+    @Test
+    void engines_agree_on_node_totals_but_not_on_every_vm() throws Exception {
+        NovaDryRunService withEngines = serviceWith(new WeightedScoreScheduler(), new TemperatureAwareScheduler(), new PowerAwareScheduler());
+        NovaInventorySnapshot snapshot = serverShaped();
+        Map<String, NovaDryRunResponse> byEngine = new LinkedHashMap<>();
+        for (String engine : List.of("weighted", "temperature", "power")) {
+            useVmPolicyWithEngine(engine);
+            byEngine.put(engine, withEngines.simulate(snapshot, T0, System.nanoTime()));
+        }
+
+        NovaDryRunResponse weighted = byEngine.get("weighted");
+        for (NovaDryRunResponse r : byEngine.values()) {
+            assertEquals(72, r.placedCount(), r.engine());
+            assertEquals(nodeTotals(weighted), nodeTotals(r), r.engine() + " 노드별 합 · 놓인 수");
+        }
+        assertEquals(hosts(weighted), hosts(byEngine.get("power")), "계측이 없으면 power 는 weighted 와 같은 노드를 고른다");
+        List<String> w = hosts(weighted), t = hosts(byEngine.get("temperature"));
+        long differ = java.util.stream.IntStream.range(0, w.size()).filter(i -> !w.get(i).equals(t.get(i))).count();
+        assertEquals(GOLD_TEMPERATURE_DIFFERS, differ, "temperature 는 스코어 식과 반올림 뒤 동점 여부가 달라 weighted 와 다른 노드를 고르는 VM 이 있다");
+    }
+
     // ── 도우미 ──────────────────────────────────────────────────
+
+    /** 서버 모양 입력에서 temperature 엔진이 weighted와 다른 노드를 고르는 VM 수(실물 엔진 결과를 고정). */
+    private static final long GOLD_TEMPERATURE_DIFFERS = 2;
+
+    /** 엔진을 여럿 등록한 서비스 — 서비스와 SchedulingService가 같은 레지스트리를 쓴다(없는 id는 조용히 기본 엔진이 되므로). */
+    private NovaDryRunService serviceWith(SchedulingEngine... engines) {
+        EngineRegistry registry = new EngineRegistry(List.of(engines));
+        SchedulingService scheduling = SchedulingServiceBuilder.aSchedulingService()
+                .policies(policies).engines(registry).properties(properties).build();
+        return new NovaDryRunService(gateway, scheduling, registry, properties);
+    }
+
+    /** 기본 엔진만 정한 VM 종류 활성 정책(상한 · 가중치는 기본값). */
+    private void useVmPolicyWithEngine(String engine) {
+        SchedulingPolicy policy = new SchedulingPolicy("vm-" + engine, "VM 전용");
+        policy.setResourceType(Workload.ResourceType.VM);
+        policy.setActive(true);
+        policy.setDefaultEngine(engine);
+        when(policies.findByActiveTrueAndResourceTypeOrderByNameAsc(Workload.ResourceType.VM)).thenReturn(List.of(policy));
+    }
+
+    private static List<String> hosts(NovaDryRunResponse r) {
+        return r.decisions().stream().map(NovaDryRunResponse.Decision::simulatedHost).toList();
+    }
+
+    private static List<String> nodeTotals(NovaDryRunResponse r) {
+        return r.nodes().stream().map(n -> n.hypervisorHostname() + ":" + n.simulatedCpu() + "/" + n.simulatedMemoryMb() + "/" + n.simulatedVmCount())
+                .toList();
+    }
+
+    /** 평가 호출 수를 세는 엔진 — 응답의 engine 이름만이 아니라 실제로 평가에 쓰였는지 본다. */
+    private static final class CountingEngine implements SchedulingEngine {
+        private final SchedulingEngine delegate;
+        private int calls;
+
+        CountingEngine(SchedulingEngine delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public SchedulingResult schedule(Workload workload, PlacementContext context) {
+            calls++;
+            return delegate.schedule(workload, context);
+        }
+
+        @Override
+        public String getName() {
+            return delegate.getName();
+        }
+
+        @Override
+        public String getId() {
+            return delegate.getId();
+        }
+    }
 
     private NovaDryRunResponse run(NovaInventorySnapshot snapshot) {
         return service.simulate(snapshot, T0, System.nanoTime());

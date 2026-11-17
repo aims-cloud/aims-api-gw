@@ -45,7 +45,8 @@ public class NovaInventoryController {
 
     @Operation(summary = "Nova 인벤토리 모의 배치",
                description = "Nova 의 쓸 수 있는 하이퍼바이저(state up · status enabled)를 빈 노드로 두고, 그 위에 있는 VM 을 요구 vCPU 큰 순으로 스케줄러가 저장 없이 다시 놓아 봅니다. "
-                       + "정책은 VM 배치와 같은 규칙으로 고르고, 결과는 정책의 사용률 상한(놓기 전 값)과 물리 vCPU · 메모리로만 갈립니다 — 사용률 · 전력 · 온도 · 디스크는 보지 않으며 엔진에 따른 차이도 없습니다. "
+                       + "정책은 VM 배치와 같은 규칙으로 고르고, 노드는 정책의 사용률 상한(놓기 전 값)과 물리 vCPU · 메모리로만 거릅니다 — 실측 사용률 · 전력 · 온도 · 디스크는 보지 않습니다. "
+                       + "놓은 뒤 사용률은 상한을 넘을 수 있고(nodes의 overLimit), 엔진은 자원 여유로만 고르지만 노드 배치 스코어 식과 소수 넷째 자리 반올림 뒤 동점 여부가 엔진마다 달라 VM별 결정은 다를 수 있습니다. "
                        + "기능 플래그 aims.scheduler.inventory.simulation-enabled(기본 false)가 꺼져 있으면 Nova 를 부르지 않고 status DISABLED 를 돌려줍니다. "
                        + "실패도 200 이고 status 로 구분합니다 — VM 목록만 못 읽어도, 쓸 수 있는 호스트 위 VM의 flavor를 못 읽어 다시 놓을 VM이 없어도 INVENTORY_FAILED입니다. "
                        + "워크로드 · 배치 이력 · 정책을 저장하지 않고 실행 계층에 넘기지 않습니다. "

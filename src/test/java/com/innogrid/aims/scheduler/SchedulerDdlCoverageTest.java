@@ -25,22 +25,22 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 스케줄러 엔티티가 만드는 테이블이 모두 {@code deploy/sql} 에 CREATE 로 남아 있는지 대조한다.
+ * 스케줄러 엔티티가 만드는 테이블이 모두 {@code deploy/sql}에 CREATE로 남아 있는지 대조한다.
  *
  * <p><b>왜 필요한가</b> — 이 검사는 그동안 사람의 기억에만 있었고, 실제로 세 테이블
- * ({@code workloads}·{@code scheduling_policies}·{@code scheduling_history})의 CREATE 가 빠져 있었다.
+ * ({@code workloads}·{@code scheduling_policies}·{@code scheduling_history})의 CREATE가 빠져 있었다.
  * 드러나지 않은 이유는 두 가지다.</p>
  *
  * <ul>
- *   <li>배포 VM 은 환경파일이 {@code ddl-auto=update} 로 덮어써 Hibernate 가 테이블을 자동으로 만든다.
- *       리포 기본값은 {@code validate} 라, <b>그 환경변수 한 줄이 빠진 새 DB 에서는 앱 전체가 기동하지 않는다.</b></li>
- *   <li>테스트는 H2 를 {@code create-drop} 으로 쓰므로 {@code deploy/sql} 을 <b>한 번도 읽지 않는다.</b>
+ *   <li>배포 VM은 환경파일이 {@code ddl-auto=update}로 덮어써 Hibernate가 테이블을 자동으로 만든다.
+ *       리포 기본값은 {@code validate}라, <b>그 환경변수 한 줄이 빠진 새 DB에서는 앱 전체가 기동하지 않는다.</b></li>
+ *   <li>테스트는 H2를 {@code create-drop}으로 쓰므로 {@code deploy/sql}을 <b>한 번도 읽지 않는다.</b>
  *       즉 DDL 부채를 잡아 줄 자동 방어선이 0건이었다.</li>
  * </ul>
  *
  * <p><b>이 테스트의 한계</b>를 분명히 해 둔다 — 대조는 <b>테이블 이름 수준</b>이다. 컬럼 타입·길이·NOT NULL
- * 이 엔티티와 맞는지는 여기서 알 수 없다. 그건 실제 PostgreSQL 에 붙여야 알 수 있는데 테스트가 H2 라 불가능하다.
- * 배포 뒤 {@code information_schema} 로 대조하는 절차가 그 자리를 대신한다.</p>
+ * 이 엔티티와 맞는지는 여기서 알 수 없다. 그건 실제 PostgreSQL에 붙여야 알 수 있는데 테스트가 H2라 불가능하다.
+ * 배포 뒤 {@code information_schema}로 대조하는 절차가 그 자리를 대신한다.</p>
  *
  * <p>담당 범위가 스케줄러라서 <b>스케줄러 패키지의 엔티티만</b> 본다. 다른 패키지의 테이블은 대조 대상이 아니다.</p>
  */
@@ -49,10 +49,10 @@ class SchedulerDdlCoverageTest {
     private static final String ENTITY_PACKAGE = "com.innogrid.aims.scheduler.entity";
     private static final Path DDL_DIR = Path.of("deploy", "sql");
 
-    /** 줄 주석({@code --}). 주석 안의 {@code CREATE TABLE} 을 실제 생성으로 세지 않으려고 먼저 걷어낸다. */
-    private static final Pattern COMMENT = Pattern.compile("--.*");   // `.` 는 줄바꿈을 넘지 않으므로 줄 끝까지만 지운다
+    /** 줄 주석({@code --}). 주석 안의 {@code CREATE TABLE}을 실제 생성으로 세지 않으려고 먼저 걷어낸다. */
+    private static final Pattern COMMENT = Pattern.compile("--.*");   // `.`는 줄바꿈을 넘지 않으므로 줄 끝까지만 지운다
 
-    /** {@code CREATE TABLE [IF NOT EXISTS] <이름>} 의 대상 이름. 따옴표로 감싼 이름도 받는다. */
+    /** {@code CREATE TABLE [IF NOT EXISTS] <이름>}의 대상 이름. 따옴표로 감싼 이름도 받는다. */
     private static final Pattern CREATE_TABLE = Pattern.compile(
             "create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?\"?([a-z_][a-z0-9_]*)\"?",
             Pattern.CASE_INSENSITIVE);
@@ -125,7 +125,7 @@ class SchedulerDdlCoverageTest {
         return found;
     }
 
-    /** {@code deploy/sql} 의 {@code CREATE INDEX} → 같은 형식의 {@code 이름 -> "표(컬럼,컬럼)"}. */
+    /** {@code deploy/sql}의 {@code CREATE INDEX} → 같은 형식의 {@code 이름 -> "표(컬럼,컬럼)"}. */
     private Map<String, String> indexesCreatedByDdl() throws IOException {
         Map<String, String> found = new LinkedHashMap<>();
         for (Path script : ddlScripts()) {
@@ -150,7 +150,7 @@ class SchedulerDdlCoverageTest {
         return sb.toString();
     }
 
-    /** 스케줄러 패키지의 {@code @Entity} 가 쓰는 테이블 이름. {@code @Table} 이 없으면 클래스 이름을 쓴다. */
+    /** 스케줄러 패키지의 {@code @Entity}가 쓰는 테이블 이름. {@code @Table}이 없으면 클래스 이름을 쓴다. */
     private Set<String> schedulerEntityTables() throws ClassNotFoundException {
         var scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(Entity.class));
@@ -167,7 +167,7 @@ class SchedulerDdlCoverageTest {
         return tables;
     }
 
-    /** {@code deploy/sql} 의 모든 스크립트가 만드는 테이블 이름. */
+    /** {@code deploy/sql}의 모든 스크립트가 만드는 테이블 이름. */
     private Set<String> tablesCreatedByDdl() throws IOException {
         Set<String> created = new TreeSet<>();
         if (!Files.isDirectory(DDL_DIR)) return created;

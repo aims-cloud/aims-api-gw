@@ -33,10 +33,10 @@ import static org.mockito.Mockito.when;
 
 /**
  * 단건 배치·모의 배치의 엔진 선택 — 요청한 엔진, 비었으면 적용 정책의 기본 엔진(등록된 것일 때만), 그것도 없으면 weighted.
- * 스케줄 실행과 같은 규칙이다(스프링 컨텍스트 없음 · 활성 정책을 DB 에 만들지 않는다).
+ * 스케줄 실행과 같은 규칙이다(스프링 컨텍스트 없음 · 활성 정책을 DB에 만들지 않는다).
  *
- * <p>엔진은 자기 id 를 사유에 싣는 대역이라, 모의 배치 결과의 사유로 어느 엔진이 돌았는지 본다. 실제 배치는 배치 서비스 대역에
- * 넘긴 엔진 id 와 입력 행에 남은 엔진 id 로 본다.</p>
+ * <p>엔진은 자기 id를 사유에 싣는 대역이라, 모의 배치 결과의 사유로 어느 엔진이 돌았는지 본다. 실제 배치는 배치 서비스 대역에
+ * 넘긴 엔진 id와 입력 행에 남은 엔진 id로 본다.</p>
  */
 class SchedulingEngineChoiceTest {
 
@@ -47,7 +47,7 @@ class SchedulingEngineChoiceTest {
     private final PlacementInputRepository inputs = mock(PlacementInputRepository.class);
     private final Workload workload = new Workload("w", 1, 512);
 
-    /** 정책 기본 엔진을 {@code defaultEngine} 으로 둔 공통 활성 정책 하나와 노드 하나로 조립한다. */
+    /** 정책 기본 엔진을 {@code defaultEngine}으로 둔 공통 활성 정책 하나와 노드 하나로 조립한다. */
     private SchedulingService serviceWithPolicyEngine(String defaultEngine) {
         SchedulingPolicy policy = new SchedulingPolicy("engine-choice", "엔진 선택");
         policy.setDefaultEngine(defaultEngine);
@@ -65,7 +65,7 @@ class SchedulingEngineChoiceTest {
                 .build();
     }
 
-    /** 자기 id 를 사유에 싣는 엔진 대역. */
+    /** 자기 id를 사유에 싣는 엔진 대역. */
     private static SchedulingEngine engine(String id) {
         return new SchedulingEngine() {
             @Override public SchedulingResult schedule(Workload w, PlacementContext context) {

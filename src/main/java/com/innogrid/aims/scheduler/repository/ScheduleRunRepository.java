@@ -11,7 +11,7 @@ import com.innogrid.aims.scheduler.entity.ScheduleRun;
 
 /**
  * 실행 이력 저장소. 목록 조회(스케줄 + 선택 필터 상태·주체·시작 시각 창)는
- * {@link JpaSpecificationExecutor} 로 조합한다 — 스케줄·배치 이력·전달 기록과 같은 방식이다.
+ * {@link JpaSpecificationExecutor}로 조합한다 — 스케줄·배치 이력·전달 기록과 같은 방식이다.
  */
 public interface ScheduleRunRepository extends JpaRepository<ScheduleRun, Long>, JpaSpecificationExecutor<ScheduleRun> {
 

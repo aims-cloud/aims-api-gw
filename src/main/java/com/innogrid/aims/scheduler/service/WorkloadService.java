@@ -21,14 +21,14 @@ import tools.jackson.databind.JsonNode;
 /**
  * 워크로드 생성·편집·삭제 — 요청 검증과 상태 규칙을 한곳에 둔다.
  *
- * <p>검증은 애너테이션이 아니라 여기서 {@link BusinessException} 으로 한다. 이 프로젝트는 검증 예외가
- * 기본 처리로 넘어가면 400 이 아니라 403 이 되는 경로가 있어, 서비스에서 던지는 편이
- * 400 이 확실하다. 스케줄 API 와 같은 방식이다.</p>
+ * <p>검증은 애너테이션이 아니라 여기서 {@link BusinessException}으로 한다. 이 프로젝트는 검증 예외가
+ * 기본 처리로 넘어가면 400이 아니라 403이 되는 경로가 있어, 서비스에서 던지는 편이
+ * 400이 확실하다. 스케줄 API와 같은 방식이다.</p>
  */
 @Service
 public class WorkloadService {
 
-    /** 엔티티 컬럼 길이와 같다. 넘기면 DB 예외로 500 이 나므로 먼저 막는다. */
+    /** 엔티티 컬럼 길이와 같다. 넘기면 DB 예외로 500이 나므로 먼저 막는다. */
     static final int NAME_MAX = 100;
     static final int DESCRIPTION_MAX = 300;
     static final int MDC_ID_MAX = 50;
@@ -39,7 +39,7 @@ public class WorkloadService {
 
     private final WorkloadRepository workloadRepository;
 
-    /** 디스패치 기록. null 이면(직접 조립한 테스트 경로) 삭제 때 기록 정리를 건너뛴다. */
+    /** 디스패치 기록. null이면(직접 조립한 테스트 경로) 삭제 때 기록 정리를 건너뛴다. */
     private final PlacementDispatchRepository dispatchRepository;
 
     @Autowired
@@ -58,7 +58,7 @@ public class WorkloadService {
     }
 
     /**
-     * 저장하지 않는 초안 — 생성과 같은 검증·사유 문구로 엔티티만 만든다. 어떤 행도 쓰지 않고 DB 를 읽지도 않는다
+     * 저장하지 않는 초안 — 생성과 같은 검증·사유 문구로 엔티티만 만든다. 어떤 행도 쓰지 않고 DB를 읽지도 않는다
      * (저장 전 모의 배치가 쓴다). 생성은 이 초안을 저장하는 것뿐이라 두 경로의 400 규칙이 갈릴 수 없다.
      */
     public Workload draft(WorkloadRequest request) {
@@ -115,18 +115,18 @@ public class WorkloadService {
      * </pre>
      *
      * <p><b>상태를 본문보다 먼저 본다</b> — 편집할 수 없는 워크로드라면 본문이 맞아도 소용없으므로 진짜 막힌 이유를 먼저
-     * 알린다(삭제·예약 취소와 같은 순서). <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400 이면 엔티티는 전혀
-     * 바뀌지 않는다(트랜잭션 롤백에만 기대지 않는다). 깨진 JSON 처럼 본문을 읽지 못한 400 은 이 메서드에 오기 전에
-     * 프레임워크가 내므로 404·409 보다 앞선다.</p>
+     * 알린다(삭제·예약 취소와 같은 순서). <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400이면 엔티티는 전혀
+     * 바뀌지 않는다(트랜잭션 롤백에만 기대지 않는다). 깨진 JSON처럼 본문을 읽지 못한 400은 이 메서드에 오기 전에
+     * 프레임워크가 내므로 404·409보다 앞선다.</p>
      *
      * <p>재시도 회계(횟수·마지막 실패 시각)와 배정·사유·시각 칸은 건드리지 않는다. 회계를 지우는 길은 명시적 되살리기
      * (FAILED→PENDING · 일괄 재개)와 완료뿐이다 — 편집이 지우면 재시도 상한을 우회하는 숨은 되살리기가 된다.</p>
      *
      * <p><b>저장 직전에 상태를 다시 확인하고 행을 잡는다</b>({@link #lockForEdit}). 읽은 뒤 그 사이 단건 배치·스케줄 실행이
-     * 배치를 커밋했거나 워크로드가 지워졌으면 읽은 사본을 저장하지 않고 409·404 로 끝낸다 — 엔티티에 동적 갱신·행 버전이
+     * 배치를 커밋했거나 워크로드가 지워졌으면 읽은 사본을 저장하지 않고 409·404로 끝낸다 — 엔티티에 동적 갱신·행 버전이
      * 없어 읽은 사본을 그대로 저장하면 모든 열이 읽을 때의 값으로 덮여 막 끝난 배치가 대기로 돌아간다. 그 사이의 실패 결정·
      * 되살리기처럼 편집할 수 있는 상태 안의 변화는 다시 읽은 값 위에 보낸 키만 얹어 보존한다. 이 확인은 본문 검증 뒤라
-     * 겹칠 때는 400 이 409·404 보다 먼저일 수 있다.</p>
+     * 겹칠 때는 400이 409·404보다 먼저일 수 있다.</p>
      */
     @Transactional
     public Workload update(Long id, WorkloadUpdateRequest request) {
@@ -178,7 +178,7 @@ public class WorkloadService {
      * 때까지 다른 쪽이 바꾸지 못한다.
      *
      * <p>잡지 못했으면(0행) 다시 읽어 사유를 정한다 — 지워졌으면 404, 배치·실행 중·완료로 바뀌었으면 처음 확인과 같은 409.
-     * 다시 읽었더니 편집할 수 있는 상태라면 그 사이 상태가 두 번 바뀐 것이라 409 로 다시 조회를 요청한다.</p>
+     * 다시 읽었더니 편집할 수 있는 상태라면 그 사이 상태가 두 번 바뀐 것이라 409로 다시 조회를 요청한다.</p>
      */
     private Workload lockForEdit(Long id) {
         if (workloadRepository.lockIfStatusIn(id, EDITABLE) == 0) {
@@ -210,7 +210,7 @@ public class WorkloadService {
      *
      * <p>스케줄러의 예약 장부는 별도 테이블이 아니라 <b>워크로드 행 자체</b>다(배치 노드가 적힌 SCHEDULED·RUNNING 행).
      * 실행 중인 행을 지우면 노드에서 실제로 도는 부하는 그대로인데 장부만 사라져, 그 노드가 비어 보이고
-     * 다음 배치가 몰린다. 이력도 고아가 된다. 먼저 상태를 COMPLETED/FAILED 로 바꾸게 한다 —
+     * 다음 배치가 몰린다. 이력도 고아가 된다. 먼저 상태를 COMPLETED/FAILED로 바꾸게 한다 —
      * 스케줄 삭제(실행 중 409)와 같은 규칙이다.</p>
      */
     @Transactional
@@ -227,7 +227,7 @@ public class WorkloadService {
                             ? "먼저 예약 취소(POST /workloads/{id}/release)로 배정을 푸세요"
                             : "먼저 상태를 COMPLETED 또는 FAILED 로 바꾸세요"));
         }
-        if (dispatchRepository != null) dispatchRepository.deleteByWorkloadId(id);   // FK 가 없어 여기서 함께 지운다
+        if (dispatchRepository != null) dispatchRepository.deleteByWorkloadId(id);   // FK가 없어 여기서 함께 지운다
         workloadRepository.delete(workload);
     }
 
@@ -241,8 +241,8 @@ public class WorkloadService {
     /**
      * 선택 MDC 식별자 — 앞뒤 공백을 지우고, 비면 {@code null}(지정 안 함)로 본다.
      *
-     * <p>링크 원장은 MDC 이름을 다듬어 저장하고, 배치는 데이터 MDC 와 노드 MDC 를 <b>정확히 비교</b>해 같은 MDC 와
-     * 미등록 원격을 가른다. 여기서 다듬지 않으면 {@code " mdc-01 "} 이 같은 MDC 로 인식되지 않아 조용히 미등록
+     * <p>링크 원장은 MDC 이름을 다듬어 저장하고, 배치는 데이터 MDC와 노드 MDC를 <b>정확히 비교</b>해 같은 MDC와
+     * 미등록 원격을 가른다. 여기서 다듬지 않으면 {@code " mdc-01 "}이 같은 MDC로 인식되지 않아 조용히 미등록
      * 점수(기본 0.5)를 받고, 빈 문자열은 게이트를 열지 못한 채 값만 남는다.</p>
      */
     private static String optionalMdcId(String value, String label) {
@@ -265,8 +265,8 @@ public class WorkloadService {
     }
 
     /**
-     * 유한한 양수만 받는다 — 무한대·NaN 을 통과시키면 점수 식에서 NaN 이 나고, NaN 총점은 반올림에서
-     * 0.0 으로 삼켜져 오류가 아니라 최하위 점수로 보인다.
+     * 유한한 양수만 받는다 — 무한대·NaN을 통과시키면 점수 식에서 NaN이 나고, NaN 총점은 반올림에서
+     * 0.0으로 삼켜져 오류가 아니라 최하위 점수로 보인다.
      */
     private static double requirePositive(Double value, String label) {
         if (!(value > 0) || !Double.isFinite(value)) {
@@ -275,7 +275,7 @@ public class WorkloadService {
         return value;
     }
 
-    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null 이면 {@code null}). */
+    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null이면 {@code null}). */
     private record Clearable<T>(boolean sent, T value) {
         static <T> Clearable<T> keep() { return new Clearable<>(false, null); }
         static <T> Clearable<T> set(T value) { return new Clearable<>(true, value); }
@@ -301,8 +301,8 @@ public class WorkloadService {
      * 키 없음 → 유지, 명시적 null → 비움, 숫자 → 생성과 같은 양수 규칙, 그 외(숫자 문자열 포함) → 400.
      * 생성 요청은 {@code "100"} 같은 숫자 문자열을 받아 주지만 여기서는 받지 않는다 — MDC 링크 원장 수정과 같은 규칙이다.
      *
-     * <p>값은 {@code numberValue().doubleValue()} 로 꺼낸다. {@code asDouble()} 은 double 범위를 넘는 큰 정수에서
-     * {@code JsonNodeException} 을 던지는데 처리기가 없어 400 이 되지 못한다. 이쪽은 ±무한대가 되어 양수 검사가 400 으로 막는다.</p>
+     * <p>값은 {@code numberValue().doubleValue()}로 꺼낸다. {@code asDouble()}은 double 범위를 넘는 큰 정수에서
+     * {@code JsonNodeException}을 던지는데 처리기가 없어 400이 되지 못한다. 이쪽은 ±무한대가 되어 양수 검사가 400으로 막는다.</p>
      */
     private static Clearable<Double> clearablePositive(JsonNode node, String label) {
         if (node == null) return Clearable.keep();

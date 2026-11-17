@@ -17,7 +17,7 @@ public final class VictoriaMetricsGateway implements SchedulerMetricsGateway {
         this.client = client;
     }
 
-    /** 클라이언트가 null 이면(추세 없이 조립한 테스트 경로) null 을 돌려준다. */
+    /** 클라이언트가 null이면(추세 없이 조립한 테스트 경로) null을 돌려준다. */
     public static SchedulerMetricsGateway of(VictoriaMetricsClient client) {
         return client == null ? null : new VictoriaMetricsGateway(client);
     }

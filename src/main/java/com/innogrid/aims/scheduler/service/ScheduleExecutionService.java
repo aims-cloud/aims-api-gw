@@ -61,7 +61,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * </pre>
  *
  * <p>트랜잭션을 이 클래스에 걸지 않는다. 노드 수집이 외부 메트릭 저장소를 호출해 오래
- * 걸리기 때문이다. DB 쓰기는 리포지토리와 {@link PlacementService} 의 짧은 트랜잭션에
+ * 걸리기 때문이다. DB 쓰기는 리포지토리와 {@link PlacementService}의 짧은 트랜잭션에
  * 맡긴다. 예외는 노드를 모으지 않는 {@link #preview} 하나로, 쓰기를 막는 목적의 읽기 전용 트랜잭션을 건다.</p>
  */
 @Service
@@ -84,7 +84,7 @@ public class ScheduleExecutionService {
 
     /**
      * 우선순위 높은 것부터, 같으면 요구 CPU → 요구 메모리가 큰 것부터, 그래도 같으면 먼저 등록된 것부터.
-     * 빈 패킹의 first-fit-decreasing 에서 가져온 선택지다. 기본 엔진(weighted)에서 조각화를 줄이는지는 배치 전략 비교의
+     * 빈 패킹의 first-fit-decreasing에서 가져온 선택지다. 기본 엔진(weighted)에서 조각화를 줄이는지는 배치 전략 비교의
      * 스케줄 배치 순서 열로 합성 판에서만 쟀고 전력 엔진은 재지 않았다(docs/14). 우선순위가 첫 기준이라 공정성은 그대로다.
      */
     static final Comparator<Workload> BY_PRIORITY_THEN_SIZE =
@@ -110,7 +110,7 @@ public class ScheduleExecutionService {
     private final EngineRegistry engineRegistry;
     private final SchedulerProperties properties;
     private final RunClusterSnapshot clusterSnapshot;
-    /** 재시작 정리에서 전달 기록을 보는 데 쓴다. 생성자로 직접 조립해 null 을 넣으면(지금은 그런 조립이 없다) 전달 기록 없이 전부 실패로 돌린다. */
+    /** 재시작 정리에서 전달 기록을 보는 데 쓴다. 생성자로 직접 조립해 null을 넣으면(지금은 그런 조립이 없다) 전달 기록 없이 전부 실패로 돌린다. */
     private final PlacementDispatchService dispatchService;
     /** 실행마다 배치 입력을 남긴다. 빈이 아니라 여기서 만든다. */
     private final RunInputCapture inputCapture;
@@ -150,7 +150,7 @@ public class ScheduleExecutionService {
     public ScheduleRun runNow(Long id, String triggeredBy) {
         Schedule schedule = scheduleService.require(id);
         ScheduleRun run = execute(schedule, ScheduleRun.TriggerType.MANUAL, triggeredBy);
-        // 수동 실행은 대상이 없어도 항상 기록하므로 null 이 나올 수 없다.
+        // 수동 실행은 대상이 없어도 항상 기록하므로 null이 나올 수 없다.
         return run;
     }
 
@@ -223,7 +223,7 @@ public class ScheduleExecutionService {
                         if (firstFailure == null) firstFailure = skip;
                         continue;
                     }
-                    // 결정 → 예약 → 전달 → 받지 않으면 예약 되돌림. 순서와 그 이유는 PlaceAndDispatch 가 갖는다.
+                    // 결정 → 예약 → 전달 → 받지 않으면 예약 되돌림. 순서와 그 이유는 PlaceAndDispatch가 갖는다.
                     SchedulingResult result = PlaceAndDispatch.run(context, workload,
                             () -> placementService.place(workload, context, engineId, runId),
                             placed -> schedulingService.dispatch(workload, placed, runId)).delivered();
@@ -235,7 +235,7 @@ public class ScheduleExecutionService {
                     }
                 }
             } catch (RuntimeException e) {
-                // 루프 중간에 끊겨도 그때까지의 결과는 사실이다. 집계를 0 으로 두면 실제로 배치된
+                // 루프 중간에 끊겨도 그때까지의 결과는 사실이다. 집계를 0으로 두면 실제로 배치된
                 // 워크로드가 이력에서 사라져, 다음 실행이 무엇을 이어서 해야 하는지 알 수 없다.
                 // 그때까지 쌓인 예약도 사실이므로 실행 후 상태를 남긴다.
                 run.recordCounts(targets.size(), success, attempted - success, truncated);
@@ -260,8 +260,8 @@ public class ScheduleExecutionService {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "스케줄 실행에 실패했습니다: " + e.getMessage());
         } catch (Error e) {
-            // 배포는 실행 중인 JVM 의 jar 를 덮어쓴다. 아직 로드되지 않은 클래스를 그때 읽으면
-            // NoClassDefFoundError 가 나는데, RuntimeException 만 잡으면 실행 권한이 잡힌 채 남는다.
+            // 배포는 실행 중인 JVM의 jar를 덮어쓴다. 아직 로드되지 않은 클래스를 그때 읽으면
+            // NoClassDefFoundError가 나는데, RuntimeException만 잡으면 실행 권한이 잡힌 채 남는다.
             log.error("스케줄 실행 중단(Error): schedule={}", schedule.getScheduleId(), e);
             failQuietly(schedule, run, startedAt, "실행 중단: " + e);
             throw e;
@@ -296,7 +296,7 @@ public class ScheduleExecutionService {
      * 스케줄을 지금 실행하면 어떻게 배치될지를 <b>저장 없이</b> 돌려준다.
      *
      * <p>실행과 같은 코드로 정책·엔진·대상·순서·상한·전력 상한을 해석하고, 컨텍스트 하나 위에 대상을 차례로 놓아 본다 —
-     * 성공한 건의 요구량을 예약으로 누적하므로 앞 건이 뒤 건에 보인다(실행의 배치 루프가 {@code place} 에 넘기는 것과 같은 입력).
+     * 성공한 건의 요구량을 예약으로 누적하므로 앞 건이 뒤 건에 보인다(실행의 배치 루프가 {@code place}에 넘기는 것과 같은 입력).
      * 실행 권한을 잡지 않고(실행 중·사용 안 함 스케줄도 200), 실행 계층에 전달하지 않으며(전부 받는다고 본다), 워크로드·
      * 배치 이력·전달·실행 이력·{@code default} 정책 어느 행도 쓰지 않는다. 트랜잭션은 두지 않는다 — 메트릭 수집이 길다.</p>
      *
@@ -411,12 +411,12 @@ public class ScheduleExecutionService {
      * 예외를 밖으로 내보내면 잘 돌던 배치가 통째로 실패로 뒤바뀐다. 대신 상태를 실패로 남겨 빈 칸이
      * "안 쟀다"인지 "재다 터졌다"인지 구분되게 한다.</p>
      *
-     * <p>{@link LinkageError} 까지 잡는다. 배포가 실행 중인 JVM 의 jar 를 덮어쓰는 이 환경에서는 아직
-     * 로드되지 않은 클래스를 그때 읽어 {@code NoClassDefFoundError} 가 난다 — 이 계산이 쓰는 record 와
-     * enum 이 바로 그런 지연 로드 대상이다. {@code RuntimeException} 만 잡으면 "실행은 계속한다"는 이
-     * 메서드의 약속이 하필 그 상황에서 깨진다. 메모리 고갈 같은 나머지 {@code Error} 는 그대로 내보낸다.</p>
+     * <p>{@link LinkageError}까지 잡는다. 배포가 실행 중인 JVM의 jar를 덮어쓰는 이 환경에서는 아직
+     * 로드되지 않은 클래스를 그때 읽어 {@code NoClassDefFoundError}가 난다 — 이 계산이 쓰는 record와
+     * enum이 바로 그런 지연 로드 대상이다. {@code RuntimeException}만 잡으면 "실행은 계속한다"는 이
+     * 메서드의 약속이 하필 그 상황에서 깨진다. 메모리 고갈 같은 나머지 {@code Error}는 그대로 내보낸다.</p>
      *
-     * <p>여기서 <b>한 번 저장한다</b>. 저장하지 않으면 이 값이 실행이 끝날 때까지 DB 에 닿지 않아, 배치
+     * <p>여기서 <b>한 번 저장한다</b>. 저장하지 않으면 이 값이 실행이 끝날 때까지 DB에 닿지 않아, 배치
      * 도중 앱이 죽은 회차가 "전만 기록됨"이 아니라 아무것도 기록되지 않은 행으로 남는다 — 기동 회수는
      * 실행 이력을 마무리할 뿐 스냅샷을 채우지 못한다. 실행 1회당 UPDATE 한 번이고 배치 루프 밖이다.</p>
      */
@@ -468,7 +468,7 @@ public class ScheduleExecutionService {
 
     /**
      * 실행 권한을 잡는다. 자동 실행과 즉시 실행이 겹치면 한쪽만 진행한다.
-     * 앱이 한 대라 DB 의 조건부 UPDATE 로 충분하다.
+     * 앱이 한 대라 DB의 조건부 UPDATE로 충분하다.
      */
     private void acquire(Schedule schedule, ScheduleRun.TriggerType triggerType,
                          OffsetDateTime startedAt) {
@@ -486,7 +486,7 @@ public class ScheduleExecutionService {
      *
      * <p>실행({@link #execute})과 같은 메서드로 정책·엔진을 해석하고 같은 질의로 대상·대기·소진을 세어 두 응답이
      * 어긋나지 않는다. 다만 실행 권한({@code acquireForRun})을 잡지 않고, 노드를 모으지 않으며(외부 메트릭 호출 0),
-     * {@code default} 정책이 없어도 만들지 않는다. 사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 읽기라 200 이다.</p>
+     * {@code default} 정책이 없어도 만들지 않는다. 사용 여부가 꺼진 스케줄과 실행 중인 스케줄도 읽기라 200이다.</p>
      *
      * <p>대상 건수는 실행이 <b>시도할</b> 건수다 — 실제로 배치될 건수는 노드 상태에 달려 있어 여기서는 알 수 없다.
      * 대기·소진 건수는 재시도 간격 경계를 지나며 바뀌므로 호출 시각의 값이다.</p>
@@ -502,7 +502,7 @@ public class ScheduleExecutionService {
      * <p>응답 값을 바꾸는 칸은 셋이다 — 리소스 종류·정책·엔진. 온도 상한·배치 순서는 실행과 같은 해석에 쓰이지만
      * 응답에는 드러나지 않는다(정책 이름은 사본이어도 같고, 정렬은 건수를 바꾸지 않는다). 전력 상한은 노드를 모은 뒤
      * 노드 단위로 거는 제약이라 건수에 닿지 않고(저장된 미리보기도 같다), 스케줄명·실행 주기·자동 실행은
-     * 실행 해석과 무관하다. {@code id} 는 없으니 {@code null} 이다.</p>
+     * 실행 해석과 무관하다. {@code id}는 없으니 {@code null}이다.</p>
      */
     @Transactional(readOnly = true)
     public ScheduleRunPreviewResponse previewDraft(ScheduleRequest request) {
@@ -531,12 +531,12 @@ public class ScheduleExecutionService {
     /**
      * 배치할 워크로드를 고른다.
      *
-     * <p>정렬을 SQL 에 맡기지 않는다. 우선순위가 문자열로 저장돼 있어 {@code order by} 로는
-     * 사전순(CRITICAL, HIGH, LOW, NORMAL)이 되어 NORMAL 이 LOW 보다 뒤로 간다.</p>
+     * <p>정렬을 SQL에 맡기지 않는다. 우선순위가 문자열로 저장돼 있어 {@code order by}로는
+     * 사전순(CRITICAL, HIGH, LOW, NORMAL)이 되어 NORMAL이 LOW보다 뒤로 간다.</p>
      */
     List<Workload> findTargets(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
-        boolean matchNullType = type == Workload.ResourceType.VM;   // 기존 행은 VM 으로 해석한다
+        boolean matchNullType = type == Workload.ResourceType.VM;   // 기존 행은 VM으로 해석한다
 
         return workloadRepository.findSchedulingCandidates(
                         TARGET_STATUSES, type, matchNullType, properties.getMaxRetryCount(),
@@ -564,11 +564,11 @@ public class ScheduleExecutionService {
      */
     private EmptyTargetOutcome emptyTargetOutcome(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
-        // 소진이 0 일 때만 대기를 센다 — 실행 경로의 조회 횟수를 예전과 같게 둔다.
+        // 소진이 0일 때만 대기를 센다 — 실행 경로의 조회 횟수를 예전과 같게 둔다.
         return outcomeOf(countExhausted(type), () -> countWaiting(type));
     }
 
-    /** 재시도 상한에 걸린 워크로드 수. 대상 선정({@link #findTargets})과 같은 종류 규칙(VM 은 종류 빈 행 포함). */
+    /** 재시도 상한에 걸린 워크로드 수. 대상 선정({@link #findTargets})과 같은 종류 규칙(VM은 종류 빈 행 포함). */
     private long countExhausted(Workload.ResourceType type) {
         return workloadRepository.countRetryExhausted(
                 Workload.WorkloadStatus.FAILED, type, type == Workload.ResourceType.VM, properties.getMaxRetryCount());
@@ -582,7 +582,7 @@ public class ScheduleExecutionService {
 
     /**
      * 대상 0건의 사유와 문구를 건수만으로 정한다. 실행과 미리보기가 <b>이 한 곳</b>에서 문구를 얻으므로 미리보기가
-     * 보여 준 문장과 실행이 남기는 {@code lastRunMessage} 가 글자 단위로 같다.
+     * 보여 준 문장과 실행이 남기는 {@code lastRunMessage}가 글자 단위로 같다.
      */
     EmptyTargetOutcome outcomeOf(long exhausted, LongSupplier waitingSupplier) {
         if (exhausted > 0) {
@@ -637,9 +637,9 @@ public class ScheduleExecutionService {
      * <p>저장된 정책을 고치지 않으려고 <b>영속되지 않는 사본</b>을 만들어 쓴다.
      * 정책은 여러 스케줄이 공유하므로 한 스케줄의 설정이 남으면 안 된다.</p>
      *
-     * <p>사본은 {@link SchedulingPolicy#detachedCopy()} 가 만든다 — 판단 필드 전부를 옮기는 곳은 그 메서드 하나다.
-     * 전에는 여기서 필드를 손으로 옮기다 {@code affinityEnabled} 가 빠져 온도 한계를 지정한 스케줄에서만 MDC 링크
-     * 게이트가 조용히 꺼지던 결함이 있었다(2026-09-02). 테스트 {@code ScheduleOverridePolicyCopyTest} 가 고정한다.</p>
+     * <p>사본은 {@link SchedulingPolicy#detachedCopy()}가 만든다 — 판단 필드 전부를 옮기는 곳은 그 메서드 하나다.
+     * 전에는 여기서 필드를 손으로 옮기다 {@code affinityEnabled}가 빠져 온도 한계를 지정한 스케줄에서만 MDC 링크
+     * 게이트가 조용히 꺼지던 결함이 있었다(2026-09-02). 테스트 {@code ScheduleOverridePolicyCopyTest}가 고정한다.</p>
      */
     SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
         if (schedule.getMaxTemperatureCelsius() == null) {
@@ -709,7 +709,7 @@ public class ScheduleExecutionService {
         int recovered = 0;
         for (Schedule schedule : stuck) {
             try {
-                // 그 사이 삭제된 스케줄이면 갱신 행이 0 이다 — 로그 건수가 어긋나지 않게 실제 결과를 센다.
+                // 그 사이 삭제된 스케줄이면 갱신 행이 0이다 — 로그 건수가 어긋나지 않게 실제 결과를 센다.
                 if (complete(schedule, ScheduleRun.RunStatus.FAILED, schedule.getLastRunAt(), RECOVERED_MESSAGE) > 0) {
                     recovered++;
                 }
@@ -793,7 +793,7 @@ public class ScheduleExecutionService {
     }
 
     /**
-     * cron 을 읽을 수 없을 때 다음 실행 시각을 얼마나 뒤로 미룰지(분).
+     * cron을 읽을 수 없을 때 다음 실행 시각을 얼마나 뒤로 미룰지(분).
      *
      * <p><b>폴링 주기보다 훨씬 커야 한다.</b> 폴링 주기만큼만 밀면 "실행 → cron 실패 → 주기 뒤 재실행"이
      * 끝없이 도는 핫 루프가 된다. 그렇다고 비워 두면(null) 자동 실행이 조용히 멈춰 아무도 모른다.
@@ -804,12 +804,12 @@ public class ScheduleExecutionService {
     /**
      * 다음 실행 시각.
      *
-     * <p><b>DB 의 현재 값으로 계산한다.</b> 넘겨받은 엔티티는 실행이 <b>시작될 때</b> 읽은 사본이라,
-     * 실행 도중 사용자가 cron 이나 자동 실행 여부를 바꿨으면 낡았다. 그 사본으로 계산하면 방금 켠 자동 실행이
-     * {@code nextRunAt = null} 로 덮여 <b>그 스케줄만 조용히 안 돌게</b> 된다(폴러는 null 을 건너뛴다).
+     * <p><b>DB의 현재 값으로 계산한다.</b> 넘겨받은 엔티티는 실행이 <b>시작될 때</b> 읽은 사본이라,
+     * 실행 도중 사용자가 cron이나 자동 실행 여부를 바꿨으면 낡았다. 그 사본으로 계산하면 방금 켠 자동 실행이
+     * {@code nextRunAt = null}로 덮여 <b>그 스케줄만 조용히 안 돌게</b> 된다(폴러는 null을 건너뛴다).
      * 화면에는 자동 실행이 켜져 보이므로 원인을 찾기도 어렵다.</p>
      *
-     * <p>cron 을 못 읽어도 <b>실행 권한 해제를 막지 않는다</b> — 그 경우 넉넉히 뒤로 밀어 폴러가 같은 실행을
+     * <p>cron을 못 읽어도 <b>실행 권한 해제를 막지 않는다</b> — 그 경우 넉넉히 뒤로 밀어 폴러가 같은 실행을
      * 반복해 던지지 않게 한다.</p>
      */
     private OffsetDateTime nextRunAtOf(Schedule schedule, OffsetDateTime base) {
@@ -833,7 +833,7 @@ public class ScheduleExecutionService {
 
     /**
      * 실패로 마무리한다. 여기서 다시 예외가 나면 원래 예외를 가리므로 삼킨다.
-     * 상태를 못 풀면 스케줄이 RUNNING 으로 남아 영영 실행되지 않는다.
+     * 상태를 못 풀면 스케줄이 RUNNING으로 남아 영영 실행되지 않는다.
      *
      * <p><b>이력 저장과 권한 해제를 따로 감싼다.</b> 한 덩어리로 두면 이력 저장이 먼저 터졌을 때 해제가
      * 아예 실행되지 않는다 — 실제로 이것이 가장 유력한 잠금 경로였다(긴 오류 메시지 → 컬럼 길이 초과).</p>

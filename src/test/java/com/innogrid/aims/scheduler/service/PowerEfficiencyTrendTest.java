@@ -114,7 +114,7 @@ class PowerEfficiencyTrendTest {
     @DisplayName("저장소 조회에 실패해도 예외를 올리지 않는다")
     @Test
     void query_failure_raises_no_exception() {
-        // 조회 실패로 500 을 내면 화면이 통째로 깨진다. IPMI 미연동 환경에서는 흔한 상황이다.
+        // 조회 실패로 500을 내면 화면이 통째로 깨진다. IPMI 미연동 환경에서는 흔한 상황이다.
         when(metrics.queryRangeResults(anyString(), any(), any(), anyString()))
                 .thenThrow(new IllegalStateException("connection refused"));
 
@@ -127,7 +127,7 @@ class PowerEfficiencyTrendTest {
     @DisplayName("전력만 없으면 왜 PEI 가 비었는지 알려준다")
     @Test
     void missing_power_explains_empty_pei() {
-        // 배포 VM 이 실제로 이 상태다 — CPU 시계열은 있고 IPMI 만 없다.
+        // 배포 VM이 실제로 이 상태다 — CPU 시계열은 있고 IPMI만 없다.
         // 사유가 없으면 화면은 "PEI 가 왜 전부 비었는지" 알 길이 없다.
         stub("ipmi_dcmi_power", List.of());
         stub("node_cpu_seconds_total", series(1756684800L, 80.0, 1756685100L, 50.0));

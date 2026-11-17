@@ -55,9 +55,9 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 워크로드·노드·배치 이력 API.
  *
- * <p>응답은 전부 {@code dto} 패키지의 record 로 나간다. 예전에는 엔티티·모델을 그대로 직렬화해
- * {@code get} 메서드 하나를 추가하면 API 필드가 조용히 늘었다. 응답 형태의 주인은 이제 DTO 이고,
- * 필드 계약은 {@code ResponseJsonGoldenTest}·{@code NodeResourceSerializationTest} 가 고정한다.</p>
+ * <p>응답은 전부 {@code dto} 패키지의 record로 나간다. 예전에는 엔티티·모델을 그대로 직렬화해
+ * {@code get} 메서드 하나를 추가하면 API 필드가 조용히 늘었다. 응답 형태의 주인은 이제 DTO이고,
+ * 필드 계약은 {@code ResponseJsonGoldenTest}·{@code NodeResourceSerializationTest}가 고정한다.</p>
  */
 @Tag(name = "스케줄러", description = "워크로드 스케줄링 (제약조건/전력/온도 기반)")
 @RestController
@@ -67,11 +67,11 @@ public class SchedulerController {
     private static final Logger log = LoggerFactory.getLogger(SchedulerController.class);
 
     /**
-     * 배열로 전량 반환하던 이력 API 의 반환 상한.
+     * 배열로 전량 반환하던 이력 API의 반환 상한.
      *
-     * <p>{@code scheduling_history} 는 연구 근거라 지우지 않는다 — 즉 단조 증가한다. 상한이 없으면
+     * <p>{@code scheduling_history}는 연구 근거라 지우지 않는다 — 즉 단조 증가한다. 상한이 없으면
      * 응답 하나가 표 전체가 되어 메모리와 응답 크기가 행 수를 따라간다. 응답 <b>형태</b>는 배열 그대로 두고
-     * (프런트 영향 없음) 건수만 최신 기준으로 자른다. 더 필요하면 {@code /history/page} 를 쓴다.</p>
+     * (프런트 영향 없음) 건수만 최신 기준으로 자른다. 더 필요하면 {@code /history/page}를 쓴다.</p>
      */
     private static final int HISTORY_MAX = 1000;
 
@@ -215,7 +215,7 @@ public class SchedulerController {
         return ApiResponse.ok(WorkloadReleaseResponse.from(r.workload(), r.releasedMdcId(), r.releasedNodeId(), r.dispatch()));
     }
 
-    /** 잘못된 열거형 값이 500 이 아니라 400 이 되도록 감싼다. 요청 DTO 와 같은 규칙({@link EnumSupport}). */
+    /** 잘못된 열거형 값이 500이 아니라 400이 되도록 감싼다. 요청 DTO와 같은 규칙({@link EnumSupport}). */
     private <E extends Enum<E>> E parseEnum(Class<E> type, String value, String label) {
         return EnumSupport.parse(type, value, label);
     }
@@ -459,7 +459,7 @@ public class SchedulerController {
     }
 
     /**
-     * 이력 목록을 응답 DTO 로 옮기고, 상한에 닿았으면 로그로 알린다.
+     * 이력 목록을 응답 DTO로 옮기고, 상한에 닿았으면 로그로 알린다.
      *
      * <p>응답에는 잘렸다는 표시를 넣지 않는다 — 넣으면 배열이던 응답 형태가 바뀌어 프런트가 영향을 받는다.
      * 대신 운영 로그에 남겨, 잘린 목록을 화면에서 보고 있다는 사실을 알 수 있게 한다.</p>

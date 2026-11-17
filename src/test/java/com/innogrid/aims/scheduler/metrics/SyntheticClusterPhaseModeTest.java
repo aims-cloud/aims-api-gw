@@ -18,10 +18,10 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 위상 방식 — legacy 식의 값을 리터럴로 고정하고, independent 가 seed 마다 <b>노드별로</b> 위상을 움직이는지 본다.
+ * 위상 방식 — legacy 식의 값을 리터럴로 고정하고, independent가 seed마다 <b>노드별로</b> 위상을 움직이는지 본다.
  *
- * <p>"상수 가산이 아님" 만으로는 독립성의 증거가 못 된다(단사 사상이면 무엇이든 통과한다). 그래서 ⓐ seed 마다 노드 위상의 순위
- * 순열이 달라지고 ⓑ 모든 노드쌍의 위상차가 seed 에 따라 변하며 ⓒ 여러 seed 의 위상이 대략 고르게 흩어지는지를 본다.</p>
+ * <p>"상수 가산이 아님"만으로는 독립성의 증거가 못 된다(단사 사상이면 무엇이든 통과한다). 그래서 ⓐ seed마다 노드 위상의 순위
+ * 순열이 달라지고 ⓑ 모든 노드쌍의 위상차가 seed에 따라 변하며 ⓒ 여러 seed의 위상이 대략 고르게 흩어지는지를 본다.</p>
  */
 class SyntheticClusterPhaseModeTest {
 
@@ -55,7 +55,7 @@ class SyntheticClusterPhaseModeTest {
         Map<String, Integer> actual = main.nodes().stream()
                 .collect(Collectors.toMap(SyntheticCluster.Node::nodeId, n -> milli(main.phaseOf(n.nodeId()))));
         assertEquals(LEGACY_MAIN_PHASE_MILLI, actual, "legacy 위상이 바뀌었다 — 6판 기준선 무효");
-        // legacy 결함의 재현: seed 를 바꾸면 전 노드가 같은 상수만큼 회전한다(nodeId 길이 전부 10 → 31^10 mod 1000 = 801)
+        // legacy 결함의 재현: seed를 바꾸면 전 노드가 같은 상수만큼 회전한다(nodeId 길이 전부 10 → 31^10 mod 1000 = 801)
         SyntheticCluster shifted = main.withSeed(11);
         Set<Integer> deltas = main.nodes().stream()
                 .map(n -> Math.floorMod(milli(shifted.phaseOf(n.nodeId())) - milli(main.phaseOf(n.nodeId())), 1000))

@@ -30,15 +30,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>각 테스트는 재작성 전 코드에서 <b>실패했을</b> 상황을 재현한다. 값은 손으로 검산할 수 있게
  * 잡았다 — 용량 500W, 유휴 비율 0.3(P_idle 150W), 동적 범위 350W, 8코어, 2코어 워크로드이면
- * 동적 증가분이 87.5W 다.</p>
+ * 동적 증가분이 87.5W다.</p>
  */
 class PowerAwareScoringTest {
 
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
     /**
-     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 칸이 배치용 실효 PEI 와 같고, 비낭비 칸은 항등,
-     * 전력점수의 이동은 {@code peiWeight × ΔPEI} 다(한계 전력 동적항은 α=1 에서 불변). 엔진 배선을 진단용 두 함수로 되돌리면
+     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 칸이 배치용 실효 PEI와 같고, 비낭비 칸은 항등,
+     * 전력점수의 이동은 {@code peiWeight × ΔPEI}다(한계 전력 동적항은 α=1에서 불변). 엔진 배선을 진단용 두 함수로 되돌리면
      * PEI 칸이 예약 전과 같아져 여기서 멈춘다.
      */
     @DisplayName("예약이 쌓인 노드의 후보 상세 PEI 는 배치용 실효 PEI 이고 전력점수 상승분은 peiWeight × ΔPEI 다")
@@ -66,7 +66,7 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * 비낭비 배선을 잡는 유일한 자리 — 적격 노드에서는 두 함수가 항등이라, 실효 사용률이 100 에서 잘리는 부적격 후보에서만 갈린다.
+     * 비낭비 배선을 잡는 유일한 자리 — 적격 노드에서는 두 함수가 항등이라, 실효 사용률이 100에서 잘리는 부적격 후보에서만 갈린다.
      * u=90 · P=440 · 예약 2/8: P_eff 527.5, 실효 이상 곡선 500 → overdraw 27.5 → 0.945. 진단용은 P_ideal 465 → 1.0.
      */
     @DisplayName("실효 사용률이 잘린 부적격 후보의 상세 비낭비 칸은 배치용 실효값 0.945 다")
@@ -103,7 +103,7 @@ class PowerAwareScoringTest {
         return cooling * (1.0 - model.warningPenalty(temperature, warn, policy.getMaxTemperatureCelsius()));
     }
 
-    /** 예약 0 이면 실효 온도 = 실측 온도라 열점수가 실측 식과 비트 단위로 같다 — 첫 배치는 불변. */
+    /** 예약 0이면 실효 온도 = 실측 온도라 열점수가 실측 식과 비트 단위로 같다 — 첫 배치는 불변. */
     @DisplayName("예약이 없으면 열점수는 실측 온도 식과 비트 단위로 같다")
     @Test
     void thermal_score_without_reservation_equals_measured_formula() {
@@ -119,7 +119,7 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * 예약이 쌓이면 열점수가 실효 온도 T(1 + k·r) 의 식으로 내려간다 — 냉각·경고 감점 둘 다 실효 온도를 읽는다.
+     * 예약이 쌓이면 열점수가 실효 온도 T(1 + k·r)의 식으로 내려간다 — 냉각·경고 감점 둘 다 실효 온도를 읽는다.
      * 정정 전(실측 고정)이면 예약 뒤에도 값이 같아 여기서 실패한다.
      */
     @DisplayName("예약이 쌓인 노드의 열점수는 실효 온도 식으로 내려간다")
@@ -157,7 +157,7 @@ class PowerAwareScoringTest {
         assertTrue(detail(result, "n", "열점수") < round4(Math.min(1.0, model.coolingScore(66.4, policy().getMaxTemperatureCelsius()))), "냉각만 실효이면 감점이 빠진다");
     }
 
-    /** 온도를 수집하지 못한 노드는 예약이 있어도 열점수 중립 — 실효 온도도 0 을 유지하고 게이트는 실측을 본다. */
+    /** 온도를 수집하지 못한 노드는 예약이 있어도 열점수 중립 — 실효 온도도 0을 유지하고 게이트는 실측을 본다. */
     @DisplayName("온도 미계측 노드는 예약이 있어도 열점수가 중립값이다")
     @Test
     void unmeasured_temperature_stays_neutral_when_reserved() {
@@ -169,7 +169,7 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35 가 열 항 몫이고, 전력 3항 칸과 배치 후 예상
+     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35가 열 항 몫이고, 전력 3항 칸과 배치 후 예상
      * 온도 칸은 예약 전과 같은 식(이미 실효 기저)이다.
      */
     @DisplayName("예약 뒤 총점 이동은 열 항·전력 항·자원 항 몫으로 분해된다")
@@ -183,7 +183,7 @@ class PowerAwareScoringTest {
         node.reserve(1, 0, 0);
         SchedulingResult after = scheduler.schedule(workload(1), List.of(node), policy());
 
-        // 열 항 이동은 상세 칸이 아니라 실효 온도 식으로 독립 산출한다 — 상세 칸에서 읽으면 실측 복귀 변이에서도 양변이 함께 0 이 된다
+        // 열 항 이동은 상세 칸이 아니라 실효 온도 식으로 독립 산출한다 — 상세 칸에서 읽으면 실측 복귀 변이에서도 양변이 함께 0이 된다
         double dThermal = thermalScoreOf(thermalModel, 53.484375, policy()) - thermalScoreOf(thermalModel, 52.5, policy());
         double dPei = powerModel.placementPei(node) - powerModel.normalizedPei(node);           // 전력 항 이동은 PEI 항 하나(비낭비 항등·α=1 한계항 불변)
         double dPower = props.getPower().getPeiWeight() * dPei;
@@ -193,13 +193,13 @@ class PowerAwareScoringTest {
         double expected = thermalShare * dThermal + powerShare * dPower + resourceShift;
         double actual = after.candidateScores().get(0).totalScore() - before.candidateScores().get(0).totalScore();
         assertTrue(dThermal < 0, "열 항 감점");
-        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 칸을 거치지 않으므로 그 외 반올림 없음 → 2e-4 는 두 배 여유
+        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 칸을 거치지 않으므로 그 외 반올림 없음 → 2e-4는 두 배 여유
         assertEquals(expected, actual, 2e-4, "총점 이동 = 열 항 몫 + 전력 항 몫 + 자원 항 몫");
         assertEquals(round4(powerModel.placementPei(node)), detail(after, "n", "PEI"), 0.0, "전력 PEI 칸은 자기 실효 식 그대로");
         assertEquals(round4(thermalModel.predictedTemperature(node, 1)), detail(after, "n", "배치후예상온도C"), 0.0, "예상 온도 칸은 이미 실효 기저");
     }
 
-    /** 실효 온도가 임계(75℃)를 넘으면 냉각 항이 0 으로 잘려 열점수 0 — 음수가 아니다. 온도 인지를 끈 정책에서는 제약이 막지 않아 이 구역에 닿을 수 있다. */
+    /** 실효 온도가 임계(75℃)를 넘으면 냉각 항이 0으로 잘려 열점수 0 — 음수가 아니다. 온도 인지를 끈 정책에서는 제약이 막지 않아 이 구역에 닿을 수 있다. */
     @DisplayName("실효 온도가 임계를 넘는 후보의 열점수는 0 으로 포화하고 음수가 되지 않는다")
     @Test
     void thermal_score_saturates_at_zero_above_max_temperature() {
@@ -218,7 +218,7 @@ class PowerAwareScoringTest {
 
     /**
      * 이상 곡선(360W)보다 적게 쓰는 200W 노드가, 넘겨 쓰는 440W 노드보다 높아야 한다.
-     * 옛 수식은 대칭 편차를 써서 200W 를 0.68, 440W 를 0.84 로 매겼다.
+     * 옛 수식은 대칭 편차를 써서 200W를 0.68, 440W를 0.84로 매겼다.
      */
     @DisplayName("전력을 적게 쓰는 노드를 벌하지 않는다")
     @Test
@@ -237,7 +237,7 @@ class PowerAwareScoringTest {
 
     /**
      * M3 — 빈 노드에 처음 얹으면 그 노드의 유휴 전력이 새로 든다.
-     * 옛 수식은 둘 다 87.5W 로 봐서 통합할 이유를 설명하지 못했다.
+     * 옛 수식은 둘 다 87.5W로 봐서 통합할 이유를 설명하지 못했다.
      */
     @DisplayName("빈 노드에는 유휴 기동분이 더해진다")
     @Test
@@ -249,8 +249,8 @@ class PowerAwareScoringTest {
         SchedulingResult result = scheduler.schedule(workload(2), nodes, policy());
 
         assertEquals(87.5, detail(result, "running", "실질한계전력W"), 1e-4);
-        // parked 는 계측(250W)·유휴(2%)라 깨우기 비용을 실측에서 역산한다: (250 − 500×0.02)/(1−0.02) = 244.9W.
-        // 대체값 150W(정격×0.3)가 아니다 — 이 픽스처는 놀면서 250W 를 쓰는 노드라 깨우는 값도 그만큼이다.
+        // parked는 계측(250W)·유휴(2%)라 깨우기 비용을 실측에서 역산한다: (250 − 500×0.02)/(1−0.02) = 244.9W.
+        // 대체값 150W(정격×0.3)가 아니다 — 이 픽스처는 놀면서 250W를 쓰는 노드라 깨우는 값도 그만큼이다.
         double recon = (250 - 500 * 0.02) / 0.98;
         assertEquals((500 - recon) * 0.25 + recon, detail(result, "parked", "실질한계전력W"), 1e-4,
                 "실측에서 역산한 유휴 244.9W 가 깨우기항이고 동적 범위의 기준선이기도 하다");
@@ -293,8 +293,8 @@ class PowerAwareScoringTest {
     // ── 결함 E — 미수집 노드를 우대하지 않는다 ────────────────────
 
     /**
-     * 전력·온도가 0 이면 판단 근거가 없다. 0 점을 주면 최악으로, 감점을 안 하면 최상으로
-     * 평가된다. 둘 다 틀렸으므로 중립 0.5 를 준다.
+     * 전력·온도가 0이면 판단 근거가 없다. 0 점을 주면 최악으로, 감점을 안 하면 최상으로
+     * 평가된다. 둘 다 틀렸으므로 중립 0.5를 준다.
      */
     @DisplayName("전력을 수집하지 못하면 중립값을 쓴다")
     @Test
@@ -335,12 +335,12 @@ class PowerAwareScoringTest {
         assertTrue(result.reason().contains("반납가능"), result.reason());
     }
 
-    // ── 결함 G — 점수가 CPU 에 대해 단조롭다 ──────────────────────
+    // ── 결함 G — 점수가 CPU에 대해 단조롭다 ──────────────────────
 
     /**
      * 옛 수식은 PEI(증가)와 CPU 여유(감소)가 맞붙어 30% 부근에서 꺾였다. 꺾이면 "왜 이 노드가
      * 뽑혔는지" 설명할 수 없다. 방향이 증가인 것은 통합 목적상 의도된 것이다 — 같은 전력에서
-     * CPU 가 높으면 단위 전력당 처리량이 좋다. 몰림은 사용률 임계가 막는다.
+     * CPU가 높으면 단위 전력당 처리량이 좋다. 몰림은 사용률 임계가 막는다.
      */
     @DisplayName("점수는 CPU 사용률에 대해 단조롭다")
     @Test
@@ -385,7 +385,7 @@ class PowerAwareScoringTest {
 
     /**
      * `networkScore` 칸에는 실측 네트워크 점수를 담는다.
-     * 0 을 넣으면 "해당 없음" 이 아니라 "네트워크 포화" 로 읽히고, weighted 엔진이 같은 칸에
+     * 0을 넣으면 "해당 없음"이 아니라 "네트워크 포화"로 읽히고, weighted 엔진이 같은 칸에
      * 담는 값과도 의미가 어긋난다.
      */
     @DisplayName("networkScore에 실측 네트워크 점수가 담긴다")
@@ -419,7 +419,7 @@ class PowerAwareScoringTest {
 
     /**
      * 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않는다.
-     * 0 이나 0.5 를 넣으면 "측정했더니 그 값" 으로 읽혀 판단 근거가 없다는 사실이 가려진다.
+     * 0이나 0.5를 넣으면 "측정했더니 그 값"으로 읽혀 판단 근거가 없다는 사실이 가려진다.
      */
     @DisplayName("계측되지 않으면 파생 항목을 null로 둔다")
     @Test
@@ -487,10 +487,10 @@ class PowerAwareScoringTest {
         }
     }
 
-    // ── 배치 점수용 PEI 의 코어 비율 ────────────────────────────
+    // ── 배치 점수용 PEI의 코어 비율 ────────────────────────────
 
     /**
-     * 12·36코어(평균 24) · 사용률 40% · 200W 이면 정정 전 PEI 0.4 에 비율 0.5 · 1.5 를 곱해 상세 PEI 가 0.2 · 0.6 이다.
+     * 12·36코어(평균 24) · 사용률 40% · 200W이면 정정 전 PEI 0.4에 비율 0.5 · 1.5를 곱해 상세 PEI가 0.2 · 0.6이다.
      * 비율은 PEI 항에만 곱하므로 비낭비·한계 전력 칸은 그 노드만 후보로 둔 실행과 같다.
      */
     @DisplayName("코어 수가 섞인 후보의 상세 PEI 는 코어 비율을 곱한 값이고 비낭비·실질한계전력점수 값은 그대로다")
@@ -513,7 +513,7 @@ class PowerAwareScoringTest {
 
     /**
      * 평균을 내는 후보는 그 호출의 후보 전체다 — 메모리가 모자라 제외된 36코어, 전력을 계측하지 못한 4코어, 정격을 모르는 20코어도
-     * 센다. 평균은 (12 + 36 + 4 + 20) / 4 = 18 이고, 적격 후보만 세면 12, 전력 계측 후보만 세면 24 라 상세 PEI 가 달라진다.
+     * 센다. 평균은 (12 + 36 + 4 + 20) / 4 = 18이고, 적격 후보만 세면 12, 전력 계측 후보만 세면 24라 상세 PEI가 달라진다.
      */
     @DisplayName("코어 평균은 제외된 노드와 전력 미계측 노드를 포함한 후보 전체로 낸다")
     @Test
@@ -536,7 +536,7 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * 코어 수가 모두 같으면 정정 전과 같다 — 제외된 노드와 예약이 있는 노드를 섞은 12코어 3대에서 각 노드의 상세 PEI 는 한 인자 판과 같고,
+     * 코어 수가 모두 같으면 정정 전과 같다 — 제외된 노드와 예약이 있는 노드를 섞은 12코어 3대에서 각 노드의 상세 PEI는 한 인자 판과 같고,
      * 총점은 그 노드만 후보로 둔 실행과 같으며, 선택은 그 총점이 가장 높은 적격 노드다.
      */
     @DisplayName("코어 수가 모두 같은 후보에서 상세 PEI·총점·선택은 정정 전과 같다")

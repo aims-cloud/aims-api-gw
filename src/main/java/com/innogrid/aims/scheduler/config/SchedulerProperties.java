@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 /**
  * 스케줄러 설정.
  *
- * 모든 값에 코드 기본값을 두어 application.yml 을 수정하지 않아도 동작한다.
+ * 모든 값에 코드 기본값을 두어 application.yml을 수정하지 않아도 동작한다.
  * 환경별로 바꾸려면 환경변수(AIMS_SCHEDULER_*)로만 덮어쓴다.
  */
 @Component
@@ -24,7 +24,7 @@ public class SchedulerProperties {
     /**
      * 모의 메트릭 모드 — 실제 저장소 대신 가상 클러스터({@link #syntheticClusterPath})를 본다.
      * 1세부 데이터가 없는 동안 시연·검증용. 팀 관행({@code aims.gpu-dashboard.mock-enabled})과 같은 플래그 방식이며
-     * 환경변수 {@code AIMS_SCHEDULER_MOCK_ENABLED} 로 켠다. 기본 false — 배포는 항상 꺼진 채로.
+     * 환경변수 {@code AIMS_SCHEDULER_MOCK_ENABLED}로 켠다. 기본 false — 배포는 항상 꺼진 채로.
      */
     private boolean mockEnabled = false;
 
@@ -58,22 +58,22 @@ public class SchedulerProperties {
     private int metricLagMinutes = 10;
 
     /**
-     * <b>스케줄 cron 을 해석할 시간대.</b>
+     * <b>스케줄 cron을 해석할 시간대.</b>
      *
-     * <p>배포 VM 은 OS·DB 모두 {@code Etc/UTC} 이고 TZ 환경변수도 없어 JVM 기본 시간대가 UTC 다.
-     * 그대로 두면 화면에서 "매일 02:00" 으로 만든 스케줄이 한국 시간 오전 11시에 실행된다.
+     * <p>배포 VM은 OS·DB 모두 {@code Etc/UTC}이고 TZ 환경변수도 없어 JVM 기본 시간대가 UTC다.
+     * 그대로 두면 화면에서 "매일 02:00"으로 만든 스케줄이 한국 시간 오전 11시에 실행된다.
      * cron 문자열에는 시간대 정보가 없으므로 <b>입력을 한국 시간(UTC+9)으로 가정</b>해 해석한다.</p>
      *
-     * <p>이 값은 <b>cron 해석에만</b> 쓴다. 저장·응답 시각은 전부 UTC {@code OffsetDateTime} 이고
+     * <p>이 값은 <b>cron 해석에만</b> 쓴다. 저장·응답 시각은 전부 UTC {@code OffsetDateTime}이고
      * 표출 변환은 프런트가 한다. JVM 전역 시간대는 바꾸지 않는다 — 그러면 미터링 집계·알람 평가 등
      * 다른 담당자의 기능까지 함께 움직인다.</p>
      *
-     * <p>Asia/Seoul 은 서머타임이 없어 존재하지 않는 시각·중복 시각 문제가 발생하지 않는다.
+     * <p>Asia/Seoul은 서머타임이 없어 존재하지 않는 시각·중복 시각 문제가 발생하지 않는다.
      * 이 값을 바꾸면 기존 스케줄의 실행 시각이 전부 이동하므로 운영 공지가 필요하다.</p>
      */
     private String timezone = "Asia/Seoul";
 
-    /** 자동 실행 대상을 확인하는 주기(ms). 이 값보다 짧은 주기의 cron 은 등록 시 거부한다. */
+    /** 자동 실행 대상을 확인하는 주기(ms). 이 값보다 짧은 주기의 cron은 등록 시 거부한다. */
     private long pollIntervalMs = 10_000;
 
     /**
@@ -153,12 +153,12 @@ public class SchedulerProperties {
 
         /**
          * 노드 전력 용량 기본값(W).
-         * IPMI 에서 정격 전력을 얻을 수 없으므로 설정으로 둔다.
-         * 기존 코드가 쓰던 500W 를 그대로 기본값으로 사용해 동작을 보존한다.
+         * IPMI에서 정격 전력을 얻을 수 없으므로 설정으로 둔다.
+         * 기존 코드가 쓰던 500W를 그대로 기본값으로 사용해 동작을 보존한다.
          */
         private double defaultCapacityWatts = 500.0;
 
-        /** 노드별 전력 용량 override. key 는 노드 식별자(instance). */
+        /** 노드별 전력 용량 override. key는 노드 식별자(instance). */
         private Map<String, Double> capacityByNode = new HashMap<>();
 
         /** 유휴 전력 비율. P_idle = P_max × idleRatio — 진단 지표·동적 범위의 기준선이고, 계측이 없을 때 깨우기 비용의 대체값 */
@@ -167,14 +167,14 @@ public class SchedulerProperties {
         /**
          * 계측된 유휴 노드의 깨우기 비용을 실측 전력에서 역산하는가.
          *
-         * <p>끄면 전 노드가 {@code P_max × idleRatio} 로 돌아간다 — 되돌리기는 이 값 하나다(팀 관례대로
+         * <p>끄면 전 노드가 {@code P_max × idleRatio}로 돌아간다 — 되돌리기는 이 값 하나다(팀 관례대로
          * 환경변수 바인딩 한 줄). 유휴 판정은 {@code isActive}(실효 CPU)와 같은 기준이고, 역산 입력은 같은 순간의
-         * 실측 CPU 다. 이 값은 비교 API 의 설정 스냅샷과 다이제스트에 들어간다 — 모델 형태가 바뀌었는데
+         * 실측 CPU다. 이 값은 비교 API의 설정 스냅샷과 다이제스트에 들어간다 — 모델 형태가 바뀌었는데
          * 다이제스트가 같으면 어제 표와 오늘 표가 같은 설정으로 보인다.</p>
          */
         private boolean idleFromMeasurement = true;
 
-        /** PEI 정규화 기준(%/W). 이 값을 1.0 으로 본다. */
+        /** PEI 정규화 기준(%/W). 이 값을 1.0으로 본다. */
         private double peiNormalizer = 0.5;
 
         // ── 전력 기반 배치 점수 (PowerAwareScheduler 전용) ────────
@@ -183,16 +183,16 @@ public class SchedulerProperties {
          * 총점에서 자원 여유(CPU·메모리)가 차지하는 몫. 나머지가 전력·열이다.
          *
          * <p>정책의 가중치를 그대로 쓰지 않는 이유가 여기 있다. 정책 기본값은
-         * {@code cpu .25 + memory .25 = 0.50} 대 {@code power .20} 이라, 그대로 쓰면 전력 항이
+         * {@code cpu .25 + memory .25 = 0.50} 대 {@code power .20}이라, 그대로 쓰면 전력 항이
          * 소수파가 되어 전력 엔진이 전력 엔진이 아니게 된다. 그래서 전력·열 대 자원의 배분은
          * 엔진 고유값으로 두고, 정책 가중치는 <b>전력↔열·CPU↔메모리의 비율로만</b> 쓴다.</p>
          *
-         * <p><b>0.10 을 쓰는 이유는 실측으로 정했다.</b> 빈 노드는 "비어 있다"는 사실 하나로
+         * <p><b>0.10을 쓰는 이유는 실측으로 정했다.</b> 빈 노드는 "비어 있다"는 사실 하나로
          * 자원 여유와 온도 <b>양쪽에서</b> 보상을 받는다 — 부하가 없으니 여유도 많고 온도도 낮다.
          * 전력 항 하나가 그 둘을 상대하는 구조라, 기준 시나리오에서는 자원 몫 0.10045 부근에서
-         * 빈 노드를 깨우는 판단으로 뒤집힌다. 기본값 0.10 은 그 경계에 가깝다.</p>
+         * 빈 노드를 깨우는 판단으로 뒤집힌다. 기본값 0.10은 그 경계에 가깝다.</p>
          *
-         * <p>0.30 까지 올리면 기존 판단(가동 중 서버 선호)도 뒤집힌다. 반대로 0 으로 두면 자원
+         * <p>0.30까지 올리면 기존 판단(가동 중 서버 선호)도 뒤집힌다. 반대로 0으로 두면 자원
          * 여유를 전혀 보지 않아 한 노드에 몰리는데, 그건 사용률 임계 제약이 막는다.</p>
          */
         private double resourceShare = 0.10;
@@ -209,11 +209,11 @@ public class SchedulerProperties {
         /**
          * 전력 곡선의 볼록 지수. P(u) = P_idle + (P_max − P_idle) × u^α
          *
-         * <p><b>기본값 1.0 은 기존 선형 모델과 완전히 같다.</b> 부하가 높을수록 단위 부하당 전력이
+         * <p><b>기본값 1.0은 기존 선형 모델과 완전히 같다.</b> 부하가 높을수록 단위 부하당 전력이
          * 더 드는 볼록 곡선을 <b>가정할 수 있지만</b>(문헌에는 반대 방향의 보고도 있다), 그 값을 기본으로
          * 켜면 배치 결과가 바뀐다. 기능만 넣어 두고 실험은 설정으로 한다.</p>
          *
-         * <p>α&gt;1 이면 같은 워크로드라도 이미 바쁜 노드에 얹을 때 ΔP 가 커진다. 이것이
+         * <p>α&gt;1이면 같은 워크로드라도 이미 바쁜 노드에 얹을 때 ΔP가 커진다. 이것이
          * 통합(유휴 서버 반납)과 맞서는 지점이다.</p>
          */
         private double curveAlpha = 1.0;
@@ -227,22 +227,22 @@ public class SchedulerProperties {
          * 보너스가 아니라 <b>W 단위로 계산되는 항</b>으로 만든다 — 동적항은 모델식이고, 깨우기항은 계측 노드면
          * 실측 역산·미계측이면 대체값이다. 총량이 실측 서버와 같다는 뜻은 아니다.</p>
          *
-         * <p>5% 는 OS·에이전트만 도는 상태와 실제 워크로드가 도는 상태를 가르는 값이다.</p>
+         * <p>5%는 OS·에이전트만 도는 상태와 실제 워크로드가 도는 상태를 가르는 값이다.</p>
          */
         private double activeCpuPercent = 5.0;
 
         /**
          * 실질 한계 전력 점수의 분모가 되는 <b>W 눈금</b>.
          *
-         * <p>깨우기 벌점을 노드 정격으로 나누면 유휴비로 상대화되어, 절대 W 가 다른 노드가 같은
-         * 벌점을 받는다. 고정 W 로 나누면 벌점이 절대 W 로 총점에 들어간다.</p>
+         * <p>깨우기 벌점을 노드 정격으로 나누면 유휴비로 상대화되어, 절대 W가 다른 노드가 같은
+         * 벌점을 받는다. 고정 W로 나누면 벌점이 절대 W로 총점에 들어간다.</p>
          *
-         * <p>기본 500 W 는 (i) 정격 500 W 노드의 점수를 그대로 두고 (ii) 비교 판 실측 최댓값
-         * 316 W 를 넘어 점수가 0 으로 포화하지 않게 하는 값이다. <b>0 이하면 정격 분모(구 방식)</b>
+         * <p>기본 500 W는 (i) 정격 500 W 노드의 점수를 그대로 두고 (ii) 비교 판 실측 최댓값
+         * 316 W를 넘어 점수가 0으로 포화하지 않게 하는 값이다. <b>0 이하면 정격 분모(구 방식)</b>
          * 로 돌아간다 — 되돌리기는 이 값 하나다.</p>
          *
          * <p>가중치와 마찬가지로 <b>바뀔 수 있는 값</b>이다. 바꾸면 배치 결정과 이력에 저장되는
-         * 점수의 눈금이 새 행부터 달라지므로, 비교 응답의 configDigest 에 성분으로 실어 둔다.</p>
+         * 점수의 눈금이 새 행부터 달라지므로, 비교 응답의 configDigest에 성분으로 실어 둔다.</p>
          */
         private double marginalScaleWatts = 500.0;
 
@@ -252,7 +252,7 @@ public class SchedulerProperties {
          * 통합 가능성을 따져볼 후보 노드 수 상한.
          *
          * <p>판정은 노드마다 워크로드를 실제로 재배치해 보는 방식이라, 총 채점 횟수가
-         * <b>후보 노드 수 × 워크로드 수 × 클러스터 노드 수</b>로 늘어난다. 상한 10 · 50 에
+         * <b>후보 노드 수 × 워크로드 수 × 클러스터 노드 수</b>로 늘어난다. 상한 10 · 50에
          * 50노드 클러스터라도 25,000회 남짓이고 DB·네트워크를 타지 않아 100ms 안쪽이다.
          * 성능 방어선이라기보다 <b>폭주 방지용</b>이다.</p>
          *
@@ -270,7 +270,7 @@ public class SchedulerProperties {
          */
         private int maxRelocationsPerNode = 50;
 
-        /** 전력 효율 추세의 기본 조회 구간(시간). from·to 를 주지 않으면 최근 이만큼을 본다. */
+        /** 전력 효율 추세의 기본 조회 구간(시간). from·to를 주지 않으면 최근 이만큼을 본다. */
         private int trendDefaultHours = 24;
 
         /** 전력 효율 추세의 기본 간격. */
@@ -334,8 +334,8 @@ public class SchedulerProperties {
 
         /**
          * 열관성 계수. ΔT = k × (요구 CPU / 전체 CPU) × 현재 온도. 음수는 배치할수록 식는 예측이 되어 온도 게이트를
-         * 느슨하게 하므로 setter 가 0 으로 잘라 쓴다 — 바인딩은 setter 를 지나므로 설정값도 같은 규칙을 받는다.
-         * NaN·양의 무한대는 다루지 않는다(음의 무한대는 음수라 0 으로 잘린다 · 설정 검증 일반 과제).
+         * 느슨하게 하므로 setter가 0으로 잘라 쓴다 — 바인딩은 setter를 지나므로 설정값도 같은 규칙을 받는다.
+         * NaN·양의 무한대는 다루지 않는다(음의 무한대는 음수라 0으로 잘린다 · 설정 검증 일반 과제).
          */
         private double inertiaK = 0.15;
 
@@ -356,7 +356,7 @@ public class SchedulerProperties {
     /** 네트워크 모델 설정. */
     public static class Network {
 
-        /** 링크 지연 정규화 기준(ms). 이 값을 비용 1.0 으로 본다. */
+        /** 링크 지연 정규화 기준(ms). 이 값을 비용 1.0으로 본다. */
         private double latencyScaleMs = 50.0;
 
         /** DEGRADED 링크에 더할 비용. */
@@ -369,12 +369,12 @@ public class SchedulerProperties {
         private double linkWeight = 0.5;
 
         /**
-         * 데이터 MDC 와 노드 MDC 가 다른데 원장에 링크가 없을 때의 링크 점수(0~1).
+         * 데이터 MDC와 노드 MDC가 다른데 원장에 링크가 없을 때의 링크 점수(0~1).
          *
-         * <p>같은 MDC 는 항상 1.0 이다. 미등록 원격 쌍을 같은 1.0 으로 두면 원장을 채운 MDC 가 채우지 않은
-         * MDC 보다 불리해진다 — 측정된 20ms 링크(0.714)가 측정되지 않은 경로에 진다. 기본 0.5 는 지연 기준값
+         * <p>같은 MDC는 항상 1.0이다. 미등록 원격 쌍을 같은 1.0으로 두면 원장을 채운 MDC가 채우지 않은
+         * MDC보다 불리해진다 — 측정된 20ms 링크(0.714)가 측정되지 않은 경로에 진다. 기본 0.5는 지연 기준값
          * (50ms) UP 링크와 같은 점수라 "양호한 등록 링크보다는 낮고, 등록 여부만으로 후보를 버리지는 않는다".
-         * 예전 동작으로 되돌리려면 1.0. 범위 밖은 계산 시 0~1 로 자르고, 유한하지 않으면(NaN·무한) 기본값으로 본다.</p>
+         * 예전 동작으로 되돌리려면 1.0. 범위 밖은 계산 시 0~1로 자르고, 유한하지 않으면(NaN·무한) 기본값으로 본다.</p>
          */
         private double unknownLinkScore = 0.5;
 
@@ -421,8 +421,8 @@ public class SchedulerProperties {
     /**
      * 실행 계층 연동(디스패치) — 배치 결정을 실행 계층으로 넘기는 방식.
      *
-     * <p>{@code mode} 는 등록된 디스패처 식별자다. 기본 {@code record} 는 외부를 부르지 않고 기록만 한다(실행 API 미정).
-     * {@code timeoutMinutes} 는 원격 모드에서 응답 없는 요청을 TIMED_OUT 으로 볼 시간이며 record 모드에서는 쓰지 않는다 —
+     * <p>{@code mode}는 등록된 디스패처 식별자다. 기본 {@code record}는 외부를 부르지 않고 기록만 한다(실행 API 미정).
+     * {@code timeoutMinutes}는 원격 모드에서 응답 없는 요청을 TIMED_OUT으로 볼 시간이며 record 모드에서는 쓰지 않는다 —
      * 지금은 <b>읽는 코드가 없다</b>(원격 디스패처가 생기면 그때 만료 스윕이 읽는다).</p>
      */
     public static class Dispatch {
@@ -443,11 +443,11 @@ public class SchedulerProperties {
      */
     public static class Inventory {
 
-        /** 조회 전체(하이퍼바이저 · 가용영역 · VM · flavor) 상한(ms). 넘으면 TIMEOUT 으로 돌려준다. */
+        /** 조회 전체(하이퍼바이저 · 가용영역 · VM · flavor) 상한(ms). 넘으면 TIMEOUT으로 돌려준다. */
         private long timeoutMs = 5_000;
 
         /**
-         * Nova 인벤토리 모의 배치를 켠다(기본 꺼짐). 꺼져 있으면 모의 배치 경로는 Nova 를 부르지 않고 DISABLED 를 돌려준다.
+         * Nova 인벤토리 모의 배치를 켠다(기본 꺼짐). 꺼져 있으면 모의 배치 경로는 Nova를 부르지 않고 DISABLED를 돌려준다.
          * 실행 경로의 노드 입력은 이 값과 관계없이 그대로다 — 메트릭 수집 · 합성 모드는 바뀌지 않는다.
          */
         private boolean simulationEnabled = false;

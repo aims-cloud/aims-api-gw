@@ -30,8 +30,8 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Nova 인벤토리 조회 · 모의 배치 API — 응답 모양과 Swagger 문서.
  *
- * <p>테스트 설정(src/test/resources/application.yml)에는 openstack 블록이 없어 접속 정보가 비어 있으므로 조회는 NOT_CONFIGURED 로 끝난다.
- * 상태별 분류와 변환은 {@code NovaInventoryGatewayTest} 가 실제 HTTP 응답으로 확인한다. 테스트 컨텍스트는 다른 API 테스트와 공유하도록
+ * <p>테스트 설정(src/test/resources/application.yml)에는 openstack 블록이 없어 접속 정보가 비어 있으므로 조회는 NOT_CONFIGURED로 끝난다.
+ * 상태별 분류와 변환은 {@code NovaInventoryGatewayTest}가 실제 HTTP 응답으로 확인한다. 테스트 컨텍스트는 다른 API 테스트와 공유하도록
  * 세 애너테이션만 붙이고 빈 교체 · 프로파일 · 속성 지정을 두지 않는다. 모의 배치 플래그를 켠 경로는 주입된 설정 값을 그 테스트 안에서만
  * 켰다가 되돌린다(서비스가 호출마다 읽는다).</p>
  */

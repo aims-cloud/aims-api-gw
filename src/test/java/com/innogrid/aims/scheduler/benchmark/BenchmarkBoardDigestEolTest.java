@@ -15,14 +15,14 @@ import org.springframework.core.io.ClassPathResource;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 판 다이제스트와 개행 문자 — 빌드 OS 에 따라 값이 갈리지 않는지.
+ * 판 다이제스트와 개행 문자 — 빌드 OS에 따라 값이 갈리지 않는지.
  *
- * <p>판 다이제스트는 파일 내용의 SHA-256 앞 12자다. 저장소는 LF 로 보관하지만 {@code core.autocrlf=true} 인 Windows
- * 체크아웃은 작업 트리와 jar 안의 yml 을 CRLF 로 만들어, 예전에는 <b>같은 판이 빌드 OS 에 따라 다른 다이제스트</b>를
- * 냈다. 지금은 개행을 LF 로 정규화한 뒤 해시하므로 값은 저장소 바이트의 해시와 같고, 아래 리터럴은
- * {@code git show HEAD:파일 | sha256sum} 으로 누구나 재계산할 수 있다.</p>
+ * <p>판 다이제스트는 파일 내용의 SHA-256 앞 12자다. 저장소는 LF로 보관하지만 {@code core.autocrlf=true}인 Windows
+ * 체크아웃은 작업 트리와 jar 안의 yml을 CRLF로 만들어, 예전에는 <b>같은 판이 빌드 OS에 따라 다른 다이제스트</b>를
+ * 냈다. 지금은 개행을 LF로 정규화한 뒤 해시하므로 값은 저장소 바이트의 해시와 같고, 아래 리터럴은
+ * {@code git show HEAD:파일 | sha256sum}으로 누구나 재계산할 수 있다.</p>
  *
- * <p><b>2026-09-11 이전 Windows 빌드 jar 가 낸 표는 아래 옛 값을 가리킨다.</b> 계약 문서 §10 에도 같은 표가 있다.</p>
+ * <p><b>2026-09-11 이전 Windows 빌드 jar가 낸 표는 아래 옛 값을 가리킨다.</b> 계약 문서 §10에도 같은 표가 있다.</p>
  * <pre>
  * 판                옛(CRLF 빌드)     새(= 저장소 LF)
  * main              add880e1f395      fb011848258b
@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * </pre>
  *
  * <p><b>리터럴은 판 파일 바이트에 묶여 있다 — 의도다.</b> 판 파일을 한 글자라도 고치면(주석 문구 포함) 해당 조건이
- * 깨진다. 그때는 (1) 새 값으로 리터럴을 갱신하고 (2) 계약 문서 §10 에 옛→새 행을 추가하고 (3) 커밋 메시지에 판 이름을
+ * 깨진다. 그때는 (1) 새 값으로 리터럴을 갱신하고 (2) 계약 문서 §10에 옛→새 행을 추가하고 (3) 커밋 메시지에 판 이름을
  * 적는다. 판을 바꾸면 눈에 보이게 하려는 장치이므로 리터럴만 조용히 고치지 않는다.</p>
  */
 class BenchmarkBoardDigestEolTest {
@@ -56,7 +56,7 @@ class BenchmarkBoardDigestEolTest {
     @DisplayName("CRLF 와 LF 로 적은 같은 내용은 파일·OS 와 무관하게 같은 다이제스트다")
     @Test
     void crlf_and_lf_content_digest_alike_regardless_of_checkout() {
-        // LF 체크아웃(Linux·CI)에서는 판 파일이 이미 LF 라 리터럴 테스트가 정규화 회귀를 못 잡는다 — 이 확인이 OS 무관 가드다
+        // LF 체크아웃(Linux·CI)에서는 판 파일이 이미 LF라 리터럴 테스트가 정규화 회귀를 못 잡는다 — 이 확인이 OS 무관 가드다
         byte[] lf = "name: x\nnodes:\n  - { mdcId: a }\n".getBytes(StandardCharsets.UTF_8);
         byte[] crlf = "name: x\r\nnodes:\r\n  - { mdcId: a }\r\n".getBytes(StandardCharsets.UTF_8);
         assertEquals(BenchmarkClusters.digestOfContent(lf), BenchmarkClusters.digestOfContent(crlf));
@@ -68,7 +68,7 @@ class BenchmarkBoardDigestEolTest {
 
     /**
      * 판 id → 저장소 LF 바이트 해시 리터럴. <b>판 추가 절차</b>: (1) 규칙 커밋을 먼저(판정 상수가 바뀌면 그 커밋에서),
-     * (2) 판 yml 과 등록부 레코드, (3) 이 맵에 한 줄, (4) 계약 §10 에 행, (5) 증거 묶음 재생성. 등록부와 이 맵의 키 집합이
+     * (2) 판 yml과 등록부 레코드, (3) 이 맵에 한 줄, (4) 계약 §10에 행, (5) 증거 묶음 재생성. 등록부와 이 맵의 키 집합이
      * 다르면 아래 테스트가 깨진다 — 판을 더하고 다이제스트를 고정하지 않은 채 지나갈 수 없다.
      */
     private static final Map<String, String> BOARD_DIGESTS = Map.of(

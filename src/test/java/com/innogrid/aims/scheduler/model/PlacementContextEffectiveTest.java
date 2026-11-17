@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * 컨텍스트의 클러스터 지표가 예약분(실효)을 반영하는지.
  *
- * <p>{@code PowerModel.isActive} 는 실효 사용률인데 클러스터 요약만 실측이면, 같은 응답 안에서
+ * <p>{@code PowerModel.isActive}는 실효 사용률인데 클러스터 요약만 실측이면, 같은 응답 안에서
  * 노드별 "가동중"과 요약의 "가동 노드 수"가 어긋난다.</p>
  *
- * <p>{@code averageTemperature} 의 평균 대상도 "후보 전체"에서 "계측된 후보"로 바뀌었다 —
+ * <p>{@code averageTemperature}의 평균 대상도 "후보 전체"에서 "계측된 후보"로 바뀌었다 —
  * 온도를 수집하지 못한 노드(0℃)는 평균에서 제외한다.</p>
  */
 class PlacementContextEffectiveTest {
@@ -36,7 +36,7 @@ class PlacementContextEffectiveTest {
     void woken_node_counts_active() {
         PlacementContext ctx = context(node("busy", 50, 45), node("empty", 1, 45));
         assertEquals(1, ctx.activeNodeCount(ACTIVE_CPU));
-        // empty 는 계측 200W·CPU 1% 라 반납 가능 전력을 실측에서 역산한다: (200 − 500×0.01)/(1−0.01) = 197.0W
+        // empty는 계측 200W·CPU 1%라 반납 가능 전력을 실측에서 역산한다: (200 − 500×0.01)/(1−0.01) = 197.0W
         assertEquals((200 - 500 * 0.01) / 0.99, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
 
         ctx.reserve("empty", new Workload("w", 1, 512));    // 1/8 코어 → 실효 13.5%

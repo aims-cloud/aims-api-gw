@@ -31,10 +31,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 스키마에 적은 <b>필수 표기·허용값·예시가 실제 서버 거동과 같은지</b> — HTTP 로 확인한다.
+ * 스키마에 적은 <b>필수 표기·허용값·예시가 실제 서버 거동과 같은지</b> — HTTP로 확인한다.
  *
- * <p>반사만으로는 "스키마가 스키마와 일치" 를 볼 뿐이다. 필수 세 개만 보내면 200 이고 하나라도 빼면
- * 400 인지, 엔진 허용값이 실제로 등록된 엔진과 같은지, 미리보기 예시가 실제 응답과 같은 형태인지는
+ * <p>반사만으로는 "스키마가 스키마와 일치"를 볼 뿐이다. 필수 세 개만 보내면 200이고 하나라도 빼면
+ * 400인지, 엔진 허용값이 실제로 등록된 엔진과 같은지, 미리보기 예시가 실제 응답과 같은 형태인지는
  * 서버를 띄워야 보인다. 다른 테스트는 컨텍스트 비용을 물지 않게 반사 테스트와 파일을 나눴다.</p>
  */
 @SpringBootTest
@@ -78,7 +78,7 @@ class ScheduleRequiredFieldContractTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value(containsString("필수")));
         }
-        // 생성(POST) 기준 — 편집(PUT)은 부분 갱신이라 같은 필드를 비워도 400 이 아니다.
+        // 생성(POST) 기준 — 편집(PUT)은 부분 갱신이라 같은 필드를 비워도 400이 아니다.
     }
 
     @DisplayName("엔진 허용값·예시는 실제로 등록된 엔진 id 집합과 같다")
@@ -107,7 +107,7 @@ class ScheduleRequiredFieldContractTest {
 
         JsonNode first = d.get("nextRuns").get(0);
         String localExample = schemaOf(CronPreviewResponse.NextRun.class, "localTime").example();
-        // 서버의 포맷 상수는 private 이라 여기 파서는 사본이다. 사본 하나로 서버를 검증하면 원본이 바뀌어도
+        // 서버의 포맷 상수는 private이라 여기 파서는 사본이다. 사본 하나로 서버를 검증하면 원본이 바뀌어도
         // 초록으로 남지만, 예시와 실제 응답을 같은 파서로 둘 다 읽으면 둘이 서로 갈린 것은 잡는다 — 그것이 목적이다.
         DateTimeFormatter probe = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         assertDoesNotThrow(() -> probe.parse(first.get("localTime").asString()), "실제 localTime 이 예시 형태와 다르다");

@@ -32,9 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 워크로드 편집({@code PUT /workloads/{workloadId}})의 HTTP 계약 — 응답 23키, 상세 조회 왕복 무변경, 편집 대상이 아닌 키 무시,
- * 상태 409 와 예약 취소 뒤 편집, null 비우기, 오류 래퍼.
+ * 상태 409와 예약 취소 뒤 편집, null 비우기, 오류 래퍼.
  *
- * <p>트랜잭션을 걸지 않아 롤백이 없다 — 이름 접두어 {@code edit-api-} 로 정리한다. 배치가 필요한 테스트만 수집기 대역으로
+ * <p>트랜잭션을 걸지 않아 롤백이 없다 — 이름 접두어 {@code edit-api-}로 정리한다. 배치가 필요한 테스트만 수집기 대역으로
  * 노드 1대(16코어)를 준다(호출마다 새 노드 객체 — 같은 객체를 돌려주면 예약이 누적돼 보인다).</p>
  */
 @SpringBootTest

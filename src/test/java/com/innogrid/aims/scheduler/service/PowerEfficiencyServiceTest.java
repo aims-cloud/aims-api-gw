@@ -19,9 +19,9 @@ import static org.mockito.Mockito.mock;
 /**
  * 실제 전력 데이터를 얻기 전까지는 합성 스냅샷이 기능을 증명하는 유일한 수단이다.
  *
- * <p>전력을 200W 로 고정하고 CPU 사용률만 바꿔, 기대값을 손으로 계산할 수 있게 픽스처를
- * 짰다(용량 500W, idleRatio 0.3, peiNormalizer 0.5). PEI 는 CPU÷전력 이므로
- * 80% → 0.40, 10% → 0.05 처럼 값이 바로 떨어진다.</p>
+ * <p>전력을 200W로 고정하고 CPU 사용률만 바꿔, 기대값을 손으로 계산할 수 있게 픽스처를
+ * 짰다(용량 500W, idleRatio 0.3, peiNormalizer 0.5). PEI는 CPU÷전력 이므로
+ * 80% → 0.40, 10% → 0.05처럼 값이 바로 떨어진다.</p>
  */
 class PowerEfficiencyServiceTest {
 
@@ -69,7 +69,7 @@ class PowerEfficiencyServiceTest {
     @DisplayName("전력을 모르면 파생 지표를 모두 비운다")
     @Test
     void unknown_power_clears_derived_metrics() {
-        // PowerModel.proportionality 는 전력이 0 이어도 0.6 같은 값을 돌려준다.
+        // PowerModel.proportionality는 전력이 0이어도 0.6 같은 값을 돌려준다.
         // 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로 서비스가 막아야 한다.
         NodeEfficiency n = evaluateOne(node("n9", 50, 0));
 
@@ -141,7 +141,7 @@ class PowerEfficiencyServiceTest {
     void pei_and_proportionality_differ() {
         PowerEfficiencyResponse result = service.evaluate(cluster());
 
-        // n8 은 PEI 최하위(D)지만 저부하라 실측 전력이 이상 곡선에 가까워 비례성은 최고다.
+        // n8은 PEI 최하위(D)지만 저부하라 실측 전력이 이상 곡선에 가까워 비례성은 최고다.
         // 지표 하나로 뭉뚱그리면 이런 노드를 잘못 판단한다.
         assertEquals("D", grade(result, "n8"));
         assertTrue(find(result, "n8").proportionality() > find(result, "n1").proportionality(),
@@ -248,7 +248,7 @@ class PowerEfficiencyServiceTest {
     @DisplayName("노드 ID 가 겹쳐도 순위가 뒤섞이지 않는다")
     @Test
     void duplicate_node_id_keeps_rank_stable() {
-        // 수집 설정이 잘못되면 같은 instance 가 두 번 올라올 수 있다. 그때는 지표까지
+        // 수집 설정이 잘못되면 같은 instance가 두 번 올라올 수 있다. 그때는 지표까지
         // 똑같아서, 순위를 값으로 되찾으면 한쪽이 순위를 못 받고 다른 쪽이 두 번 받는다.
         PowerEfficiencyResponse result = service.evaluate(List.of(
                 node("중복", 50, 200), node("중복", 50, 200),
@@ -266,7 +266,7 @@ class PowerEfficiencyServiceTest {
     @DisplayName("PEI 정규화 기준이 0 이면 기본값으로 되돌린다")
     @Test
     void pei_base_0_falls_back_to_default() {
-        // min(1, x/0) 은 1.0 이라 방어하지 않으면 전 노드가 조용히 만점이 된다
+        // min(1, x/0)은 1.0이라 방어하지 않으면 전 노드가 조용히 만점이 된다
         SchedulerProperties broken = new SchedulerProperties();
         broken.getPower().setPeiNormalizer(0);
         PowerEfficiencyService guarded = new PowerEfficiencyService(mock(SchedulingService.class),
@@ -294,7 +294,7 @@ class PowerEfficiencyServiceTest {
 
     // ── 픽스처 ─────────────────────────────────────────────────
 
-    /** 9노드 픽스처. 전력 200W 고정, CPU 만 10~80% 로 변화. */
+    /** 9노드 픽스처. 전력 200W 고정, CPU만 10~80%로 변화. */
     private List<NodeResource> cluster() {
         return List.of(
                 node("n1", 80, 200), node("n2", 70, 200), node("n3", 60, 200),
@@ -357,9 +357,9 @@ class PowerEfficiencyServiceTest {
     }
 
     /**
-     * 코어 수가 섞이면 두 순위가 갈린다. 원값 순위는 사용률 ÷ W 라 16코어 70% 395W(0.1772)가 32코어 35% 314W(0.1115)보다 앞서지만,
+     * 코어 수가 섞이면 두 순위가 갈린다. 원값 순위는 사용률 ÷ W라 16코어 70% 395W(0.1772)가 32코어 35% 314W(0.1115)보다 앞서지만,
      * 일한 코어 수로 보면 32코어 쪽(11.2코어 ÷ 0.314kW = 35.67)이 16코어 쪽(11.2코어 ÷ 0.395kW = 28.35)보다 앞선다.
-     * 64코어 20% 380W 는 코어 기준 2위(33.68)인데 원값은 꼴찌(0.0526 · D)라, 원값 기준이면 저부하 권고가 붙고 코어 기준이면 붙지 않는다 —
+     * 64코어 20% 380W는 코어 기준 2위(33.68)인데 원값은 꼴찌(0.0526 · D)라, 원값 기준이면 저부하 권고가 붙고 코어 기준이면 붙지 않는다 —
      * 권고가 어느 기준을 따르는지 이 노드로 가려낸다.
      */
     @DisplayName("코어 수가 섞이면 코어 기준 순위가 원값 순위와 갈리고 등급과 권고는 원값 기준 그대로다")

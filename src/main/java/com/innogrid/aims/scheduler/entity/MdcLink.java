@@ -8,15 +8,15 @@ import jakarta.persistence.*;
  * MDC 두 곳 사이의 연결 품질 원장 — 지연·대역폭·손실·상태.
  *
  * <p>배치 엔진이 "데이터가 있는 MDC 와 노드가 있는 MDC 사이가 얼마나 좋은가"를 물을 때 읽는 표다.
- * 정책 {@code affinityEnabled} 와 워크로드 {@code dataMdcId} 가 모두 있을 때 제약 C5(DOWN 제외, 전 엔진 공통)와
+ * 정책 {@code affinityEnabled}와 워크로드 {@code dataMdcId}가 모두 있을 때 제약 C5(DOWN 제외, 전 엔진 공통)와
  * weighted 엔진의 링크 점수가 읽는다. 대역폭은 워크로드가 요구 대역폭을 준 배치에서 부족분만큼 링크 점수를 깎는다.</p>
  *
- * <p><b>쌍은 방향이 없다.</b> A→B 와 B→A 를 따로 두면 매트릭스가 비대칭이 되고 한쪽만 갱신되는 사고가 난다.
- * 그래서 저장할 때 두 식별자를 <b>사전순으로 정렬</b>해 작은 쪽을 {@code mdcA} 에 둔다. 유니크 제약은
+ * <p><b>쌍은 방향이 없다.</b> A→B와 B→A를 따로 두면 매트릭스가 비대칭이 되고 한쪽만 갱신되는 사고가 난다.
+ * 그래서 저장할 때 두 식별자를 <b>사전순으로 정렬</b>해 작은 쪽을 {@code mdcA}에 둔다. 유니크 제약은
  * 정렬된 쌍에 걸리므로 역방향 등록이 자연히 중복으로 잡힌다. 정렬은 {@link Pair#of} 한 곳에서만 한다.</p>
  *
- * <p>MDC 식별자는 노드 라벨 {@code mdc_id} 와 같은 문자열이며 여기서 존재를 검증하지 않는다 — 검증하려면
- * 원장 CRUD 가 메트릭 저장소를 불러야 한다. 오타 링크는 매트릭스에 그대로 보이고 배치에서는 미등록 쌍으로
+ * <p>MDC 식별자는 노드 라벨 {@code mdc_id}와 같은 문자열이며 여기서 존재를 검증하지 않는다 — 검증하려면
+ * 원장 CRUD가 메트릭 저장소를 불러야 한다. 오타 링크는 매트릭스에 그대로 보이고 배치에서는 미등록 쌍으로
  * 취급된다(제약 통과 · 점수는 기본값 0.5).</p>
  */
 @Entity
@@ -28,10 +28,10 @@ import jakarta.persistence.*;
        })
 public class MdcLink {
 
-    /** 링크 상태. DOWN 은 배치 제약 C5(전 엔진 공통)가 후보 제외에 쓰고, DEGRADED 는 weighted 엔진의 링크 점수에만 가산 비용으로 반영된다. */
+    /** 링크 상태. DOWN은 배치 제약 C5(전 엔진 공통)가 후보 제외에 쓰고, DEGRADED는 weighted 엔진의 링크 점수에만 가산 비용으로 반영된다. */
     public enum LinkStatus { UP, DEGRADED, DOWN }
 
-    /** 값의 출처. PROBE 는 자동 측정용으로 예약만 해 두었다 — 측정기는 아직 없다. */
+    /** 값의 출처. PROBE는 자동 측정용으로 예약만 해 두었다 — 측정기는 아직 없다. */
     public enum LinkSource { MANUAL, PROBE }
 
     @Id
@@ -42,13 +42,13 @@ public class MdcLink {
      * 사전순으로 작은 MDC 식별자.
      *
      * <p>컬럼 이름을 명시한다 — 스프링의 카멜→스네이크 변환은 <b>마지막 글자</b>를 검사하지 않아
-     * {@code mdcA} 가 {@code mdc_a} 가 아니라 {@code mdca} 로 만들어진다(2026-09-02 배포에서 실측).
+     * {@code mdcA}가 {@code mdc_a}가 아니라 {@code mdca}로 만들어진다(2026-09-02 배포에서 실측).
      * DDL 스크립트와 같은 이름이 되도록 고정한다.</p>
      */
     @Column(name = "mdc_a", nullable = false, length = 50)
     private String mdcA;
 
-    /** 사전순으로 큰 MDC 식별자. 컬럼 이름을 명시하는 이유는 {@link #mdcA} 와 같다. */
+    /** 사전순으로 큰 MDC 식별자. 컬럼 이름을 명시하는 이유는 {@link #mdcA}와 같다. */
     @Column(name = "mdc_b", nullable = false, length = 50)
     private String mdcB;
 
@@ -100,15 +100,15 @@ public class MdcLink {
 
     protected MdcLink() {}
 
-    /** 두 식별자는 순서에 상관없이 넣는다 — 저장 순서는 {@link Pair#of} 가 정한다. */
+    /** 두 식별자는 순서에 상관없이 넣는다 — 저장 순서는 {@link Pair#of}가 정한다. */
     public MdcLink(String mdcA, String mdcB, double latencyMs) {
         repair(mdcA, mdcB);
         this.latencyMs = latencyMs;
     }
 
     /**
-     * 정렬된 MDC 쌍. {@code of("b","a")} 와 {@code of("a","b")} 는 같다.
-     * 같은 식별자 둘은 링크가 아니므로 거부한다 — 서비스가 먼저 400 으로 막고, 여기서는 불변식으로 지킨다.
+     * 정렬된 MDC 쌍. {@code of("b","a")}와 {@code of("a","b")}는 같다.
+     * 같은 식별자 둘은 링크가 아니므로 거부한다 — 서비스가 먼저 400으로 막고, 여기서는 불변식으로 지킨다.
      */
     public record Pair(String a, String b) {
         public static Pair of(String x, String y) {
@@ -125,12 +125,12 @@ public class MdcLink {
         this.mdcB = p.b();
     }
 
-    /** 이 링크가 주어진 MDC 에 걸려 있는가. */
+    /** 이 링크가 주어진 MDC에 걸려 있는가. */
     public boolean connects(String mdcId) {
         return mdcA.equals(mdcId) || mdcB.equals(mdcId);
     }
 
-    /** 주어진 MDC 의 반대편. 걸려 있지 않으면 null. */
+    /** 주어진 MDC의 반대편. 걸려 있지 않으면 null. */
     public String other(String mdcId) {
         if (mdcA.equals(mdcId)) return mdcB;
         if (mdcB.equals(mdcId)) return mdcA;

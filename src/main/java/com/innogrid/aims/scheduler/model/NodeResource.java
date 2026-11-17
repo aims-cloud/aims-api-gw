@@ -6,9 +6,9 @@ package com.innogrid.aims.scheduler.model;
  * 스케줄링 엔진이 이 데이터를 기반으로 배치를 결정한다.
  *
  * <p>메트릭 사용률은 "이미 실행 중인" 부하만 반영하므로, 배치는 되었으나 아직 메트릭에
- * 드러나지 않은 워크로드(배치 대기, 그리고 시작한 지 메트릭 지연 시간이 지나지 않은 실행 중)는 {@code reserved*} 로
+ * 드러나지 않은 워크로드(배치 대기, 그리고 시작한 지 메트릭 지연 시간이 지나지 않은 실행 중)는 {@code reserved*}로
  * 따로 차감한다. 그래야 한 번의 스케줄링 실행 안에서 같은 노드에 과도하게 배치되는 것을 막을 수 있다. GPU 개수는
- * 사용률에 드러나지 않으므로 실행 중 워크로드의 것도 끝 상태가 될 때까지 {@code reservedGpu} 에 남는다.</p>
+ * 사용률에 드러나지 않으므로 실행 중 워크로드의 것도 끝 상태가 될 때까지 {@code reservedGpu}에 남는다.</p>
  */
 public class NodeResource {
 
@@ -34,22 +34,22 @@ public class NodeResource {
     private final double networkRxBps;
     private final double networkTxBps;
 
-    // ── GPU 축 (DCGM) — 섀시 온도·전력과 별개. 0 = 미계측. 생성자에 넣지 않고 {@link #withGpuTelemetry} 로 얹는다 ──
+    // ── GPU 축 (DCGM) — 섀시 온도·전력과 별개. 0 = 미계측. 생성자에 넣지 않고 {@link #withGpuTelemetry}로 얹는다 ──
     private double gpuUsagePercent;
     private double gpuTemperatureCelsius;
     private double gpuPowerWatts;
 
-    // ── 예약분 (배치 확정됐으나 메트릭에 아직 반영되지 않은 워크로드 · GPU 는 실행 중 워크로드의 카드도 포함) ──
+    // ── 예약분 (배치 확정됐으나 메트릭에 아직 반영되지 않은 워크로드 · GPU는 실행 중 워크로드의 카드도 포함) ──
     private int reservedCpu;
     private long reservedMemoryMb;
     private int reservedGpu;
     private long reservedDiskGb;
 
     /**
-     * 디스크 총량(GB). 0 이면 <b>모른다</b>는 뜻이다 — 수집기가 파일시스템 크기를 얻지 못한 경우.
+     * 디스크 총량(GB). 0이면 <b>모른다</b>는 뜻이다 — 수집기가 파일시스템 크기를 얻지 못한 경우.
      *
      * <p>생성자에 넣지 않고 세터로 둔다. 생성자는 테스트 62개 파일이 위치 인자로 쓰고 있어 시그니처를
-     * 바꾸면 전부 손대야 한다. 디스크는 부가 메트릭이라 "없으면 0" 이 자연스럽고, 제약 검사는 총량을
+     * 바꾸면 전부 손대야 한다. 디스크는 부가 메트릭이라 "없으면 0"이 자연스럽고, 제약 검사는 총량을
      * 아는 노드에서만 한다.</p>
      */
     private long diskCapacityGb;
@@ -95,7 +95,7 @@ public class NodeResource {
         return totalGpu - reservedGpu;
     }
 
-    /** 디스크 총량(GB). 0 = 모름. 이름에 {@code get} 을 붙이지 않는다(응답 계약은 {@code NodeResponse} 가 정한다). */
+    /** 디스크 총량(GB). 0 = 모름. 이름에 {@code get}을 붙이지 않는다(응답 계약은 {@code NodeResponse}가 정한다). */
     public long diskCapacityGb() {
         return diskCapacityGb;
     }
@@ -106,8 +106,8 @@ public class NodeResource {
     }
 
     /**
-     * 가용 디스크(GB, 예약분 차감). 총량을 모르면(0) 0 을 돌려준다 — 이 값으로 배치를 막으려면
-     * 호출부가 {@link #diskCapacityGb()} 가 0 이 아닌지 먼저 봐야 한다.
+     * 가용 디스크(GB, 예약분 차감). 총량을 모르면(0) 0을 돌려준다 — 이 값으로 배치를 막으려면
+     * 호출부가 {@link #diskCapacityGb()}가 0이 아닌지 먼저 봐야 한다.
      */
     public long availableDiskGb() {
         if (diskCapacityGb <= 0) return 0;
@@ -115,15 +115,15 @@ public class NodeResource {
         return Math.max(0, available);
     }
 
-    /** 수집기가 파일시스템 총량을 얻었을 때 넣는다. 0 은 "모름". */
+    /** 수집기가 파일시스템 총량을 얻었을 때 넣는다. 0은 "모름". */
     public NodeResource withDiskCapacityGb(long gb) {
         this.diskCapacityGb = Math.max(0, gb);
         return this;
     }
 
     /**
-     * GPU 축 — 카드 평균 사용률·가장 뜨거운 카드 온도·카드 합 전력. 수집기가 GPU 가 있는 노드에만 얹는다.
-     * 섀시 온도·전력에 섞지 않는다({@link GpuTelemetry} 참고). NaN·무한대·음수는 record 가 이미 0(미계측)으로 만든다.
+     * GPU 축 — 카드 평균 사용률·가장 뜨거운 카드 온도·카드 합 전력. 수집기가 GPU가 있는 노드에만 얹는다.
+     * 섀시 온도·전력에 섞지 않는다({@link GpuTelemetry} 참고). NaN·무한대·음수는 record가 이미 0(미계측)으로 만든다.
      */
     public NodeResource withGpuTelemetry(GpuTelemetry gpu) {
         if (gpu == null) return this;
@@ -140,16 +140,16 @@ public class NodeResource {
      * 잇달아 배치하면 예약만 쌓이고 사용률은 그대로라, 제약 검사가 매번 같은 값을 보게 된다.
      * 그래서 예약분을 사용률로 환산해 더한 값을 따로 둔다.</p>
      *
-     * <p><b>이름에 {@code get} 을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
-     * 나가므로 {@code get} 접두어를 쓰면 API 에 필드가 늘어난다.
-     * {@code NodeResourceSerializationTest} 가 이 규칙을 지킨다.</p>
+     * <p><b>이름에 {@code get}을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
+     * 나가므로 {@code get} 접두어를 쓰면 API에 필드가 늘어난다.
+     * {@code NodeResourceSerializationTest}가 이 규칙을 지킨다.</p>
      */
     public double effectiveCpuUsagePercent() {
         if (totalCpu <= 0) return cpuUsagePercent;
         return Math.min(100.0, cpuUsagePercent + (double) reservedCpu / totalCpu * 100.0);
     }
 
-    /** 예약분까지 반영한 메모리 사용률 (%). {@link #effectiveCpuUsagePercent} 와 같은 이유로 둔다. */
+    /** 예약분까지 반영한 메모리 사용률 (%). {@link #effectiveCpuUsagePercent}와 같은 이유로 둔다. */
     public double effectiveMemoryUsagePercent() {
         if (totalMemoryMb <= 0) return memoryUsagePercent;
         return Math.min(100.0, memoryUsagePercent + (double) reservedMemoryMb / totalMemoryMb * 100.0);
@@ -164,15 +164,15 @@ public class NodeResource {
     /**
      * 예약분까지 그대로 옮겨 담은 사본.
      *
-     * <p>이 클래스는 {@link #reserve} 로 상태가 바뀌는 <b>가변</b> 객체다. 배치를 시뮬레이션할
+     * <p>이 클래스는 {@link #reserve}로 상태가 바뀌는 <b>가변</b> 객체다. 배치를 시뮬레이션할
      * 때 조회용으로 받은 객체에 예약을 쌓으면 응답이 오염되므로 사본을 쓴다.</p>
      *
      * <p>메트릭을 다시 수집하지 않고 복사하는 이유는 비용이다 — 수집기는 노드당 열 종의
      * 질의를 날리므로, 후보 노드마다 새로 수집하면 한 요청에 수백 건이 나간다. 게다가 메트릭
      * 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.</p>
      *
-     * <p><b>이름에 {@code get} 을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
-     * 나가므로 {@code get} 접두어를 쓰면 API 에 필드가 늘어난다.</p>
+     * <p><b>이름에 {@code get}을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
+     * 나가므로 {@code get} 접두어를 쓰면 API에 필드가 늘어난다.</p>
      */
     public NodeResource snapshot() {
         NodeResource copy = new NodeResource(mdcId, nodeId, totalCpu, totalMemoryMb, totalGpu,
@@ -199,8 +199,8 @@ public class NodeResource {
     }
 
     /**
-     * 워크로드 수용 가능 여부. GPU 는 워크로드가 요구할 때만 본다 — 수집이 카드를 실제보다 적게 잡았거나 같은 카드에 겹쳐
-     * 배정된 실행 중 워크로드가 남으면 가용 GPU 가 음수가 되는데, 그 값으로 카드를 쓰지 않는 배치를 막지 않는다. 음수는
+     * 워크로드 수용 가능 여부. GPU는 워크로드가 요구할 때만 본다 — 수집이 카드를 실제보다 적게 잡았거나 같은 카드에 겹쳐
+     * 배정된 실행 중 워크로드가 남으면 가용 GPU가 음수가 되는데, 그 값으로 카드를 쓰지 않는 배치를 막지 않는다. 음수는
      * 노드 응답에 그대로 내보내는 과예약 신호라 하한을 두지 않는다. CPU·메모리는 요구량이 1 이상이라 그대로 비교한다.
      */
     public boolean canAccommodate(int requiredCpu, int requiredMemMb, int requiredGpu) {
@@ -217,7 +217,7 @@ public class NodeResource {
         reserve(cpu, memoryMb, gpu, 0);
     }
 
-    /** 디스크까지 예약하는 형태. 기존 3인자 호출(38곳)은 디스크 0 으로 위임된다. */
+    /** 디스크까지 예약하는 형태. 기존 3인자 호출(38곳)은 디스크 0으로 위임된다. */
     public void reserve(int cpu, long memoryMb, int gpu, long diskGb) {
         this.reservedCpu += cpu;
         this.reservedMemoryMb += memoryMb;
@@ -226,9 +226,9 @@ public class NodeResource {
     }
 
     /**
-     * {@link #reserve(int, long, int, long)} 를 되돌린다 — 실행 계층이 받지 않은 배치의 예약을 같은 실행 안에서 푼다.
-     * 디스크는 reserve 와 같은 보정(음수 → 0)을 적용해 정확히 대칭이다. 하한은 두지 않는다 — 이중 호출 같은 결함이
-     * 0 에서 조용히 숨지 않도록.
+     * {@link #reserve(int, long, int, long)}를 되돌린다 — 실행 계층이 받지 않은 배치의 예약을 같은 실행 안에서 푼다.
+     * 디스크는 reserve와 같은 보정(음수 → 0)을 적용해 정확히 대칭이다. 하한은 두지 않는다 — 이중 호출 같은 결함이
+     * 0에서 조용히 숨지 않도록.
      */
     public void unreserve(int cpu, long memoryMb, int gpu, long diskGb) {
         this.reservedCpu -= cpu;
@@ -241,7 +241,7 @@ public class NodeResource {
     public enum PowerSource {
         /** IPMI 메트릭으로 실측한 값. */
         IPMI,
-        /** 수집되지 않아 0 으로 채운 값. */
+        /** 수집되지 않아 0으로 채운 값. */
         NONE
     }
 

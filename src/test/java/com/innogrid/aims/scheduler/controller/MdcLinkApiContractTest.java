@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code /scheduler/mdc-links} 6종의 HTTP 계약 — 필드 집합, 상태 코드와 사유, 매트릭스 대칭, 경로 우선, 인증.
  *
  * <p>테스트마다 고유 접두어의 MDC 식별자를 쓰고 끝에 지운다(H2 공유 컨텍스트). 감사 필드는 {@code @WithMockUser}
- * 의 "user" 가 사용자 원장에 없어 이름은 null, 계정은 "user" 로 남는다.</p>
+ * 의 "user"가 사용자 원장에 없어 이름은 null, 계정은 "user"로 남는다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -58,8 +58,8 @@ class MdcLinkApiContractTest {
             assertEquals("user", d.get("createdBy"));
             assertNull(d.get("packetLossPercent"));
 
-            // 생성 == 조회 — 시각은 제외한다. 생성 응답은 메모리의 나노초, 조회는 DB 에 저장된 마이크로초라
-            // 같은 시각이 다른 문자열로 나온다(SchedulerApiContractTest 와 같은 사정).
+            // 생성 == 조회 — 시각은 제외한다. 생성 응답은 메모리의 나노초, 조회는 DB에 저장된 마이크로초라
+            // 같은 시각이 다른 문자열로 나온다(SchedulerApiContractTest와 같은 사정).
             MvcResult fetched = mockMvc.perform(get(BASE + "/" + d.get("id"))).andExpect(status().isOk()).andReturn();
             assertEquals(withoutTimestamps(d), withoutTimestamps(data(fetched)));
         } finally {

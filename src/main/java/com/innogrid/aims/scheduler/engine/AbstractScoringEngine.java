@@ -21,9 +21,9 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * <ul>
  *   <li>제외 판정은 노드마다 채점 직전에 한 번 부른다 — 임계 온도를 넘은 노드에 냉각 기록을 남기는 부작용이 있어 순서와 횟수가 결과다.</li>
  *   <li>최고점은 적격 후보만, 엄격한 초과로 고른다 — 동점이면 입력 순서가 앞인 노드가 남는다. 정렬은 안정 정렬이라 동점 순서도 입력 순서다.</li>
- *   <li>호출 한 번 동안만 살아야 할 값(계측 집계·평균 온도·승자의 계측 여부)은 {@link Run} 에 두고, 최고점은 {@code schedule} 의
+ *   <li>호출 한 번 동안만 살아야 할 값(계측 집계·평균 온도·승자의 계측 여부)은 {@link Run}에 두고, 최고점은 {@code schedule}의
  *       지역 변수다. 엔진은 싱글턴 빈이라 인스턴스 필드에 두면 앞선 호출이 다음 결과에 섞인다. 이 클래스에는 인스턴스 필드가 없다.</li>
- *   <li>{@code details} 는 엔진이 만든 {@code LinkedHashMap} 을 그대로 쓴다 — 키 순서가 응답 바이트이고, 전력 엔진 후처리가 사후에
+ *   <li>{@code details}는 엔진이 만든 {@code LinkedHashMap}을 그대로 쓴다 — 키 순서가 응답 바이트이고, 전력 엔진 후처리가 사후에
  *       키를 더하므로 복사하거나 변경 불가 맵으로 감싸지 않는다.</li>
  * </ul>
  *
@@ -77,7 +77,7 @@ public abstract class AbstractScoringEngine<R extends AbstractScoringEngine.Run>
     protected abstract R newRun(Workload workload, PlacementContext context);
 
     /**
-     * 노드 하나를 채점한다. 제외 판정은 이미 끝났고 {@code exclusion} 이 null 이면 적격이다.
+     * 노드 하나를 채점한다. 제외 판정은 이미 끝났고 {@code exclusion}이 null이면 적격이다.
      * 반올림은 엔진이 지금 자리에서 그대로 하고, 상세 키는 지금 순서 그대로 넣는다.
      */
     protected abstract NodeScore scoreNode(Workload workload, PlacementContext context, NodeResource node,

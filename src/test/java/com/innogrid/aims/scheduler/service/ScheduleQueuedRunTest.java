@@ -29,12 +29,12 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>폴러는 예정 시각이 지난 스케줄 엔티티를 그대로 단일 워커 큐에 넣는다. 앞 실행이 길면 뒤 스케줄은
  * 그만큼 기다리는데, 그 사이 편집·삭제가 끼면 넘겨받은 사본은 낡는다. 여기서는 폴링 때의 사본을 먼저
- * 떼어 두고(DB 에서 읽은 뒤 트랜잭션 밖이라 분리된 사본) → 편집·삭제를 자기 트랜잭션으로 커밋한 뒤 →
+ * 떼어 두고(DB에서 읽은 뒤 트랜잭션 밖이라 분리된 사본) → 편집·삭제를 자기 트랜잭션으로 커밋한 뒤 →
  * 그 사본으로 러너의 실행 메서드를 직접 불러, 큐에서 기다리는 동안 생긴 변경을 스레드 없이 재현한다.</p>
  *
- * <p><b>이 클래스는 {@code @Transactional} 을 쓰지 않는다.</b> 트랜잭션으로 감싸면 편집이 같은 관리
+ * <p><b>이 클래스는 {@code @Transactional}을 쓰지 않는다.</b> 트랜잭션으로 감싸면 편집이 같은 관리
  * 엔티티를 바꿔 사본이 낡지 않는다. 커밋된 값을 다시 읽어 확인한다. 실행 이력을 먼저 지운다 —
- * {@link ScheduleRunnerTest} 가 자동 실행 이력이 하나도 없음을 전역으로 확인한다.</p>
+ * {@link ScheduleRunnerTest}가 자동 실행 이력이 하나도 없음을 전역으로 확인한다.</p>
  */
 @SpringBootTest
 class ScheduleQueuedRunTest {
@@ -78,7 +78,7 @@ class ScheduleQueuedRunTest {
         return scheduleRepository.saveAndFlush(schedule);
     }
 
-    /** 폴러가 넘긴 사본 — DB 에서 읽은 뒤 트랜잭션 밖이라 분리된 엔티티. */
+    /** 폴러가 넘긴 사본 — DB에서 읽은 뒤 트랜잭션 밖이라 분리된 엔티티. */
     private Schedule polled(Long id) {
         return scheduleRepository.findById(id).orElseThrow();
     }

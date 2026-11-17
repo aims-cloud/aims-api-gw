@@ -32,20 +32,20 @@ import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 증거 묶음 — 등록된 판 전부 × 워크로드 분포 2 의 응답을 파일로 남긴다.
+ * 증거 묶음 — 등록된 판 전부 × 워크로드 분포 2의 응답을 파일로 남긴다.
  *
- * <p>보고서의 문장이 지목할 원본이 지금은 "그때 돌린 응답" 뿐이다. CI 가 없어 로컬 테스트가 재현 산출물의 유일한 생산처이므로,
+ * <p>보고서의 문장이 지목할 원본이 지금은 "그때 돌린 응답"뿐이다. CI가 없어 로컬 테스트가 재현 산출물의 유일한 생산처이므로,
  * 결정론 테스트와 같은 경로({@code compareFresh})로 응답을 만들어 {@code build/benchmark-evidence/} 아래에
- * {@code <판>-<분포>-<판 다이제스트>-<워크로드 다이제스트>-<설정 다이제스트>.json} 으로 쓰고, 매니페스트 한 장에 판·세
+ * {@code <판>-<분포>-<판 다이제스트>-<워크로드 다이제스트>-<설정 다이제스트>.json}으로 쓰고, 매니페스트 한 장에 판·세
  * 다이제스트(판·워크로드·설정)·지표 키 목록과 다이제스트·규칙 축 다이제스트·JVM/OS/엔진 id·각 파일의 내용 해시를 모아 둔다.
- * 재생성: {@code ./gradlew test --tests '*BenchmarkEvidenceDumpTest*'} (매니페스트의 {@code regeneratedBy} 에도 있다). 응답 시각({@code evaluatedAt})은 빼고 쓴다 — 같은 입력이면 파일이 바이트까지 같아야 대조가 된다.</p>
+ * 재생성: {@code ./gradlew test --tests '*BenchmarkEvidenceDumpTest*'} (매니페스트의 {@code regeneratedBy}에도 있다). 응답 시각({@code evaluatedAt})은 빼고 쓴다 — 같은 입력이면 파일이 바이트까지 같아야 대조가 된다.</p>
  *
  * <p>이 테스트는 값을 확인하지 않는다. 산출물이 실제로 쓰였고 매니페스트가 등록부와 일치하는지만 본다 — 값 판정은 규칙·계약
  * 테스트의 몫이다. 파일은 {@code build/} 아래라 저장소에 들어가지 않는다.</p>
  *
  * <p><b>판정 기준선 후보</b>도 여기서 같은 실행으로 쓴다({@code judgment-baseline-candidate.json}, 형식은 {@link JudgmentBaselines}).
  * 기준선 파일({@link BenchmarkRules#JUDGMENT_BASELINE_PATH})을 갱신하려면 이 후보를 그 경로로 복사하고 기준선 이력에 행을 더한다 —
- * 생산 경로가 하나여야 B 와 N 이 같은 조립에서 나온다. 매니페스트의 {@code entries} 는 건드리지 않는다(옛 매니페스트와의 대조 축 보존).</p>
+ * 생산 경로가 하나여야 B와 N이 같은 조립에서 나온다. 매니페스트의 {@code entries}는 건드리지 않는다(옛 매니페스트와의 대조 축 보존).</p>
  */
 class BenchmarkEvidenceDumpTest {
 
@@ -80,7 +80,7 @@ class BenchmarkEvidenceDumpTest {
                 String boardDigest = clusters.digest(board);
                 assertEquals(boardDigest, r.boards().get(0).digest(), board + " 응답의 판 다이제스트가 등록부와 다르다");
 
-                // evaluatedAt 을 빼고 쓴다 — 같은 입력이면 바이트까지 같아야 한다
+                // evaluatedAt을 빼고 쓴다 — 같은 입력이면 바이트까지 같아야 한다
                 PlacementBenchmarkResponse stable = new PlacementBenchmarkResponse(null, r.assumptions(), r.engineConfig(),
                         r.metrics(), r.boards(), r.limitation());
                 engineIds = r.engineConfig().engineIds();
@@ -118,10 +118,10 @@ class BenchmarkEvidenceDumpTest {
         manifest.put("metricKeys", metricKeys);
         manifest.put("metricKeyDigest", BenchmarkClusters.digestOf(String.join(",", metricKeys)));
         manifest.put("entries", entries);
-        // 매니페스트 자신은 해시할 수 없으니(자기참조) entries 의 정규 직렬화 해시를 싣는다 — 보고서는 gitHead + entriesDigest 쌍을 인용한다
+        // 매니페스트 자신은 해시할 수 없으니(자기참조) entries의 정규 직렬화 해시를 싣는다 — 보고서는 gitHead + entriesDigest 쌍을 인용한다
         manifest.put("entriesDigest", BenchmarkClusters.digestOf(mapper.writeValueAsString(entries)));
 
-        // 판정 기준선 후보 — entries 와 별도의 최상위 키로. 기준선 파일 갱신은 이 후보를 저장소 경로로 복사하는 것이다
+        // 판정 기준선 후보 — entries와 별도의 최상위 키로. 기준선 파일 갱신은 이 후보를 저장소 경로로 복사하는 것이다
         String candidateJson = JudgmentBaselines.toJson(JudgmentBaselines.build(judgmentDistributionResponses, JudgmentBaselines.gitHead()));
         Path candidate = OUT.resolve("judgment-baseline-candidate.json");
         Files.writeString(candidate, candidateJson, StandardCharsets.UTF_8);

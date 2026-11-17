@@ -18,25 +18,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * 노드 조회 응답의 필드 계약을 고정한다.
  *
- * <p>응답 형태의 주인은 이제 {@link NodeResponse} 다. 예전에는 {@code NodeResource} 를 DTO 없이 그대로
+ * <p>응답 형태의 주인은 이제 {@link NodeResponse}다. 예전에는 {@code NodeResource}를 DTO 없이 그대로
  * 내보내 모델에 {@code get} 메서드를 하나 추가하면 {@code GET /api/v1/scheduler/nodes} 응답에 필드가
  * 조용히 늘었다. DTO 도입 후에는 그 위험이 사라졌지만, 계약 자체(27필드)는 프런트와의 약속이라
- * 여기서 여전히 못 박는다 — DTO 에 컴포넌트를 추가하면 이 테스트가 막는다.</p>
+ * 여기서 여전히 못 박는다 — DTO에 컴포넌트를 추가하면 이 테스트가 막는다.</p>
  *
- * <p>디스크 축 3칸({@code diskCapacityGb}·{@code reservedDiskGb}·{@code availableDiskGb})은 DTO 에만 있다.
+ * <p>디스크 축 3칸({@code diskCapacityGb}·{@code reservedDiskGb}·{@code availableDiskGb})은 DTO에만 있다.
  * 모델은 그 셋을 {@code get} 없는 이름으로 두므로 모델 직렬화는 여전히 24필드다 — 두 집합의 차가 정확히
  * 그 세 키인지도 고정한다.</p>
  *
  * <p>계산용 메서드를 {@code get} 없이 짓는 규율은 유지한다. 이제는 API 보호 수단이 아니라
  * "모델을 조회 응답과 혼동하지 않게 하는 관례"다. 그 전제가 지켜지는지도 함께 확인한다.</p>
  *
- * <p>스프링이 구성한 {@code ObjectMapper} 를 그대로 주입받아 쓴다. 이 프로젝트는 Jackson 2 와 3 이
+ * <p>스프링이 구성한 {@code ObjectMapper}를 그대로 주입받아 쓴다. 이 프로젝트는 Jackson 2와 3이
  * 함께 올라와 있고 <b>HTTP 응답을 만드는 것은 Jackson 3({@code tools.jackson})</b> 이다.</p>
  */
 @SpringBootTest
 class NodeResourceSerializationTest {
 
-    /** 모델이 {@code get} 으로 내보내는 필드 — 디스크 축을 뺀 24개. */
+    /** 모델이 {@code get}으로 내보내는 필드 — 디스크 축을 뺀 24개. */
     private static final Set<String> MODEL_FIELDS = new TreeSet<>(Set.of(
             "mdcId", "nodeId",
             "totalCpu", "totalMemoryMb", "totalGpu",
@@ -49,7 +49,7 @@ class NodeResourceSerializationTest {
             "availableCpu", "availableMemoryMb", "availableGpu"
     ));
 
-    /** DTO 에만 있는 디스크 축 3칸. 모델은 이 셋을 {@code get} 없는 이름으로 둔다. */
+    /** DTO에만 있는 디스크 축 3칸. 모델은 이 셋을 {@code get} 없는 이름으로 둔다. */
     private static final Set<String> DISK_FIELDS = new TreeSet<>(Set.of(
             "diskCapacityGb", "reservedDiskGb", "availableDiskGb"
     ));
@@ -78,7 +78,7 @@ class NodeResourceSerializationTest {
 
     /**
      * 모델의 계산용 메서드를 {@code get} 없이 지으면 직렬화되지 않는다는 관례를 고정한다.
-     * {@code powerHeadroomPercent()}·{@code snapshot()}·{@code effectiveCpuUsagePercent()} 가 그 예다.
+     * {@code powerHeadroomPercent()}·{@code snapshot()}·{@code effectiveCpuUsagePercent()}가 그 예다.
      */
     @DisplayName("모델의 get 접두어 없는 계산 메서드는 직렬화되지 않는다")
     @Test
@@ -110,7 +110,7 @@ class NodeResourceSerializationTest {
         assertEquals(node.availableDiskGb(), r.availableDiskGb(), "모델 계산식과 동일");
     }
 
-    /** 총량을 모르는 노드(0)는 가용도 0 이고, 예약은 그래도 쌓인다 — 화면이 0/0 을 "모름"으로 읽는 근거. */
+    /** 총량을 모르는 노드(0)는 가용도 0이고, 예약은 그래도 쌓인다 — 화면이 0/0을 "모름"으로 읽는 근거. */
     @DisplayName("디스크 총량을 모르면 가용은 0 이고 예약은 남는다")
     @Test
     void unknown_disk_capacity_reports_zero_available() {
@@ -124,7 +124,7 @@ class NodeResourceSerializationTest {
         assertEquals(5L, r.reservedDiskGb());
     }
 
-    /** 세 GPU 칸이 각자 제 자리로 간다 — 셋 다 double 이라 인자 순서가 바뀌어도 컴파일되므로 값으로 잡는다. */
+    /** 세 GPU 칸이 각자 제 자리로 간다 — 셋 다 double이라 인자 순서가 바뀌어도 컴파일되므로 값으로 잡는다. */
     @DisplayName("GPU 사용률·온도·전력이 응답의 제 칸에 실린다")
     @Test
     void gpu_fields_land_in_their_own_slots() {

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * PABFD 와 우리 전력 엔진이 <b>실제로 다른 답을 낸다</b>는 것을 고정한다.
+ * PABFD와 우리 전력 엔진이 <b>실제로 다른 답을 낸다</b>는 것을 고정한다.
  *
  * <p>이 테스트가 없으면 "ΔP 단독 대조군과 비교했다"는 문장이 위험하다. 두 전략이 같은 노드를 고르면 표의
  * 두 열은 같은 숫자가 되고, 그걸 "우리가 대조군과 동등하다"고 읽든 "차이가 없다"고 읽든 둘 다
@@ -35,9 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   realMarginalPower (유휴 가산 — 계측된 유휴 노드는 실측 역산 153.1W 를 절편·깨우기항에)  idle-x 239.8W  >  busy-y 157.5W
  * </pre>
  *
- * <p>두 수식의 부등호가 <b>반대</b>다. 그래서 PABFD 는 빈 노드를, 우리 엔진은 가동 중인 노드를
+ * <p>두 수식의 부등호가 <b>반대</b>다. 그래서 PABFD는 빈 노드를, 우리 엔진은 가동 중인 노드를
  * 고른다. 정격이 큰 서버가 동적 증가분도 크다는 사실만 보면 빈 노드가 유리해 보이지만, 클러스터 총
- * 전력은 "가동 노드의 유휴 전력 + 동적 전력"이므로 빈 노드를 깨우면 그 노드의 유휴 전력(실측 160W 에서 역산한 153W)이 통째로 새로 든다.</p>
+ * 전력은 "가동 노드의 유휴 전력 + 동적 전력"이므로 빈 노드를 깨우면 그 노드의 유휴 전력(실측 160W에서 역산한 153W)이 통째로 새로 든다.</p>
  */
 class PabfdVsPowerEngineTest {
 
@@ -77,8 +77,8 @@ class PabfdVsPowerEngineTest {
         NodeResource idle = idleNode();
         NodeResource busy = busyNode();
 
-        // idle-x 는 계측 160W·CPU 2% 라 깨우기 비용을 실측에서 역산한다: (160 − 500×0.02)/(1−0.02) = 153.1W.
-        // pabfd 가 쓰는 marginalPower(대체값 기준 87.5W)는 그대로다 — 갈리는 것은 깨우기 비용의 출처뿐이다.
+        // idle-x는 계측 160W·CPU 2%라 깨우기 비용을 실측에서 역산한다: (160 − 500×0.02)/(1−0.02) = 153.1W.
+        // pabfd가 쓰는 marginalPower(대체값 기준 87.5W)는 그대로다 — 갈리는 것은 깨우기 비용의 출처뿐이다.
         double recon = (160 - 500 * 0.02) / 0.98;
         assertEquals((500 - recon) * 0.25 + recon, powerModel.realMarginalPower(idle, 2), 1e-9,
                 "동적 (500 − 153.1) × 0.25 = 86.7 + 역산 유휴 153.1W");
@@ -107,11 +107,11 @@ class PabfdVsPowerEngineTest {
     // ── 2단계: 그 차이가 배치 결정까지 이어진다 ──────────────────
 
     /**
-     * PABFD 는 {@code marginalPower} 의 최소값을 고르므로 빈 노드를 깨운다.
+     * PABFD는 {@code marginalPower}의 최소값을 고르므로 빈 노드를 깨운다.
      *
-     * <p>정규화 점수는 두 노드가 <b>똑같이 0.825</b> 다 — ΔP/정격 = 0.7 × 요구코어/총코어 라서 코어
+     * <p>정규화 점수는 두 노드가 <b>똑같이 0.825</b>다 — ΔP/정격 = 0.7 × 요구코어/총코어 라서 코어
      * 비율이 같으면 정격이 달라도 같은 값이 나온다. 선택은 정규화 점수가 아니라 <b>절대 와트</b>로
-     * 하며, 그 와트를 {@code details} 에 남기는 이유가 여기 있다.</p>
+     * 하며, 그 와트를 {@code details}에 남기는 이유가 여기 있다.</p>
      */
     @DisplayName("PABFD는 빈 노드를 고른다")
     @Test
@@ -138,9 +138,9 @@ class PabfdVsPowerEngineTest {
      * 열점수  둘 다 1 − (40/75)² = 0.715556 (경고 65℃ 미만이라 감점 0)
      * 총점    idle-x 0.5966  <  busy-y 0.6190
      * </pre>
-     * 자원 여유만 보면 빈 노드가 0.94 대 0.50 으로 앞서지만, 자원 몫이 0.10 이라 전력 판단이 이긴다.
-     * busy-y 의 한계전력 점수 0.685 는 1 − 157.5/500 이다 — 분모가 정격 900 이 아니라 W 눈금이라
-     * 정격이 큰 노드의 깨우기·증가 비용이 그만큼 크게 보인다. idle-x 는 정격이 눈금과 같아 값이 그대로다.
+     * 자원 여유만 보면 빈 노드가 0.94 대 0.50으로 앞서지만, 자원 몫이 0.10이라 전력 판단이 이긴다.
+     * busy-y의 한계전력 점수 0.685는 1 − 157.5/500이다 — 분모가 정격 900이 아니라 W 눈금이라
+     * 정격이 큰 노드의 깨우기·증가 비용이 그만큼 크게 보인다. idle-x는 정격이 눈금과 같아 값이 그대로다.
      */
     @DisplayName("전력 엔진은 가동 중인 노드를 고른다")
     @Test
@@ -170,13 +170,13 @@ class PabfdVsPowerEngineTest {
         return List.of(busyNode(), idleNode());   // nodeId 순은 busy-y < idle-x — 정렬이 결과를 바꾸지 않음을 겸한다
     }
 
-    /** 사실상 빈 노드. 실측 160W 는 유휴 150W 를 조금 넘는 값이라 "켜져 있지만 일하지 않는" 상태다. */
+    /** 사실상 빈 노드. 실측 160W는 유휴 150W를 조금 넘는 값이라 "켜져 있지만 일하지 않는" 상태다. */
     private static NodeResource idleNode() {
         return new NodeResource("mdc-01", "idle-x", 8, 16384, 0,
                 2, 10, 40, 160, 500, 40, 1_000_000, 500_000);
     }
 
-    /** 가동 중인 큰 노드. 정격 900W 라 동적 증가분은 크지만 새로 드는 유휴 전력이 없다. */
+    /** 가동 중인 큰 노드. 정격 900W라 동적 증가분은 크지만 새로 드는 유휴 전력이 없다. */
     private static NodeResource busyNode() {
         return new NodeResource("mdc-01", "busy-y", 8, 16384, 0,
                 50, 50, 40, 500, 900, 40, 1_000_000, 500_000);

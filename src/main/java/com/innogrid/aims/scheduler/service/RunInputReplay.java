@@ -42,20 +42,20 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 저장한 실행 입력만으로 그 실행의 배치를 다시 돌리고 배치 이력과 대조한다 — 실행 재생 API·엔진별 재계산 API 와 재생 테스트가
+ * 저장한 실행 입력만으로 그 실행의 배치를 다시 돌리고 배치 이력과 대조한다 — 실행 재생 API·엔진별 재계산 API와 재생 테스트가
  * 함께 쓴다. 엔진별 재계산은 같은 루프를 엔진만 바꿔 돌린다.
  *
  * <p>엔진·평가기·모델은 스프링 빈을 쓰지 않고 공개 생성자로 다시 만든다. 운영 {@link ThermalModel} 빈의 냉각 대기를 건드리지
- * 않으려는 것이다. 노브는 payload 의 전력·열·네트워크 설정을 새 {@link SchedulerProperties} 에 덮어쓴다. 냉각 대기는 시각을
+ * 않으려는 것이다. 노브는 payload의 전력·열·네트워크 설정을 새 {@link SchedulerProperties}에 덮어쓴다. 냉각 대기는 시각을
  * 맞춘 시계로 다시 건 뒤 저장 시각으로 돌려놓는다. 평가기는 대기를 거는 쪽이다 — 실제 실행처럼 루프 중 상한을 넘은 노드에
  * 대기가 걸려 뒤 워크로드가 그 노드를 보지 못한다.</p>
  *
  * <p>루프 안에서 생긴 일은 결과 쪽 기록에서 가져온다: 배치 이력의 후보 0 행은 건너뜀, 전달 기록의 거부·불가는 예약 되돌림
- * ({@link PlacementDispatchService#downgrade} 가 실패로 낮추는 상태와 같다).</p>
+ * ({@link PlacementDispatchService#downgrade}가 실패로 낮추는 상태와 같다).</p>
  */
 final class RunInputReplay {
 
-    /** 다시 만들 수 있는 엔진 id 와 엔진별 재계산 응답의 엔진 순서. 엔진 레지스트리의 id 와 같아야 한다 — 테스트가 맞대어 확인한다. */
+    /** 다시 만들 수 있는 엔진 id와 엔진별 재계산 응답의 엔진 순서. 엔진 레지스트리의 id와 같아야 한다 — 테스트가 맞대어 확인한다. */
     static final List<String> ENGINE_ORDER = List.of("weighted", "power", "temperature");
 
     static final Set<String> ENGINES = Set.copyOf(ENGINE_ORDER);
@@ -83,7 +83,7 @@ final class RunInputReplay {
 
     /**
      * 저장한 설정 노브를 새 설정에 덮어쓴다. 지금 코드에 없는 노브는 무시하고, 저장 뒤 새로 생긴 노브는 지금 기본값으로 둔다.
-     * 형식이 지금 코드와 다르면 {@link tools.jackson.core.JacksonException} 을 던진다 — 실행 재생은 이것을 409 로 돌려준다.
+     * 형식이 지금 코드와 다르면 {@link tools.jackson.core.JacksonException}을 던진다 — 실행 재생은 이것을 409로 돌려준다.
      */
     static SchedulerProperties properties(RunInputCapture.RunInputs in) {
         SchedulerProperties props = new SchedulerProperties();
@@ -147,7 +147,7 @@ final class RunInputReplay {
                 continue;
             }
             Workload w = workload(row);
-            // 실행과 같은 PlaceAndDispatch 를 거친다. 실제 전달은 없고, 실행이 예약을 되돌린 워크로드만 실행 계층이 받지 않은 것으로 본다
+            // 실행과 같은 PlaceAndDispatch를 거친다. 실제 전달은 없고, 실행이 예약을 되돌린 워크로드만 실행 계층이 받지 않은 것으로 본다
             PlaceAndDispatch.Done done = PlaceAndDispatch.run(rebuilt.context(), w, () -> {
                 try {
                     return rebuilt.engine().schedule(w, rebuilt.context());
@@ -206,12 +206,12 @@ final class RunInputReplay {
     }
 
     /**
-     * 재생 결과를 워크로드 id 로 배치 이력과 맞댄다. 선택 노드·노드 배치 스코어({@code finalScore})·성공 여부가 모두 같아야
-     * MATCH 다 — 스코어는 오차 없이 비교한다.
+     * 재생 결과를 워크로드 id로 배치 이력과 맞댄다. 선택 노드·노드 배치 스코어({@code finalScore})·성공 여부가 모두 같아야
+     * MATCH다 — 스코어는 오차 없이 비교한다.
      *
      * <p>판정은 앞에서부터 본다. 이력 행이 없는 워크로드부터, 그리고 전달 기록이 없는 성공 배치의 다음 워크로드부터는 실행의
      * 예약 상태를 알 수 없다. 그 지점 앞에서 어긋났으면 MISMATCH, 앞이 모두 같고 그런 지점이 있으면 INCOMPLETE, 끝까지
-     * 확인했으면 MATCH 다.</p>
+     * 확인했으면 MATCH다.</p>
      */
     static Report compare(List<Step> steps, List<SchedulingHistory> history, Set<Long> missingDispatch) {
         Map<Long, SchedulingHistory> byWorkload = byWorkload(history);
@@ -290,7 +290,7 @@ final class RunInputReplay {
         return p;
     }
 
-    /** 엔진과 예약은 워크로드 id 를 쓰지 않아 id 는 채우지 않는다 — 대조는 {@link Step#workloadId()} 로 한다. */
+    /** 엔진과 예약은 워크로드 id를 쓰지 않아 id는 채우지 않는다 — 대조는 {@link Step#workloadId()}로 한다. */
     static Workload workload(RunInputCapture.WorkloadRow r) {
         Workload w = new Workload(r.name(), r.requiredCpu(), r.requiredMemoryMb());
         w.setRequiredGpu(r.requiredGpu());

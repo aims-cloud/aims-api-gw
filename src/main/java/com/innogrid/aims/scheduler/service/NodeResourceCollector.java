@@ -32,13 +32,13 @@ import com.innogrid.aims.scheduler.model.NodeResource.PowerSource;
  * 스케줄링 엔진에 NodeResource 목록을 제공한다.
  *
  * <p><b>핵심 메트릭(CPU 사용률·코어 수·MemTotal·MemAvailable)을 알 수 없는 노드는 수집하지
- * 않는다.</b> 질의가 실패하거나 시리즈가 없을 때 0 으로 채우면 그 노드는 "CPU 0% 의 빈 노드"로
+ * 않는다.</b> 질의가 실패하거나 시리즈가 없을 때 0으로 채우면 그 노드는 "CPU 0% 의 빈 노드"로
  * 보인다 — 점수가 치솟아 배치가 몰리고, 통합 진단은 가동 중인 노드를 반납 후보로 판정한다.
- * 코어 수가 0 이면 {@code Math.max(…, 1)} 로 1코어짜리 가짜 노드가 만들어지기도 했다.
+ * 코어 수가 0이면 {@code Math.max(…, 1)}로 1코어짜리 가짜 노드가 만들어지기도 했다.
  * 모르는 노드는 후보가 아니다. 제외 사실은 WARN 로그로 남긴다.</p>
  *
- * <p>디스크·네트워크·전력·온도는 없으면 0 으로 둔다. 전력·온도는 {@link PowerSource} 플래그가
- * "수집 안 됨"을 표시하고, 디스크 총량 0 은 "모름"이라 C1 디스크 검사가 그 노드를 건너뛴다.</p>
+ * <p>디스크·네트워크·전력·온도는 없으면 0으로 둔다. 전력·온도는 {@link PowerSource} 플래그가
+ * "수집 안 됨"을 표시하고, 디스크 총량 0은 "모름"이라 C1 디스크 검사가 그 노드를 건너뛴다.</p>
  */
 @Service
 public class NodeResourceCollector {
@@ -51,7 +51,7 @@ public class NodeResourceCollector {
     private final PowerModel powerModel;
     private final MetricsQueryGuard guard;
 
-    /** 노드 전력 사양 원장. null 이면(원장 없이 조립한 테스트 경로) 정격은 종전대로 설정값에서 온다. */
+    /** 노드 전력 사양 원장. null이면(원장 없이 조립한 테스트 경로) 정격은 종전대로 설정값에서 온다. */
     private final NodePowerSpecRepository powerSpecRepository;
 
     /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
@@ -126,7 +126,7 @@ public class NodeResourceCollector {
 
     /**
      * 모든 활성 노드의 실시간 자원 상태를 수집한다.
-     * 핵심 메트릭을 알 수 없는 노드는 목록에 들어가지 않는다 — 제외 목록은 {@link #collect()} 가 준다.
+     * 핵심 메트릭을 알 수 없는 노드는 목록에 들어가지 않는다 — 제외 목록은 {@link #collect()}가 준다.
      */
     public List<NodeResource> collectAll() {
         return collect().nodes();
@@ -144,7 +144,7 @@ public class NodeResourceCollector {
      * 노드 상한, 스냅샷 전체는 전체 상한이다. 노드별 수집은 보호 장치의 풀에서 병렬로 돌리되 결과는 <b>제출 순서대로</b>
      * 모아 노드 순서가 순차 수집과 같다. 상한을 넘긴 노드는 "응답 없음"으로 제외 목록에 넣고 나머지로 계속 간다 —
      * 저장소가 멈춰도 요청 스레드는 멈추지 않는다. 대상 목록 질의가 상한을 넘기면 빈 스냅샷(예외로 끝났을 때의 "수집 실패"와
-     * 같은 결과)이다. 작업 스레드는 공유 목록을 건드리지 않고 {@link NodeOutcome} 만 돌려준다 — 뒤늦게 끝난 작업이
+     * 같은 결과)이다. 작업 스레드는 공유 목록을 건드리지 않고 {@link NodeOutcome}만 돌려준다 — 뒤늦게 끝난 작업이
      * 조립이 끝난 목록을 오염시키지 않게 하기 위해서다.</p>
      */
     @SuppressWarnings("unchecked")
@@ -166,15 +166,15 @@ public class NodeResourceCollector {
             List<Map<String, Object>> results = (List<Map<String, Object>>) data.get("result");
             if (results == null) return new Snapshot(nodes, excluded);
 
-            // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다. 키는 DCGM 시리즈의 instance 다.
+            // GPU 개수는 노드마다 조회하지 않고 한 번에 받아 둔다. 키는 DCGM 시리즈의 instance다.
             Map<String, Integer> gpuCounts = exporterResolver.discoverGpuCounts();
             // GPU 축(사용률·온도·전력)도 클러스터 한 번씩 — GPU 시리즈가 아예 없으면 세 질의를 던지지 않는다.
             ExporterInstanceResolver.GpuTelemetryDiscovery gpuDiscovery = gpuCounts.isEmpty()
                     ? ExporterInstanceResolver.GpuTelemetryDiscovery.NONE : exporterResolver.discoverGpuTelemetry();
             Map<String, GpuTelemetry> gpuTelemetry = gpuDiscovery.byInstance();
             warnGpuTelemetryGaps(gpuCounts, gpuDiscovery);
-            // 세 익스포터의 instance 를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance 가
-            // 달라(노드 :9100, DCGM :9400, IPMI 는 중앙 주소) 노드 instance 로는 GPU·전력·온도를 찾을 수 없었다.
+            // 세 익스포터의 instance를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance가
+            // 달라(노드 :9100, DCGM :9400, IPMI는 중앙 주소) 노드 instance로는 GPU·전력·온도를 찾을 수 없었다.
             ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
             // 정격 전력 원장도 수집 1회당 한 번만 읽는다. 비어 있으면 정격은 종전대로 설정값에서 온다.
             NodePowerSpecs specs = powerSpecs();
@@ -229,7 +229,7 @@ public class NodeResourceCollector {
 
     /**
      * GPU 개수는 잡혔는데 GPU 축이 빈 까닭을 수집 1회당 한 줄로 남긴다 — 메트릭 이름과 노드 예시까지. 상한 초과(저장소 쪽)와
-     * 빈 결과(익스포터가 그 카운터를 안 냄)는 확인할 자리가 달라 갈라 적는다. 응답의 0 은 규약이지만 로그까지 조용하면
+     * 빈 결과(익스포터가 그 카운터를 안 냄)는 확인할 자리가 달라 갈라 적는다. 응답의 0은 규약이지만 로그까지 조용하면
      * 운영자가 어디를 봐야 할지 모른다.
      */
     private void warnGpuTelemetryGaps(Map<String, Integer> gpuCounts, ExporterInstanceResolver.GpuTelemetryDiscovery d) {
@@ -252,7 +252,7 @@ public class NodeResourceCollector {
     private NodeOutcome collectNodeMetrics(String mdcId, String instance, String ipmiInstance, int totalGpu,
                                            GpuTelemetry gpuTelemetry, NodePowerSpecs specs) {
         String filter = String.format("{instance=\"%s\"}", instance);
-        // 전력·온도는 IPMI 시리즈의 instance 로 묻는다 — 노드 익스포터와 다를 수 있다.
+        // 전력·온도는 IPMI 시리즈의 instance로 묻는다 — 노드 익스포터와 다를 수 있다.
         String ipmiFilter = String.format("{instance=\"%s\"}", ipmiInstance);
         String mount = properties.getDiskMountPoint();
 
@@ -282,7 +282,7 @@ public class NodeResourceCollector {
         // ── 부가 메트릭: 없으면 0 ────────────────────────────────
         // 마운트 포인트를 고정하지 않으면 여러 시리즈 중 첫 건이 잡혀 값이 흔들린다.
         // 총량과 가용량을 따로 받아 사용률은 여기서 계산한다 — 총량(GB)이 디스크 제약(C1)의 기준이 된다.
-        // 총량을 못 얻으면 0 = "모름" 이고, 그 노드는 디스크 검사를 받지 않는다(부가 메트릭이라 제외 사유가 아니다).
+        // 총량을 못 얻으면 0 = "모름"이고, 그 노드는 디스크 검사를 받지 않는다(부가 메트릭이라 제외 사유가 아니다).
         double diskSize = safeQuery(String.format(
                 "node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"%s\",instance=\"%s\"}", mount, instance));
         double diskAvail = safeQuery(String.format(
@@ -314,8 +314,8 @@ public class NodeResourceCollector {
     /**
      * 핵심 메트릭 질의 — "값이 없다"와 "값이 0 이다"를 구분한다.
      *
-     * <p>{@code queryScalar} 는 질의 실패도 시리즈 없음도 0.0 으로 돌려주므로 구분할 수 없다.
-     * 결과 벡터를 직접 받아 비어 있으면 {@code empty}, 예외도 {@code empty} 로 돌려준다.</p>
+     * <p>{@code queryScalar}는 질의 실패도 시리즈 없음도 0.0으로 돌려주므로 구분할 수 없다.
+     * 결과 벡터를 직접 받아 비어 있으면 {@code empty}, 예외도 {@code empty}로 돌려준다.</p>
      */
     @SuppressWarnings("unchecked")
     private OptionalDouble requiredQuery(String promQL) {

@@ -30,25 +30,25 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * </pre>
  *
  * <p><b>정책 가중치를 그대로 쓰지 않는다.</b> 정책 기본값은 {@code cpu .25 + memory .25 = 0.50}
- * 대 {@code power .20} 이라, 그대로 쓰면 전력 항이 소수파가 되어 전력 엔진이 전력 엔진이 아니게
+ * 대 {@code power .20}이라, 그대로 쓰면 전력 항이 소수파가 되어 전력 엔진이 전력 엔진이 아니게
  * 된다. 정책 가중치는 <b>전력↔열·CPU↔메모리의 비율로만</b> 반영하고, 전력·열 대 자원의 배분은
  * 엔진 고유 설정({@code resourceShare})으로 둔다.</p>
  *
  * <p><b>우선순위 배수·선호 MDC 보너스·MDC 링크 점수는 이 엔진에 적용하지 않는다.</b> 셋은 {@code weighted}
  * 엔진에만 있다. 정책이 링크 게이트를 켜도 이 엔진은 DOWN 링크 제외(C5)만 공유하고 링크 품질을 점수에 섞지
- * 않는다. 스케줄의 엔진 선택이 곧 이 항목들의 적용 여부를 결정하므로, 우선순위나 데이터 MDC 를 쓰는 워크로드는
+ * 않는다. 스케줄의 엔진 선택이 곧 이 항목들의 적용 여부를 결정하므로, 우선순위나 데이터 MDC를 쓰는 워크로드는
  * 엔진을 바꾸면 그 효과가 사라진다는 점을 운영 문서가 알려야 한다.</p>
  *
  * <p><b>전력 통합은 별도 항이 아니다.</b> 예전에는 "CPU 가 10% 를 넘으면 보너스"라는 임의 규칙을
- * 뒀지만, 실효 기여가 명목 10% 가 아닌 1.5% 에 그쳤고 근거도 없었다. 지금은 빈 노드에 배치할 때
- * 그 노드의 유휴 전력이 새로 든다는 사실을 {@code realMarginalPower} 가 직접 계산한다 — 통합이
+ * 뒀지만, 실효 기여가 명목 10%가 아닌 1.5%에 그쳤고 근거도 없었다. 지금은 빈 노드에 배치할 때
+ * 그 노드의 유휴 전력이 새로 든다는 사실을 {@code realMarginalPower}가 직접 계산한다 — 통합이
  * W 단위로 설명된다(동적항은 모델식, 깨우기항은 계측 노드의 실측 역산 — 총량의 실측 검증은 아니다).</p>
  *
- * <p><b>전력·온도를 수집하지 못한 노드는 중립값 0.5 를 준다.</b> 0 을 주면 판단 근거가 없는 노드가
- * 최악으로 평가되고, 감점을 아예 하지 않으면 오히려 유리해진다. IPMI 가 없는 환경에서는 모든
- * 노드가 중립이 되어 자원 여유로 결정되며, 그 사실이 {@code reason} 에 드러난다.</p>
+ * <p><b>전력·온도를 수집하지 못한 노드는 중립값 0.5를 준다.</b> 0을 주면 판단 근거가 없는 노드가
+ * 최악으로 평가되고, 감점을 아예 하지 않으면 오히려 유리해진다. IPMI가 없는 환경에서는 모든
+ * 노드가 중립이 되어 자원 여유로 결정되며, 그 사실이 {@code reason}에 드러난다.</p>
  * <p>실질 한계 전력 점수는 노드 정격이 아니라 W 눈금({@code marginalScaleWatts})으로 정규화한다 —
- * 깨우기 벌점이 유휴비가 아니라 절대 W 로 총점에 들어간다.</p>
+ * 깨우기 벌점이 유휴비가 아니라 절대 W로 총점에 들어간다.</p>
  */
 @Component
 public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareScheduler.PowerRun> {
@@ -90,7 +90,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
 
     /**
      * 호출 한 번의 누적값 — 후보 중 전력을 잰 노드가 하나라도 있는가(제외된 후보도 센다 · 현재 동작)와
-     * 배치 점수용 PEI 의 코어 기준(후보 전체 중 코어 수가 0 보다 큰 노드의 평균 코어 수 · 제외 판정·미계측 노드 포함).
+     * 배치 점수용 PEI의 코어 기준(후보 전체 중 코어 수가 0보다 큰 노드의 평균 코어 수 · 제외 판정·미계측 노드 포함).
      */
     static final class PowerRun extends Run {
         final double meanCores;
@@ -103,7 +103,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
 
     @Override
     protected PowerRun newRun(Workload workload, PlacementContext context) {
-        // 평균은 판정 회차 4 지목(BenchmarkRules.GAP_JUDGMENT_RULE 의 소비된 회차 목록)대로 후보 전체(제외 판정·미계측 노드 포함)로 낸다.
+        // 평균은 판정 회차 4 지목(BenchmarkRules.GAP_JUDGMENT_RULE의 소비된 회차 목록)대로 후보 전체(제외 판정·미계측 노드 포함)로 낸다.
         // 제외 판정은 여기서 부르지 않는다 — 냉각 기록을 남기므로 다시 부르면 호출 횟수가 바뀌어 결과가 달라진다(AbstractScoringEngine)
         return new PowerRun(PowerModel.meanPositiveCores(context.nodes()));
     }
@@ -118,7 +118,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
 
         // ── 전력 복합 점수 ──────────────────────────────────
         // PEI·비낭비도 실효 기저 — 한계 전력·가동 판정·자원 여유와 같은 입력(예약 반영)을 본다.
-        // PEI 는 후보 평균 코어 수 대비 코어 비율을 곱한 배치용 값이다(비낭비·한계 전력에는 곱하지 않는다)
+        // PEI는 후보 평균 코어 수 대비 코어 비율을 곱한 배치용 값이다(비낭비·한계 전력에는 곱하지 않는다)
         double pei = powerModel.placementPei(node, run.meanCores);
         double waste = powerModel.placementWasteScore(node);
         double marginal = powerModel.marginalScore(node, workload.getRequiredCpu());
@@ -139,13 +139,13 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
 
         double totalScore = Scores.round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
 
-        // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0 을 넣으면 "포화" 로
+        // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0을 넣으면 "포화"로
         // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
         double netScore = networkModel.localTrafficScore(node);
 
-        // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다. 0 이나 0.5 를
-        // 넣으면 "측정했더니 그 값" 으로 읽혀, 판단 근거가 없다는 사실이 가려진다.
-        // 전력 효율 평가 API 도 같은 방식을 쓴다(PowerEfficiencyResponse 주석).
+        // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null로 둔다. 0이나 0.5를
+        // 넣으면 "측정했더니 그 값"으로 읽혀, 판단 근거가 없다는 사실이 가려진다.
+        // 전력 효율 평가 API도 같은 방식을 쓴다(PowerEfficiencyResponse 주석).
         //
         // 실질 한계 전력은 가동 노드에서는 용량과 CPU 사용률로 동적 증가분을 계산하지만,
         // 유휴 노드의 깨우기 비용은 설정에 따라 실측 전력에서 유휴 전력을 역산할 수 있다.
@@ -206,8 +206,8 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
     /**
      * 두 계층을 합친다.
      *
-     * <p>정책 가중치의 <b>비율만</b> 쓴다. 합이 1 이 아니거나 일부가 0 이어도 각 계층 안에서
-     * 정규화되므로 총점은 0~1 을 벗어나지 않는다. 한 계층의 가중치가 전부 0 이면 그 안의 두
+     * <p>정책 가중치의 <b>비율만</b> 쓴다. 합이 1이 아니거나 일부가 0이어도 각 계층 안에서
+     * 정규화되므로 총점은 0~1을 벗어나지 않는다. 한 계층의 가중치가 전부 0이면 그 안의 두
      * 항을 반씩 본다.</p>
      */
     private double combine(SchedulingPolicy policy,
@@ -235,7 +235,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
      * 한 실행에서 같은 노드에 워크로드를 잇달아 얹어도 열 항은 첫 배치 자리에 머문다. 온도 엔진({@code TemperatureAwareScheduler})과
      * 배치 후 예상 온도({@link ThermalModel#predictedTemperature})는 이미 실효 온도를 쓴다. 계측 게이트({@code hasThermal})는 의도된
      * 실측이라 그대로 두고, 열관성 계수는 엔진 노브라 판 생성식의 온도 상승분과 다르므로 이 배선은 기저 일치까지만 주장한다.
-     * 예약이 0 이면 실효 온도 = 실측 온도라 값이 비트 단위로 같다.</p>
+     * 예약이 0이면 실효 온도 = 실측 온도라 값이 비트 단위로 같다.</p>
      */
     private double thermalScore(NodeResource node, SchedulingPolicy policy) {
         double maxTemp = policy.getMaxTemperatureCelsius();
@@ -258,7 +258,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
      * 통합 판정의 여유 — 가동 중 후보의 최고 총점 − 빈 후보의 최고 총점(적격 후보만).
      *
      * <p>양수면 통합 쪽(가동 노드)을 골랐고, 값이 작으면 노드 조건이 조금만 달라져도 빈 노드를 깨우는 선택으로
-     * 뒤집힌다는 뜻이다. 기준 시나리오에서 0.0002 였다. 점수·순위·선택은 바꾸지 않고 <b>보이게만</b> 한다 —
+     * 뒤집힌다는 뜻이다. 기준 시나리오에서 0.0002였다. 점수·순위·선택은 바꾸지 않고 <b>보이게만</b> 한다 —
      * 어느 쪽으로 얼마나 밀어야 하는지는 노드 2대 이상 실환경의 이 값이 쌓인 뒤에 정한다.
      * 한쪽 집단이 없으면 키를 넣지 않는다.</p>
      */

@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * ({@code ScheduleExecutionService.BY_PRIORITY_THEN_SIZE})과 같은 순서를 내는지 고정한다.
  *
  * <p>이 테스트를 {@code com.innogrid.aims.scheduler.service} 패키지에 둔 것은 {@code
- * BY_PRIORITY_THEN_SIZE} 가 package-private 상수이기 때문이다 — <b>프로덕션 가시성을 넓히지 않고</b>
+ * BY_PRIORITY_THEN_SIZE}가 package-private 상수이기 때문이다 — <b>프로덕션 가시성을 넓히지 않고</b>
  * 접근해서, 벤치마크 쪽 정렬과 실행 경로의 정렬이 조용히 발산하는 것을 막는다. 둘 중 하나만 고치고
  * 다른 하나를 안 고치면 여기가 먼저 빨간불이 된다.</p>
  */

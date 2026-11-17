@@ -8,11 +8,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 서버별 전력 효율성 평가 결과.
  *
- * <p>지표를 낼 수 없는 노드는 {@code evaluable=false} 이고 파생 값이 전부 {@code null} 이다.
- * 0 이나 0.5 같은 숫자를 채우지 않는 이유는, 판단 근거가 없다는 사실 자체가 정보이기
- * 때문이다. IPMI 가 연동되지 않은 환경에서는 모든 노드가 이 상태로 나오는 것이 정상이다.</p>
+ * <p>지표를 낼 수 없는 노드는 {@code evaluable=false}이고 파생 값이 전부 {@code null}이다.
+ * 0이나 0.5 같은 숫자를 채우지 않는 이유는, 판단 근거가 없다는 사실 자체가 정보이기
+ * 때문이다. IPMI가 연동되지 않은 환경에서는 모든 노드가 이 상태로 나오는 것이 정상이다.</p>
  *
- * <p>시각은 UTC 다. 표출 변환은 프런트가 한다.</p>
+ * <p>시각은 UTC다. 표출 변환은 프런트가 한다.</p>
  */
 public record PowerEfficiencyResponse(
         OffsetDateTime evaluatedAt,
@@ -50,12 +50,12 @@ public record PowerEfficiencyResponse(
      * 노드 하나의 평가.
      *
      * @param peiRaw          전력 효율 지표 원값(%/W) — CPU 사용률 ÷ 소비 전력
-     * @param peiNormalized   0~1 로 정규화한 값
-     * @param proportionality 이상 전력 곡선과의 근접도(0~1). 1 에 가까울수록 부하에 비례해 전력을 쓴다
+     * @param peiNormalized   0~1로 정규화한 값
+     * @param proportionality 이상 전력 곡선과의 근접도(0~1). 1에 가까울수록 부하에 비례해 전력을 쓴다
      * @param grade           클러스터 내 4분위 상대 등급 A~D. 표본이 모자라면 null
      * @param rank            PEI 내림차순 순위. 평가 불가 노드는 null
      * @param recommendation  운영 권고 한 줄. 해당 없으면 null
-     * @param totalCpu        노드 코어 수 — 노드 조회의 totalCpu 와 같은 수집 값
+     * @param totalCpu        노드 코어 수 — 노드 조회의 totalCpu와 같은 수집 값
      * @param usedCoresPerKw  사용 코어 환산 효율(코어/kW) = CPU 사용률/100 × 코어 수 ÷ 소비 전력(kW). PEI 원값과 달리 코어 수를 본다.
      *                        평가 불가 노드와 코어 수가 0 이하인 노드는 null
      * @param coreRank        usedCoresPerKw 내림차순 순위. 동점이면 노드 ID 사전순. 값이 없는 노드는 null

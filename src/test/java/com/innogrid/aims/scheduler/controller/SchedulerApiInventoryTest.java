@@ -24,20 +24,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 스케줄러 API 의 작업 목록(HTTP 메서드 + 경로)이 기준 파일과 같은지 확인한다.
+ * 스케줄러 API의 작업 목록(HTTP 메서드 + 경로)이 기준 파일과 같은지 확인한다.
  *
- * <p>{@code /v3/api-docs} 의 {@code paths} 중 {@code /api/v1/scheduler/} 로 시작하는 경로와 그 메서드를 모아 한 줄에
- * {@code METHOD /path} 로 적은 목록을 {@code src/test/resources/scheduler/golden/api/operations.txt} 와 비교한다.
+ * <p>{@code /v3/api-docs}의 {@code paths} 중 {@code /api/v1/scheduler/}로 시작하는 경로와 그 메서드를 모아 한 줄에
+ * {@code METHOD /path}로 적은 목록을 {@code src/test/resources/scheduler/golden/api/operations.txt}와 비교한다.
  * 경로 오름차순, 같은 경로 안에서는 GET·POST·PUT·PATCH·DELETE 순이라 기준 파일의 N 번째 줄이 docs/15 6장 색인의 N 번째 행과
- * 같다. operationId·태그·스키마·파라미터는 보지 않는다 — operationId 는 이름이 겹칠 때 springdoc 이 등록 순서에 따라 접미사를
- * 붙여 값이 흔들리고, 스키마·파라미터는 docs/13 이 맡는 필드 계약이라 이 목록의 뜻(어떤 작업이 있는가)과 다르기 때문이다.</p>
+ * 같다. operationId·태그·스키마·파라미터는 보지 않는다 — operationId는 이름이 겹칠 때 springdoc이 등록 순서에 따라 접미사를
+ * 붙여 값이 흔들리고, 스키마·파라미터는 docs/13이 맡는 필드 계약이라 이 목록의 뜻(어떤 작업이 있는가)과 다르기 때문이다.</p>
  *
- * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 목록을 {@code build/golden-candidates/api/operations.txt} 에 쓰고
- * 실패한다. 작업이 추가·삭제된 것이면 후보를 검토한 뒤 기준 파일로 복사하고, 같은 PR 에서 docs/15 8장 갱신 규약을 따라
+ * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 목록을 {@code build/golden-candidates/api/operations.txt}에 쓰고
+ * 실패한다. 작업이 추가·삭제된 것이면 후보를 검토한 뒤 기준 파일로 복사하고, 같은 PR에서 docs/15 8장 갱신 규약을 따라
  * 문서를 고친다. 순서나 중복만 다른 파일(손으로 고친 것으로 보임)도 실패로 보며, 이때는 후보로 바꿔 넣기만 하면 되고 문서 변경은
  * 없다. 통과하면 남아 있던 후보 파일을 지운다. 배치 응답 기준 파일({@link PlacementResponseGoldenTest})과 같은 운용이다.</p>
  *
- * <p>경로 필터와 메서드 집합은 {@link SchedulerResponseTypeApiTest} 와 같은 정의다(그 테스트의 하한 75 확인은 작업을 하나도
+ * <p>경로 필터와 메서드 집합은 {@link SchedulerResponseTypeApiTest}와 같은 정의다(그 테스트의 하한 75 확인은 작업을 하나도
  * 돌지 않고 통과하는 일을 막는 것이라 그대로 두고, 이 테스트가 두 번째 가드다). 테스트 컨텍스트는 다른 API 테스트와 공유하도록
  * 세 애너테이션만 붙이고 빈 교체·프로파일·속성 지정을 두지 않는다. springdoc 설정이나 버전이 바뀌어 경로 표기가 달라져도
  * 실패하며 그것은 의도한 동작이다.</p>
@@ -51,9 +51,9 @@ class SchedulerApiInventoryTest {
     private static final List<String> METHOD_ORDER = List.of("get", "post", "put", "patch", "delete");
     private static final Path GOLDEN = Path.of("src", "test", "resources", "scheduler", "golden", "api", "operations.txt");
     private static final Path CANDIDATE = Path.of("build", "golden-candidates", "api", "operations.txt");
-    /** 추가·삭제 목록을 메시지에 보여 주는 상한 — 넘치면 「외 N건」 으로 줄인다. */
+    /** 추가·삭제 목록을 메시지에 보여 주는 상한 — 넘치면 「외 N건」으로 줄인다. */
     private static final int LIST_LIMIT = 20;
-    /** {@link SchedulerResponseTypeApiTest} 가 확인하는 작업 수 하한 — 작업 수가 이 밑으로 줄면 그 테스트도 고쳐야 한다. */
+    /** {@link SchedulerResponseTypeApiTest}가 확인하는 작업 수 하한 — 작업 수가 이 밑으로 줄면 그 테스트도 고쳐야 한다. */
     private static final int LOWER_BOUND = 75;
 
     @Autowired MockMvc mockMvc;

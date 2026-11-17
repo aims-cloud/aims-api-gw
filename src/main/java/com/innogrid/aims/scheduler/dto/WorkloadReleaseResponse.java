@@ -8,8 +8,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 배치 예약 취소의 결과 — 대기로 돌아간 워크로드와 풀린 배정, 마감된 전달 기록.
  *
- * <p>취소는 실패가 아니다. 재시도 회계는 그대로이고 배치 이력도 남긴다. 풀린 노드·MDC 는 워크로드 응답에서
- * 이미 null 이 됐으므로 여기서 따로 알려 준다.</p>
+ * <p>취소는 실패가 아니다. 재시도 회계는 그대로이고 배치 이력도 남긴다. 풀린 노드·MDC는 워크로드 응답에서
+ * 이미 null이 됐으므로 여기서 따로 알려 준다.</p>
  */
 @Schema(description = "배치 예약 취소 결과 — 대기로 돌아간 워크로드 · 풀린 배정 · 마감된 전달 기록")
 public record WorkloadReleaseResponse(

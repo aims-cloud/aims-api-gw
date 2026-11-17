@@ -10,10 +10,10 @@ import com.innogrid.aims.scheduler.model.NovaDryRunStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Nova 인벤토리 모의 배치 응답 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고, 그 위의 VM 을 스케줄러가 다시 놓아 본 결과.
+ * Nova 인벤토리 모의 배치 응답 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고, 그 위의 VM을 스케줄러가 다시 놓아 본 결과.
  *
  * <p>저장하지 않는다. 노드에 사용률 · 전력 · 온도가 없어 정책의 사용률 상한과 물리 vCPU · 메모리만 결과를 가른다 —
- * 엔진 비교나 통합 권고의 근거로 쓰지 않는다. 건수는 그 값을 알 때만 채우고, 모르면 null 이다(0 과 다름).</p>
+ * 엔진 비교나 통합 권고의 근거로 쓰지 않는다. 건수는 그 값을 알 때만 채우고, 모르면 null이다(0과 다름).</p>
  */
 @Schema(description = "Nova 인벤토리 모의 배치 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고 그 위 VM 을 정책 상한 아래 다시 놓아 본 결과. 저장 없음")
 public record NovaDryRunResponse(

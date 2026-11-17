@@ -69,7 +69,7 @@ class BandwidthAwarePlacementScenarioTest {
         assertEquals(0.714, s2.get("c").details().get("링크품질"), EPS, "딱 채우면 부족분 0");
         assertEquals(s2.get("b").totalScore(), s2.get("c").totalScore());
 
-        // ③ 요구 1000 — c 만 부족
+        // ③ 요구 1000 — c만 부족
         Map<String, NodeScore> s3 = run(1000.0, true);
         row(table, "③", "1000", s3, "b");
         assertEquals(0.714, s3.get("b").details().get("링크품질"), EPS, "넓은 경로는 그대로");

@@ -30,14 +30,14 @@ final class PolicyResolver {
         this.policyRepository = policyRepository;
     }
 
-    /** {@link #choose} 와 같은 선택에서 {@code default} 행이 없으면 만들어 저장한다(실행·배치 경로 — 이력이 정책 이름을 가리켜야 한다). */
+    /** {@link #choose}와 같은 선택에서 {@code default} 행이 없으면 만들어 저장한다(실행·배치 경로 — 이력이 정책 이름을 가리켜야 한다). */
     PolicyChoice resolve(Workload.ResourceType resourceType) {
         PolicyChoice choice = choose(resourceType);
         if (choice.persisted()) return choice;
         return new PolicyChoice(policyRepository.save(choice.policy()), choice.source(), true);
     }
 
-    /** 정책을 고르되 아무것도 저장하지 않는다. 규칙은 {@link SchedulingService#choosePolicy} 의 설명과 같다. */
+    /** 정책을 고르되 아무것도 저장하지 않는다. 규칙은 {@link SchedulingService#choosePolicy}의 설명과 같다. */
     PolicyChoice choose(Workload.ResourceType resourceType) {
         if (resourceType != null) {
             Optional<SchedulingPolicy> byType =
@@ -45,7 +45,7 @@ final class PolicyResolver {
                             .or(() -> policyRepository.findFirstByActiveTrueAndResourceType(resourceType));
             if (byType.isPresent()) return new PolicyChoice(byType.get(), PolicyChoice.Source.RESOURCE_TYPE, true);
         }
-        // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB 에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
+        // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
         // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
         Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
                 .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);

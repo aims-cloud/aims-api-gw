@@ -15,28 +15,28 @@ import java.util.function.UnaryOperator;
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 
 /**
- * 익스포터 대응 화면이 고를 후보 — 저장소에 <b>지금</b> 있는 DCGM·IPMI 시리즈의 {@code instance} 와, 수집기가 그것을
+ * 익스포터 대응 화면이 고를 후보 — 저장소에 <b>지금</b> 있는 DCGM·IPMI 시리즈의 {@code instance}와, 수집기가 그것을
  * 어느 노드에 배정하는지.
  *
  * <p>배정은 수집기와 같은 규칙 {@link ExporterInstances}(원장 → 호스트명 일치 → 그대로, 둘 이상이 같은 시리즈를 가리키면
- * 전부 자기 instance 로 되돌림)의 <b>역방향</b>이다 — 규칙을 여기서 다시 쓰지 않고 {@link ExporterInstances#dcgmFor} 의 결과를
- * 뒤집는다. 그래서 화면이 보는 "이 instance 는 어느 노드에 붙는가" 와 수집기가 실제로 하는 일이 어긋날 수 없다.</p>
+ * 전부 자기 instance로 되돌림)의 <b>역방향</b>이다 — 규칙을 여기서 다시 쓰지 않고 {@link ExporterInstances#dcgmFor}의 결과를
+ * 뒤집는다. 그래서 화면이 보는 "이 instance 는 어느 노드에 붙는가"와 수집기가 실제로 하는 일이 어긋날 수 없다.</p>
  *
  * <p><b>답하지 않은 질의는 그 질의가 뒷받침하는 칸을 비운다.</b> 노드 목록을 못 받으면 배정을 계산할 수 없으니 후보의 배정은
- * {@link Assignment#UNKNOWN} 이고, DCGM(IPMI) 목록을 못 받으면 원장값을 대조할 것이 없으니 그쪽 {@code ledgerOnly} 는 빈
- * 목록이다 — 못 받은 것을 "저장소에 없다" 로 보이게 하지 않기 위해서다.</p>
+ * {@link Assignment#UNKNOWN}이고, DCGM(IPMI) 목록을 못 받으면 원장값을 대조할 것이 없으니 그쪽 {@code ledgerOnly}는 빈
+ * 목록이다 — 못 받은 것을 "저장소에 없다"로 보이게 하지 않기 위해서다.</p>
  *
- * <p>메트릭 값은 쓰지 않는다 — 발견 질의는 {@code count by(instance)} 라 라벨과 시리즈 수만 있다. GPU 개수는 DCGM 쪽 시리즈
+ * <p>메트릭 값은 쓰지 않는다 — 발견 질의는 {@code count by(instance)}라 라벨과 시리즈 수만 있다. GPU 개수는 DCGM 쪽 시리즈
  * 수가 곧 카드 수라 함께 실린다.</p>
  *
  * @param dcgm           DCGM 시리즈 후보, instance 오름차순
  * @param ipmi           IPMI 시리즈 후보, instance 오름차순
- * @param nodeInstances  지금 수집 대상인 노드 익스포터 instance 들({@code up == 1}), 오름차순
+ * @param nodeInstances  지금 수집 대상인 노드 익스포터 instance들({@code up == 1}), 오름차순
  * @param ledgerOnlyDcgm 원장에 적혀 있으나 저장소에 없는 DCGM instance — 오타이거나 익스포터가 내려간 것. DCGM 질의가 답하지
  *                       않았으면 대조할 수 없어 빈 목록
  * @param ledgerOnlyIpmi 같은 뜻의 IPMI
  * @param unavailable    상한 안에 답하지 않았거나 예외가 난 질의 이름({@code dcgm}·{@code ipmi}·{@code nodes}). 비어 있으면 세
- *                       질의가 모두 답했고, 그때 빈 후보 목록은 "그 익스포터 시리즈가 저장소에 없다" 는 뜻이다
+ *                       질의가 모두 답했고, 그때 빈 후보 목록은 "그 익스포터 시리즈가 저장소에 없다"는 뜻이다
  */
 public record ExporterInstanceCandidates(List<Candidate> dcgm, List<Candidate> ipmi, List<String> nodeInstances,
                                          List<String> ledgerOnlyDcgm, List<String> ledgerOnlyIpmi, List<String> unavailable) {
@@ -45,15 +45,15 @@ public record ExporterInstanceCandidates(List<Candidate> dcgm, List<Candidate> i
     public static final String QUERY_IPMI = "ipmi";
     public static final String QUERY_NODES = "nodes";
 
-    /** 수집기가 이 instance 를 어떻게 노드에 붙이는가. */
+    /** 수집기가 이 instance를 어떻게 노드에 붙이는가. */
     public enum Assignment {
-        /** 원장 행이 이 instance 를 지목한다 */
+        /** 원장 행이 이 instance를 지목한다 */
         LEDGER,
         /** 포트를 뗀 호스트명이 같은 노드가 정확히 하나 — 원장 없이 이어진다 */
         HOSTNAME,
-        /** 노드 익스포터 instance 와 같은 문자열 — 같은 포트 배치·모의 모드 옛 형태 */
+        /** 노드 익스포터 instance와 같은 문자열 — 같은 포트 배치·모의 모드 옛 형태 */
         SAME_AS_NODE,
-        /** 둘 이상의 노드가 같은 시리즈를 얻어 수집기가 그 노드들을 자기 instance 로 되돌린다 — 자기 시리즈가 있는 노드만 값이 남는다 */
+        /** 둘 이상의 노드가 같은 시리즈를 얻어 수집기가 그 노드들을 자기 instance로 되돌린다 — 자기 시리즈가 있는 노드만 값이 남는다 */
         AMBIGUOUS,
         /** 어느 노드도 얻지 못한다 — 원장에 적어야 이어진다 */
         UNASSIGNED,
@@ -64,12 +64,12 @@ public record ExporterInstanceCandidates(List<Candidate> dcgm, List<Candidate> i
     /**
      * @param instance         시리즈의 instance 라벨 그대로
      * @param host             포트를 뗀 호스트 — 화면이 노드와 나란히 놓고 보기 위한 것
-     * @param gpuCount         DCGM 이면 그 instance 의 시리즈 수(= 카드 수), IPMI 는 null
-     * @param assignedNodeId   수집기가 이 instance 를 붙이는 노드. {@code AMBIGUOUS}·{@code UNASSIGNED}·{@code UNKNOWN} 이면 null
+     * @param gpuCount         DCGM이면 그 instance의 시리즈 수(= 카드 수), IPMI는 null
+     * @param assignedNodeId   수집기가 이 instance를 붙이는 노드. {@code AMBIGUOUS}·{@code UNASSIGNED}·{@code UNKNOWN}이면 null
      * @param assignedBy       붙이는 근거
-     * @param claimedByNodeIds 충돌 규칙 전에 이 instance 로 해석되는 노드 전부(원장·호스트명·그대로), 오름차순. {@code AMBIGUOUS} 면
+     * @param claimedByNodeIds 충돌 규칙 전에 이 instance로 해석되는 노드 전부(원장·호스트명·그대로), 오름차순. {@code AMBIGUOUS}면
      *                         둘 이상이고 그 노드들이 충돌 당사자다
-     * @param ledgerNodeIds    원장에서 이 instance 를 적은 노드 전부, 오름차순. 배정 근거가 원장이 아니어도 원장 행은 있을 수 있다
+     * @param ledgerNodeIds    원장에서 이 instance를 적은 노드 전부, 오름차순. 배정 근거가 원장이 아니어도 원장 행은 있을 수 있다
      */
     public record Candidate(String instance, String host, Integer gpuCount, String assignedNodeId, Assignment assignedBy,
                             List<String> claimedByNodeIds, List<String> ledgerNodeIds) {
@@ -90,9 +90,9 @@ public record ExporterInstanceCandidates(List<Candidate> dcgm, List<Candidate> i
 
     /**
      * @param ledger        원장 행
-     * @param dcgmCounts    저장소의 DCGM instance → 시리즈 수(질의가 답하지 않았으면 비어 있고 {@code unavailable} 에 이름이 있다)
-     * @param ipmiSeen      저장소의 IPMI instance 들
-     * @param nodeInstances 지금 수집 대상 노드 instance 들
+     * @param dcgmCounts    저장소의 DCGM instance → 시리즈 수(질의가 답하지 않았으면 비어 있고 {@code unavailable}에 이름이 있다)
+     * @param ipmiSeen      저장소의 IPMI instance들
+     * @param nodeInstances 지금 수집 대상 노드 instance들
      * @param unavailable   답하지 않은 질의 이름
      */
     public static ExporterInstanceCandidates of(List<NodeExporterMapping> ledger, Map<String, Integer> dcgmCounts,
@@ -123,7 +123,7 @@ public record ExporterInstanceCandidates(List<Candidate> dcgm, List<Candidate> i
         // instance → 원장에서 그것을 적은 노드들
         Map<String, List<String>> ledgerNodesOf = new LinkedHashMap<>();
         ledgerByNode.forEach((node, inst) -> ledgerNodesOf.computeIfAbsent(inst, k -> new ArrayList<>()).add(node));
-        // instance → 충돌 규칙 전에 그 instance 로 해석되는 노드들 (assign 의 claims 와 같은 셈, 한 번만 훑는다)
+        // instance → 충돌 규칙 전에 그 instance로 해석되는 노드들 (assign의 claims와 같은 셈, 한 번만 훑는다)
         Map<String, List<String>> claimants = new LinkedHashMap<>();
         for (String node : nodes) {
             String target = singleResolve.apply(node);

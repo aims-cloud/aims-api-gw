@@ -9,9 +9,9 @@ import com.innogrid.aims.scheduler.model.InventoryStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Nova 인벤토리 조회 응답 — 하이퍼바이저를 스케줄러 노드 입력 모양으로, VM 을 워크로드 입력 모양으로 바꾼 것.
+ * Nova 인벤토리 조회 응답 — 하이퍼바이저를 스케줄러 노드 입력 모양으로, VM을 워크로드 입력 모양으로 바꾼 것.
  *
- * <p>읽기 전용이고 저장하지 않는다. 실행 경로의 배치 입력에는 쓰지 않고, 저장 없는 모의 배치는 {@code POST /inventory/nova/dry-run} 이 한다.</p>
+ * <p>읽기 전용이고 저장하지 않는다. 실행 경로의 배치 입력에는 쓰지 않고, 저장 없는 모의 배치는 {@code POST /inventory/nova/dry-run}이 한다.</p>
  */
 @Schema(description = "Nova 인벤토리 조회 — 하이퍼바이저 · VM 을 스케줄러 입력 모양으로. 실제로 빈 인벤토리(EMPTY)와 연동 실패를 나눈다. 저장 없음")
 public record NovaInventoryResponse(

@@ -34,11 +34,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 실행 상세 결정 목록의 응답 계약 — 결정 한 줄은 13키이고 {@code exclusionCodes} 가 맨 끝에 문자열 그대로 실린다.
+ * 실행 상세 결정 목록의 응답 계약 — 결정 한 줄은 13키이고 {@code exclusionCodes}가 맨 끝에 문자열 그대로 실린다.
  * 배치 이력 페이징의 실행 필터({@code scheduleRunId})는 이 결정 목록과 모집단이 같다.
  *
  * <p>이 컨텍스트는 실 게이트웨이라 노드가 없어 즉시 실행으로는 결정이 생기지 않는다. 그래서 실행 이력과 결정 이력 행을
- * 저장소에 직접 심고 HTTP 로 읽는다 — 컴포넌트 수는 {@code ScheduleSchemaContractTest} 가 세고, 여기서는 JSON 키 집합·순서를 본다.</p>
+ * 저장소에 직접 심고 HTTP로 읽는다 — 컴포넌트 수는 {@code ScheduleSchemaContractTest}가 세고, 여기서는 JSON 키 집합·순서를 본다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -120,7 +120,7 @@ class ScheduleRunDetailDecisionApiTest {
             List<Long> fromPage = new ArrayList<>();
             for (JsonNode row : data(get(HISTORY_PAGE).param("scheduleRunId", String.valueOf(s.runId()))
                     .param("sort", "createdAt,asc").param("size", "100")).get("items")) fromPage.add(row.get("id").asLong());
-            // H2 는 동률을 삽입 순(id 오름차순)으로 주는 경향이 있어 오름차순 확인만으로는 보조 키 누락을 못 잡는다 — 검출은 아래 내림차순 페이지 확인이 맡는다.
+            // H2는 동률을 삽입 순(id 오름차순)으로 주는 경향이 있어 오름차순 확인만으로는 보조 키 누락을 못 잡는다 — 검출은 아래 내림차순 페이지 확인이 맡는다.
             assertEquals(ascending, fromDetail, "실행 상세는 createdAt 동률을 id 오름차순으로 싣는다");
             assertEquals(fromDetail, fromPage, "sort=createdAt,asc 페이징과 실행 상세의 행 순서가 같다");
 
@@ -156,7 +156,7 @@ class ScheduleRunDetailDecisionApiTest {
             run.recordCounts(2, 1, 1, false);
             run.finish(ScheduleRun.RunStatus.FAILED, "시험용");
             run = runRepository.save(run);
-            // 워크로드 id 는 실재 행과 겹치지 않는 예약 대역(다른 이력 테스트의 9_9xx_xxx 관례)
+            // 워크로드 id는 실재 행과 겹치지 않는 예약 대역(다른 이력 테스트의 9_9xx_xxx 관례)
             SchedulingHistory failed = new SchedulingHistory(9_930_001L, key + "-fail", null, null, 0, "모든 후보 노드가 제약 조건을 충족하지 못합니다", "weighted", "default");
             failed.setCandidateCount(1);
             failed.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":1}");
@@ -177,7 +177,7 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
-    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id 는 예약 대역 9_930_003, 동률 테스트 전용. */
+    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id는 예약 대역 9_930_003, 동률 테스트 전용. */
     private Seeded seedTied(int n) throws Exception {
         String key = "rdtie-" + Long.toHexString(System.nanoTime());
         JsonNode schedule = objectMapper.readTree(mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
@@ -207,7 +207,7 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
-    /** 저장 경로가 채운 결정 시각을 하나로 덮어 동률을 만든다 — 실행 이력 필터 테스트의 backdate 와 같은 방식. */
+    /** 저장 경로가 채운 결정 시각을 하나로 덮어 동률을 만든다 — 실행 이력 필터 테스트의 backdate와 같은 방식. */
     private void pinCreatedAt(List<Long> ids, OffsetDateTime at) {
         tx.executeWithoutResult(st -> em.createQuery("update SchedulingHistory h set h.createdAt = :t where h.id in :ids")
                 .setParameter("t", at).setParameter("ids", ids).executeUpdate());

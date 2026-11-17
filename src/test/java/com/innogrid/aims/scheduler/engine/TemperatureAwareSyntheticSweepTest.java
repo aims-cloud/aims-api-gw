@@ -25,22 +25,22 @@ import com.innogrid.aims.scheduler.service.NodeResourceCollector;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@code TemperatureAwareScheduler} 의 미계측 가드·평균 수정을 <b>실제 가상 클러스터 8대</b>(계측 5·미계측 3)로,
+ * {@code TemperatureAwareScheduler}의 미계측 가드·평균 수정을 <b>실제 가상 클러스터 8대</b>(계측 5·미계측 3)로,
  * <b>한 주기(60분) 전체</b>를 훑어 확인한다.
  *
- * <p>{@code TemperatureAwareUnmeasuredTest} 는 손으로 만든 2노드 픽스처로 결함의 정확한 수치(0.5831 대 0.5500 등)를
+ * <p>{@code TemperatureAwareUnmeasuredTest}는 손으로 만든 2노드 픽스처로 결함의 정확한 수치(0.5831 대 0.5500 등)를
  * 고정한다. 그 픽스처는 결함의 존재는 증명하지만 <b>실제 수집 경로</b>({@link NodeResourceCollector} +
- * {@link SyntheticMetricsGateway})를 거치지 않는다 — {@code NodeResource} 를 직접 만들어 넘기기 때문이다. 이 클래스는
+ * {@link SyntheticMetricsGateway})를 거치지 않는다 — {@code NodeResource}를 직접 만들어 넘기기 때문이다. 이 클래스는
  * 실제 수집 경로를 그대로 타서, 합성 클러스터가 시각에 따라 CPU·온도를 사인 곡선으로 흔드는 동안에도 미계측 가드와
  * 평균 수정이 매 순간 성립하는지를 본다.</p>
  *
- * <p>배포 VM 은 노드가 <b>1대</b>뿐이라({@code TemperatureAwareUnmeasuredTest#lone_unmeasured_node_total_score_pinned}
+ * <p>배포 VM은 노드가 <b>1대</b>뿐이라({@code TemperatureAwareUnmeasuredTest#lone_unmeasured_node_total_score_pinned}
  * 참고) 계측·미계측이 섞인 클러스터에서의 평균 계산이나, 계측 노드끼리의 온도 기반 선택 자체를 볼 수 없다. 이
  * 성질을 실제로 보는 자리는 8대짜리 가상 클러스터인 이 테스트뿐이다.</p>
  */
 class TemperatureAwareSyntheticSweepTest {
 
-    private static final long PERIOD_SECONDS = 3600;   // synthetic-cluster.yml 의 periodMinutes: 60
+    private static final long PERIOD_SECONDS = 3600;   // synthetic-cluster.yml의 periodMinutes: 60
     private static final long STEP_SECONDS = 30;       // 120 표본
     private static final long BASE_EPOCH = 1_800_000_000L;
 
@@ -55,7 +55,7 @@ class TemperatureAwareSyntheticSweepTest {
     private final ThermalModel thermalModel = new ThermalModel(properties);
     private final TemperatureAwareScheduler scheduler = new TemperatureAwareScheduler();
 
-    /** 고정 시각으로 실제 수집을 한 번 돌린다({@code SyntheticModeInvariantTest} 와 같은 조립). */
+    /** 고정 시각으로 실제 수집을 한 번 돌린다({@code SyntheticModeInvariantTest}와 같은 조립). */
     private NodeResourceCollector.Snapshot collectAt(long epochSecond) {
         SyntheticMetricsGateway gateway = new SyntheticMetricsGateway(cluster, () -> Instant.ofEpochSecond(epochSecond));
         return new NodeResourceCollector(gateway, properties, powerModel, new MetricsQueryGuard(2)).collect();
@@ -76,7 +76,7 @@ class TemperatureAwareSyntheticSweepTest {
                 .orElseThrow(() -> new AssertionError(nodeId + " 가 후보에 없다 — synthetic-cluster.yml 이 바뀌었는가"));
     }
 
-    /** 스냅샷이 기대한 계측/미계측 구성인지 먼저 확인한다 — yml 이 바뀌면 여기서 정확히 실패한다. */
+    /** 스냅샷이 기대한 계측/미계측 구성인지 먼저 확인한다 — yml이 바뀌면 여기서 정확히 실패한다. */
     private void assertClusterShape(NodeResourceCollector.Snapshot snapshot, long t) {
         Set<String> measured = snapshot.nodes().stream()
                 .filter(n -> n.getTemperatureCelsius() > 0).map(NodeResource::getNodeId).collect(Collectors.toSet());
@@ -151,15 +151,15 @@ class TemperatureAwareSyntheticSweepTest {
 
             // 클러스터 평균은 노드별 값이 아니라 <b>실행 단위 값</b>이다 — 후보 여덟 대가 모두 같은 수를
             // 담고 있어야 한다. 대표로 첫 노드 한 대만 읽으면 이 성질을 확인하지 못한다: 채움 조건을
-            // "클러스터에 계측 노드가 있는가" 에서 "이 노드가 계측인가" 로 바꾸는 변이는 미계측 3대의
-            // 칸만 null 로 만드는데, 첫 노드가 계측이면 그 변이가 그대로 통과한다.
+            // "클러스터에 계측 노드가 있는가"에서 "이 노드가 계측인가"로 바꾸는 변이는 미계측 3대의
+            // 칸만 null로 만드는데, 첫 노드가 계측이면 그 변이가 그대로 통과한다.
             assertEquals(snapshot.nodes().size(), result.candidateScores().size(),
                     "t=" + t + " 후보 수가 스냅샷과 달라 순회가 헐거워졌다");
 
             for (NodeScore s : result.candidateScores()) {
                 Double actual = s.details().get("클러스터평균온도C");
 
-                // 계측 노드가 0대일 때만 null 이어야 한다 — 이 클러스터는 계측 5대라 미계측 노드의
+                // 계측 노드가 0대일 때만 null이어야 한다 — 이 클러스터는 계측 5대라 미계측 노드의
                 // 칸에도 값이 있어야 한다. 언박싱 전에 확인해 NPE 대신 의미 있는 실패를 남긴다.
                 assertNotNull(actual, "t=" + t + " node=" + s.nodeId() + " 클러스터평균온도C 가 null이다 — "
                         + "계측 노드가 0대일 때만 null 이어야 하는데, 이 클러스터는 계측 5대이므로 "
@@ -225,7 +225,7 @@ class TemperatureAwareSyntheticSweepTest {
             }
         }
 
-        // 0.02 는 프로덕션의 성질이 아니라 이 픽스처 스냅샷의 최소 마진이다 — 실패 시 회귀인지
+        // 0.02는 프로덕션의 성질이 아니라 이 픽스처 스냅샷의 최소 마진이다 — 실패 시 회귀인지
         // synthetic-cluster.yml 드리프트로 마진 자체가 바뀐 것인지는 최소 마진 표본 값을 보고 판단하라.
         assertTrue(minMargin > 0.02, "여유가 충분해야 흔들리지 않는다(0.02 는 프로덕션 성질이 아니라 이 픽스처 스냅샷의 값이다). "
                 + "적격 미계측 노드가 없어 건너뛴 시각 수=" + skippedNoEligibleUnmeasured + ". 최소 마진 표본: " + worstMessage);

@@ -28,9 +28,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배열로 전량 반환하던 두 이력 API 의 반환 상한.
+ * 배열로 전량 반환하던 두 이력 API의 반환 상한.
  *
- * <p>{@code scheduling_history} 는 연구 근거라 <b>지우지 않는다</b> — 즉 단조 증가한다. 그런데 두 API
+ * <p>{@code scheduling_history}는 연구 근거라 <b>지우지 않는다</b> — 즉 단조 증가한다. 그런데 두 API
  * ({@code /history}, {@code /workloads/{id}/history})는 표 전체를 배열로 돌려주고 있었다. 행이 늘면
  * 응답 하나가 표 전체가 되고, 서버는 그만큼을 한꺼번에 메모리에 올린다.</p>
  *
@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WithMockUser
 class HistoryReturnLimitTest {
 
-    /** {@code SchedulerController.HISTORY_MAX} 와 같아야 한다. 다르면 아래 확인이 실패한다. */
+    /** {@code SchedulerController.HISTORY_MAX}와 같아야 한다. 다르면 아래 확인이 실패한다. */
     private static final int EXPECTED_LIMIT = 1000;
     /** 상한을 넘겼다는 것과 "최신이 남는다"를 함께 보기 위해 상한보다 이만큼 더 심는다. */
     private static final int EXTRA = 5;

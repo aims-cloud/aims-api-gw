@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * C3 냉각 대기 — 대기를 건 온도 상한 이하의 상한으로 평가할 때만 노드를 뺀다.
  *
- * <p>같은 노드 id 의 온도만 다른 노드 객체로 「지금 온도」와 「걸린 대기」를 떼어 본다. 시계는 한 번만 도는 갈고리를
+ * <p>같은 노드 id의 온도만 다른 노드 객체로 「지금 온도」와 「걸린 대기」를 떼어 본다. 시계는 한 번만 도는 갈고리를
  * 끼울 수 있어, 만료된 대기를 지우는 확인 도중 다른 평가가 새 대기를 거는 순서를 결정적으로 만든다.</p>
  */
 class ConstraintEvaluatorCooldownTest {
@@ -77,7 +77,7 @@ class ConstraintEvaluatorCooldownTest {
     @Test
     void over_reserved_gpu_node_cooldown_kept_per_limit() {
         NodeResource node = node(80);
-        node.reserve(0, 0, 1);                                      // 가용 GPU -1 — GPU 0 워크로드는 자원 검사를 지나 C3 에 닿는다
+        node.reserve(0, 0, 1);                                      // 가용 GPU -1 — GPU 0 워크로드는 자원 검사를 지나 C3에 닿는다
 
         assertEquals(ExclusionReason.TEMPERATURE_EXCEEDED, evaluate(node, policy(70)).reason());
         assertNull(evaluate(node, policy(85)));

@@ -35,8 +35,8 @@ import static org.mockito.Mockito.when;
  * 통합 권고가 받을 노드를 실제 배치와 같은 평가기로 판정하는가 — 운영 설정과 걸린 냉각 대기.
  *
  * <p>기준 컨텍스트는 실제 배치처럼 공유 평가기를 싣는다. 테스트마다 같은 컨텍스트에서 받을 노드가 빠지는 까닭을
- * 먼저 확인해, 결과가 그 까닭에서 나온다는 것을 고정한다. 노드는 8코어 · 용량 500W, 비울 노드 idle 은 CPU 2% ·
- * 150W · 45℃ 다. 워크로드는 목이 아니라 실제 엔티티라 온도·전력 제약이 비어 있다.</p>
+ * 먼저 확인해, 결과가 그 까닭에서 나온다는 것을 고정한다. 노드는 8코어 · 용량 500W, 비울 노드 idle은 CPU 2% ·
+ * 150W · 45℃다. 워크로드는 목이 아니라 실제 엔티티라 온도·전력 제약이 비어 있다.</p>
  */
 class ConsolidationSandboxEvaluatorTest {
 
@@ -124,7 +124,7 @@ class ConsolidationSandboxEvaluatorTest {
 
     // ── 헬퍼 ───────────────────────────────────────────────────
 
-    /** idle 과 받을 노드들로 기준 컨텍스트를 세우고, idle 에 놓인 워크로드 하나로 진단한다. */
+    /** idle과 받을 노드들로 기준 컨텍스트를 세우고, idle에 놓인 워크로드 하나로 진단한다. */
     private Candidate diagnose(Workload workload, NodeResource... receivers) {
         List<NodeResource> nodes = new ArrayList<>();
         nodes.add(node("idle", 2, 150, 45));

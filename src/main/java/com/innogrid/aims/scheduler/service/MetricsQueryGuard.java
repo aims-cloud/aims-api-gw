@@ -37,14 +37,14 @@ import jakarta.annotation.PreDestroy;
  * 살아나면 자연히 회복되고, 붙잡힌 스레드를 실제로 회수하는 것은 클라이언트 타임아웃만 할 수 있다.</p>
  *
  * <p>전역 설정 빈을 만들지 않는다 — 스케줄러 패키지 안의 컴포넌트이고 풀은 데몬 스레드라 JVM 종료를 막지 않으며
- * {@link #shutdown()} 에서 정리한다. 러너의 전용 executor 와 같은 원칙이다.</p>
+ * {@link #shutdown()}에서 정리한다. 러너의 전용 executor와 같은 원칙이다.</p>
  */
 @Component
 public class MetricsQueryGuard {
 
     private static final Logger log = LoggerFactory.getLogger(MetricsQueryGuard.class);
 
-    /** 포화 WARN 은 1분에 한 번만 — 저장소가 멈춘 동안 매 질의마다 찍히면 로그가 넘친다. */
+    /** 포화 WARN은 1분에 한 번만 — 저장소가 멈춘 동안 매 질의마다 찍히면 로그가 넘친다. */
     private static final long SATURATION_WARN_INTERVAL_MS = 60_000;
 
     private final ThreadPoolExecutor pool;
@@ -75,7 +75,7 @@ public class MetricsQueryGuard {
         return await(future, timeoutMs, "질의");
     }
 
-    /** 작업을 풀에 넣는다. 결과는 {@link #await} 로 상한 안에 받는다. */
+    /** 작업을 풀에 넣는다. 결과는 {@link #await}로 상한 안에 받는다. */
     public <T> Future<T> submit(Supplier<T> task) {
         warnIfSaturated();
         return pool.submit(task::get);
@@ -109,7 +109,7 @@ public class MetricsQueryGuard {
 
     /**
      * 여러 작업을 제출 순서대로 받는다. 전체 기한과 작업별 상한 중 먼저 오는 쪽까지만 기다리고,
-     * 넘긴 작업은 {@code Optional.empty()} 로 표시한다 — 호출자가 "응답 없음"으로 처리한다.
+     * 넘긴 작업은 {@code Optional.empty()}로 표시한다 — 호출자가 "응답 없음"으로 처리한다.
      * 순서를 지키므로 병렬로 돌려도 결과 목록의 순서가 제출 순서와 같다.
      */
     public <T> List<Optional<T>> awaitAll(List<Future<T>> futures, long perTaskTimeoutMs, long deadlineNanos) {

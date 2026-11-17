@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 클러스터 전력 최적화 진단.
  *
  * <p>모든 노드를 8코어 · 용량 500W(유휴 150W)로 맞추고 부하·전력만 바꿔, 결과 차이의 출처를
- * 분명히 한다. {@code PowerAwareScenarioTest} 의 픽스처와 같은 값이라 손으로 검산할 수 있다.</p>
+ * 분명히 한다. {@code PowerAwareScenarioTest}의 픽스처와 같은 값이라 손으로 검산할 수 있다.</p>
  */
 class PowerOptimizationServiceTest {
 
@@ -82,7 +82,7 @@ class PowerOptimizationServiceTest {
     @DisplayName("부하에 비해 전력을 많이 쓰면 낭비로 본다")
     @Test
     void high_power_low_load_is_waste() {
-        // CPU 20% → 이상 전력 150 + 350×0.2 = 220W. 실측 420W 는 200W 초과
+        // CPU 20% → 이상 전력 150 + 350×0.2 = 220W. 실측 420W는 200W 초과
         var result = service.diagnose(List.of(node("wasteful", 20, 420)));
 
         Finding f = find(result, "POWER_WASTE");
@@ -93,7 +93,7 @@ class PowerOptimizationServiceTest {
     @DisplayName("이상 곡선 안에 있으면 낭비로 보지 않는다")
     @Test
     void within_ideal_curve_not_waste() {
-        // CPU 60% → 이상 250 + ... 실측 300W 는 곡선 아래
+        // CPU 60% → 이상 250 + ... 실측 300W는 곡선 아래
         var result = service.diagnose(List.of(node("efficient", 60, 300)));
 
         assertNull(find(result, "POWER_WASTE"));
@@ -114,7 +114,7 @@ class PowerOptimizationServiceTest {
     @Test
     void larger_saving_comes_first() {
         // 낭비 노드는 이상 곡선(150 + 350×0.4 = 290W)을 130W 넘겨 임계 0.8 아래로 떨어진다.
-        // 350W 로 두면 초과가 60W 뿐이라 낭비로 잡히지 않아 항목이 하나만 나온다.
+        // 350W로 두면 초과가 60W뿐이라 낭비로 잡히지 않아 항목이 하나만 나온다.
         var result = service.diagnose(List.of(
                 node("waste", 40, 420),
                 node("idle", 1, 150)));

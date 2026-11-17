@@ -20,9 +20,9 @@ import static org.mockito.Mockito.*;
  * 배치 컨텍스트가 MDC 전력 예산 원장을 <b>실행당 1회</b> 읽는가, 그리고 원장을 붙이지 않으면 꺼지는가.
  *
  * <p>링크 원장과 달리 정책 게이트가 없다 — 운영자가 원장에 직접 넣은 값이라 정책 설정과 무관하게 적용한다
- * (워크로드·스케줄 전력 예산과 같은 관례). 대신 <b>원장이 비면 스냅샷도 비어</b> C6 이 아무 노드도 막지 않는다.</p>
+ * (워크로드·스케줄 전력 예산과 같은 관례). 대신 <b>원장이 비면 스냅샷도 비어</b> C6이 아무 노드도 막지 않는다.</p>
  *
- * <p>조립은 {@link SchedulingServiceBuilder} 가 한다 — 선택 원장을 붙이지 않으면 그 기능이 꺼진다는
+ * <p>조립은 {@link SchedulingServiceBuilder}가 한다 — 선택 원장을 붙이지 않으면 그 기능이 꺼진다는
  * 빌더의 계약을 여기서 고정한다.</p>
  */
 class SchedulingServiceBudgetLoadTest {

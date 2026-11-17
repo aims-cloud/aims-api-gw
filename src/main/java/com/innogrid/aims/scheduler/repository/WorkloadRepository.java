@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.scheduler.entity.Workload;
 
-/** 워크로드 저장소. 페이징 목록({@code /workloads/page})의 선택 필터는 {@link JpaSpecificationExecutor} 로 조합한다. */
+/** 워크로드 저장소. 페이징 목록({@code /workloads/page})의 선택 필터는 {@link JpaSpecificationExecutor}로 조합한다. */
 public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSpecificationExecutor<Workload> {
     List<Workload> findByStatusOrderByCreatedAtDesc(Workload.WorkloadStatus status);
     List<Workload> findByAssignedNodeIdOrderByScheduledAtDesc(String nodeId);
@@ -28,11 +28,11 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
      * 스케줄 실행이 배치할 후보 워크로드.
      *
      * <p>재시도 횟수가 상한에 이른 워크로드는 제외한다. 자원이 영영 모자란 워크로드가
-     * 매 실행마다 다시 시도되어 이력을 채우는 것을 막는다. 값이 null 인 기존 행은
+     * 매 실행마다 다시 시도되어 이력을 채우는 것을 막는다. 값이 null인 기존 행은
      * 0회로 본다.</p>
      *
-     * <p><b>정렬은 여기서 하지 않는다.</b> 우선순위가 문자열로 저장돼 있어 SQL 의
-     * {@code order by} 로는 CRITICAL·HIGH·LOW·NORMAL 순(사전순)이 되어 버린다.
+     * <p><b>정렬은 여기서 하지 않는다.</b> 우선순위가 문자열로 저장돼 있어 SQL의
+     * {@code order by}로는 CRITICAL·HIGH·LOW·NORMAL 순(사전순)이 되어 버린다.
      * 호출부가 열거형 순서로 다시 정렬한다.</p>
      *
      * @param matchNullType 리소스 종류가 없는 기존 행까지 포함할지 (VM 대상 실행에서 true)
@@ -58,8 +58,8 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
      * <p>리소스 종류와 기간은 <b>선택</b>이지만 호출부가 둘 중 하나는 반드시 준다 — 조건 없는
      * 전체 일괄은 실수로 수백 건을 되살리는 사고 경로라 서비스에서 막는다.</p>
      *
-     * <p><b>널 파라미터를 쓰지 않는다.</b> {@code (:from is null or ...)} 형태는 H2 에서는 통과하지만
-     * PostgreSQL 이 "could not determine data type of parameter" 로 거절한다 — 값이 없는 자리의 타입을
+     * <p><b>널 파라미터를 쓰지 않는다.</b> {@code (:from is null or ...)} 형태는 H2에서는 통과하지만
+     * PostgreSQL이 "could not determine data type of parameter"로 거절한다 — 값이 없는 자리의 타입을
      * 추론할 수 없기 때문이다. 그래서 호출부가 경계값과 깃발을 채워 넘기고, 여기서는 전부
      * 값이 있는 비교만 한다.</p>
      */
@@ -124,7 +124,7 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
             @Param("maxRetryCount") int maxRetryCount);
 
     /**
-     * 상태가 {@code expected} 중 하나일 때만 {@code next} 로 옮긴다 — 스케줄 실행의 배치 저장이 그 사이 다른 실행·단건 배치가
+     * 상태가 {@code expected} 중 하나일 때만 {@code next}로 옮긴다 — 스케줄 실행의 배치 저장이 그 사이 다른 실행·단건 배치가
      * 커밋한 배치를 덮지 않게 하는 조건부 갱신이다.
      *
      * <p>호출자의 트랜잭션 안에서만 부른다({@code MANDATORY}). 갱신한 행의 잠금이 그 트랜잭션이 끝날 때까지 남아야, 같은 행을
@@ -132,7 +132,7 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
      *
      * <p>스케줄 실행의 배치 저장은 1행이면 같은 트랜잭션에서 그 행을 다시 읽어 재시도 회계를 이어받은 뒤 저장한다.</p>
      *
-     * @return 갱신한 행 수. 0 이면 그 사이 상태가 바뀌었거나 지워졌다
+     * @return 갱신한 행 수. 0이면 그 사이 상태가 바뀌었거나 지워졌다
      */
     @Transactional(propagation = Propagation.MANDATORY)
     @Modifying(clearAutomatically = false, flushAutomatically = true)
@@ -145,11 +145,11 @@ public interface WorkloadRepository extends JpaRepository<Workload, Long>, JpaSp
      * 상태가 {@code expected} 중 하나일 때만 행을 잡는다(값은 바꾸지 않는 조건부 갱신) — 워크로드 편집이 읽은 뒤 저장하기 전에
      * 그 사이 단건 배치·스케줄 실행이 커밋한 배치와 삭제를 편집 전 값으로 덮지 않게 한다.
      *
-     * <p>{@link #updateStatusIfIn} 처럼 호출자의 트랜잭션 안에서만 부른다({@code MANDATORY}) — 잡은 행의 잠금이 그 트랜잭션이
+     * <p>{@link #updateStatusIfIn}처럼 호출자의 트랜잭션 안에서만 부른다({@code MANDATORY}) — 잡은 행의 잠금이 그 트랜잭션이
      * 끝날 때까지 남아야 그 사이 다른 쪽이 행을 바꾸지 못한다. 실행 전에 미뤄 둔 쓰기를 내보내고 실행 뒤 영속성 컨텍스트를
      * 비우므로, 호출자는 반드시 다시 읽은 엔티티에 값을 반영해야 한다(먼저 읽은 사본은 분리된다).</p>
      *
-     * @return 잡은 행 수. 0 이면 그 사이 상태가 바뀌었거나 지워졌다
+     * @return 잡은 행 수. 0이면 그 사이 상태가 바뀌었거나 지워졌다
      */
     @Transactional(propagation = Propagation.MANDATORY)
     @Modifying(clearAutomatically = true, flushAutomatically = true)

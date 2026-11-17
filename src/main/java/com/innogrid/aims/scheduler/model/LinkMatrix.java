@@ -15,7 +15,7 @@ import com.innogrid.aims.scheduler.entity.MdcLink;
  * 이것만 본다 — 노드 메트릭을 실행당 1회 수집하는 원칙과 같다. 배치 도중 원장이 바뀌어도
  * 같은 실행 안에서는 같은 링크 품질을 본다.</p>
  *
- * <p>키는 {@link MdcLink.Pair} 로 정렬된 쌍이라 방향이 없다. 같은 MDC·미등록 쌍은 {@link #between} 이
+ * <p>키는 {@link MdcLink.Pair}로 정렬된 쌍이라 방향이 없다. 같은 MDC·미등록 쌍은 {@link #between}이
  * 비어 있다 — 행렬은 둘을 구분하지 않으므로 <b>같은 MDC 판정은 호출자가 행렬을 보기 전에</b> 한다.
  * 제약(C5)은 빈 값을 통과시키고, 점수({@code NetworkModel})는 같은 MDC 1.0 · 미등록 원격은 설정값(기본 0.5)을
  * 준다 — 모르는 값으로 배치를 막지는 않되, 모르는 경로가 측정된 양호 경로를 이기지도 않게.</p>
@@ -31,8 +31,8 @@ public final class LinkMatrix {
      * <p>인자 순서는 원장 컬럼 순서(지연 → 대역폭 → 손실 → 상태)와 같다.</p>
      *
      * @param latencyMs         왕복 지연(ms)
-     * @param bandwidthMbps     대역폭(Mbps). 모르면 null → 부족분 항이 0 이라 예전과 같은 비용이다
-     * @param packetLossPercent 손실률(%). 모르면 null → 0 으로 본다
+     * @param bandwidthMbps     대역폭(Mbps). 모르면 null → 부족분 항이 0이라 예전과 같은 비용이다
+     * @param packetLossPercent 손실률(%). 모르면 null → 0으로 본다
      * @param status            UP · DEGRADED · DOWN
      */
     public record Quality(double latencyMs, Double bandwidthMbps, Double packetLossPercent, MdcLink.LinkStatus status) {
@@ -63,7 +63,7 @@ public final class LinkMatrix {
 
     /**
      * 두 MDC 사이 링크. 같은 MDC·null·미등록이면 비어 있다 — 셋을 구분하지 않으므로 해석은 호출자 몫이다.
-     * 노드 MDC 가 {@code unknown} 이라도 특별 취급하지 않는다 — 원장에 없으면 그냥 비어 있다.
+     * 노드 MDC가 {@code unknown}이라도 특별 취급하지 않는다 — 원장에 없으면 그냥 비어 있다.
      */
     public Optional<Quality> between(String mdcX, String mdcY) {
         if (mdcX == null || mdcY == null || mdcX.equals(mdcY)) return Optional.empty();

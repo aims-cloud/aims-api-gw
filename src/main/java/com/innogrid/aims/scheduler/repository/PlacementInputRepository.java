@@ -14,9 +14,9 @@ import com.innogrid.aims.scheduler.entity.PlacementInput;
 public interface PlacementInputRepository extends JpaRepository<PlacementInput, Long> {
 
     /**
-     * {@code cutoff} 전에 저장한 입력을 한 번에 지운다. 행을 읽어 들이지 않는다 — payload 가 크다.
+     * {@code cutoff} 전에 저장한 입력을 한 번에 지운다. 행을 읽어 들이지 않는다 — payload가 크다.
      *
-     * <p>보존 정리({@code ScheduleRunner})는 트랜잭션 없이 돌므로 {@link ScheduleRunInputRepository} 처럼 쿼리 메서드에
+     * <p>보존 정리({@code ScheduleRunner})는 트랜잭션 없이 돌므로 {@link ScheduleRunInputRepository}처럼 쿼리 메서드에
      * 직접 트랜잭션을 건다.</p>
      */
     @Transactional

@@ -29,7 +29,7 @@ import static org.mockito.Mockito.*;
  */
 class HistoryQueryLimitTest {
 
-    /** {@code SchedulerController.HISTORY_MAX} 와 같아야 한다. */
+    /** {@code SchedulerController.HISTORY_MAX}와 같아야 한다. */
     private static final int HISTORY_MAX = 1000;
 
     private final SchedulingHistoryRepository repository = mock(SchedulingHistoryRepository.class);

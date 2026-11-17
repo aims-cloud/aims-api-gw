@@ -24,7 +24,7 @@ final class WorkloadStatusChanger {
 
     private final WorkloadRepository workloadRepository;
 
-    /** 실행 계층 연동. null 이면(직접 조립한 테스트 경로) 전달 기록을 마감하지 않는다. */
+    /** 실행 계층 연동. null이면(직접 조립한 테스트 경로) 전달 기록을 마감하지 않는다. */
     private final PlacementDispatchService dispatchService;
 
     private final SchedulerProperties properties;
@@ -36,7 +36,7 @@ final class WorkloadStatusChanger {
         this.properties = properties;
     }
 
-    /** 재시도 상한에 걸린 워크로드를 여러 건 한 번에 되살린다. 규칙은 {@link SchedulingService#resumeExhausted} 의 설명과 같다. */
+    /** 재시도 상한에 걸린 워크로드를 여러 건 한 번에 되살린다. 규칙은 {@link SchedulingService#resumeExhausted}의 설명과 같다. */
     List<Workload> resumeExhausted(Workload.ResourceType resourceType, OffsetDateTime from, OffsetDateTime to) {
         if (resourceType == null && from == null && to == null) {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
@@ -46,7 +46,7 @@ final class WorkloadStatusChanger {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "기간의 시작이 끝보다 뒤입니다");
         }
 
-        // 널 파라미터는 PostgreSQL 이 타입을 추론하지 못한다 — 경계값과 깃발로 바꿔 넘긴다.
+        // 널 파라미터는 PostgreSQL이 타입을 추론하지 못한다 — 경계값과 깃발로 바꿔 넘긴다.
         boolean anyType = resourceType == null;
         boolean matchNullType = resourceType == Workload.ResourceType.VM;
         boolean anyPeriod = from == null && to == null;
@@ -73,7 +73,7 @@ final class WorkloadStatusChanger {
         return resumed;
     }
 
-    /** 워크로드의 실행 상태를 전이한다. 규칙은 {@link SchedulingService#changeStatus} 의 설명과 같다. */
+    /** 워크로드의 실행 상태를 전이한다. 규칙은 {@link SchedulingService#changeStatus}의 설명과 같다. */
     Workload changeStatus(Long workloadId, Workload.WorkloadStatus target) {
         Workload workload = workloadRepository.findById(workloadId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
@@ -90,7 +90,7 @@ final class WorkloadStatusChanger {
         return workloadRepository.save(workload);
     }
 
-    /** 배치 예약을 취소한다. 규칙은 {@link SchedulingService#release} 의 설명과 같다. */
+    /** 배치 예약을 취소한다. 규칙은 {@link SchedulingService#release}의 설명과 같다. */
     Release release(Long workloadId) {
         Workload workload = workloadRepository.findById(workloadId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,

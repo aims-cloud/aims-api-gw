@@ -39,7 +39,7 @@ class SyntheticClusterTest {
         assertEquals(c.cpuUsage(a, t), c.cpuUsage(a, t));
         assertNotEquals(c.phase(a), c.phase(b));
         assertTrue(c.cpuUsage(a, t) >= 0 && c.cpuUsage(a, t) <= 100);
-        // 전력은 CPU 를 따라간다: 유휴 ≤ 전력 ≤ 정격
+        // 전력은 CPU를 따라간다: 유휴 ≤ 전력 ≤ 정격
         assertTrue(c.powerWatts(a, t) >= a.idleWatts() && c.powerWatts(a, t) <= a.capacityWatts());
         // 한 주기(60분) 뒤에는 같은 값
         assertEquals(c.cpuUsage(a, t), c.cpuUsage(a, t + 3600), 1e-9);
@@ -105,8 +105,8 @@ class SyntheticClusterTest {
 
     /**
      * 지수를 일반화하면서 <b>기존 판의 값이 한 비트도 움직이지 않았는지</b> 본다. 예전 식은 좌결합
-     * {@code ((정격−유휴) × cpu) / 100} 이라 괄호를 옮기기만 해도 마지막 비트가 달라지고, 그러면 판
-     * 다이제스트는 같은데 숫자가 미세하게 바뀐 표가 나온다. 그래서 오차 허용 없이 {@code ==} 로 잠근다.
+     * {@code ((정격−유휴) × cpu) / 100}이라 괄호를 옮기기만 해도 마지막 비트가 달라지고, 그러면 판
+     * 다이제스트는 같은데 숫자가 미세하게 바뀐 표가 나온다. 그래서 오차 허용 없이 {@code ==}로 잠근다.
      */
     @DisplayName("지수가 1 인 클러스터의 전력은 예전 식과 비트까지 같다")
     @Test

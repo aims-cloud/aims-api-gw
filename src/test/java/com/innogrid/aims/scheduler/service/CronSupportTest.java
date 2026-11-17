@@ -16,7 +16,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 프런트 도움말 모달은 Quartz 규약을 안내하는데 런타임은 Spring 이다.
+ * 프런트 도움말 모달은 Quartz 규약을 안내하는데 런타임은 Spring이다.
  * 두 규약의 차이를 실제 값으로 고정해 둔다 — 요일 해석이 어긋나도 예외가 나지 않고
  * 조용히 다른 날 실행되기 때문에 테스트로 잡지 않으면 드러나지 않는다.
  */
@@ -24,7 +24,7 @@ class CronSupportTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    /** 2026-08-31(월) 09:00 KST. 그날 02:00 은 이미 지난 시점이다. */
+    /** 2026-08-31(월) 09:00 KST. 그날 02:00은 이미 지난 시점이다. */
     private static final OffsetDateTime BASE = OffsetDateTime.parse("2026-08-31T00:00:00Z");
 
     private final CronSupport cron = new CronSupport(new SchedulerProperties());
@@ -59,7 +59,7 @@ class CronSupportTest {
     @DisplayName("단독 L 은 토요일로 바꾼다")
     @Test
     void standalone_l_becomes_saturday() {
-        // Quartz 의 단독 L 은 그 주의 마지막 날(토). Spring 은 앞에 요일이 없으면 파싱 오류를 낸다.
+        // Quartz의 단독 L은 그 주의 마지막 날(토). Spring은 앞에 요일이 없으면 파싱 오류를 낸다.
         assertEquals("0 0 2 ? * 6", cron.toSpringExpression("0 0 2 ? * L"));
     }
 
@@ -82,7 +82,7 @@ class CronSupportTest {
     @DisplayName("Quartz 2 는 월요일에 실행된다")
     @Test
     void quartz_2_runs_monday() {
-        // 변환하지 않으면 Spring 이 화요일로 읽는다
+        // 변환하지 않으면 Spring이 화요일로 읽는다
         ZonedDateTime next = kst(cron.nextRunAt("0 0 2 ? * 2", BASE));
 
         assertEquals(DayOfWeek.MONDAY, next.getDayOfWeek());
@@ -125,14 +125,14 @@ class CronSupportTest {
     }
 
     /**
-     * 한국 시간 기준 이른 새벽은 UTC 로는 전날이 된다.
-     * cron 필드를 UTC 로 옮겨 적는 방식이었다면 날짜·요일·월이 전부 어긋났을 자리다.
+     * 한국 시간 기준 이른 새벽은 UTC로는 전날이 된다.
+     * cron 필드를 UTC로 옮겨 적는 방식이었다면 날짜·요일·월이 전부 어긋났을 자리다.
      */
     @DisplayName("날짜 경계를 넘는 시각도 정확하다")
     @Test
     void date_boundary_crossing_correct() {
-        assertKst("0 30 0 * * ?", "00:30");    // UTC 로는 전날 15:30
-        assertKst("0 0 2 * * ?", "02:00");     // UTC 로는 전날 17:00
+        assertKst("0 30 0 * * ?", "00:30");    // UTC로는 전날 15:30
+        assertKst("0 0 2 * * ?", "02:00");     // UTC로는 전날 17:00
         assertKst("0 59 8 * * ?", "08:59");    // UTC 자정 1분 전
         assertKst("0 0 9 * * ?", "09:00");     // UTC 자정 정각
         assertKst("0 0 23 * * ?", "23:00");    // 같은 날 14:00
@@ -145,7 +145,7 @@ class CronSupportTest {
 
         assertEquals(1, next.getDayOfMonth(), "한국 시간으로는 1일이어야 한다");
         assertEquals("02:00", next.toLocalTime().toString());
-        // 같은 순간을 UTC 로 보면 전월 말일이다
+        // 같은 순간을 UTC로 보면 전월 말일이다
         var utc = cron.nextRunAt("0 0 2 1 * ?", BASE);
         assertEquals(17, utc.getHour());
         assertNotEquals(1, utc.getDayOfMonth(), "UTC 날짜는 1일이 아니다");
@@ -171,7 +171,7 @@ class CronSupportTest {
 
     /**
      * 여러 번 이어서 계산해도 한국 시간 벽시계 값이 흔들리지 않아야 한다.
-     * UTC 날짜는 달마다 달라지지만(08-31, 09-30 …) 사용자가 입력한 02:00 은 고정이다.
+     * UTC 날짜는 달마다 달라지지만(08-31, 09-30 …) 사용자가 입력한 02:00은 고정이다.
      */
     @DisplayName("연속 실행이 같은 벽시계 시각을 유지한다")
     @Test
@@ -221,7 +221,7 @@ class CronSupportTest {
     @DisplayName("일과 요일을 동시에 지정하면 거부한다")
     @Test
     void both_dom_and_dow_rejected() {
-        // Spring 은 두 조건을 모두 만족하는 날로 읽어 2027-02-01 에 실행된다
+        // Spring은 두 조건을 모두 만족하는 날로 읽어 2027-02-01에 실행된다
         BusinessException e = assertThrows(BusinessException.class,
                 () -> cron.toSpringExpression("0 0 2 1 * MON"));
 

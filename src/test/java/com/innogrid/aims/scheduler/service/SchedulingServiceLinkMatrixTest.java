@@ -22,7 +22,7 @@ import static org.mockito.Mockito.*;
 /**
  * 배치 컨텍스트가 링크 원장을 <b>정책이 켰을 때만, 실행당 1회</b> 읽는가.
  *
- * <p>기존 정책은 전부 {@code affinityEnabled=false} 라 배포 직후 원장 조회가 0회여야 한다 — 비용도 결과도 그대로.
+ * <p>기존 정책은 전부 {@code affinityEnabled=false}라 배포 직후 원장 조회가 0회여야 한다 — 비용도 결과도 그대로.
  * 켠 정책은 스냅샷을 컨텍스트에 싣고, 게이트 판정은 정책과 워크로드를 함께 본다.</p>
  */
 class SchedulingServiceLinkMatrixTest {

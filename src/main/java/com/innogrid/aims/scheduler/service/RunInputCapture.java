@@ -42,7 +42,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 받지 않아 되돌린 예약(전달 기록). 둘 다 이미 남으므로 재생할 때 거기서 읽는다. 실행 도중 편집된 워크로드의 새 값은 담지
  * 않는다.</p>
  *
- * <p>빈이 아니다 — {@link ScheduleExecutionService} 와 단건 배치({@link SchedulingService})가 만들어 쓴다. 직렬화기도 전역 빈을
+ * <p>빈이 아니다 — {@link ScheduleExecutionService}와 단건 배치({@link SchedulingService})가 만들어 쓴다. 직렬화기도 전역 빈을
  * 주입받지 않고 여기서 만든다. 전역 설정이 바뀌어도 저장 형식이 흔들리지 않게 하려는 것이다.</p>
  */
 final class RunInputCapture {
@@ -62,7 +62,7 @@ final class RunInputCapture {
         this.properties = properties;
     }
 
-    /** 저장소 없이 문자열만 만드는 형태 — 단건 배치({@link SchedulingService})는 자기 표에 저장한다. {@link #capture} 를 쓰지 않는다. */
+    /** 저장소 없이 문자열만 만드는 형태 — 단건 배치({@link SchedulingService})는 자기 표에 저장한다. {@link #capture}를 쓰지 않는다. */
     RunInputCapture(ThermalModel thermalModel, SchedulerProperties properties) {
         this(null, thermalModel, properties);
     }
@@ -102,7 +102,7 @@ final class RunInputCapture {
             byte[] hash = MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash).substring(0, 12);
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 을 쓸 수 없다", e);   // 표준 JRE 에는 늘 있다
+            throw new IllegalStateException("SHA-256 을 쓸 수 없다", e);   // 표준 JRE에는 늘 있다
         }
     }
 
@@ -129,7 +129,7 @@ final class RunInputCapture {
                      PolicyRow policy, Map<String, Double> mdcBudgets, List<LinkRow> links,
                      List<CooldownRow> cooldowns, Knobs knobs) {}
 
-    /** {@link NodeResource} 의 선언 필드 전부. 이름을 필드와 같게 둔다 — 빠진 필드를 테스트가 반사로 잡는다. */
+    /** {@link NodeResource}의 선언 필드 전부. 이름을 필드와 같게 둔다 — 빠진 필드를 테스트가 반사로 잡는다. */
     record NodeRow(String mdcId, String nodeId, int totalCpu, long totalMemoryMb, int totalGpu,
                    double cpuUsagePercent, double memoryUsagePercent, double diskUsagePercent,
                    double powerWatts, double powerCapacityWatts, double temperatureCelsius,

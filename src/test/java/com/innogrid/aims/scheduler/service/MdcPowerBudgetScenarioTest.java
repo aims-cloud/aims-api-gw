@@ -85,7 +85,7 @@ class MdcPowerBudgetScenarioTest {
         assertTrue(eligible(after, MDC).isEmpty(),
                 "합계의 절반이 예산이면 mdc-seoul 노드는 전부 빠진다: " + eligible(after, MDC));
 
-        // seoul-03 은 뜨거운 노드라 시각에 따라 온도(C3)에 먼저 걸릴 수 있다. 사유가 MDC 예산인지는
+        // seoul-03은 뜨거운 노드라 시각에 따라 온도(C3)에 먼저 걸릴 수 있다. 사유가 MDC 예산인지는
         // 다른 제약에 걸리지 않는 평범한 노드로 확인한다.
         NodeResource plain = nodesOf(after, MDC).stream()
                 .filter(n -> n.getNodeId().equals(PLAIN_NODE)).findFirst().orElseThrow();
@@ -124,7 +124,7 @@ class MdcPowerBudgetScenarioTest {
     @DisplayName("전력을 수집하지 못하는 MDC 는 예산을 걸어도 막히지 않는다 — 모르는 값으로 배치를 막지 않는다")
     @Test
     void unmeasured_mdc_is_not_blocked_by_budget() {
-        // daejeon 2대는 IPMI 가 없어 전력이 0 이다. 예산을 아주 낮게 걸어도 C6 은 후보를 건드리지 않는다.
+        // daejeon 2대는 IPMI가 없어 전력이 0이다. 예산을 아주 낮게 걸어도 C6은 후보를 건드리지 않는다.
         budgetRepository.save(new MdcPowerBudget("mdc-daejeon", 1.0));
         try {
             PlacementContext ctx = schedulingService.createContext(schedulingService.resolvePolicy(null));

@@ -14,9 +14,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 /**
  * 워크로드 재시도 정책 조회 — 상한과 간격을 설정에서 읽어 준다.
  *
- * <p>{@code SchedulerController} 와 따로 둔다 — 그쪽 생성자를 건드리지 않으려는 것이고,
- * 설정값만 돌려주는 소형 컨트롤러라는 점에서 {@link MetricsSourceController} 와 같은 자리다.
- * 리터럴 경로 {@code /workloads/retry-policy} 는 {@code /workloads/{workloadId}} 보다 우선한다.</p>
+ * <p>{@code SchedulerController}와 따로 둔다 — 그쪽 생성자를 건드리지 않으려는 것이고,
+ * 설정값만 돌려주는 소형 컨트롤러라는 점에서 {@link MetricsSourceController}와 같은 자리다.
+ * 리터럴 경로 {@code /workloads/retry-policy}는 {@code /workloads/{workloadId}}보다 우선한다.</p>
  */
 @Tag(name = "스케줄러", description = "워크로드 스케줄링 (제약조건/전력/온도 기반)")
 @RestController

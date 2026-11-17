@@ -25,17 +25,17 @@ import static org.mockito.Mockito.mock;
  * 사용 코어 환산 효율 · 코어 기준 순위를 배치 전략 비교 판 파일로 확인한다(스프링 없음).
  *
  * <p>판 노드마다 기준 사용률 시점의 스냅샷을 만든다 — 전력 = 유휴 + (정격 − 유휴) × (사용률/100)^β(그 판의 β), 엔진에 알려 준 정격은
- * 노드 조회와 같이 {@code believedCapacityWatts}. IPMI 가 없는 노드는 전력 0 이라 평가에서 빠진다.</p>
+ * 노드 조회와 같이 {@code believedCapacityWatts}. IPMI가 없는 노드는 전력 0이라 평가에서 빠진다.</p>
  *
  * <p>코어당 한계 전력은 기준 사용률 시점의 기울기로 잰다 — β · (정격 − 유휴) · (사용률/100)^(β−1) ÷ 코어. 이 정의로
  * 판정 회차 4 사전 추정(노드 배치 스코어 PEI 항 기준 · 커밋 b6da0771)의 순위 상관이 나온다: 판정판 원값 −0.27 · 코어 기준 +0.55, 방향판 코어 기준 +0.75.
- * 방향판 원값은 정밀값으로 −0.43 이지만 응답의 peiRaw 가 소수 넷째 자리까지 반올림이라 bm-02 · bm-05 가 0.0914 로 같아져 −0.38 이다.
+ * 방향판 원값은 정밀값으로 −0.43이지만 응답의 peiRaw가 소수 넷째 자리까지 반올림이라 bm-02 · bm-05가 0.0914로 같아져 −0.38이다.
  * 기준값이 코어 수로 나눈 값이라 코어 수를 곱한 지표에 유리한 구조이고 노드가 9대뿐이라, 이 상관은 통계 근거가 아니라 노드 배치 스코어 PEI 항과
  * 같은 방향인지 보는 확인이다. 값은 표준 출력에 남기고 확인은 부호만 한다.</p>
  */
 class PowerEfficiencyCoreBasisBoardTest {
 
-    /** 가동 노드 기준 — 판의 유휴 노드는 기준 사용률이 2% 안팎이라 10% 로 가르면 두 판 모두 9대다(엔진의 통전 문턱 5% 와는 쓰임이 다르다). */
+    /** 가동 노드 기준 — 판의 유휴 노드는 기준 사용률이 2% 안팎이라 10%로 가르면 두 판 모두 9대다(엔진의 통전 문턱 5%와는 쓰임이 다르다). */
     private static final double ACTIVE_CPU_PERCENT = 10.0;
 
     private final SchedulerProperties properties = new SchedulerProperties();
@@ -59,7 +59,7 @@ class PowerEfficiencyCoreBasisBoardTest {
             for (int i = 0; i < snapshot.size(); i++) {
                 NodeEfficiency row = result.nodes().get(i);
                 double pei = powerModel.placementPei(snapshot.get(i), meanCores);
-                if (row.coreRank() == null || pei >= 1.0) continue;   // 미계측 · 포화(1.0 에서 잘려 동점) 노드는 순서를 말하지 못한다
+                if (row.coreRank() == null || pei >= 1.0) continue;   // 미계측 · 포화(1.0에서 잘려 동점) 노드는 순서를 말하지 못한다
                 rows.add(row);
                 placement.add(pei);
             }
@@ -90,7 +90,7 @@ class PowerEfficiencyCoreBasisBoardTest {
             List<Double> core = new ArrayList<>();
             List<Double> inverseMarginal = new ArrayList<>();
             for (SyntheticCluster.Node node : cluster.nodes()) {
-                if (!node.ipmi() || node.cpuUsage() < ACTIVE_CPU_PERCENT) continue;   // 가동 노드만 — 유휴 노드는 일의 양이 0 에 가까워 순위가 의미 없다
+                if (!node.ipmi() || node.cpuUsage() < ACTIVE_CPU_PERCENT) continue;   // 가동 노드만 — 유휴 노드는 일의 양이 0에 가까워 순위가 의미 없다
                 NodeEfficiency row = result.nodes().stream().filter(n -> n.nodeId().equals(node.nodeId())).findFirst().orElseThrow();
                 double beta = cluster.powerExponent();
                 double marginalPerCore = beta * (node.capacityWatts() - node.idleWatts())

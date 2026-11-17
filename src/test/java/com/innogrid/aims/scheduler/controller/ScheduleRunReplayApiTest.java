@@ -36,12 +36,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 실행 재생 API 와 엔진별 재계산 API 의 응답 계약과 오류 — 재생 응답 14키·단계 8키, 엔진별 재계산 응답 12키·엔진 5키·단계 5키·선택
+ * 실행 재생 API와 엔진별 재계산 API의 응답 계약과 오류 — 재생 응답 14키·단계 8키, 엔진별 재계산 응답 12키·엔진 5키·단계 5키·선택
  * 3키의 순서, 404 두 가지, 409 네 가지(엔진별 재계산은 같은 검사를 거쳐 세 가지만 다시 본다).
  *
  * <p>이 컨텍스트는 실 게이트웨이라 노드가 없어 즉시 실행으로는 입력이 남지 않는다. 그래서 형식 1 고정 픽스처
  * ({@code scheduler/replay/run-input-format-1.json})를 입력 행으로 심고 실행·결정 이력도 저장소에 직접 심는다. 재생 판정이
- * 실제 실행과 맞는지는 {@code RunInputReplayTest} 가 본다.</p>
+ * 실제 실행과 맞는지는 {@code RunInputReplayTest}가 본다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -133,7 +133,7 @@ class ScheduleRunReplayApiTest {
             inputRepository.save(input(version2, 2, digest(payload), payload));
             long altered = finishedRun(scheduleId);
             inputRepository.save(input(altered, 1, digest(payload), payload.replace("rpl-w1", "rpl-w2")));
-            long unreadable = finishedRun(scheduleId);   // 지문은 맞지만 지금 코드에 없는 열거값 — 처리하지 않으면 본문 없는 403 이 된다
+            long unreadable = finishedRun(scheduleId);   // 지문은 맞지만 지금 코드에 없는 열거값 — 처리하지 않으면 본문 없는 403이 된다
             String unknownState = payload.replace("\"thermalState\": \"NORMAL\"", "\"thermalState\": \"MELTING\"");
             assertNotEquals(payload, unknownState);
             inputRepository.save(input(unreadable, 1, digest(unknownState), unknownState));
@@ -343,7 +343,7 @@ class ScheduleRunReplayApiTest {
         }
     }
 
-    /** 저장 경로와 같은 지문 — 원문 UTF-8 의 SHA-256 앞 12자. */
+    /** 저장 경로와 같은 지문 — 원문 UTF-8의 SHA-256 앞 12자. */
     private static String digest(String payload) throws Exception {
         byte[] hash = MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8));
         return HexFormat.of().formatHex(hash).substring(0, 12);

@@ -10,7 +10,7 @@ import com.innogrid.aims.auth.repository.UserRepository;
 /**
  * 스케줄을 만들거나 실행한 주체를 알아낸다.
  *
- * <p>인증 principal 에는 email 만 들어 있어(스프링 기본 {@code UserDetails} 를 쓴다)
+ * <p>인증 principal에는 email만 들어 있어(스프링 기본 {@code UserDetails}를 쓴다)
  * 화면에 표시할 이름을 얻으려면 사용자 원장을 읽어야 한다. <b>이 클래스가 인증 도메인을
  * 참조하는 유일한 지점</b>이다. 스케줄러 곳곳에서 직접 리포지토리를 부르면 결합도가
  * 올라가고 나중에 사용자 조회 방식이 바뀔 때 고칠 곳이 흩어진다.</p>
@@ -47,7 +47,7 @@ public class ScheduleActorResolver {
     }
 
     /**
-     * @param email 로그인 계정. 화면에는 이름과 조합해 "이름(email)" 로 표시한다
+     * @param email 로그인 계정. 화면에는 이름과 조합해 "이름(email)"로 표시한다
      * @param name  조회 시점의 사용자 이름. 원장에 없으면 null
      */
     public record Actor(String email, String name) {

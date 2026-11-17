@@ -20,13 +20,13 @@ import static org.mockito.Mockito.mock;
 /**
  * 실제 전력 데이터가 들어오기 전까지 여러 클러스터 모양을 넣어 보는 시나리오 모음.
  *
- * <p><b>입력을 바꾸는 법</b> — {@link #node(String, double, double)} 로 노드를 만들어
- * {@code evaluate(...)} 에 넣으면 된다. CPU 사용률(%)과 소비 전력(W)만 주면 PEI 는
- * {@code CPU ÷ 전력} 이라 기대값을 손으로 계산할 수 있다. 새 시나리오가 필요하면
+ * <p><b>입력을 바꾸는 법</b> — {@link #node(String, double, double)}로 노드를 만들어
+ * {@code evaluate(...)}에 넣으면 된다. CPU 사용률(%)과 소비 전력(W)만 주면 PEI는
+ * {@code CPU ÷ 전력}이라 기대값을 손으로 계산할 수 있다. 새 시나리오가 필요하면
  * 이 파일에 메서드를 하나 더 만들면 되고, 다른 곳은 건드릴 필요가 없다.</p>
  *
  * <p>각 시나리오는 결과를 표로 찍는다. 값이 어떻게 갈리는지 눈으로 확인하려면
- * {@code ./gradlew test --tests '*PowerEfficiencyScenarioTest*' --info} 로 실행한다.</p>
+ * {@code ./gradlew test --tests '*PowerEfficiencyScenarioTest*' --info}로 실행한다.</p>
  */
 class PowerEfficiencyScenarioTest {
 
@@ -73,7 +73,7 @@ class PowerEfficiencyScenarioTest {
                 node("노드-7", 49.8, 200),  // 0.2490
                 node("노드-8", 49.7, 200))); // 0.2485
 
-        // 상대 평가라 실질 차이가 0.35% 뿐이어도 등급은 끝까지 갈린다.
+        // 상대 평가라 실질 차이가 0.35%뿐이어도 등급은 끝까지 갈린다.
         // 등급만 보고 "D 노드를 정리해야겠다"고 판단하면 틀린다.
         assertEquals("A", find(result, "노드-1").grade());
         assertEquals("D", find(result, "노드-8").grade());
@@ -99,8 +99,8 @@ class PowerEfficiencyScenarioTest {
         assertTrue(find(result, "노드-8").peiNormalized() > 1.0 - 1e-9,
                 "정규화 PEI 는 만점인데 상대 등급은 D 다");
 
-        // 이 노드들은 이상 곡선(465W)보다 훨씬 적은 150W 만 쓰는 아주 효율적인 노드다.
-        // 비례성이 0.37 로 낮게 나오지만 그건 "덜 쓴다"는 뜻이므로 경고 대상이 아니다.
+        // 이 노드들은 이상 곡선(465W)보다 훨씬 적은 150W만 쓰는 아주 효율적인 노드다.
+        // 비례성이 0.37로 낮게 나오지만 그건 "덜 쓴다"는 뜻이므로 경고 대상이 아니다.
         assertTrue(result.nodes().stream().allMatch(n -> n.recommendation() == null),
                 "고효율 노드에 권고가 붙으면 오탐이다");
         assertTrue(find(result, "노드-1").proportionality() < 0.5,
@@ -170,7 +170,7 @@ class PowerEfficiencyScenarioTest {
     @Test
     @DisplayName("전력 여유가 부족한 경우 — 배치 제한 권고가 우선한다")
     void scenario_low_power_headroom() {
-        // 용량 500W 중 450W 를 쓰고 있어 여유가 10% 다
+        // 용량 500W 중 450W를 쓰고 있어 여유가 10%다
         NodeResource tight = new NodeResource("mdc-01", "포화-1", 8, 16384, 0,
                 90, 50, 30, 450, 500, 40, 0, 0);
         tight.setPowerSource(NodeResource.PowerSource.IPMI);
@@ -184,7 +184,7 @@ class PowerEfficiencyScenarioTest {
 
     // ── 도우미 ─────────────────────────────────────────────────
 
-    /** 평가하고 결과를 표로 찍는다. 값이 어떻게 갈리는지 눈으로 보려면 --info 로 실행한다. */
+    /** 평가하고 결과를 표로 찍는다. 값이 어떻게 갈리는지 눈으로 보려면 --info로 실행한다. */
     private PowerEfficiencyResponse run(String title, List<NodeResource> nodes) {
         PowerEfficiencyResponse result = service.evaluate(nodes);
         StringBuilder out = new StringBuilder();
@@ -213,7 +213,7 @@ class PowerEfficiencyScenarioTest {
         return value == null ? "-" : String.format("%.4f", value);
     }
 
-    /** CPU 사용률(%)과 소비 전력(W)만 주면 되는 노드. 용량은 500W 로 고정한다. */
+    /** CPU 사용률(%)과 소비 전력(W)만 주면 되는 노드. 용량은 500W로 고정한다. */
     private NodeResource node(String id, double cpuPercent, double powerWatts) {
         NodeResource node = new NodeResource("mdc-01", id, 8, 16384, 0,
                 cpuPercent, 50, 30, powerWatts, 500, 40, 0, 0);

@@ -40,7 +40,7 @@ import com.sun.net.httpserver.HttpServer;
  *
  * <p>스프링 없이 실제 Keystone · Nova 클라이언트를 만들고, 테스트 안에서 띄운 HTTP 서버가 Keystone 토큰과 Nova 응답을 흉내 낸다.
  * 그래서 클라이언트가 실제로 던지는 예외 종류(401 · 403 · 5xx · 연결 거부 · 응답 지연)로 상태 분류를 확인한다.
- * 응답 본문은 Nova 2.1 문서 모양을 따른 {@code scheduler/inventory/*.json} 이다.</p>
+ * 응답 본문은 Nova 2.1 문서 모양을 따른 {@code scheduler/inventory/*.json}이다.</p>
  */
 class NovaInventoryGatewayTest {
 
@@ -142,7 +142,7 @@ class NovaInventoryGatewayTest {
         try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             port = socket.getLocalPort();
         }
-        // Windows 는 연결 거부를 몇 번 다시 시도해 2초 안팎이 걸리므로 상한을 넉넉히 둔다
+        // Windows는 연결 거부를 몇 번 다시 시도해 2초 안팎이 걸리므로 상한을 넉넉히 둔다
         NovaInventorySnapshot snapshot = gateway("http://127.0.0.1:" + port, 15_000).read();
 
         assertEquals(InventoryStatus.CONNECTION_FAILED, snapshot.status());

@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 구간 에너지 적분기 — 결손과 모집단 변동 앞에서 무엇을 세고 무엇을 세지 않는지.
  *
- * <p>이 테스트의 무게는 정확한 kWh 보다 <b>세지 않기로 한 것</b>에 있다. 사다리꼴 자체는 두 줄이면 되지만, 표본이
+ * <p>이 테스트의 무게는 정확한 kWh보다 <b>세지 않기로 한 것</b>에 있다. 사다리꼴 자체는 두 줄이면 되지만, 표본이
  * 빈 구간을 직선으로 이어 버리거나 노드가 중간에 등장한 것을 에너지로 세면 값이 조용히 부푼다. 그 세 자리를
  * 값으로 못 박는다.</p>
  */
@@ -23,7 +23,7 @@ class IntervalEnergyTest {
     @DisplayName("고른 표본은 손계산과 같은 kWh 를 낸다")
     @Test
     void an_even_series_matches_the_hand_calculation() {
-        // 100W 를 1시간 동안 — 0.1 kWh. 표본은 1분 간격 61개.
+        // 100W를 1시간 동안 — 0.1 kWh. 표본은 1분 간격 61개.
         Map<Long, IntervalEnergy.Sample> flat = new TreeMap<>();
         for (long t = 0; t <= 3600; t += MINUTE) flat.put(t, new IntervalEnergy.Sample(100, false));
 
@@ -61,7 +61,7 @@ class IntervalEnergyTest {
         IntervalEnergy.Result r = IntervalEnergy.integrate(Map.of("n1", holed));
 
         assertEquals(1, r.gaps(), "먼 두 표본 사이를 끊었다고 세어야 한다");
-        // 이었다면 2시간이 더해져 약 0.217 kWh 가 된다. 끊으면 10분치만 남는다.
+        // 이었다면 2시간이 더해져 약 0.217 kWh가 된다. 끊으면 10분치만 남는다.
         assertEquals(0.017, r.kwh(), "빈 두 시간을 직선으로 이으면 없던 에너지가 생긴다");
         assertEquals(0.1667, r.hours(), "잰 시간은 10분이다 — 물은 구간이 아니다");
     }

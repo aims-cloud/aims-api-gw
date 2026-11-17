@@ -17,17 +17,17 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 정책 사본 {@link SchedulingPolicy#detachedCopy()} 가 <b>영속되지 않고</b> 판단 필드를 하나도 빠뜨리지 않는지 고정한다.
+ * 정책 사본 {@link SchedulingPolicy#detachedCopy()}가 <b>영속되지 않고</b> 판단 필드를 하나도 빠뜨리지 않는지 고정한다.
  *
  * <p>필드 하나가 빠지면 그 사본을 쓰는 실행에서 게이트가 <b>조용히</b> 꺼진다. 실제로 예전 실행 경로의 손 복사에서
- * {@code affinityEnabled} 가 빠져 있어 온도 한계를 지정한 스케줄에서만 MDC 링크 게이트가 꺼지던 결함이 있었다. 비교 판에서
+ * {@code affinityEnabled}가 빠져 있어 온도 한계를 지정한 스케줄에서만 MDC 링크 게이트가 꺼지던 결함이 있었다. 비교 판에서
  * 같은 일이 나면 "대조군이 제약을 덜 받아 유리했다"가 되어 표 전체가 무효가 된다. 그래서 이름을 하나하나 적은 테스트와,
  * 선언된 필드를 반사로 훑는 테스트를 <b>둘 다</b> 둔다 — 앞의 것은 의도를 적고, 뒤의 것은 나중에 늘어나는 필드를 잡는다.</p>
  */
 class SchedulingPolicyCopyTest {
 
     /**
-     * 사본의 {@code id} 는 항상 {@code null} 이다. 그 근거는 {@link SchedulingPolicy} 에 {@code id}
+     * 사본의 {@code id}는 항상 {@code null}이다. 그 근거는 {@link SchedulingPolicy}에 {@code id}
      * 세터가 <b>없다</b>는 사실이므로, 세터가 생기는 것까지 함께 막는다 — 세터가 생기면 사본이
      * 기존 행과 같은 식별자를 갖고 영속 문맥에 들어갈 길이 열린다.
      */
@@ -88,7 +88,7 @@ class SchedulingPolicyCopyTest {
 
     /**
      * 선언된 필드를 반사로 훑어 값을 대조한다. 나중에 판단 필드가 늘어났을 때
-     * {@code detachedCopy} 가 따라오지 않으면 여기가 빨간불이 된다.
+     * {@code detachedCopy}가 따라오지 않으면 여기가 빨간불이 된다.
      */
     @DisplayName("선언된 모든 필드가 사본으로 옮겨진다")
     @Test
@@ -98,7 +98,7 @@ class SchedulingPolicyCopyTest {
         Map<String, Object> expected = fields(src);
         Map<String, Object> actual = fields(src.detachedCopy());
 
-        // id 와 createdAt 은 영속 계층의 몫이다 — 사본에 없는 것이 맞고, 세터도 없다
+        // id와 createdAt은 영속 계층의 몫이다 — 사본에 없는 것이 맞고, 세터도 없다
         for (String persistenceOwned : new String[]{"id", "createdAt"}) {
             expected.remove(persistenceOwned);
             actual.remove(persistenceOwned);

@@ -20,21 +20,21 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>기존 계약 테스트는 판정 규칙의 사본(한계 문구·지표 라벨·판 설명·전제 문구·Swagger 설명)만 본다. 그래서
  * 주석이나 어노테이션 설명에 "볼록하기 때문이다" 같은 단정이 되돌아와도 아무 테스트가 깨지지 않았다 — 문구 <!-- ban-ok: 예시 --> 정정
- * PR 의 효과가 다음 편집에서 조용히 사라질 수 있었다. 이 테스트는 {@code src/main}·{@code src/test} 의 스케줄러 소스를
+ * PR의 효과가 다음 편집에서 조용히 사라질 수 있었다. 이 테스트는 {@code src/main}·{@code src/test}의 스케줄러 소스를
  * 텍스트로 읽어 <b>주석 블록</b>(javadoc 블록 · 일반 블록 주석 · 줄 주석)과 <b>설명 어노테이션</b>
  * ({@code @Tag}·{@code @Operation}·{@code @Schema})의 문자열을 검사한다. 예외 메시지 같은 일반 문자열 리터럴은
  * 대상이 아니다 — 그것은 사용자에게 가는 문장이 아니라 코드 안의 값이다.</p>
  *
- * <p><b>줄바꿈으로 갈린 조각도 잡는다.</b> 이 저장소는 긴 문장을 여러 줄 javadoc 이나 {@code +} 로 이어 붙이므로
+ * <p><b>줄바꿈으로 갈린 조각도 잡는다.</b> 이 저장소는 긴 문장을 여러 줄 javadoc이나 {@code +}로 이어 붙이므로
  * 블록 단위로 이어 붙인 뒤 공백을 하나로 접어 검사한다.</p>
  *
  * <p><b>의도된 인용은 {@code ban-ok} 마커로 건너뛴다.</b> 마커가 있는 <b>줄과 그 앞뒤 한 줄</b>만 제외한다 — 금지 조각을
- * 정의하거나 "이렇게 부르지 않는다" 고 설명하는 자리가 그 예다. 블록 전체를 면제하면 연구 서술이 가장 긴 클래스 javadoc 이
+ * 정의하거나 "이렇게 부르지 않는다"고 설명하는 자리가 그 예다. 블록 전체를 면제하면 연구 서술이 가장 긴 클래스 javadoc이
  * 통째로 사각지대가 되므로 줄 단위로 좁혔고, 면제된 줄 수에는 상한을 둔다. 금지 조각을 열거하는 자리 하나만
- * 블록 마커({@code ban-ok-block} 을 HTML 주석으로)로 블록 전체를 면제한다. 마커는 {@code <!-- ban-ok} 로 시작하는 HTML 주석만
+ * 블록 마커({@code ban-ok-block}을 HTML 주석으로)로 블록 전체를 면제한다. 마커는 {@code <!-- ban-ok}로 시작하는 HTML 주석만
  * 인식하므로 이 문장처럼 이름을 언급하는 것은 면제가 아니다.</p>
  *
- * <p>대상은 {@code src/main}·{@code src/test} 의 스케줄러 패키지 전부다 — 테스트 주석에 남은 금지 문구 조각도 같은 규칙으로 잡는다.</p>
+ * <p>대상은 {@code src/main}·{@code src/test}의 스케줄러 패키지 전부다 — 테스트 주석에 남은 금지 문구 조각도 같은 규칙으로 잡는다.</p>
  */
 class BannedClaimsSourceScanTest {
 
@@ -49,7 +49,7 @@ class BannedClaimsSourceScanTest {
     private static final Pattern TEXT_BLOCK = Pattern.compile("\"\"\".*?\"\"\"", Pattern.DOTALL);
     private static final Pattern BLOCK_COMMENT = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
     private static final Pattern LINE_COMMENT = Pattern.compile("//[^\\r\\n]*");
-    // FQN 인라인(@io.swagger…ApiResponse) 도 잡는다 — 컨트롤러가 공통 ApiResponse 와의 이름 충돌로 FQN 을 쓴다
+    // FQN 인라인(@io.swagger…ApiResponse)도 잡는다 — 컨트롤러가 공통 ApiResponse와의 이름 충돌로 FQN을 쓴다
     private static final Pattern DESCRIPTION_ANNOTATION = Pattern.compile("@(?:\\w+\\.)*(Tag|Operation|Schema|Parameter|ApiResponses?)\\s*\\(");
     private static final Pattern STRING_LITERAL = Pattern.compile("\"((?:\\\\.|[^\"\\\\])*)\"");
     private static final Pattern DESCRIPTION_ARG = Pattern.compile("\\b(description|summary)\\s*=\\s*");
@@ -130,7 +130,7 @@ class BannedClaimsSourceScanTest {
     static List<Block> blocks(String text) {
         List<Block> out = new ArrayList<>();
         // 문자열 리터럴 안의 /* 가 가짜 주석 블록을 열어 뒤 코드를 삼키지 않도록, 블록 주석은 리터럴을 가린 텍스트에서 찾는다.
-        // 텍스트 블록(""")을 먼저 가린다 — 안에 홀수 개의 " 가 있으면 일반 리터럴 마스킹이 어긋나 뒤 주석이 검사에서 빠진다
+        // 텍스트 블록(""")을 먼저 가린다 — 안에 홀수 개의 "가 있으면 일반 리터럴 마스킹이 어긋나 뒤 주석이 검사에서 빠진다
         String textBlocksMasked = TEXT_BLOCK.matcher(text).replaceAll(m -> " ".repeat(m.group().length()));
         String literalsMasked = STRING_LITERAL.matcher(textBlocksMasked).replaceAll(m -> " ".repeat(m.group().length()));
         Matcher bc = BLOCK_COMMENT.matcher(literalsMasked);

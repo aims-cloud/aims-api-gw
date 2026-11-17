@@ -22,15 +22,15 @@ import tools.jackson.databind.JsonNode;
  * 배치 정책 생성·수정 — 요청 검증과 저장 규칙.
  *
  * <p><b>최소 검증</b>이다. "저장하면 확실히 망가지는 값"만 거부한다 — 음수 가중치(점수 부호 반전), 가중치 전부 0,
- * 사용률 임계 0 이하나 100 초과(전 노드 제외 또는 임계 무효), 온도 임계 0 이하. 가중치 합이 1 이 아닌 것은
+ * 사용률 임계 0 이하나 100 초과(전 노드 제외 또는 임계 무효), 온도 임계 0 이하. 가중치 합이 1이 아닌 것은
  * 허용한다 — 가중치는 비율로만 쓰인다.</p>
  *
- * <p>이름 중복은 DB 유니크 제약이 잡아 주지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다.
- * {@code defaultEngine} 은 등록된 엔진이어야 한다 — 모르는 이름을 저장하면 실행 시 기본 엔진으로 조용히
+ * <p>이름 중복은 DB 유니크 제약이 잡아 주지만 그때는 500으로 새므로 먼저 조회해 409를 낸다.
+ * {@code defaultEngine}은 등록된 엔진이어야 한다 — 모르는 이름을 저장하면 실행 시 기본 엔진으로 조용히
  * 대체되어 정책의 의도가 사라진다.</p>
  *
- * <p><b>활성 정책은 종류(공통 포함)당 하나</b>. 생성 시 {@code active} 를 생략하면 그 종류에 활성이 없을 때만
- * 켜지고, 명시적 {@code active:true} 나 {@code PUT active:true} 는 충돌 시 409, 전환은 {@link #activate} 로 한다.
+ * <p><b>활성 정책은 종류(공통 포함)당 하나</b>. 생성 시 {@code active}를 생략하면 그 종류에 활성이 없을 때만
+ * 켜지고, 명시적 {@code active:true}나 {@code PUT active:true}는 충돌 시 409, 전환은 {@link #activate}로 한다.
  * 다른 정책의 상태를 조용히 바꾸는 경로는 없다.</p>
  */
 @Service
@@ -140,7 +140,7 @@ public class SchedulingPolicyService {
     // ── 반영 ───────────────────────────────────────────────────
 
     private void apply(SchedulingPolicy policy, SchedulingPolicyRequest r) {
-        // "비울 수 있는" 세 필드 — 키 없음(null)은 유지, 명시적 null(isNull) 은 비움
+        // "비울 수 있는" 세 필드 — 키 없음(null)은 유지, 명시적 null(isNull)은 비움
         if (r.resourceType() != null) {
             policy.setResourceType(r.resourceType().isNull() ? null
                     : EnumSupport.parse(Workload.ResourceType.class, text(r.resourceType(), "리소스 종류"), "리소스 종류"));

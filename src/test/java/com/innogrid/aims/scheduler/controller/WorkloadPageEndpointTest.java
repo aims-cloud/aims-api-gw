@@ -37,8 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * {@code GET /scheduler/workloads/page} — 총건수·필터·정렬·동률·페이지 경계, 그리고 기존 {@code /workloads} 배열이 그대로인가.
  *
- * <p>시드 8건은 {@code wp-} 접두어로 심고 {@code keyword} 로 격리한다(다른 테스트의 워크로드와 섞이지 않게).
- * 종류가 비어 있는 행 2건은 {@code resourceType=VM} 이 옛 행을 포함하는 규칙을, 이름에 {@code _}·{@code %} 가 든 행은
+ * <p>시드 8건은 {@code wp-} 접두어로 심고 {@code keyword}로 격리한다(다른 테스트의 워크로드와 섞이지 않게).
+ * 종류가 비어 있는 행 2건은 {@code resourceType=VM}이 옛 행을 포함하는 규칙을, 이름에 {@code _}·{@code %}가 든 행은
  * LIKE 이스케이프를 고정한다.</p>
  */
 @SpringBootTest
@@ -154,7 +154,7 @@ class WorkloadPageEndpointTest {
             assertEquals("FAILED", row.get("status").asString());
             assertTrue(row.get("retryCount").asInt() >= properties.getMaxRetryCount(), row.toString());
         }
-        // FAILED 인데 retryCount 가 null 인 옛 행(엔티티 메서드로는 못 만듦) — 0회라 소진이 아니어야 한다
+        // FAILED인데 retryCount가 null인 옛 행(엔티티 메서드로는 못 만듦) — 0회라 소진이 아니어야 한다
         tx.executeWithoutResult(s -> em.createQuery("update Workload w set w.retryCount = null where w.id = :id")
                 .setParameter("id", seeded.get(1)).executeUpdate());
         assertEquals(1, total("retryExhausted", "true"), "null 행은 소진에 들지 않는다");
@@ -198,7 +198,7 @@ class WorkloadPageEndpointTest {
             row.propertyNames().forEach(keys::add);
             assertEquals(ResponseJsonGoldenTest.WORKLOAD_FIELDS, keys, "필터를 걸어도 행은 23필드 그대로");
         }
-        // 모르는 값은 400 과 가능한 값 목록 — 필터와 등급 순 정렬은 함께 쓸 수 있다
+        // 모르는 값은 400과 가능한 값 목록 — 필터와 등급 순 정렬은 함께 쓸 수 있다
         mockMvc.perform(get(PAGE).param("priority", "urgent")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("CRITICAL")));
         mockMvc.perform(get(PAGE).param("priority", "HIGH,nope")).andExpect(status().isBadRequest())
@@ -375,7 +375,7 @@ class WorkloadPageEndpointTest {
         return page(withPrefix).get("totalElements").asLong();
     }
 
-    /** keyword 를 직접 주는 경우(격리 접두어를 붙이지 않음). */
+    /** keyword를 직접 주는 경우(격리 접두어를 붙이지 않음). */
     private long total0(String... pairs) throws Exception {
         return page(pairs).get("totalElements").asLong();
     }

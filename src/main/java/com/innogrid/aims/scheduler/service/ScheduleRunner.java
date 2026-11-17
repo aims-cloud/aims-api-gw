@@ -33,12 +33,12 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 /**
  * 자동 실행 러너 — 실행할 때가 된 스케줄을 찾아 돌린다.
  *
- * <p><b>{@code @Scheduled} 를 쓰지 않는다.</b> 이 앱의 작업 스케줄러 풀 크기는 기본값 1
+ * <p><b>{@code @Scheduled}를 쓰지 않는다.</b> 이 앱의 작업 스케줄러 풀 크기는 기본값 1
  * 이고, 미터링 집계·알람 평가 등 다른 담당자의 작업 5건이 그 스레드 하나를 함께 쓴다.
  * 여기에 배치 작업을 얹으면 노드 메트릭 조회가 끝날 때까지 그 작업들이 밀린다. 그래서
  * 전용 executor 두 개(폴링용·실행용)를 따로 만든다.</p>
  *
- * <p>스레드는 모두 데몬이라 JVM 종료를 막지 않고, {@link #stop()} 에서 정리한다.
+ * <p>스레드는 모두 데몬이라 JVM 종료를 막지 않고, {@link #stop()}에서 정리한다.
  * 폴링 본문은 통째로 예외를 삼킨다 — 여기서 예외가 새어 나가면 스케줄러 스레드가
  * 죽어 자동 실행이 조용히 멈춘다.</p>
  *
@@ -47,7 +47,7 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
  * 않게 한다.</p>
  *
  * <p>자동 실행의 실패 · 복구는 포털 로그에 SYSTEM 행으로 남긴다(화면 「스케줄 자동 실행」). 상태가 바뀔 때만 1행이고,
- * 판정은 포털 로그 모듈의 {@link IntegrationHealth} 를 그대로 쓴다. 기동 때 실행 권한을 회수했으면 요약 1행을 남긴다.</p>
+ * 판정은 포털 로그 모듈의 {@link IntegrationHealth}를 그대로 쓴다. 기동 때 실행 권한을 회수했으면 요약 1행을 남긴다.</p>
  */
 @Component
 public class ScheduleRunner implements SmartLifecycle {
@@ -65,14 +65,14 @@ public class ScheduleRunner implements SmartLifecycle {
     private final ScheduleExecutionService executionService;
     private final SchedulerProperties properties;
     private final PortalLogService portalLogService;
-    /** 자동 실행 실패 · 복구 전이 — 스케줄 PK 별로 상태가 바뀔 때만 SYSTEM 행 1개. 빈이 아니라 이 러너 안에서 만든다 */
+    /** 자동 실행 실패 · 복구 전이 — 스케줄 PK별로 상태가 바뀔 때만 SYSTEM 행 1개. 빈이 아니라 이 러너 안에서 만든다 */
     private final IntegrationHealth autoRunHealth;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     /**
      * 워커에 넘겼지만 아직 끝나지 않은 스케줄. 큐에서 대기 중인 것까지 포함한다 —
-     * DB 의 "실행 중" 표시는 실행이 <b>시작된 뒤</b>에야 생겨서 대기 구간을 못 막는다.
+     * DB의 "실행 중" 표시는 실행이 <b>시작된 뒤</b>에야 생겨서 대기 구간을 못 막는다.
      */
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
@@ -124,9 +124,9 @@ public class ScheduleRunner implements SmartLifecycle {
 
     /**
      * 기동 시 남아 있는 실행 권한을 회수한다. <b>여기서 예외가 새면 앱이 뜨지 않는다</b> —
-     * 스프링 컨텍스트 생성 스레드에서 돌기 때문이다. 그래서 {@code Throwable} 까지 삼키고 로그만 남긴다.
+     * 스프링 컨텍스트 생성 스레드에서 돌기 때문이다. 그래서 {@code Throwable}까지 삼키고 로그만 남긴다.
      *
-     * <p>중복 {@code start()} 로 두 번 돌지 않도록 {@code running} 을 세운 뒤에 부른다. 폴링 시작 전에
+     * <p>중복 {@code start()}로 두 번 돌지 않도록 {@code running}을 세운 뒤에 부른다. 폴링 시작 전에
      * 끝나야 회수 대상이 폴러와 겹치지 않는다.</p>
      *
      * <p>회수한 스케줄이 1건 이상이면 포털 로그에 요약 SYSTEM 행 1개를 남긴다. 재기동으로 끊긴 실행은 메모리의 전이 상태가
@@ -225,7 +225,7 @@ public class ScheduleRunner implements SmartLifecycle {
      * 편집·삭제가 끼면 낡는다. 그 사이 지워졌거나 사용 여부·자동 실행이 꺼졌으면 이 회차는 돌지 않고
      * 아무것도 남기지 않으며(실행 이력·최근 실행 기록·다음 예정 시각 모두 그대로), 리소스 종류·배치 순서·정책·
      * 엔진·상한을 바꿨으면 바뀐 값으로 돈다. 건너뛴 스케줄은 지워졌거나 사용 여부·자동 실행이 꺼진 것이라 폴링
-     * 조건에서 빠져 다음 폴링이 다시 집지 않는다. 다시 읽기는 try 안에 둔다 — 밖에 두면 DB 예외가 워커의 Future 에 삼켜져 로그 없이
+     * 조건에서 빠져 다음 폴링이 다시 집지 않는다. 다시 읽기는 try 안에 둔다 — 밖에 두면 DB 예외가 워커의 Future에 삼켜져 로그 없이
      * 사라진다. 같은 패키지의 테스트가 폴링 사본을 들고 직접 부른다.</p>
      */
     void executeQuietly(Schedule polled) {
@@ -264,13 +264,13 @@ public class ScheduleRunner implements SmartLifecycle {
     }
 
     /**
-     * 자동 실행 1회의 결과를 포털 로그 전이로 남긴다(docs/08 §6 의 요청 없는 기록 · {@link IntegrationHealth}).
+     * 자동 실행 1회의 결과를 포털 로그 전이로 남긴다(docs/08 §6의 요청 없는 기록 · {@link IntegrationHealth}).
      *
-     * <p>{@code ScheduleExecutionService.complete} 는 들고 있는 엔티티에도 결과를 반영한다. 그래서 실행 이력을 돌려줬든,
-     * 대상 0건으로 null 이든, 실패를 마감한 뒤 예외든 엔티티 하나로 읽는다. 마무리 시각이 그대로면(실행 권한을 못 잡은 409)
+     * <p>{@code ScheduleExecutionService.complete}는 들고 있는 엔티티에도 결과를 반영한다. 그래서 실행 이력을 돌려줬든,
+     * 대상 0건으로 null이든, 실패를 마감한 뒤 예외든 엔티티 하나로 읽는다. 마무리 시각이 그대로면(실행 권한을 못 잡은 409)
      * 이번 회차는 끝난 것이 아니라 보지 않는다.</p>
      *
-     * <p>실패는 FAILED 이고, 복구는 실행 이력이 있는 COMPLETED 만이다. 대상 0건으로 끝난 회차(대상 없음 · 재시도 대기)는
+     * <p>실패는 FAILED이고, 복구는 실행 이력이 있는 COMPLETED만이다. 대상 0건으로 끝난 회차(대상 없음 · 재시도 대기)는
      * 상태를 바꾸지 않는다 — 배치할 수 없는 워크로드가 재시도 간격마다 장애 · 복구 짝을 되풀이하지 않게 하려는 것이다.
      * 관측이 실패해도 자동 실행은 그대로다.</p>
      */
@@ -291,8 +291,8 @@ public class ScheduleRunner implements SmartLifecycle {
     }
 
     /**
-     * 실패 사유 운반용 — {@link IntegrationHealth#failed} 가 예외 메시지를 사유로 쓴다. 던지지 않고 스택도 만들지 않는다.
-     * 사유가 비어 있으면 「사유 없음」으로 둔다(문자열 "null" 이 남지 않게).
+     * 실패 사유 운반용 — {@link IntegrationHealth#failed}가 예외 메시지를 사유로 쓴다. 던지지 않고 스택도 만들지 않는다.
+     * 사유가 비어 있으면 「사유 없음」으로 둔다(문자열 "null"이 남지 않게).
      */
     private static final class AutoRunFailure extends RuntimeException {
         AutoRunFailure(String message) {

@@ -6,13 +6,13 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * 구간 에너지 적분 — 시각마다의 전력(W)을 kWh 로 모은다.
+ * 구간 에너지 적분 — 시각마다의 전력(W)을 kWh로 모은다.
  *
- * <p><b>무엇을 재료로 쓰는가.</b> 지점 배열이 아니라 <b>0 을 채우기 전의 원시 구간 시계열</b>이다. 지점은 전력을
- * 못 읽은 노드를 0 으로 채워 만들지만 원시 시계열에는 그 자리가 아예 없다. 소비 전력과 회수 가능 전력 둘 다
+ * <p><b>무엇을 재료로 쓰는가.</b> 지점 배열이 아니라 <b>0을 채우기 전의 원시 구간 시계열</b>이다. 지점은 전력을
+ * 못 읽은 노드를 0으로 채워 만들지만 원시 시계열에는 그 자리가 아예 없다. 소비 전력과 회수 가능 전력 둘 다
  * 이 클래스를 쓰고, 회수 가능 쪽만 시각마다 가동 판정과 유휴 역산을 한 번 더 거친 시계열을 넘긴다.</p>
  *
- * <p>저장소에 {@code avg_over_time} 을 묻는 방법도 있었으나 쓰지 않는다. 즉시 질의는 <b>언제나 현재 시각에서</b>
+ * <p>저장소에 {@code avg_over_time}을 묻는 방법도 있었으나 쓰지 않는다. 즉시 질의는 <b>언제나 현재 시각에서</b>
  * 평가되어 어제 구간을 물어도 오늘 구간의 평균이 돌아오고, 시각을 지정할 통로가 클라이언트에 없다.</p>
  *
  * <p><b>노드별로 적분한 뒤 합한다.</b> 합계 시계열을 적분하면 노드가 중간에 등장하거나 사라진 구간에서 그 등장·소멸
@@ -30,9 +30,9 @@ public final class IntervalEnergy {
      * <p>설정 노브가 아니라 코드 상수다. 노브로 두면 값이 바뀔 때 어제 낸 숫자와 오늘 낸 숫자가 말없이 갈리고,
      * 그걸 막으려면 설정 다이제스트 규율이 따라붙는다. 눈금은 메트릭 저장소의 기본 조회 지연 창과 같은 5분이다.</p>
      *
-     * <p><b>실제 허용 간격은 조회 간격에서 나온다.</b> 이 값을 그대로 쓰면 {@code step} 을 5분보다 크게 준 조회가
+     * <p><b>실제 허용 간격은 조회 간격에서 나온다.</b> 이 값을 그대로 쓰면 {@code step}을 5분보다 크게 준 조회가
      * 통째로 구멍으로 잘려 에너지가 전부 비어 버린다 — 7일을 1시간 간격으로 보는 것은 정상적인 사용이다.
-     * 호출자가 {@code step} 의 두 배와 이 하한 중 큰 값을 넘긴다.</p>
+     * 호출자가 {@code step}의 두 배와 이 하한 중 큰 값을 넘긴다.</p>
      */
     public static final long MAX_GAP_SECONDS = 300;
 
@@ -77,7 +77,7 @@ public final class IntervalEnergy {
      * 노드별 시계열을 적분한다.
      *
      * @param byNode         노드 id → (시각(초) → 표본). 비어 있으면 {@link Result#NONE}
-     * @param maxGapSeconds  이보다 먼 두 표본은 잇지 않는다. {@link #gapLimitFor} 로 조회 간격에서 낸다
+     * @param maxGapSeconds  이보다 먼 두 표본은 잇지 않는다. {@link #gapLimitFor}로 조회 간격에서 낸다
      */
     public static Result integrate(Map<String, ? extends Map<Long, Sample>> byNode, long maxGapSeconds) {
         if (byNode == null || byNode.isEmpty()) return Result.NONE;

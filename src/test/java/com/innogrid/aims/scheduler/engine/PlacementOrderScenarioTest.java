@@ -50,7 +50,7 @@ class PlacementOrderScenarioTest {
         assertTrue(size.wokenIdle <= age.wokenIdle, "크기순은 빈 노드를 더 깨우지 않는다: 나이순 %d vs 크기순 %d".formatted(age.wokenIdle, size.wokenIdle));
         assertTrue(size.reclaimable >= age.reclaimable, "남는 유휴 전력(회수 가능)이 줄지 않는다");
         assertTrue(age.firstMargin > 0, "전력만 보면 첫 배치는 가동 노드(여유 양수): " + age.firstMargin);
-        // 이 합성 클러스터에서는 두 순서가 같은 결과(빈 노드 1대·150W)다 — power 엔진은 점수로 고르므로 단순 first-fit 처럼
+        // 이 합성 클러스터에서는 두 순서가 같은 결과(빈 노드 1대·150W)다 — power 엔진은 점수로 고르므로 단순 first-fit처럼
         // 순서에 좌우되지 않는다. 크기순의 이점은 노드·워크로드 조합에 따라 나타나며, 여기서는 "나빠지지 않음"만 고정한다.
     }
 

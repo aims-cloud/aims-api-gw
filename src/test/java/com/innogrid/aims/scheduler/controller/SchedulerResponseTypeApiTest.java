@@ -57,10 +57,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 스케줄러 응답 타입 명시의 계약 — 레코드로 바꾼 네 응답의 키 순서, 작업 10개의 응답 스키마 참조와 새 이름,
  * 기존 Point·Candidate 스키마 본문 보존, 스케줄러 컨트롤러 응답 선언에 와일드카드·원시 타입이 없음.
- * 진단 응답의 중첩 레코드는 끝의 Response 를 뺀 응답 이름을 앞에 붙인 이름으로 공개한다(단순 이름은 다른 영역이 쓸 수 있다).
+ * 진단 응답의 중첩 레코드는 끝의 Response를 뺀 응답 이름을 앞에 붙인 이름으로 공개한다(단순 이름은 다른 영역이 쓸 수 있다).
  * 진단 응답 넷과 그 안에 실리는 레코드는 값이 비어도 선언한 키를 모두 순서대로 내야 한다 — 판단 근거가 없다는 사실도 정보다.
- * 스케줄러 경로의 모든 작업은 성공 응답 data 로 이름 있는 스키마나 기본 타입을 돌려주고, 스케줄러 작업이 닿는 스키마 이름은
- * 공용 래퍼 말고는 다른 작업이 닿는 이름과 겹치지 않아야 한다(겹치면 springdoc 이 한쪽 본문을 버린다).
+ * 스케줄러 경로의 모든 작업은 성공 응답 data로 이름 있는 스키마나 기본 타입을 돌려주고, 스케줄러 작업이 닿는 스키마 이름은
+ * 공용 래퍼 말고는 다른 작업이 닿는 이름과 겹치지 않아야 한다(겹치면 springdoc이 한쪽 본문을 버린다).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -74,7 +74,7 @@ class SchedulerResponseTypeApiTest {
     private static final double LIMIT = 75.0;
     private static final String REF = "#/components/schemas/";
     private static final Set<String> METHODS = Set.of("get", "post", "put", "patch", "delete");
-    /** Excel 내보내기 응답의 미디어 형식 — 이 형식으로 200 을 선언한 작업은 래퍼 검사에서 뺀다. */
+    /** Excel 내보내기 응답의 미디어 형식 — 이 형식으로 200을 선언한 작업은 래퍼 검사에서 뺀다. */
     private static final String XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     /** 양쪽이 함께 써도 되는 라이브러리 스키마. 공용 타입을 일부러 함께 쓰게 되면 여기에 더한다. */
     private static final Set<String> LIBRARY = Set.of("JsonNode");
@@ -92,7 +92,7 @@ class SchedulerResponseTypeApiTest {
             Map.entry("get /optimization/power", "ApiResponsePowerOptimizationResponse"),
             Map.entry("get /optimization/consolidation", "ApiResponseConsolidationResponse"));
 
-    /** 타입을 명시하면서 공개한 스키마 28개(중첩은 끝의 Response 를 뺀 응답 이름을 앞에 붙인 이름). */
+    /** 타입을 명시하면서 공개한 스키마 28개(중첩은 끝의 Response를 뺀 응답 이름을 앞에 붙인 이름). */
     private static final Set<String> NEW_SCHEMAS = Set.of(
             "ApiResponseConsolidationResponse", "ApiResponseListConstraintDescriptionResponse", "ApiResponseListEngineResponse",
             "ApiResponseListResourceTypeOptionResponse", "ApiResponseListThermalCooldownResponse", "ApiResponsePowerEfficiencyResponse",
@@ -277,7 +277,7 @@ class SchedulerResponseTypeApiTest {
         }
     }
 
-    /** 정준 생성자에 0·false·null 을 넣은 표본 — 압축 생성자가 null 목록을 빈 목록으로 바꾼다. */
+    /** 정준 생성자에 0·false·null을 넣은 표본 — 압축 생성자가 null 목록을 빈 목록으로 바꾼다. */
     private static Object blank(Class<?> type) throws ReflectiveOperationException {
         Class<?>[] params = Arrays.stream(type.getRecordComponents()).map(RecordComponent::getType).toArray(Class<?>[]::new);
         Object[] args = new Object[params.length];
@@ -349,7 +349,7 @@ class SchedulerResponseTypeApiTest {
         }
     }
 
-    /** data 가 없거나 이름 없는 object 이거나 라이브러리 스키마를 가리키는 래퍼 — 양쪽이 함께 써도 겹침이 아니다. */
+    /** data가 없거나 이름 없는 object이거나 라이브러리 스키마를 가리키는 래퍼 — 양쪽이 함께 써도 겹침이 아니다. */
     private static boolean wrapsLibraryOrNothing(JsonNode wrapper) {
         JsonNode ref = wrapper.path("properties").path("data").get("$ref");
         return ref == null || LIBRARY.contains(ref.asString().substring(REF.length()));
@@ -359,7 +359,7 @@ class SchedulerResponseTypeApiTest {
         return path.startsWith(BASE + "/");
     }
 
-    /** data 가 이름 있는 스키마·기본 타입·그 배열·값 타입이 정해진 맵이면 true. 정체 없는 object 는 false. */
+    /** data가 이름 있는 스키마·기본 타입·그 배열·값 타입이 정해진 맵이면 true. 정체 없는 object는 false. */
     private static boolean typed(JsonNode data) {
         if (data.has("$ref")) return true;
         String type = data.path("type").asString();
@@ -404,7 +404,7 @@ class SchedulerResponseTypeApiTest {
         }
     }
 
-    /** 이름 n 에 닿는 작업(최대 3개) — 실패 메시지용. */
+    /** 이름 n에 닿는 작업(최대 3개) — 실패 메시지용. */
     private static List<String> users(JsonNode doc, JsonNode schemas, String n, boolean ours) {
         List<String> found = new ArrayList<>();
         for (Entry<String, JsonNode> path : doc.get("paths").properties()) {

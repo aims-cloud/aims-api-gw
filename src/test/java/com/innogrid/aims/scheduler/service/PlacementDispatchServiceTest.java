@@ -29,7 +29,7 @@ import static org.mockito.Mockito.when;
 /**
  * 결정 → 디스패치 → (거부·불가) 처리와 콜백 반영. 트랜잭션 테스트가 아니다 — 커밋 뒤 실제 상태를 본다.
  *
- * <p>레지스트리를 대역으로 바꿔 수락·거부·예외 디스패처를 끼운다. 워크로드는 배치 없이 {@code assignTo} 로 배정 상태를 만든다
+ * <p>레지스트리를 대역으로 바꿔 수락·거부·예외 디스패처를 끼운다. 워크로드는 배치 없이 {@code assignTo}로 배정 상태를 만든다
  * — 여기서 보는 것은 결정 뒤의 처리이지 엔진이 아니다.</p>
  */
 @SpringBootTest
@@ -254,9 +254,9 @@ class PlacementDispatchServiceTest {
     // ── 상태 변경과 전달 기록 마감 ──────────────────────────────
 
     /**
-     * 운영자가 상태 변경 API 로 워크로드를 끝 상태로 보내면 현재 결정의 전달 기록도 같은 끝 상태로 마감된다.
-     * 전에는 워크로드만 바뀌고 기록은 ACCEPTED 로 그대로 남았다 — 기록형 디스패처 모드에서는 진행을 알리는 수단이
-     * 콜백 API 와 이 API 둘뿐이라, 이 API 로 끝낸 워크로드의 기록이 열린 채 쌓였다.
+     * 운영자가 상태 변경 API로 워크로드를 끝 상태로 보내면 현재 결정의 전달 기록도 같은 끝 상태로 마감된다.
+     * 전에는 워크로드만 바뀌고 기록은 ACCEPTED로 그대로 남았다 — 기록형 디스패처 모드에서는 진행을 알리는 수단이
+     * 콜백 API와 이 API 둘뿐이라, 이 API로 끝낸 워크로드의 기록이 열린 채 쌓였다.
      */
     @DisplayName("상태 변경으로 실패 처리하면 현재 결정의 전달 기록이 FAILED 로 마감되고 비고 앞에 표지가 붙는다")
     @Test
@@ -316,7 +316,7 @@ class PlacementDispatchServiceTest {
 
     /**
      * 결함이 실제로 해를 끼치던 길. 상태 변경으로 실패 처리한 워크로드를 대기로 되살려 다시 배치하면, 전에는
-     * 옛 결정의 기록이 ACCEPTED 로 남아 있어 그 기록에 늦게 온 RUNNING 콜백이 새 결정의 워크로드를 실행 중으로 옮겼다.
+     * 옛 결정의 기록이 ACCEPTED로 남아 있어 그 기록에 늦게 온 RUNNING 콜백이 새 결정의 워크로드를 실행 중으로 옮겼다.
      */
     @DisplayName("실패 처리 뒤 되살려 다시 배치한 워크로드는 옛 결정의 기록에 온 늦은 콜백으로 옮겨지지 않는다")
     @Test
@@ -374,12 +374,12 @@ class PlacementDispatchServiceTest {
 
     // ── 요청 시각이 같은 기록 ────────────────────────────────────
 
-    /** 같은 워크로드의 옛 결정·새 결정 기록 — 요청 시각을 같게 맞췄고, 옛 기록을 먼저 만들어 id 가 작다. */
+    /** 같은 워크로드의 옛 결정·새 결정 기록 — 요청 시각을 같게 맞췄고, 옛 기록을 먼저 만들어 id가 작다. */
     private record SameTimeRows(Workload workload, PlacementDispatch older, PlacementDispatch later) {}
 
     /**
      * 결정 두 개(옛 → 새)를 만들고 두 기록의 요청 시각을 같게 맞춘다. 두 기록 모두 배정 시각보다 앞서지 않아 현재 결정으로
-     * 보이는 동률이다. {@code laterStatus} 가 있으면 새 기록의 상태를 그 값으로 둔다(기록형 디스패처는 곧바로 ACCEPTED).
+     * 보이는 동률이다. {@code laterStatus}가 있으면 새 기록의 상태를 그 값으로 둔다(기록형 디스패처는 곧바로 ACCEPTED).
      */
     private SameTimeRows sameTimeRows(String name, DispatchStatus laterStatus) {
         when(registry.current()).thenReturn(new RecordingPlacementDispatcher());

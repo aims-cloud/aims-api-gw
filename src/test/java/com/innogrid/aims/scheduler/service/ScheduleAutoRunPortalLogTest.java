@@ -45,10 +45,10 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 자동 실행 실패 · 복구의 포털 로그 — 러너가 자동 실행 1회 결과를 SYSTEM 행으로 남기는지(화면 「스케줄 자동 실행」),
  * 상태가 바뀔 때만 남기는지, 대상 0건으로 끝난 회차를 복구로 보지 않는지, 수동 실행이 섞이지 않는지, 기동 회수 요약이 남는지 본다.
  *
- * <p>러너 폴링은 테스트에서 돌지 않으므로 {@code executeQuietly} · {@code recoverStuckRunsQuietly} 를 직접 부른다.
+ * <p>러너 폴링은 테스트에서 돌지 않으므로 {@code executeQuietly} · {@code recoverStuckRunsQuietly}를 직접 부른다.
  * 수집기는 빈 스냅샷으로 두고, 배치가 성공해야 하는 회차에서만 노드 1대를 준다. 컨텍스트는 스케줄 화면 포털 로그 테스트와
- * 같은 조합이다. 자동 실행이 스케줄을 읽은 뒤 즉시 실행이 실행 권한을 먼저 잡는 순간은, 읽은 사본을 돌려주는 저장소 mock 으로
- * 만든 러너로 본다(가짜 빈이 아니라 컨텍스트는 그대로). 행은 이 클래스가 만든 스케줄의 업무 키 · PK 로 고르고, 끝나면 만든
+ * 같은 조합이다. 자동 실행이 스케줄을 읽은 뒤 즉시 실행이 실행 권한을 먼저 잡는 순간은, 읽은 사본을 돌려주는 저장소 mock으로
+ * 만든 러너로 본다(가짜 빈이 아니라 컨텍스트는 그대로). 행은 이 클래스가 만든 스케줄의 업무 키 · PK로 고르고, 끝나면 만든
  * 스케줄 · 워크로드 · 실행 이력 · 전달 기록 · 행을 지운다(자동 실행 이력이 남으면 러너 테스트의 「테스트 중 자동 실행 없음」 확인이 깨진다).</p>
  */
 @SpringBootTest
@@ -295,7 +295,7 @@ class ScheduleAutoRunPortalLogTest {
         return scheduleRepository.saveAndFlush(schedule);
     }
 
-    /** 폴링이 넘긴 사본처럼 DB 에서 읽은 분리된 엔티티로 러너의 자동 실행 1회를 부른다 */
+    /** 폴링이 넘긴 사본처럼 DB에서 읽은 분리된 엔티티로 러너의 자동 실행 1회를 부른다 */
     private void autoRun(Schedule schedule) {
         runner.executeQuietly(scheduleRepository.findById(schedule.getId()).orElseThrow());
     }

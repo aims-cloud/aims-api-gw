@@ -84,7 +84,7 @@ class PowerOptimizationTrendTest {
         // 반납분은 wakeupPower — 유휴 2대 다 계측돼 실측에서 역산한다:
         // n2(P=160,u=0.02,Pmax=500): (160-500*0.02)/0.98 = 150/0.98 ≈ 153.0612
         // n3(P=150,u=0.01,Pmax=500): (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646
-        // 합 ≈ 299.5259 → round 299.53 (개별 반올림 후 합산하면 142.86+146.46 처럼 어긋난다 —
+        // 합 ≈ 299.5259 → round 299.53 (개별 반올림 후 합산하면 142.86+146.46처럼 어긋난다 —
         // 서비스는 raw 합을 낸 뒤 한 번만 반올림한다)
         assertEquals(PowerOptimizationService.round((160 - 500 * 0.02) / 0.98 + (150 - 500 * 0.01) / 0.99),
                 p1.reclaimableIdleWatts(), EPS,
@@ -93,7 +93,7 @@ class PowerOptimizationTrendTest {
         assertEquals(0.0067, p1.minPeiRaw(), 1e-3);       // 1/150
         assertEquals(3, p1.evaluableNodes()); assertTrue(p1.measured());
 
-        // n3(P=150,u=0.01,Pmax=500) 만 유휴: (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646 → round 146.46
+        // n3(P=150,u=0.01,Pmax=500)만 유휴: (150-500*0.01)/0.99 = 145/0.99 ≈ 146.4646 → round 146.46
         assertEquals(2, p2.activeNodes());
         assertEquals(PowerOptimizationService.round((150 - 500 * 0.01) / 0.99), p2.reclaimableIdleWatts(), EPS);
         assertEquals(3, p3.activeNodes()); assertEquals(0.0, p3.reclaimableIdleWatts(), EPS);
@@ -135,7 +135,7 @@ class PowerOptimizationTrendTest {
     @DisplayName("시각 결손 노드는 그 시각에서만 빠지고 CPU 가 전혀 없으면 빈 결과다")
     @Test
     void node_missing_at_point_drops_there() {
-        stub("node_cpu_seconds_total", List.of(series("n1", T1, 80, T2, 70), series("n2", T1, 2)));   // n2 는 T2 결손
+        stub("node_cpu_seconds_total", List.of(series("n1", T1, 80, T2, 70), series("n2", T1, 2)));   // n2는 T2 결손
         stub("ipmi_dcmi_power", List.of(series("n1", T1, 200, T2, 200), series("n2", T1, 150)));
 
         PowerOptimizationTrendResponse r = service.trend(from, to, "5m");
@@ -188,7 +188,7 @@ class PowerOptimizationTrendTest {
     @DisplayName("두 노드가 같은 IPMI 시리즈를 가리키면 둘 다 빠진다 — 한 값이 두 번 더해지면 합이 부푼다")
     @Test
     void nodes_sharing_one_ipmi_series_are_both_dropped() {
-        // 원장: n1 이 n2 의 IPMI 를 가리킨다 → n2(호스트명 일치)와 충돌
+        // 원장: n1이 n2의 IPMI를 가리킨다 → n2(호스트명 일치)와 충돌
         NodeExporterMapping m = new NodeExporterMapping("n1:9100");
         m.setIpmiInstance("n2:9290");
         NodeExporterMappingRepository ledger = mock(NodeExporterMappingRepository.class);
@@ -238,10 +238,10 @@ class PowerOptimizationTrendTest {
             assertEquals(c.totalPowerWatts(), pa.totalPowerWatts() + pb.totalPowerWatts(), 0.02);
             assertEquals(c.reclaimableIdleWatts(), pa.reclaimableIdleWatts() + pb.reclaimableIdleWatts(), 0.02);
         }
-        // kWh 는 소수 3자리로 반올림되므로 세 값의 반올림 오차(각 0.0005)를 허용한다.
+        // kWh는 소수 3자리로 반올림되므로 세 값의 반올림 오차(각 0.0005)를 허용한다.
         assertEquals(all.energy().consumedKwh(), a.energy().consumedKwh() + b.energy().consumedKwh(), 0.002,
                 "소비 에너지도 MDC 노드의 전력만 적분한다");
-        // 유휴 표본이 두 개 이상인 노드만 적분한다 — mdc-a 는 n2 가 T1 에만 유휴라 값이 없고(null), mdc-b 의 n3 가 전부다.
+        // 유휴 표본이 두 개 이상인 노드만 적분한다 — mdc-a는 n2가 T1에만 유휴라 값이 없고(null), mdc-b의 n3가 전부다.
         assertNull(a.energy().reclaimableKwh());
         assertEquals(all.energy().reclaimableKwh(), b.energy().reclaimableKwh(), 0.002);
     }
@@ -274,7 +274,7 @@ class PowerOptimizationTrendTest {
         assertTrue(r.message().contains("그 MDC 로 수집된 노드의 CPU 메트릭이 없습니다"), r.message());
         assertFalse(r.message().contains("zz"), "입력값을 되풀이하지 않는다");
 
-        // 저장소에 CPU 시리즈가 아예 없으면 MDC 를 줘도 기존 사유 그대로다 — 새 사유는 MDC 를 고른 뒤에만 나온다.
+        // 저장소에 CPU 시리즈가 아예 없으면 MDC를 줘도 기존 사유 그대로다 — 새 사유는 MDC를 고른 뒤에만 나온다.
         stub("node_cpu_seconds_total", List.of());
         assertEquals("해당 구간에 대상 노드의 CPU 메트릭이 없습니다", service.trend(from, to, "5m", "mdc-a").message());
         assertEquals("해당 구간에 대상 노드의 CPU 메트릭이 없습니다", service.trend(from, to, "5m", null).message());
@@ -305,8 +305,8 @@ class PowerOptimizationTrendTest {
     @DisplayName("MDC 를 넘어 같은 IPMI 시리즈를 가리킨 두 노드는 MDC 추세에서도 미계측이다")
     @Test
     void ipmi_shared_across_mdcs_stays_unmeasured_in_mdc_trend() {
-        // 원장: n1(mdc-a) 이 n2(mdc-b) 의 IPMI 를 가리킨다 → n2 의 호스트명 일치와 충돌. 판정은 클러스터 전체로 해야 한다 —
-        // mdc-a 노드만 보고 판정하면 충돌이 보이지 않아 n1 이 n2 의 100W 를 가져간다.
+        // 원장: n1(mdc-a) 이 n2(mdc-b)의 IPMI를 가리킨다 → n2의 호스트명 일치와 충돌. 판정은 클러스터 전체로 해야 한다 —
+        // mdc-a 노드만 보고 판정하면 충돌이 보이지 않아 n1이 n2의 100W를 가져간다.
         NodeExporterMapping m = new NodeExporterMapping("n1:9100");
         m.setIpmiInstance("n2:9290");
         NodeExporterMappingRepository ledger = mock(NodeExporterMappingRepository.class);

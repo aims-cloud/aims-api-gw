@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 /**
  * 기록형 디스패처 — 외부를 부르지 않고 요청을 로그로 남기며 수락한다.
  *
- * <p>실행 계층 API 가 없는 지금의 기본값. 이 모드에서 워크로드는 SCHEDULED 에 머물고, 진행은 콜백 API 나 상태 변경 API 로
+ * <p>실행 계층 API가 없는 지금의 기본값. 이 모드에서 워크로드는 SCHEDULED에 머물고, 진행은 콜백 API나 상태 변경 API로
  * 외부(운영자·시연 스크립트)가 알려 준다. 응답 시간 상한 판정은 하지 않는다 — 응답이 올 곳이 없기 때문이다.</p>
  */
 @Component

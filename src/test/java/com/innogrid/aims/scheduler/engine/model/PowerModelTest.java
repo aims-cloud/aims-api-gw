@@ -28,7 +28,7 @@ class PowerModelTest {
     @DisplayName("PEI는 1을 넘지 않는다")
     @Test
     void pei_does_not_exceed_1() {
-        NodeResource node = node(90, 100, 500); // 0.9 %/W → 1.8 이지만 상한 1.0
+        NodeResource node = node(90, 100, 500); // 0.9 %/W → 1.8이지만 상한 1.0
 
         assertEquals(1.0, model.normalizedPei(node), 1e-9);
     }
@@ -124,7 +124,7 @@ class PowerModelTest {
 
     /**
      * 결함 A — 이상 곡선보다 전력을 적게 쓰는 노드를 벌하면 안 된다.
-     * 진단용 proportionality 와 값이 갈리는 지점이라 나란히 확인한다.
+     * 진단용 proportionality와 값이 갈리는 지점이라 나란히 확인한다.
      */
     @DisplayName("비낭비는 이상 곡선을 넘어선 만큼만 감점한다")
     @Test
@@ -156,7 +156,7 @@ class PowerModelTest {
 
     // ── 배치 점수용 실효 기저(PEI·비낭비) ─────────────────────────
 
-    /** 예약 0 이면 실효 입력이 실측과 같아 두 쌍이 비트 단위로 같다 — 첫 배치는 불변. */
+    /** 예약 0이면 실효 입력이 실측과 같아 두 쌍이 비트 단위로 같다 — 첫 배치는 불변. */
     @DisplayName("예약이 없으면 배치용 PEI·비낭비는 진단용과 비트 단위로 같다")
     @Test
     void placement_pei_and_waste_equal_diagnostics_without_reservation() {
@@ -167,7 +167,7 @@ class PowerModelTest {
     }
 
     /**
-     * 비낭비 항의 실수 항등 — 예약분 D·r 이 실효 전력과 이상 곡선 양쪽에 같이 들어가 상쇄된다. 클램프가 걸리지 않는(적격) 노드에서
+     * 비낭비 항의 실수 항등 — 예약분 D·r이 실효 전력과 이상 곡선 양쪽에 같이 들어가 상쇄된다. 클램프가 걸리지 않는(적격) 노드에서
      * 두 값은 같고, 그래도 배치 점수가 이 항을 실효로 읽는 이유는 한 식 안에서 항마다 입력이 갈리지 않게 하기 위함이다.
      */
     @DisplayName("예약이 있어도 적격 노드에서 배치용 비낭비는 진단용과 같다 — 예약분이 상쇄되는 실수 항등")
@@ -182,7 +182,7 @@ class PowerModelTest {
     }
 
     /**
-     * PEI 는 예약이 쌓이면 움직인다 — 오르는 조건은 {@code 100·P > u·D}. 등록 판정 판의 노드는 전부 이 조건 안이라 상승하고,
+     * PEI는 예약이 쌓이면 움직인다 — 오르는 조건은 {@code 100·P > u·D}. 등록 판정 판의 노드는 전부 이 조건 안이라 상승하고,
      * 저전력·고정격으로 조건을 깬 합성 노드에서는 내려간다. 기저를 실측으로 되돌리면 두 값이 같아져 여기서 멈춘다.
      */
     @DisplayName("예약이 쌓인 적격 노드에서 배치용 PEI 는 100·P > u·D 이면 오르고 아니면 내린다")
@@ -201,7 +201,7 @@ class PowerModelTest {
         assertEquals(expected, model.placementPei(rising) - model.normalizedPei(rising), 1e-9);
     }
 
-    /** 실효 사용률이 100 에서 잘리는 노드에서만 비낭비 항등이 깨지고, 그런 노드는 자원 제약이 이미 거른다. */
+    /** 실효 사용률이 100에서 잘리는 노드에서만 비낭비 항등이 깨지고, 그런 노드는 자원 제약이 이미 거른다. */
     @DisplayName("비낭비 항등이 깨지는 노드는 실효 사용률이 100 에 잘린 노드뿐이고 그 노드는 배치 대상이 아니다")
     @Test
     void placement_waste_diverges_only_on_clamped_ineligible_nodes() {
@@ -247,7 +247,7 @@ class PowerModelTest {
         assertEquals(0.5, model.placementWasteScore(noCapacity), 1e-9);
     }
 
-    /** 정격 0 이면 D = 0 이라 실효 전력이 실측에 머물고 분자만 실효가 된다 — 그 혼재를 계산하지 않고 중립값을 준다(비낭비와 대칭). */
+    /** 정격 0이면 D = 0이라 실효 전력이 실측에 머물고 분자만 실효가 된다 — 그 혼재를 계산하지 않고 중립값을 준다(비낭비와 대칭). */
     @DisplayName("정격을 모르는 노드는 예약이 있어도 배치용 PEI 가 중립값이다")
     @Test
     void placement_pei_is_neutral_without_capacity_even_when_reserved() {
@@ -259,7 +259,7 @@ class PowerModelTest {
         assertEquals(0.32, model.normalizedPei(noCapacity), 1e-9, "진단용은 정격과 무관하게 실측 (40 / 250) / 0.5");
     }
 
-    /** 설정이 0 이면 min(1, x/0) 이 사용률 &gt; 0 노드에 1.0, 사용률 0 노드에 NaN(엔진 반올림에서 0.0)을 준다 — 대체값으로 되돌린다. */
+    /** 설정이 0이면 min(1, x/0) 이 사용률 &gt; 0 노드에 1.0, 사용률 0 노드에 NaN(엔진 반올림에서 0.0)을 준다 — 대체값으로 되돌린다. */
     @DisplayName("PEI 정규화 상수가 0 이하이면 두 PEI 모두 대체값 0.5 로 정규화한다")
     @Test
     void pei_normalizer_at_or_below_zero_falls_back() {
@@ -313,9 +313,9 @@ class PowerModelTest {
     void real_marginal_adds_idle_power() {
         // 8코어 중 2코어 = 0.25, 동적 범위 350W → 동적 증가분 87.5W, 유휴 150W
         assertEquals(87.5, model.realMarginalPower(node(50, 250, 500), 2), 1e-9, "가동 중");
-        // node(2, 250, 500) 은 유휴(2% < 5%)이고 전력이 실측(250W)이라, 유휴 역산 경로가 켜져
+        // node(2, 250, 500)은 유휴(2% < 5%)이고 전력이 실측(250W)이라, 유휴 역산 경로가 켜져
         // 있는 기본 모델에서는 대체값(150W)이 아니라 실측 역산값을 깨우기 비용으로 쓴다.
-        // 예전(대체값 시절)의 237.5 가 아니다 — 왜 바뀌었는지는 wakeupPower 역산식 그대로.
+        // 예전(대체값 시절)의 237.5가 아니다 — 왜 바뀌었는지는 wakeupPower 역산식 그대로.
         double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
         // 동적 범위의 기준선도 같은 역산 유휴다 — (500 − 244.9) × 0.25 = 63.8, 깨우기항 244.9
         assertEquals((500.0 - reconstructedWakeup) * 0.25 + reconstructedWakeup, model.realMarginalPower(node(2, 250, 500), 2), 1e-9,
@@ -326,7 +326,7 @@ class PowerModelTest {
     @Test
     void real_marginal_score_normalized() {
         assertEquals(1.0 - 87.5 / 500, model.marginalScore(node(50, 250, 500), 2), 1e-9);
-        // real_marginal_adds_idle_power 와 같은 이유로 237.5 대신 역산값 기준.
+        // real_marginal_adds_idle_power와 같은 이유로 237.5 대신 역산값 기준.
         double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
         assertEquals(1.0 - ((500.0 - reconstructedWakeup) * 0.25 + reconstructedWakeup) / 500, model.marginalScore(node(2, 250, 500), 2), 1e-9);
     }
@@ -342,8 +342,8 @@ class PowerModelTest {
     }
 
     /**
-     * 영구 항등 — α=1 이고 자르기가 걸리지 않는 노드(u_실효 + ΔU ≤ 1, 곧 C1 적격 노드)에서는 곡선 위 동적항이 선형 한계 전력과
-     * 같고 <b>예약이 있어도</b> 같다. 이것이 "기본 설정에서 이 정정은 배치 결정과 비교 판의 값을 바꾸지 않는다" 의 산술 근거다.
+     * 영구 항등 — α=1이고 자르기가 걸리지 않는 노드(u_실효 + ΔU ≤ 1, 곧 C1 적격 노드)에서는 곡선 위 동적항이 선형 한계 전력과
+     * 같고 <b>예약이 있어도</b> 같다. 이것이 "기본 설정에서 이 정정은 배치 결정과 비교 판의 값을 바꾸지 않는다"의 산술 근거다.
      * 기저를 되돌려도 항등이라 이 테스트는 기저 변조를 잡지 못한다 — 그 몫은 아래 볼록 테스트다.
      */
     @DisplayName("볼록 지수 1 · 자르기 비발현 노드에서는 예약 유무와 무관하게 곡선 동적항이 선형 한계전력과 같다")
@@ -359,8 +359,8 @@ class PowerModelTest {
     }
 
     /**
-     * 정정의 관측 가능한 효과 — α&gt;1 이면 곡선 위 평가점이 실효 사용률이라 <b>예약이 있는 적격 노드</b>에서 값이 갈린다.
-     * 예약 2/8 인 20% 노드는 곡선 위 45% 지점에서 평가되어(45→70%) 예약 없는 노드(20→45%)보다 증가분이 크다.
+     * 정정의 관측 가능한 효과 — α&gt;1이면 곡선 위 평가점이 실효 사용률이라 <b>예약이 있는 적격 노드</b>에서 값이 갈린다.
+     * 예약 2/8인 20% 노드는 곡선 위 45% 지점에서 평가되어(45→70%) 예약 없는 노드(20→45%)보다 증가분이 크다.
      * 기저를 실측으로 되돌리면 두 값이 같아져 여기서 멈춘다.
      */
     @DisplayName("볼록 지수가 1 보다 크면 예약이 있는 적격 노드의 동적항은 실효 사용률 지점에서 평가된다")
@@ -399,14 +399,14 @@ class PowerModelTest {
         assertTrue(busy > light, "바쁜 노드에 얹으면 전력이 더 든다: " + busy + " vs " + light);
         assertTrue(light > idle, light + " vs " + idle);
 
-        // 같은 입력을 기본 α 로 계산하면 셋이 모두 같다 — 그래서 구별력이 없었다
+        // 같은 입력을 기본 α로 계산하면 셋이 모두 같다 — 그래서 구별력이 없었다
         assertEquals(model.marginalPowerOnCurve(node(50, 250, 500), 2),
                 model.marginalPowerOnCurve(node(20, 250, 500), 2), 1e-9);
     }
 
     /**
-     * 음수 사용률(계측 결함)은 0 으로 자른다. α=1 에서는 자르기가 없어도 차가 같아 보이지 않지만, α 가 정수가 아니면 음수의 거듭제곱이
-     * NaN 이 되고 정수면 부호가 뒤집힌 유한 오답이 된다 — 하한 클램프가 지키는 것은 그 경계다.
+     * 음수 사용률(계측 결함)은 0으로 자른다. α=1에서는 자르기가 없어도 차가 같아 보이지 않지만, α가 정수가 아니면 음수의 거듭제곱이
+     * NaN이 되고 정수면 부호가 뒤집힌 유한 오답이 된다 — 하한 클램프가 지키는 것은 그 경계다.
      */
     @DisplayName("음수 사용률은 0 으로 자른다 — 볼록 지수에서 NaN 이 되지 않는다")
     @Test
@@ -438,8 +438,8 @@ class PowerModelTest {
     }
 
     /**
-     * 총 코어를 못 읽은 노드(0)에서 분모 가드가 없으면 요구량 0 일 때 {@code 0/0 = NaN} 이 점수 전체로 번진다. 요구량이 있으면
-     * {@code min(1, ∞) = 1} 로 가드 유무가 같아 보이므로, 이 테스트만이 가드를 잠근다.
+     * 총 코어를 못 읽은 노드(0)에서 분모 가드가 없으면 요구량 0일 때 {@code 0/0 = NaN}이 점수 전체로 번진다. 요구량이 있으면
+     * {@code min(1, ∞) = 1}로 가드 유무가 같아 보이므로, 이 테스트만이 가드를 잠근다.
      */
     @DisplayName("총 코어를 모르는 노드에 요구량 0 이면 동적항은 0 이다 — NaN 이 아니다")
     @Test
@@ -453,7 +453,7 @@ class PowerModelTest {
     }
 
     /**
-     * 사용률이 100% 를 넘어가지 않도록 자른다. 이 상태(가용 코어 &lt; 요구 코어)는 제약 C1 이 거르므로 배치는 도달하지 않는다 —
+     * 사용률이 100%를 넘어가지 않도록 자른다. 이 상태(가용 코어 &lt; 요구 코어)는 제약 C1이 거르므로 배치는 도달하지 않는다 —
      * 여기서 잠그는 것은 식의 정의이고, 응답에서는 <b>부적격 후보의 표시값</b>으로만 나타난다.
      */
     @DisplayName("요구량이 남은 용량보다 커도 100퍼센트를 넘지 않는다 — 부적격 노드의 표시값")
@@ -470,8 +470,8 @@ class PowerModelTest {
     @DisplayName("유휴 노드는 실측에서 선언 유휴전력을 역산한다")
     @Test
     void wakeup_power_recovers_declared_idle_from_a_measured_idle_node() {
-        // 정격 500, 선언 유휴 100 을 가정한 생성식 P = 100 + 400·u, u=0.02 → P=108.
-        // 대체값(정격 × idleRatio=0.3=150) 도, 보정 없는 실측 108 도 아니고 역산한 100.0 이어야 한다.
+        // 정격 500, 선언 유휴 100을 가정한 생성식 P = 100 + 400·u, u=0.02 → P=108.
+        // 대체값(정격 × idleRatio=0.3=150)도, 보정 없는 실측 108 도 아니고 역산한 100.0이어야 한다.
         NodeResource node = node(2, 108, 500);
 
         assertEquals(100.0, model.wakeupPower(node), 1e-9,
@@ -490,18 +490,18 @@ class PowerModelTest {
         assertEquals(150.0, model.wakeupPower(node(4, 520, 500)), 1e-9, "역산이 정격을 넘음");
     }
 
-    /** 추정이 정확히 0 인 경계 — 0W 유휴는 물리적으로 없으므로 유효값이 아니라 대체값이어야 한다. */
+    /** 추정이 정확히 0인 경계 — 0W 유휴는 물리적으로 없으므로 유효값이 아니라 대체값이어야 한다. */
     @DisplayName("역산이 정확히 0 이면 유효값이 아니라 대체값이다")
     @Test
     void a_zero_estimate_is_not_a_valid_idle_power() {
-        // (10 − 500×0.02) / 0.98 = 0 정확히 — 하한 가드가 <= 0 이어야 한다(< 0 이면 0W 유휴가 나간다)
+        // (10 − 500×0.02) / 0.98 = 0 정확히 — 하한 가드가 <= 0이어야 한다(< 0이면 0W 유휴가 나간다)
         assertEquals(150.0, model.wakeupPower(node(2, 10, 500)), 1e-9, "0W 유휴 전력은 없다");
     }
 
     /**
-     * 역산 입력은 <b>실측</b> CPU 다. 예약분을 섞으면 "같은 순간의 (P, u) 쌍"이 아니게 되어 식이 어긋난다.
-     * 64코어 노드에 1코어를 예약하면 실효 CPU 는 1% → 2.56% 로 움직이지만(여전히 유휴), 실측 전력 104W 는 그대로다 —
-     * 실측 u 로 역산하면 (104 − 500×0.01)/0.99 = 100, 실효 u 로 역산하면 93.6 이 나온다.
+     * 역산 입력은 <b>실측</b> CPU다. 예약분을 섞으면 "같은 순간의 (P, u) 쌍"이 아니게 되어 식이 어긋난다.
+     * 64코어 노드에 1코어를 예약하면 실효 CPU는 1% → 2.56%로 움직이지만(여전히 유휴), 실측 전력 104W는 그대로다 —
+     * 실측 u로 역산하면 (104 − 500×0.01)/0.99 = 100, 실효 u로 역산하면 93.6이 나온다.
      */
     @DisplayName("역산은 예약분이 아니라 실측 CPU 로 한다")
     @Test
@@ -517,7 +517,7 @@ class PowerModelTest {
 
     /**
      * 상한 등호 경계 — 역산값이 정격과 정확히 같으면 여전히 유효값이어야 한다. 가드가
-     * {@code estimate > pMax} 가 아니라 {@code estimate >= pMax} 로 바뀌면 이 경계에서
+     * {@code estimate > pMax}가 아니라 {@code estimate >= pMax}로 바뀌면 이 경계에서
      * 대체값(150)으로 조용히 떨어진다.
      */
     @DisplayName("추정이 정격과 정확히 같은 경계는 여전히 유효값이다")
@@ -546,7 +546,7 @@ class PowerModelTest {
         PowerModel fixed = new PowerModel(offProps);
         NodeResource node = node(2, 108, 500);
 
-        // idlePower 는 진단·동적 범위의 기준선이다 — 역산을 넣으면 항등식이 되어 구별력을 잃는다.
+        // idlePower는 진단·동적 범위의 기준선이다 — 역산을 넣으면 항등식이 되어 구별력을 잃는다.
         assertEquals(150.0, reconstructing.idlePower(node), 1e-9);
         assertEquals(150.0, fixed.idlePower(node), 1e-9);
         assertEquals(fixed.proportionality(node), reconstructing.proportionality(node), 1e-9,
@@ -590,7 +590,7 @@ class PowerModelTest {
     @Test
     void real_marginal_power_wakes_with_the_measured_idle() {
         // 공개 marginalOnCurve(α=1) = 350 × (2/8) = 87.5 — 선언 유휴 절편 그대로(진단·선형 식이 쓴다).
-        // 한계 전력 식은 역산 유휴 100 을 두 자리에 쓴다: 동적 (500−100)×0.25 = 100 + 깨우기 100 = 200.0
+        // 한계 전력 식은 역산 유휴 100을 두 자리에 쓴다: 동적 (500−100)×0.25 = 100 + 깨우기 100 = 200.0
         // (대체값 시절 237.5 · 절편만 선언이던 187.5 아님).
         NodeResource node = node(2, 108, 500);
 
@@ -598,12 +598,12 @@ class PowerModelTest {
         assertEquals(200.0, model.realMarginalPower(node, 2), 1e-9);
     }
 
-    // ── 배치 점수용 PEI 의 코어 비율 ────────────────────────────
+    // ── 배치 점수용 PEI의 코어 비율 ────────────────────────────
 
     /**
-     * 코어 수가 모두 같은 후보에서는 정정 전 식과 비트 단위로 같다. 코어 {3, 12, 48, 49} 를 고른 이유: c = 3·12·48 에서는
-     * {@code (u·c)/c ≠ u} 인 사용률이 있어 곱 순서를 바꾸면 여기서 멈추고, c = 49 는 {@code c × (1/c) ≠ 1} 이라 역수를 곱하면
-     * 여기서 멈춘다. 예약 0 의 기준은 손대지 않는 진단 {@code normalizedPei}, 예약 1 의 기준은 공개 메서드로 다시 적은 정정 전 식이다.
+     * 코어 수가 모두 같은 후보에서는 정정 전 식과 비트 단위로 같다. 코어 {3, 12, 48, 49}를 고른 이유: c = 3·12·48에서는
+     * {@code (u·c)/c ≠ u}인 사용률이 있어 곱 순서를 바꾸면 여기서 멈추고, c = 49는 {@code c × (1/c) ≠ 1}이라 역수를 곱하면
+     * 여기서 멈춘다. 예약 0의 기준은 손대지 않는 진단 {@code normalizedPei}, 예약 1의 기준은 공개 메서드로 다시 적은 정정 전 식이다.
      * 코어 0 노드는 평균에서 빠지므로 후보에 섞어 둔다.
      */
     @DisplayName("코어 수가 모두 같은 후보에서 배치용 PEI 는 정정 전 식과 비트 단위로 같다")
@@ -633,7 +633,7 @@ class PowerModelTest {
         assertEquals(List.of(), mismatches.subList(0, Math.min(5, mismatches.size())), "어긋난 점 " + mismatches.size() + "개");
     }
 
-    /** 코어 8·16·24(평균 16)의 비율은 0.5 · 1 · 1.5 이고, 비율을 곱한 값도 1.0 에서 포화한다. */
+    /** 코어 8·16·24(평균 16)의 비율은 0.5 · 1 · 1.5이고, 비율을 곱한 값도 1.0에서 포화한다. */
     @DisplayName("코어 수가 섞인 후보의 배치용 PEI 는 실효 사용률에 코어 비율을 곱한 값이고 1.0 에서 포화한다")
     @Test
     void placement_pei_multiplies_the_core_ratio_and_still_saturates() {
@@ -646,18 +646,18 @@ class PowerModelTest {
         assertEquals(0.5, PowerModel.coreRatio(small, mean), 0.0);
         assertEquals(1.0, PowerModel.coreRatio(middle, mean), 0.0);
         assertEquals(1.5, PowerModel.coreRatio(large, mean), 0.0);
-        // 40 / 250 / 0.5 = 0.32 에 비율을 곱한다
+        // 40 / 250 / 0.5 = 0.32에 비율을 곱한다
         assertEquals(0.16, model.placementPei(small, mean), 1e-12);
         assertEquals(0.32, model.placementPei(middle, mean), 1e-12);
         assertEquals(0.48, model.placementPei(large, mean), 1e-12);
 
-        NodeResource frugalSmall = nodeWithCores(8, 90, 100, 500);    // 90 / 100 / 0.5 = 1.8 → 비율 0.5 를 곱해 0.9
+        NodeResource frugalSmall = nodeWithCores(8, 90, 100, 500);    // 90 / 100 / 0.5 = 1.8 → 비율 0.5를 곱해 0.9
         NodeResource frugalLarge = nodeWithCores(24, 90, 100, 500);   // 1.8 × 1.5 = 2.7 → 상한 1.0
         assertEquals(0.9, model.placementPei(frugalSmall, mean), 1e-12);
         assertEquals(1.0, model.placementPei(frugalLarge, mean), 0.0);
     }
 
-    /** 코어 수 0 이하 노드는 평균에서 빠지고 비율 1 이다. 모든 후보가 0 이하이면 평균 0 이고 모두 비율 1 이다. */
+    /** 코어 수 0 이하 노드는 평균에서 빠지고 비율 1이다. 모든 후보가 0 이하이면 평균 0이고 모두 비율 1이다. */
     @DisplayName("코어 수가 0 이하인 노드는 평균에서 빠지고 코어 비율이 1 이다")
     @Test
     void nodes_without_cores_are_left_out_of_the_mean_and_get_ratio_one() {

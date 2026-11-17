@@ -89,7 +89,7 @@ class DispatchScenarioTest {
         assertEquals(Workload.WorkloadStatus.RUNNING, workloadRepository.findById(w2.getId()).orElseThrow().getStatus());
         assertEquals(Workload.WorkloadStatus.SCHEDULED, workloadRepository.findById(w3.getId()).orElseThrow().getStatus());
 
-        // COMPLETED 인 w1(4코어)만 예약에서 빠진다. RUNNING 인 w2 는 메트릭 반영 지연(10분) 안이라 아직 예약으로 남는다.
+        // COMPLETED인 w1(4코어)만 예약에서 빠진다. RUNNING인 w2는 메트릭 반영 지연(10분) 안이라 아직 예약으로 남는다.
         PlacementContext after = schedulingService.createContext(new SchedulingPolicy("dsc-p", "d"));
         int reservedAfter = after.node("big:9100").orElseThrow().getReservedCpu();
         assertEquals(reservedBefore - 4, reservedAfter, "예약 CPU 차이 = w1 의 4코어");

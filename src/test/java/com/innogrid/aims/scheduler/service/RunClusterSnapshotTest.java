@@ -126,7 +126,7 @@ class RunClusterSnapshotTest {
     @DisplayName("가동 판정은 초과이지 이상이 아니다")
     @Test
     void the_active_threshold_is_strictly_greater() {
-        // 실효 CPU 가 문턱과 정확히 같은 노드
+        // 실효 CPU가 문턱과 정확히 같은 노드
         NodeResource onEdge = new NodeResource("mdc-a", "n-edge", 8, 16384, 0, ACTIVE_CPU, 10, 15, 300, 500, 40, 0, 0);
 
         assertEquals(0, snapshot.movingOf(ctx(List.of(onEdge)), ACTIVE_CPU).activeNodes(),

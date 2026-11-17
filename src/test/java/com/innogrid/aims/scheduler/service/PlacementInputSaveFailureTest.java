@@ -33,8 +33,8 @@ import static org.mockito.Mockito.when;
 /**
  * 단건 배치 입력 저장이 실패해도 배치 결과와 실행 계층 전달은 그대로인가 — 저장소가 예외를 던지도록 조립한다(스프링 컨텍스트 없음).
  *
- * <p>저장은 {@link PlacementService#place} 의 트랜잭션이 끝난 뒤라 결정은 이미 커밋되어 있다. 여기서 예외가 새면 워크로드는
- * 배치됐는데 실행 계층 전달 없이 500 이 나간다.</p>
+ * <p>저장은 {@link PlacementService#place}의 트랜잭션이 끝난 뒤라 결정은 이미 커밋되어 있다. 여기서 예외가 새면 워크로드는
+ * 배치됐는데 실행 계층 전달 없이 500이 나간다.</p>
  */
 class PlacementInputSaveFailureTest {
 

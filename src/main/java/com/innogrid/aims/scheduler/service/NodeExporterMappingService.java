@@ -19,16 +19,16 @@ import tools.jackson.databind.JsonNode;
  * 익스포터 대응 원장 — 검증·저장 규칙.
  *
  * <p>거부하는 값은 "저장하면 확실히 틀린 것"이다(다른 원장과 같은 원칙) — 빈 노드 식별자, 길이 초과, 노드 식별자와
- * 같은 값을 익스포터 칸에 넣는 것. 마지막은 뜻이 없어서다: 그대로 두면 해석기가 알아서 그대로 쓴다. instance 의
- * <b>존재는 검증하지 않는다</b> — 검증하려면 원장 CRUD 가 저장소를 불러야 한다. 어느 시리즈에도 걸리지 않는 오타는
+ * 같은 값을 익스포터 칸에 넣는 것. 마지막은 뜻이 없어서다: 그대로 두면 해석기가 알아서 그대로 쓴다. instance의
+ * <b>존재는 검증하지 않는다</b> — 검증하려면 원장 CRUD가 저장소를 불러야 한다. 어느 시리즈에도 걸리지 않는 오타는
  * 그 노드의 GPU·전력·온도가 미계측으로 남을 뿐 다른 노드를 건드리지 않는다.</p>
  *
- * <p>노드 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다. 대소문자만 다른
- * 식별자도 409 다 — 라벨은 대소문자를 가리므로 철자가 다른 행은 영원히 쓰이지 않는데 운영자는 등록했다고 믿게 된다.</p>
+ * <p>노드 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500으로 새므로 먼저 조회해 409를 낸다. 대소문자만 다른
+ * 식별자도 409다 — 라벨은 대소문자를 가리므로 철자가 다른 행은 영원히 쓰이지 않는데 운영자는 등록했다고 믿게 된다.</p>
  *
- * <p><b>한 익스포터 instance 는 한 노드에만.</b> 다른 행이 이미 쓰는 DCGM·IPMI instance 는 409 다. 같은 시리즈를 두
+ * <p><b>한 익스포터 instance는 한 노드에만.</b> 다른 행이 이미 쓰는 DCGM·IPMI instance는 409다. 같은 시리즈를 두
  * 노드에 넣으면 그 값이 두 번 세어져 클러스터 전력 합·에너지·GPU 총량이 부푼다. 수집기도 같은 충돌을 미계측으로
- * 떨어뜨리지만, 여기서 막아야 운영자가 그 자리에서 안다. 중앙 IPMI 익스포터가 노드를 instance 로 구분하지 못하면
+ * 떨어뜨리지만, 여기서 막아야 운영자가 그 자리에서 안다. 중앙 IPMI 익스포터가 노드를 instance로 구분하지 못하면
  * 그 노드들은 미계측으로 두는 것이 맞다.</p>
  */
 @Service
@@ -55,7 +55,7 @@ public class NodeExporterMappingService {
 
     // ── 조회 ───────────────────────────────────────────────────
 
-    /** 목록. {@code nodeId} 를 주면 그 문자열을 포함하는 노드만(부분 일치, 대소문자 무시). */
+    /** 목록. {@code nodeId}를 주면 그 문자열을 포함하는 노드만(부분 일치, 대소문자 무시). */
     @Transactional(readOnly = true)
     public List<NodeExporterMapping> list(String nodeId) {
         List<NodeExporterMapping> all = repository.findAllByOrderByNodeIdAsc();
@@ -119,7 +119,7 @@ public class NodeExporterMappingService {
         repository.delete(require(id));
     }
 
-    /** 저장하며 동시 등록 경합을 409 로 바꾼다 — 다른 원장과 같은 처리. */
+    /** 저장하며 동시 등록 경합을 409로 바꾼다 — 다른 원장과 같은 처리. */
     NodeExporterMapping saveOrConflict(NodeExporterMapping mapping) {
         try {
             return repository.saveAndFlush(mapping);
@@ -131,7 +131,7 @@ public class NodeExporterMappingService {
 
     // ── 반영·검증 ──────────────────────────────────────────────
 
-    /** 다른 행이 이미 쓰는 DCGM·IPMI instance 면 409. 원장은 작아 전건을 훑는다. */
+    /** 다른 행이 이미 쓰는 DCGM·IPMI instance면 409. 원장은 작아 전건을 훑는다. */
     private void rejectSharedInstances(NodeExporterMapping mapping) {
         for (NodeExporterMapping other : repository.findAll()) {
             if (other.getId() != null && other.getId().equals(mapping.getId())) continue;
@@ -152,8 +152,8 @@ public class NodeExporterMappingService {
     }
 
     /**
-     * 두 익스포터 칸은 {@link JsonNode} 로 받아 "비우는 것" 을 표현한다 — 필드가 {@code null} 이면 키 없음(유지),
-     * {@code isNull()} 이면 명시적 null(비움 → 호스트명 일치로 대체), 아니면 값.
+     * 두 익스포터 칸은 {@link JsonNode}로 받아 "비우는 것"을 표현한다 — 필드가 {@code null}이면 키 없음(유지),
+     * {@code isNull()}이면 명시적 null(비움 → 호스트명 일치로 대체), 아니면 값.
      */
     private void apply(NodeExporterMapping mapping, NodeExporterMappingRequest r) {
         if (r.dcgmInstance() != null) mapping.setDcgmInstance(instanceOf(r.dcgmInstance(), "DCGM instance", mapping.getNodeId()));
@@ -169,7 +169,7 @@ public class NodeExporterMappingService {
         }
     }
 
-    /** 익스포터 instance 칸 — null 로 비울 수 있다. 노드 식별자와 같은 값은 뜻이 없어 거부한다. */
+    /** 익스포터 instance 칸 — null로 비울 수 있다. 노드 식별자와 같은 값은 뜻이 없어 거부한다. */
     private static String instanceOf(JsonNode node, String label, String nodeId) {
         if (node.isNull()) return null;
         if (!node.isString()) throw badRequest(label + "은(는) 문자열이어야 합니다");

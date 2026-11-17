@@ -39,12 +39,12 @@ public record ConsolidationResponse(
      * @param reclaimable         워크로드를 전부 옮길 수 있고 순절감이 양수인가
      * @param basis               판정 근거. {@code NET_SAVING}(순절감) · {@code ALREADY_EMPTY}(워크로드 0건)
      * @param idlePowerWatts      이 노드를 반납해 아끼는 유휴 전력 — 계측된 유휴 노드는 실측에서 역산한 값, 그 외 정격 × idleRatio.
-     *                            전력 효율 평가 API 의 같은 이름 필드는 가정값(정격 × idleRatio)이라 두 화면의 값이 다를 수 있다
+     *                            전력 효율 평가 API의 같은 이름 필드는 가정값(정격 × idleRatio)이라 두 화면의 값이 다를 수 있다
      * @param relocationCostWatts 워크로드를 옮기는 데 드는 전력 합
      * @param netSavingWatts      {@code idlePowerWatts − relocationCostWatts}
-     * @param powerRatioToIdle    실측 전력 ÷ 유휴 전력. 1 에 가까울수록 실제로 놀고 있다.
+     * @param powerRatioToIdle    실측 전력 ÷ 유휴 전력. 1에 가까울수록 실제로 놀고 있다.
      *                            분모는 정격 × idleRatio(가정) — 반납분(idlePowerWatts)의 실측 역산값을 넣으면
-     *                            유휴 노드에서 비율이 1/(1−u) 로 고정되는 항등식이 되어 분모는 가정값을 유지한다.
+     *                            유휴 노드에서 비율이 1/(1−u)로 고정되는 항등식이 되어 분모는 가정값을 유지한다.
      *                            전력을 수집하지 못하면 null
      * @param blockedReason       옮길 수 없을 때의 사유
      */
@@ -99,9 +99,9 @@ public record ConsolidationResponse(
      *
      * @param truncated       상한에 걸려 평가하지 못한 후보가 있는지.
      *                        <b>이 값을 숨기면 부분 결과가 전수 조사처럼 보인다</b>
-     * @param savingPercent   절감 가능 비율(%). 총 전력이 0 이면 null
+     * @param savingPercent   절감 가능 비율(%). 총 전력이 0이면 null
      * @param excludedNodes   핵심 메트릭을 알 수 없어 수집 단계에서 뺀 노드 수. 후보 심사 자체를 받지
-     *                        못한 노드라 {@code candidateCount} 에 들어 있지 않다
+     *                        못한 노드라 {@code candidateCount}에 들어 있지 않다
      * @param excluded        뺀 노드와 사유
      */
     @Schema(name = "ConsolidationSummary")

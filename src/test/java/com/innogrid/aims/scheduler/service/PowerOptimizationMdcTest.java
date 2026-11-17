@@ -23,7 +23,7 @@ import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
 import com.innogrid.aims.scheduler.model.NodeResource;
 
 /**
- * 전력 최적화 진단의 MDC 별 요약 — 예산이 없어도 현황은 나오고, 있으면 남은 여유·초과가 함께 나온다.
+ * 전력 최적화 진단의 MDC별 요약 — 예산이 없어도 현황은 나오고, 있으면 남은 여유·초과가 함께 나온다.
  *
  * <p>핵심은 <b>진단의 남은 여유와 배치 판정(C6)이 같은 기준선을 쓰는가</b>다. 실측만 보면 "여유가 있다"고
  * 보여 주고도 실제 배치는 막히는 어긋남이 생긴다 — 예약분을 한쪽만 보기 때문이다.</p>
@@ -33,7 +33,7 @@ class PowerOptimizationMdcTest {
 
     @Autowired PowerOptimizationService service;
 
-    /** 정격 1000W·8코어 노드. 유휴 비율 0.3 이라 유휴는 300W 다. 전력 0 은 "수집 실패"를 뜻한다. */
+    /** 정격 1000W·8코어 노드. 유휴 비율 0.3이라 유휴는 300W다. 전력 0은 "수집 실패"를 뜻한다. */
     private static NodeResource node(String mdcId, String nodeId, double watts) {
         return new NodeResource(mdcId, nodeId, 8, 16384, 0, 30.0, 30.0, 0, watts, 1000, 40.0, 0, 0);
     }
@@ -134,10 +134,10 @@ class PowerOptimizationMdcTest {
     }
 
     /**
-     * 이번 PR 의 재검토에서 잡은 어긋남을 고정한다.
+     * 이번 PR의 재검토에서 잡은 어긋남을 고정한다.
      *
-     * <p>예전에는 남은 여유를 실측으로 냈다. 그래서 예약이 쌓인 MDC 에서 <b>"여유 100W 남았다"고 보여 주고도
-     * 실제 배치는 C6 에 막히는</b> 상황이 가능했다. 진단과 판정이 같은 기준선을 쓰는지 두 경로를 나란히 확인한다.</p>
+     * <p>예전에는 남은 여유를 실측으로 냈다. 그래서 예약이 쌓인 MDC에서 <b>"여유 100W 남았다"고 보여 주고도
+     * 실제 배치는 C6에 막히는</b> 상황이 가능했다. 진단과 판정이 같은 기준선을 쓰는지 두 경로를 나란히 확인한다.</p>
      */
     @DisplayName("진단이 초과라고 하면 배치도 막히고, 여유가 있다고 하면 배치도 통과한다")
     @Test
@@ -149,7 +149,7 @@ class PowerOptimizationMdcTest {
         forDiagnosis.reserve(2, 1024, 0);
         Mdc seoul = find(service.diagnose(List.of(forDiagnosis), List.of(), budgets), "seoul");
 
-        // 실측 400 < 예산 500 이라 옛 계산이면 "여유 100W" 였다. 실효는 575 라 이미 초과다.
+        // 실측 400 < 예산 500이라 옛 계산이면 "여유 100W"였다. 실효는 575라 이미 초과다.
         assertTrue(seoul.overBudget(), "실효 575W 는 예산 500W 를 넘는다");
         assertTrue(seoul.remainingWatts() < 0);
 

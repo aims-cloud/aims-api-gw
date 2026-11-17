@@ -6,12 +6,12 @@ import java.util.SortedMap;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 배치 이력의 제외 사유 코드 합계 — 창·필터 안 결정들의 {@code exclusionCodes} 를 서버가 더한 결과.
+ * 배치 이력의 제외 사유 코드 합계 — 창·필터 안 결정들의 {@code exclusionCodes}를 서버가 더한 결과.
  *
- * <p>{@code codes} 의 키는 등장한 코드만(이름 오름차순, 문자열이라 옛·새 코드가 보존된다). 값의 {@code decisions} 는 그 코드가
- * 든 결정 수, {@code candidates} 는 그 코드로 빠진 후보 수의 합이다. 같은 필터로 {@code /history/page?exclusionCode=CODE} 를
- * 응답의 {@code from}·{@code to} 를 그대로 넘겨 부르면 {@code totalElements} 가 {@code codes[CODE].decisions} 와 같다(두 API 가 같은
- * 조건식을 쓴다) — 단 {@code skipped} 가 0 일 때다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징의 LIKE 에는 걸리고 여기서는 빠진다.</p>
+ * <p>{@code codes}의 키는 등장한 코드만(이름 오름차순, 문자열이라 옛·새 코드가 보존된다). 값의 {@code decisions}는 그 코드가
+ * 든 결정 수, {@code candidates}는 그 코드로 빠진 후보 수의 합이다. 같은 필터로 {@code /history/page?exclusionCode=CODE}를
+ * 응답의 {@code from}·{@code to}를 그대로 넘겨 부르면 {@code totalElements}가 {@code codes[CODE].decisions}와 같다(두 API가 같은
+ * 조건식을 쓴다) — 단 {@code skipped}가 0일 때다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징의 LIKE에는 걸리고 여기서는 빠진다.</p>
  */
 @Schema(description = "배치 이력의 제외 사유 코드 합계 — 창·필터 안 결정의 집계를 서버가 더한 결과")
 public record ExclusionSummaryResponse(

@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 익스포터 대응 원장이 <b>수집 결과에 실제로 닿는지</b> — 모의 클러스터로 본다.
  *
- * <p>모의 게이트웨이는 이제 DCGM 을 {@code host:9400}, IPMI 를 {@code host:9290} 으로 낸다. 노드 instance 로는 둘을
+ * <p>모의 게이트웨이는 이제 DCGM을 {@code host:9400}, IPMI를 {@code host:9290}으로 낸다. 노드 instance로는 둘을
  * 찾을 수 없으므로, 수집기가 GPU 개수와 전력을 얻는다는 것 자체가 해석기가 결합을 살렸다는 증명이다. 그 위에 원장에
- * <b>저장소에 없는 IPMI</b> 를 적어 두면 호스트명 일치로 잡혔을 전력이 사라져야 한다 — 원장이 호스트명 일치보다
+ * <b>저장소에 없는 IPMI</b>를 적어 두면 호스트명 일치로 잡혔을 전력이 사라져야 한다 — 원장이 호스트명 일치보다
  * 앞선다는 것을 값으로 보이는 방법이다. 다른 노드의 시리즈를 적으면 두 노드가 충돌해 둘 다 미계측이 된다 — 한 값을 두
  * 번 세지 않는다.</p>
  */
@@ -76,7 +76,7 @@ class ExporterMappingCollectionTest {
         double seoul03 = before.get("seoul-03:9100").getPowerWatts();
         assertTrue(seoul03 > 0);
 
-        // seoul-03 은 호스트명 일치로 seoul-03:9290 을 갖는다. seoul-01 의 원장이 같은 시리즈를 가리키면 충돌이다.
+        // seoul-03은 호스트명 일치로 seoul-03:9290을 갖는다. seoul-01의 원장이 같은 시리즈를 가리키면 충돌이다.
         NodeExporterMapping mapping = new NodeExporterMapping("seoul-01:9100");
         mapping.setIpmiInstance("seoul-03:9290");
         repository.saveAndFlush(mapping);

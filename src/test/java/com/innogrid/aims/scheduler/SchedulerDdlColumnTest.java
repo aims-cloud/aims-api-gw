@@ -24,22 +24,22 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 스케줄러 엔티티의 <b>컬럼</b>이 배포 SQL 에 있는지 본다.
+ * 스케줄러 엔티티의 <b>컬럼</b>이 배포 SQL에 있는지 본다.
  *
- * <p>기존 {@code SchedulerDdlCoverageTest} 는 <b>테이블 이름 수준</b>만 대조한다(그 테스트가 스스로
- * 한계를 밝혀 뒀다). 그래서 컬럼을 더하고 DDL 을 빠뜨려도 아무 테스트가 빨간불이 되지 않고,
- * {@code ddl-auto=validate} 인 새 DB 에서 <b>기동 실패</b>로만 드러난다. 배포 VM 은 {@code update} 라
- * Hibernate 가 자동으로 만들어 주므로 그때도 안 드러난다.</p>
+ * <p>기존 {@code SchedulerDdlCoverageTest}는 <b>테이블 이름 수준</b>만 대조한다(그 테스트가 스스로
+ * 한계를 밝혀 뒀다). 그래서 컬럼을 더하고 DDL을 빠뜨려도 아무 테스트가 빨간불이 되지 않고,
+ * {@code ddl-auto=validate}인 새 DB에서 <b>기동 실패</b>로만 드러난다. 배포 VM은 {@code update}라
+ * Hibernate가 자동으로 만들어 주므로 그때도 안 드러난다.</p>
  *
  * <p>여기서는 엔티티의 필드 이름을 스네이크 케이스로 바꿔 해당 테이블을 만드는·고치는 SQL
- * 어딘가에 그 이름이 나오는지 본다. 타입·길이·제약은 보지 않는다 — 그건 실제 PostgreSQL 에
+ * 어딘가에 그 이름이 나오는지 본다. 타입·길이·제약은 보지 않는다 — 그건 실제 PostgreSQL에
  * 붙어야 알 수 있고, 이 테스트의 목적은 <b>누락</b>을 잡는 것이다.</p>
  */
 class SchedulerDdlColumnTest {
 
     private static final Path SQL_DIR = Path.of("deploy", "sql");
 
-    /** 이름을 SQL 에서 찾을 때 쓰는 스네이크 케이스 변환. */
+    /** 이름을 SQL에서 찾을 때 쓰는 스네이크 케이스 변환. */
     private static String snake(String camel) {
         return camel.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT);
     }

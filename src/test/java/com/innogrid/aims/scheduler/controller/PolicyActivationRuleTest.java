@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 활성 정책은 종류(공통 포함)당 하나 — 조건부 기본 활성, 엄격한 PUT, 명시적 전환.
  *
- * <p>공유 H2 에 다른 테스트가 남긴 정책이 있을 수 있어, 시작 전에 정책 표를 비우고 끝나면 만든 것을 지운다.
+ * <p>공유 H2에 다른 테스트가 남긴 정책이 있을 수 있어, 시작 전에 정책 표를 비우고 끝나면 만든 것을 지운다.
  * (다른 테스트는 각자 정책을 만들어 쓰므로 비어 있는 상태를 전제하지 않는다.)</p>
  */
 @SpringBootTest

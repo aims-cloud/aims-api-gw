@@ -61,7 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 배치 결정 응답의 기준 파일 테스트.
  *
  * <p><b>값 층</b> — 엔진 3종을 고정 입력(노드·워크로드·정책)으로 직접 불러 결정 결과 전체(키 순서·타입·값)를
- * {@code src/test/resources/scheduler/golden/placement/<시나리오>.json} 과 문자열로 비교한다. 같은 매퍼로 들여쓰기
+ * {@code src/test/resources/scheduler/golden/placement/<시나리오>.json}과 문자열로 비교한다. 같은 매퍼로 들여쓰기
  * 출력한 문자열을 비교하므로 키 순서가 바뀌면 실패한다(트리 비교는 순서를 보지 않아 쓰지 않는다). 엔진 채점 골격을
  * 공통화할 때 바뀌기 쉬운 지점도 고정한다 — 가중치 엔진 전용 입력(우선순위 HIGH · 선호 MDC · 데이터 MDC)을 켠 경우, 정책의
  * 전력·온도 반영을 끈 가중치 엔진, 제외 사유가 하나씩 다른 노드와 계측 방식이 다른 노드(전력은 있고 정격 0 · 미계측)를 섞은
@@ -71,9 +71,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 고정한다. 공유 H2 상태(정책·예약)가 점수를 흔들 수 있어 점수 값은 보지 않는다. 실패·노드 없음 응답의 선택 칸 null · 제외 코드 ·
  * 빈 후보 목록(상태와 무관)과 단건 배치의 성공 여부(활성 정책에 기댐)만 본다.</p>
  *
- * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 결과를 {@code build/golden-candidates/placement/} 에 쓰고 실패한다
+ * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 결과를 {@code build/golden-candidates/placement/}에 쓰고 실패한다
  * (소스 아래에는 쓰지 않는다 · 기준과 같으면 옛 후보는 지운다). 다시 만들 때는
- * {@code gradlew test --tests "*PlacementResponseGoldenTest" --no-build-cache --rerun-tasks} 로 돌려 후보를 검토한 뒤 복사한다.
+ * {@code gradlew test --tests "*PlacementResponseGoldenTest" --no-build-cache --rerun-tasks}로 돌려 후보를 검토한 뒤 복사한다.
  * 기준 파일은 테스트 입력으로 잡히도록 {@code src/test/resources} 아래에 둔다. 출력을 바꾸는 코드 변경은 같은 커밋에서 기준 파일을
  * 갱신하고, 커밋 본문에 바뀐 시나리오·키·이유를 적는다. 기준 파일만 고치는 커밋은 두지 않으며, 시나리오 추가는 test 커밋으로
  * 한다. 값은 설정 기본값·정책 기본값·엔진 상수로 계산하므로 이 중 하나가 바뀌어 값이 움직이면 그 원인(설정 다이제스트 변화
@@ -81,14 +81,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 한다(엔진을 만드는 방식은 고쳐도 된다).</p>
  *
  * <p><b>현재 동작 기록</b> — 다음 값은 지금 출력을 그대로 기록한 것이고, 동작을 바꿀지는 따로 정한다. 동작을 바꾸는 변경은
- * 별도 PR 로 하고 같은 커밋에서 해당 기준 파일을 갱신한다. 리팩터링에서 이 값이 바뀌면 리팩터링 쪽을 고친다: 가중치 엔진이
- * 전력은 있고 정격이 0 인 노드에 주는 전력 여유 1.0(weighted-mixed-nodes) · 전력 엔진이 미계측 선택 노드의 사유에 적는
+ * 별도 PR로 하고 같은 커밋에서 해당 기준 파일을 갱신한다. 리팩터링에서 이 값이 바뀌면 리팩터링 쪽을 고친다: 가중치 엔진이
+ * 전력은 있고 정격이 0인 노드에 주는 전력 여유 1.0(weighted-mixed-nodes) · 전력 엔진이 미계측 선택 노드의 사유에 적는
  * 전력·열 중립값 숫자(power-unmeasured-winner) · 온도 엔진의 음수 냉각 점수(temperature-mixed-nodes ·
- * temperature-unmeasured-winner). 또 weighted-mixed-nodes 의 미계측 노드 총점은 반올림 전 0.71875 라 0.7188 이지만 항을
- * 더하는 순서만 바꿔도 0.7187 이 된다 — 리팩터링은 점수 합산식을 항 순서까지 그대로 옮긴다.</p>
+ * temperature-unmeasured-winner). 또 weighted-mixed-nodes의 미계측 노드 총점은 반올림 전 0.71875라 0.7188이지만 항을
+ * 더하는 순서만 바꿔도 0.7187이 된다 — 리팩터링은 점수 합산식을 항 순서까지 그대로 옮긴다.</p>
  *
  * <p><b>선택 규칙</b> — 기준 파일과 별도로, 가중치 엔진 전용 입력과 정책의 전력·온도 반영 끔이 전력·온도 엔진 결과를 바꾸지
- * 않는지(전력·온도 제약에서 먼 노드로 본다), 가중치 엔진이 정책의 전력 반영과 온도 반영을 하나씩 끄면 그 점수만 중립 0.5 가
+ * 않는지(전력·온도 제약에서 먼 노드로 본다), 가중치 엔진이 정책의 전력 반영과 온도 반영을 하나씩 끄면 그 점수만 중립 0.5가
  * 되는지, 우선순위 배수와 선호 MDC 보너스가 가중치 엔진 총점에 곱해지는지와 보너스가 동점을 깨는지, 반올림한 총점이 같으면
  * 입력 순서가 앞인 노드를 고르는지, 후보가 없을 때 세 엔진이 같은 실패를 내는지 본다.
  * HTTP 층에서는 저장 전 모의 배치가 엔진을 생략하면 가중치 엔진으로 평가하는지 본다.</p>
@@ -117,7 +117,7 @@ class PlacementResponseGoldenTest {
             "temperature", List.of("온도계측", "열적여유", "열적균형", "냉각점수", "자원여유", "배치후예상온도C", "클러스터평균온도C"));
     /**
      * 배치 엔진이 후보 노드마다 매기는 노드 배치 스코어 다섯 필드(cpu · memory · power · temperature · network 순)에 담기는
-     * 엔진별 후보 상세 키. docs/13 3장 「엔진별 노드 배치 스코어의 뜻」 표와 같다 — 대응이 바뀌면 그 표를 같은 PR 에서 고친다.
+     * 엔진별 후보 상세 키. docs/13 3장 「엔진별 노드 배치 스코어의 뜻」 표와 같다 — 대응이 바뀌면 그 표를 같은 PR에서 고친다.
      */
     private static final Map<String, List<String>> SLOT_DETAIL_KEYS = Map.of(
             "weighted", List.of("cpu여유", "메모리여유", "전력여유", "온도여유", "네트워크한산도"),
@@ -163,7 +163,7 @@ class PlacementResponseGoldenTest {
     private static Workload boosted() {
         Workload w = small(); w.setPriority(Workload.WorkloadPriority.HIGH); w.setPreferredMdcId("gld-mdc-1"); w.setDataMdcId("gld-mdc-1"); return w;
     }
-    /** {@link #boosted()} 의 대조군 — 데이터 MDC 만 둔다. */
+    /** {@link #boosted()}의 대조군 — 데이터 MDC만 둔다. */
     private static Workload linked() { Workload w = small(); w.setDataMdcId("gld-mdc-1"); return w; }
     /** 링크 정책에서 전력·온도 반영만 끈다. */
     private static SchedulingPolicy flagsOff() { SchedulingPolicy p = linkPolicy(); p.setPowerAwareEnabled(false); p.setTemperatureAwareEnabled(false); return p; }
@@ -270,7 +270,7 @@ class PlacementResponseGoldenTest {
                     assertFalse(r.success());
                 }),
                 new Scenario("weighted-priority-preferred", "weighted", PlacementResponseGoldenTest::three, PlacementResponseGoldenTest::boosted, PlacementResponseGoldenTest::linkPolicy, r -> {
-                    // 같은 노드를 데이터 MDC 만 둔 대조군으로 돌린 총점 대비 — 우선순위 ×1.1, 선호 MDC 노드는 다시 ×1.1
+                    // 같은 노드를 데이터 MDC만 둔 대조군으로 돌린 총점 대비 — 우선순위 ×1.1, 선호 MDC 노드는 다시 ×1.1
                     Map<String, Double> base = totals(engine("weighted").schedule(linked(), three(), linkPolicy()));
                     r.candidateScores().forEach(c -> {
                         assertEquals("gld-mdc-1".equals(c.mdcId()) ? 1.21 : 1.10, c.totalScore() / base.get(c.nodeId()), 1e-3, c.nodeId());
@@ -368,7 +368,7 @@ class PlacementResponseGoldenTest {
         }
     }
 
-    /** 쌍둥이 노드 — 입력 순서 b(mdc-2) → a(mdc-1). a 는 메모리 사용률만 0.0001%p 낮아 반올림 전 총점이 아주 조금 높고 반올림한 총점은 같다. */
+    /** 쌍둥이 노드 — 입력 순서 b(mdc-2) → a(mdc-1). a는 메모리 사용률만 0.0001%p 낮아 반올림 전 총점이 아주 조금 높고 반올림한 총점은 같다. */
     private static List<NodeResource> twins() {
         return List.of(mixNode("gld-mdc-2", "tie-b", 8, 10, 20, 200, 500, 40), mixNode("gld-mdc-1", "tie-a", 8, 10, 19.9999, 200, 500, 40));
     }
@@ -403,7 +403,7 @@ class PlacementResponseGoldenTest {
     @ParameterizedTest(name = "{0}")
     @EnumSource(Workload.WorkloadPriority.class)
     void weighted_priority_and_preferred_mdc_scale_totals(Workload.WorkloadPriority priority) {
-        // 링크 게이트를 끈 기본 정책 — 우선순위·선호 MDC 가 데이터 MDC 링크와 무관하게 걸리는지도 본다
+        // 링크 게이트를 끈 기본 정책 — 우선순위·선호 MDC가 데이터 MDC 링크와 무관하게 걸리는지도 본다
         Map<String, Double> base = totals(engine("weighted").schedule(small(), twins(), policy()));
         Workload w = small(); w.setPriority(priority); w.setPreferredMdcId("gld-mdc-1");
         SchedulingResult r = engine("weighted").schedule(w, twins(), policy());
@@ -529,7 +529,7 @@ class PlacementResponseGoldenTest {
                 + CANDIDATE_DIR + " 에 썼다 — 의도한 변경이면 검토 뒤 " + GOLDEN_DIR + " 로 복사하고 같은 커밋에서 이유를 적는다");
     }
 
-    /** 같은 매퍼의 들여쓰기 출력(개행은 LF 로 통일 · 끝 개행 1). 키 순서·타입·값이 그대로 문자열에 드러난다. */
+    /** 같은 매퍼의 들여쓰기 출력(개행은 LF로 통일 · 끝 개행 1). 키 순서·타입·값이 그대로 문자열에 드러난다. */
     private String pretty(JsonNode node) {
         return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node).replace("\r\n", "\n").stripTrailing() + "\n";
     }

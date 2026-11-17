@@ -60,7 +60,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 목적 함수와 다른가, 그리고 숫자가 언제 의미를 갖는지 응답이 스스로 밝히는가.</p>
  *
  * <p>스프링을 띄우지 않는다 — 하네스는 저장소를 하나도 쓰지 않으므로 손으로 조립할 수 있고,
- * 그 사실 자체를 {@link #harness_takes_no_repository} 가 지킨다.</p>
+ * 그 사실 자체를 {@link #harness_takes_no_repository}가 지킨다.</p>
  */
 class PlacementBenchmarkServiceTest {
 
@@ -88,7 +88,7 @@ class PlacementBenchmarkServiceTest {
     @Test
     void the_powered_on_accounting_ignores_the_engine_threshold() {
         SchedulerProperties tuned = new SchedulerProperties();
-        tuned.getPower().setActiveCpuPercent(40.0);   // 기본 5.0 의 여덟 배
+        tuned.getPower().setActiveCpuPercent(40.0);   // 기본 5.0의 여덟 배
         PlacementBenchmarkService other = harnessWith(tuned);
 
         Cell base = cell(service.compare("main", "heavytail").boards().get(0), 60, "AVAILABLE");
@@ -108,7 +108,7 @@ class PlacementBenchmarkServiceTest {
     /**
      * 반대로 엔진이 <b>스스로 믿은 비용</b>은 엔진 노브를 따라 움직여야 한다 — 그건 엔진의 믿음이다.
      * 하네스가 그것까지 대신 정해 주면 모델 가정과 생성식의 격차를 잴 수 없다. 이 테스트가
-     * {@code PowerModel.isActive} 를 갈아치우는 잘못된 확대 적용을 막는다.
+     * {@code PowerModel.isActive}를 갈아치우는 잘못된 확대 적용을 막는다.
      */
     @DisplayName("엔진이 믿은 비용은 여전히 엔진 설정을 따른다")
     @Test
@@ -139,7 +139,7 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 설정을 <b>엔진까지</b> 넣어 조립한다. 무인자 생성자로 만들면 엔진이 코드 기본값을 쓰므로,
-     * 노브를 바꿔도 다이제스트만 달라지고 표는 그대로여서 "노브가 표를 움직인다" 를 볼 수 없다.
+     * 노브를 바꿔도 다이제스트만 달라지고 표는 그대로여서 "노브가 표를 움직인다"를 볼 수 없다.
      */
     private static PlacementBenchmarkService serviceWith(SchedulerProperties props) {
         PowerModel power = new PowerModel(props);
@@ -154,7 +154,7 @@ class PlacementBenchmarkServiceTest {
     // ── 응답이 자기가 본 설정을 밝힌다 ────────────────────────
 
     /**
-     * {@code policyBasis} 는 "코드 기본값으로 돌렸다"는 말이고, 이 블록은 그 말의 내용이다. 값이 없으면
+     * {@code policyBasis}는 "코드 기본값으로 돌렸다"는 말이고, 이 블록은 그 말의 내용이다. 값이 없으면
      * 배포 환경의 임계값이 다른지를 읽는 사람이 확인할 수 없다.
      */
     @DisplayName("응답이 자기가 본 엔진 설정과 정책 변종 셋을 전부 밝힌다")
@@ -233,7 +233,7 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * W 눈금은 <b>모델 형태</b>를 바꾸는 노브다 — 다이제스트에 들어가지 않으면 눈금이 다른 두 표가
-     * 같은 설정의 표로 보인다. 기본값은 계약 상한보다 커야 판에서 점수가 0 으로 포화하지 않는다.
+     * 같은 설정의 표로 보인다. 기본값은 계약 상한보다 커야 판에서 점수가 0으로 포화하지 않는다.
      */
     @DisplayName("W 눈금은 다이제스트 성분이고 기본값은 계약 상한보다 크다")
     @Test
@@ -258,7 +258,7 @@ class PlacementBenchmarkServiceTest {
      *
      * <p>canonical 목록은 지역 변수라 반사로 볼 수 없다. 대신 노브 레코드의 성분마다 값을 하나씩
      * 바꿔 다이제스트가 달라지는지 확인하고, 성분 목록을 반사로 읽어 이 표에 빠진 성분이 없는지
-     * 확인한다. 새 노브를 더하고 canonical 에 넣지 않으면 두 번째 확인이 잡는다.</p>
+     * 확인한다. 새 노브를 더하고 canonical에 넣지 않으면 두 번째 확인이 잡는다.</p>
      */
     @DisplayName("전력 노브의 모든 성분이 다이제스트를 움직이고, 표에 빠진 성분이 없다")
     @Test
@@ -321,7 +321,7 @@ class PlacementBenchmarkServiceTest {
         assertEquals(0.5, service.engineConfig().network().unknownLinkScore(), 1e-9);
     }
 
-    /** 위상 독립 판은 seed 마다 Board 하나 — 서로 독립 복제라 값이 다르고, legacy 판은 Board 하나다. */
+    /** 위상 독립 판은 seed마다 Board 하나 — 서로 독립 복제라 값이 다르고, legacy 판은 Board 하나다. */
     @DisplayName("위상 독립 판은 seeds 수만큼 Board 를 내고 seed 별 값이 서로 다르며, legacy 판은 Board 하나다")
     @Test
     void independent_boards_yield_one_board_per_seed() {
@@ -339,8 +339,8 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·override 열 6 의 canonical 문자열. 이 값이 바뀌면 계약 §10 에 옛 → 새 행을 적는다.
-     * 방법론 변경 이전(위생 정비 PR 까지)의 값은 {@code 79315785b762}, 온도 상한 열 추가 전의 값은 {@code 1487c10f4e97} 이었다.
+     * 설정 다이제스트 리터럴 — 기본 설정·엔진 3·override 열 6의 canonical 문자열. 이 값이 바뀌면 계약 §10에 옛 → 새 행을 적는다.
+     * 방법론 변경 이전(위생 정비 PR까지)의 값은 {@code 79315785b762}, 온도 상한 열 추가 전의 값은 {@code 1487c10f4e97}이었다.
      */
     @DisplayName("기본 설정의 configDigest 리터럴이 고정된다 — 바뀌면 계약 §10 행이 따른다")
     @Test
@@ -349,7 +349,7 @@ class PlacementBenchmarkServiceTest {
                 "설정 다이제스트가 바뀌었다 — canonical 성분·열·노브가 바뀐 것이며 계약 §10 에 옛 → 새 행을 적는다");
     }
 
-    /** 링크 게이트 열은 링크 판에서만 weighted 와 갈린다 — 링크 없는 판에서는 게이트가 켜질 수 없어 같은 값이다(구조적 사실). */
+    /** 링크 게이트 열은 링크 판에서만 weighted와 갈린다 — 링크 없는 판에서는 게이트가 켜질 수 없어 같은 값이다(구조적 사실). */
     @DisplayName("weighted-affinity 는 링크 없는 판에서 weighted 와 값이 같고 링크 판에서만 다르다")
     @Test
     void the_affinity_column_differs_from_weighted_only_on_the_link_board() {
@@ -406,14 +406,14 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 열을 더해도 기존 열의 값이 바뀌지 않는다 — 짝 조건은 기준 집합으로만 정한다. 배포 검증에서 반증판 90%·전원 제어 셀의 power
-     * 총전력 표본이 5 → 1 로 줄어든 것이 이 규칙의 계기다. 리터럴의 출처는 두 겹이다: 처음은 변종 열 도입 전(위생 정비 PR jar) 응답의
-     * 표본 5 · 6429.0022 · 32.3241 이었고, 배치 점수 PEI·비낭비 항의 기저를 실효로 바꾼 판정 회차 1 에서 power 열의 배치가 달라져
-     * 기준 집합 짝 지점이 5 → 6 으로 늘고 두 중앙값이 6412.2625 · 32.2913 으로 움직였으며, 열 항의 기저를 실효 온도로 바꾼 다음 회차에서
-     * 반증판 짝 지점이 6 → 7, 총전력 중앙값이 6403.1272 로 다시 움직였다(계측 공백판 32.2913 은 그대로). 노드 배치 스코어 PEI 항에
-     * 코어 비율을 곱한 회차에서 반증판 짝 지점이 7 → 4, 총전력 중앙값이 6234.1715, 계측 공백판 미계측 격차가 34.4749 로 움직였다
+     * 총전력 표본이 5 → 1로 줄어든 것이 이 규칙의 계기다. 리터럴의 출처는 두 겹이다: 처음은 변종 열 도입 전(위생 정비 PR jar) 응답의
+     * 표본 5 · 6429.0022 · 32.3241이었고, 배치 점수 PEI·비낭비 항의 기저를 실효로 바꾼 판정 회차 1에서 power 열의 배치가 달라져
+     * 기준 집합 짝 지점이 5 → 6으로 늘고 두 중앙값이 6412.2625 · 32.2913으로 움직였으며, 열 항의 기저를 실효 온도로 바꾼 다음 회차에서
+     * 반증판 짝 지점이 6 → 7, 총전력 중앙값이 6403.1272로 다시 움직였다(계측 공백판 32.2913은 그대로). 노드 배치 스코어 PEI 항에
+     * 코어 비율을 곱한 회차에서 반증판 짝 지점이 7 → 4, 총전력 중앙값이 6234.1715, 계측 공백판 미계측 격차가 34.4749로 움직였다
      * — 지금 리터럴은 맨 뒤 값이다.
      * 값의 이동은 배치 점수 변경에 귀속된다. 현 리터럴은 변종 열이 있는 실행에서 온 값이라 override 열 독립성의 교차 증거는
-     * 첫 출처에서 소모됐고, 이 테스트는 이후 회차에 대해 "값이 조용히 움직이지 않는다" 를 지킨다.
+     * 첫 출처에서 소모됐고, 이 테스트는 이후 회차에 대해 "값이 조용히 움직이지 않는다"를 지킨다.
      */
     @DisplayName("변종 열을 더해도 기준 집합 열의 총량 표본 수와 값이 사전 등록 리터럴과 같다")
     @Test
@@ -422,7 +422,7 @@ class PlacementBenchmarkServiceTest {
         MetricValue power = strategy(adversarial, "power").metrics().stream()
                 .filter(m -> m.key().equals(BenchmarkRules.GENERATOR_POWER)).findFirst().orElseThrow();
         assertEquals(4, power.samples(), "짝 지점 수가 사전 등록 리터럴(4)과 다르다 — 짝 조건이 override 열까지 보고 있거나 배치가 또 움직였다");
-        // 허용 오차는 판정 규칙의 지점 비교 무시 폭(0.0002, 4자리 두 칸)과 같은 근거 — 실수 항등인 변경이 마지막 자리를 한 칸 뒤집을 수 있어 한 칸(1e-4)은 여유가 0 이다
+        // 허용 오차는 판정 규칙의 지점 비교 무시 폭(0.0002, 4자리 두 칸)과 같은 근거 — 실수 항등인 변경이 마지막 자리를 한 칸 뒤집을 수 있어 한 칸(1e-4)은 여유가 0이다
         assertEquals(6234.1715, power.median(), BenchmarkRules.JUDGMENT_POINT_IGNORE_PP);
         Cell sparse = cell(service.compare("sparse", "heavytail").boards().get(0), 90, "AVAILABLE");
         MetricValue spread = strategy(sparse, "power").metrics().stream()
@@ -446,7 +446,7 @@ class PlacementBenchmarkServiceTest {
         assertTrue(plain.stream().allMatch(w -> w.getDataMdcId() == null), "링크 없는 판은 dataMdcId 를 부여하지 않는다");
     }
 
-    /** 순환 배정 — 0 은 요구 없음이라 null 로 남고, 요구 대역폭 절이 없는 판은 아무것도 부여하지 않는다. */
+    /** 순환 배정 — 0은 요구 없음이라 null로 남고, 요구 대역폭 절이 없는 판은 아무것도 부여하지 않는다. */
     @DisplayName("요구 대역폭은 표본 순서대로 순환 배정되고 0 은 요구 없음으로 남는다")
     @Test
     void required_bandwidth_is_assigned_round_robin_with_zero_meaning_none() {
@@ -471,7 +471,7 @@ class PlacementBenchmarkServiceTest {
 
     // ── 원격 MDC 배치 비율 ─────────────────────────────────────
 
-    /** 링크 판은 워크로드에 데이터 MDC 를 배정하는 유일한 판이라 전 셀 · 전 열이 시각 지점마다 값을 낸다. 0~100 밖이면 분모나 분자를 잘못 센 것이다. */
+    /** 링크 판은 워크로드에 데이터 MDC를 배정하는 유일한 판이라 전 셀 · 전 열이 시각 지점마다 값을 낸다. 0~100 밖이면 분모나 분자를 잘못 센 것이다. */
     @DisplayName("링크 판의 원격 MDC 배치 비율은 두 분포의 전 셀 · 전 열에서 0~100 사이 값이다")
     @Test
     void remote_mdc_rate_is_valid_on_every_link_board_cell() {
@@ -488,7 +488,7 @@ class PlacementBenchmarkServiceTest {
         }
     }
 
-    /** 데이터 MDC 가 없는 판에서 0 을 내면 "원격 배치가 없었다"로 읽힌다 — 값도 표본도 없이 사유를 단 무효여야 한다. */
+    /** 데이터 MDC가 없는 판에서 0을 내면 "원격 배치가 없었다"로 읽힌다 — 값도 표본도 없이 사유를 단 무효여야 한다. */
     @DisplayName("데이터 MDC 를 배정하지 않은 판은 원격 MDC 배치 비율이 0 이 아니라 사유를 단 무효다")
     @Test
     void remote_mdc_rate_is_invalid_with_a_reason_on_boards_without_data_mdc() {
@@ -549,7 +549,7 @@ class PlacementBenchmarkServiceTest {
         assertNull(BenchmarkCellAssembler.remoteMdcRate(placementWithDataMdc(5, 0, 0)), "원격 여부를 말할 수 있는 배치가 없으면 비율은 정의되지 않는다");
     }
 
-    /** 등록된 판은 노드 MDC 가 모두 있어 응답으로는 빠지는 가지를 볼 수 없다. */
+    /** 등록된 판은 노드 MDC가 모두 있어 응답으로는 빠지는 가지를 볼 수 없다. */
     @DisplayName("원격 여부는 노드 MDC 와 데이터 MDC 가 다를 때만 참이고 둘 중 하나라도 없으면 셈에서 빠진다")
     @Test
     void remote_mdc_is_counted_only_when_both_mdc_ids_are_known() {
@@ -566,7 +566,7 @@ class PlacementBenchmarkServiceTest {
 
     // ── 자원 조각화 비율 ───────────────────────────────────────
 
-    /** 부하율 분모와 같은 식이어야 조각화 비율의 여유가 표본 크기를 정한 여유와 같은 뜻이 된다 — 메모리가 묶는 노드 · CPU 가 묶는 노드 · 상한을 넘은 노드로 본다. */
+    /** 부하율 분모와 같은 식이어야 조각화 비율의 여유가 표본 크기를 정한 여유와 같은 뜻이 된다 — 메모리가 묶는 노드 · CPU가 묶는 노드 · 상한을 넘은 노드로 본다. */
     @DisplayName("노드 여유는 기준 정책 상한까지의 CPU 와 메모리 환산 코어 중 작은 쪽이고 예약분을 빼며 음수는 0 이다")
     @Test
     void node_headroom_is_the_smaller_of_cpu_and_memory_and_never_negative() {
@@ -606,7 +606,7 @@ class PlacementBenchmarkServiceTest {
     /**
      * 짝 지점이 있는 셀은 전 열이 0~100 사이 값이고 표본 수가 총량 지표(가동 노드 증감)의 표본 수와 같다. 짝 지점이 없는 고부하 셀은 값 없이
      * 사유를 단 무효다 — 짝 조건이 빠지면 적게 배치한 열이 남긴 여유로 고부하 셀에 값이 생긴다. 반증판에는 기본 설정을 바꾼 열이 자기 배치
-     * 건수가 기준 집합과 다른 지점을 빼는 셀이 있어(90% heavytail 의 power-s250 · power-s0 · power-s1000) 그 열의 짝 조건까지 본다.
+     * 건수가 기준 집합과 다른 지점을 빼는 셀이 있어(90% heavytail의 power-s250 · power-s0 · power-s1000) 그 열의 짝 조건까지 본다.
      */
     @DisplayName("주 결과판 · 반증판의 자원 조각화 비율은 짝 지점에서만 표본을 내고 짝 지점이 없는 셀은 사유를 단 무효다")
     @Test
@@ -650,7 +650,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 주 결과판 heavytail 의 다섯 열 자원 조각화 비율 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정). 두 전원 상태 셀은 배치가 같아 값이 같다.
+     * 주 결과판 heavytail의 다섯 열 자원 조각화 비율 — 첫 실행에서 관측한 값을 리터럴로 고정한다(회귀 고정). 두 전원 상태 셀은 배치가 같아 값이 같다.
      * 110% 셀은 짝 지점이 없어 위 테스트가 본다. 허용 오차는 판정 규칙의 지점 비교 무시 폭과 같은 근거다.
      */
     @DisplayName("주 결과판 heavytail 의 자원 조각화 비율이 세 부하율에서 관측 리터럴과 같다")
@@ -677,7 +677,7 @@ class PlacementBenchmarkServiceTest {
     // ── 코어 기준 배치 성공률 ───────────────────────────────────
 
     /**
-     * 두 성공률은 같은 배치를 건수와 코어로 센 값이라, 전부 배치했을 때만 100 이 되는 것도 같다. 유효 여부 · 표본 수 · 사유도 배치 성공률과 같다 —
+     * 두 성공률은 같은 배치를 건수와 코어로 센 값이라, 전부 배치했을 때만 100이 되는 것도 같다. 유효 여부 · 표본 수 · 사유도 배치 성공률과 같다 —
      * 제약을 끈 변종은 두 지표 모두 천장 사유를 단 무효다. 코어 누적이 배치 성공과 무관하게 늘면 이 동치가 깨진다.
      */
     @DisplayName("주 결과판 · 반증판의 코어 기준 배치 성공률은 배치 성공률과 유효 여부가 같고 둘 다 100 인 열도 같다")
@@ -759,7 +759,7 @@ class PlacementBenchmarkServiceTest {
         assertEquals(expected.size() * 2, checked, "두 분포 · 두 전원 상태 셀을 모두 봐야 한다");
     }
 
-    /** 열 하나의 셀×지표 값 — median 만이 아니라 samples·valid 까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */
+    /** 열 하나의 셀×지표 값 — median만이 아니라 samples·valid까지 비교 키에 넣는다(표본 축소·유효성 차이도 잡는다). */
     private static Map<String, String> columnOf(PlacementBenchmarkResponse.Board board, String strategyId) {
         Map<String, String> out = new LinkedHashMap<>();
         for (var cell : board.cells()) for (var s : cell.strategies()) if (s.strategyId().equals(strategyId)) for (var m : s.metrics()) {
@@ -769,7 +769,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * override 열이 기준 집합과 건수가 다른 지점에서 총량을 내지 못하면 그 사실이 응답에 보인다 — PAIRING_RULE 의 표기 의무.
+     * override 열이 기준 집합과 건수가 다른 지점에서 총량을 내지 못하면 그 사실이 응답에 보인다 — PAIRING_RULE의 표기 의무.
      * 등록 판 전부를 훑어 그런 셀을 찾고, 있으면 셀 문장에 열 이름과 지점 수가 적혀 있는지 본다(없으면 규칙이 검증 불가다).
      */
     @DisplayName("override 열의 총량 표본이 기준 집합보다 적은 셀은 그 사실을 셀 문장에 적는다")
@@ -827,10 +827,10 @@ class PlacementBenchmarkServiceTest {
     /**
      * 눈금 전환의 점수 차가 닫힌 형태와 같다 — 판의 모든 노드·지점·요구 코어에서.
      *
-     * <p>{@code score_S = 1 − rm/S}, {@code score_pMax = 1 − rm/pMax} 이므로
-     * {@code score_S − score_pMax = rm·(1/pMax − 1/S)} 다. 이 등식이 성립하면 바뀐 것은 분모 하나뿐이고,
+     * <p>{@code score_S = 1 − rm/S}, {@code score_pMax = 1 − rm/pMax}이므로
+     * {@code score_S − score_pMax = rm·(1/pMax − 1/S)}다. 이 등식이 성립하면 바뀐 것은 분모 하나뿐이고,
      * {@code rm}(실질 한계 전력)은 그대로라는 뜻이다. 포화 구간은 등식이 성립하지 않으므로 제외하고,
-     * 제외된 수가 0 인 것도 함께 확인한다 — 기본 눈금에서는 판에 포화가 없어야 한다.</p>
+     * 제외된 수가 0인 것도 함께 확인한다 — 기본 눈금에서는 판에 포화가 없어야 한다.</p>
      */
     @DisplayName("판 전체에서 눈금 전환의 점수 차가 rm·(1/정격 − 1/눈금) 과 같다")
     @Test
@@ -882,12 +882,12 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * <b>대조군의 총전력은 눈금과 무관하다</b> — 격차 지표의 분모가 우리 변경에 흔들리지 않는다는 뜻이고,
-     * 그것이 "격차가 줄었다" 를 우리 엔진의 변화로 읽을 수 있는 근거다.
+     * 그것이 "격차가 줄었다"를 우리 엔진의 변화로 읽을 수 있는 근거다.
      *
      * <p>구조상으로는 자명하다(대조군 어느 것도 한계 전력 점수를 부르지 않는다). 그러나 자명함은
      * 테스트가 아니다 — 나중에 대조군이 우리 점수를 쓰게 되면 이 전제가 조용히 깨지고, 그때 격차의
      * 해석이 통째로 바뀐다. 눈금을 크게 벌린 두 설정으로 같은 판을 돌려 대조군 열이 한 자리도
-     * 움직이지 않는지 본다 — 대비는 이 PR 의 변경 자체(W 눈금 vs 정격 분모)다.</p>
+     * 움직이지 않는지 본다 — 대비는 이 PR의 변경 자체(W 눈금 vs 정격 분모)다.</p>
      */
     @DisplayName("눈금을 바꿔도 대조군 총전력은 한 자리도 움직이지 않는다")
     @Test
@@ -953,13 +953,13 @@ class PlacementBenchmarkServiceTest {
     /**
      * 판에 실린 <b>엔진 쪽 계수</b>가 진짜 엔진 식과 같은지 못 박는다.
      *
-     * <p>{@code GroundTruthOracle} 은 엔진 식({@code inertiaK × T × 코어비율})을 <b>손으로 복제</b>해
-     * 갖고 있다. 복제본과 원본을 묶는 테스트가 없으면, 나중에 {@code ThermalModel} 의 상승 식을 고쳐도
+     * <p>{@code GroundTruthOracle}은 엔진 식({@code inertiaK × T × 코어비율})을 <b>손으로 복제</b>해
+     * 갖고 있다. 복제본과 원본을 묶는 테스트가 없으면, 나중에 {@code ThermalModel}의 상승 식을 고쳐도
      * <b>아무 테스트도 빨간불이 되지 않고</b> 응답의 그 칸만 조용히 거짓이 된다 — 존재하지 않는 식을
      * "엔진이 이렇게 잰다"고 설명하게 된다. 그래서 여기서 <b>실제 엔진 모델을 불러</b> 대조한다.</p>
      *
      * <p>엔진 식을 바꾸면 이 테스트가 먼저 터진다. 그때 할 일은 테스트를 고치는 것이 아니라
-     * {@code thermalRiseScaleCheck} 가 새 식을 반영하게 하는 것이다.</p>
+     * {@code thermalRiseScaleCheck}가 새 식을 반영하게 하는 것이다.</p>
      */
     @DisplayName("판에 실린 엔진 쪽 열 상승 계수가 실제 엔진 모델의 계산과 같다")
     @Test
@@ -988,20 +988,20 @@ class PlacementBenchmarkServiceTest {
      * 온도 지표는 엔진의 열관성 가정이 아니라 생성식으로 낸다. 엔진 노브({@code inertiaK})를 크게 흔들어도
      * 값이 움직이지 않아야, 열 엔진이 자기 가정으로 채점받지 않는다는 것이 증명된다.
      *
-     * <p>비교 대상은 <b>자원전용 제약 해제 변종 하나</b>다. 다른 전략은 전부 온도 제약 C3 를 받고, C3 의
-     * "배치 후 예상 온도"가 바로 {@code inertiaK} 를 쓰므로 노브를 돌리면 <b>배치 자체</b>가 바뀐다 —
+     * <p>비교 대상은 <b>자원전용 제약 해제 변종 하나</b>다. 다른 전략은 전부 온도 제약 C3를 받고, C3의
+     * "배치 후 예상 온도"가 바로 {@code inertiaK}를 쓰므로 노브를 돌리면 <b>배치 자체</b>가 바뀐다 —
      * 그 경우 지표가 움직이는 것은 측정이 아니라 결정이 바뀐 것이고, 그것은 옳은 동작이다(실제로
-     * {@code ffd-size} 는 13.42 → 11.01 로 움직인다). 측정이 노브에 무관함을 보려면 배치가 노브에 무관한
+     * {@code ffd-size}는 13.42 → 11.01로 움직인다). 측정이 노브에 무관함을 보려면 배치가 노브에 무관한
      * 전략에서 봐야 하고, 그것이 게이트까지 끈 자원전용 변종이다.</p>
      */
     @DisplayName("열관성 계수를 바꿔도 온도 지표가 움직이지 않는다 — 배치가 노브에 무관한 전략에서")
     @Test
     void the_temperature_metrics_do_not_follow_the_engine_inertia_knob() {
         SchedulerProperties tuned = new SchedulerProperties();
-        // 기본 0.15 의 두 배. 온도 분포 지표는 총량과 같이 <b>전 전략의 배치 건수가 같은 지점</b>에서만 값이
+        // 기본 0.15의 두 배. 온도 분포 지표는 총량과 같이 <b>전 전략의 배치 건수가 같은 지점</b>에서만 값이
         // 나오는데, 노브를 서른 배로 돌리면 게이트가 켜진 다른 전략이 저부하에서도 배치에 실패해 어느 셀에도
         // 짝 지점이 남지 않는다 — 그러면 비교할 값 자체가 없다. 두 배면 짝은 남고, 엔진 모델로 재고 있었다면
-        // 예약이 있는 노드의 온도가 (1+0.15r)→(1+0.30r) 로 움직여 4자리 반올림한 표준편차가 달라진다.
+        // 예약이 있는 노드의 온도가 (1+0.15r)→(1+0.30r)로 움직여 4자리 반올림한 표준편차가 달라진다.
         // 경고 구간 노드 수는 정수라 작은 흔들림에 우연히 같을 수 있으므로, 이 테스트의 힘은 표준편차 쪽에 있다.
         tuned.getThermal().setInertiaK(0.30);
         PlacementBenchmarkService other = serviceWith(tuned);
@@ -1033,7 +1033,7 @@ class PlacementBenchmarkServiceTest {
                 "열관성 계수가 온도 표준편차를 움직인다 — 평가 기준이 엔진의 가정이라는 뜻이다");
         assertEquals(median(a, BenchmarkRules.WARN_ZONE_NODES), median(b, BenchmarkRules.WARN_ZONE_NODES),
                 "열관성 계수가 경고 구간 노드 수를 움직인다");
-        // 성공률은 이 변종에서 무효라 median 이 null 이다 — null == null 로 비교하면 아무것도 안 본다.
+        // 성공률은 이 변종에서 무효라 median이 null이다 — null == null로 비교하면 아무것도 안 본다.
         // 배치가 노브에 무관하다는 전제는 값이 나온 지점 수로 확인한다(배치가 달라지면 표본 수가 달라진다).
         MetricValue rateBase = metric(a, BenchmarkRules.PLACEMENT_RATE);
         MetricValue rateMoved = metric(b, BenchmarkRules.PLACEMENT_RATE);
@@ -1052,7 +1052,7 @@ class PlacementBenchmarkServiceTest {
      * 임계값을 통째로 무시하고, 벤치마크가 <b>운영과 다른 조건</b>에서 낸 수치를 연구 근거로 쓰게 된다.
      * 응답만 봐서는 절대 드러나지 않는 종류의 오염이라 여기서 못 박는다.</p>
      *
-     * <p>온도 게이트가 켜진 전략은 C3 가 "배치 후 예상 온도"를 {@code inertiaK} 로 계산하므로, 계수를 키우면
+     * <p>온도 게이트가 켜진 전략은 C3가 "배치 후 예상 온도"를 {@code inertiaK}로 계산하므로, 계수를 키우면
      * 더 많은 후보가 막혀 배치가 달라져야 한다. 안 달라지면 평가기가 주입 설정을 안 보고 있다는 뜻이다.</p>
      */
     @DisplayName("온도 게이트가 켜진 전략은 열관성 계수를 따라 배치가 달라진다 — 평가기가 주입 설정을 본다")
@@ -1090,8 +1090,8 @@ class PlacementBenchmarkServiceTest {
     // ── 무효 지표는 숫자를 싣지 않는다 ─────────────────────────
 
     /**
-     * 순위 근거가 아니라고 판정한 칸에 중앙값이 실리면 {@code valid} 를 보지 않은 인용자에게는 그냥 숫자다.
-     * 이 PR 이 세운 원칙("각주로 밀어 두면 인용될 때 떨어져 나간다")을 응답이 스스로 어기는 자리였다.
+     * 순위 근거가 아니라고 판정한 칸에 중앙값이 실리면 {@code valid}를 보지 않은 인용자에게는 그냥 숫자다.
+     * 이 PR이 세운 원칙("각주로 밀어 두면 인용될 때 떨어져 나간다")을 응답이 스스로 어기는 자리였다.
      */
     @DisplayName("순위 근거로 쓸 수 없는 지표는 중앙값·최소·최대를 싣지 않는다")
     @Test
@@ -1113,7 +1113,7 @@ class PlacementBenchmarkServiceTest {
                         assertNull(m.median(), where + ": 무효인데 숫자가 실렸다 — valid 를 보지 않은 인용자에게는 그냥 값이다");
                         assertNull(m.min(), where);
                         assertNull(m.max(), where);
-                        // 지점별 값도 숫자 통로다. median 만 지우고 배열에 값을 남기면 무효 판정이
+                        // 지점별 값도 숫자 통로다. median만 지우고 배열에 값을 남기면 무효 판정이
                         // 응답의 한쪽에서만 지켜지고, 지점 대조는 그 배열을 그대로 읽는다.
                         if (m.points() != null) {
                             assertTrue(m.points().stream().allMatch(Objects::isNull),
@@ -1129,8 +1129,8 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 위 테스트는 "무효면 숫자가 없다"만 본다 — 무효여야 할 칸이 <b>유효로 둔갑</b>하면 통과해 버린다.
-     * 그래서 무효여야 하는 칸 하나를 이름으로 못 박는다: 온도 제약을 끈 변종의 개입 횟수는 항상 0 이고,
-     * 그 0 은 값이 아니라 게이트가 없다는 뜻이라 반드시 무효·null 이어야 한다.
+     * 그래서 무효여야 하는 칸 하나를 이름으로 못 박는다: 온도 제약을 끈 변종의 개입 횟수는 항상 0이고,
+     * 그 0은 값이 아니라 게이트가 없다는 뜻이라 반드시 무효·null이어야 한다.
      */
     @DisplayName("온도 제약을 끈 변종의 개입 횟수는 무효이고 숫자가 없다")
     @Test
@@ -1146,7 +1146,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 건당 전력의 무효 판정이 <b>첫 시각 지점 하나</b>로 결정되던 결함. t=0 에 0건이고 다른 지점에 배치한
+     * 건당 전력의 무효 판정이 <b>첫 시각 지점 하나</b>로 결정되던 결함. t=0에 0건이고 다른 지점에 배치한
      * 전략은 정당한 중앙값을 갖는데 "배치 0건" 사유로 통째로 버려졌다. 고친 뒤에는 값이 나온 지점이
      * 하나라도 있으면 유효, 하나도 없으면 무효 — 둘이 정확히 일치해야 한다.
      */
@@ -1259,7 +1259,7 @@ class PlacementBenchmarkServiceTest {
         assertThrows(IllegalStateException.class, () -> PlacementBenchmarkService.cacheKey("main", "heavytail"), "축 수가 다르면 키를 만들지 않는다");
     }
 
-    /** 실행 중인 호출이 있으면 두 번째 호출은 기다리지 않고 429 다. */
+    /** 실행 중인 호출이 있으면 두 번째 호출은 기다리지 않고 429다. */
     @DisplayName("동시 두 번째 호출은 429 로 거절된다")
     @Test
     void concurrent_second_call_is_rejected_with_429() throws Exception {
@@ -1360,8 +1360,8 @@ class PlacementBenchmarkServiceTest {
      * 전원 제어가 있다는 가정에서도 <b>배치 전부터 돌던 노드는 끌 수 없다</b>. 그래서 그 판의 총전력은
      * 없는 판의 총전력에서 <b>유휴 노드 몫만큼만</b> 낮아질 수 있다.
      *
-     * <p>경계를 응답에서 유도한다 — 유휴 노드 수는 {@code nodeCount − activeNodesBefore} 이고 그 노드들이
-     * 낼 수 있는 최대치는 {@code idleAssumptionGaps} 의 실제 유휴 전력 중 큰 것들의 합이다. 통전 노드
+     * <p>경계를 응답에서 유도한다 — 유휴 노드 수는 {@code nodeCount − activeNodesBefore}이고 그 노드들이
+     * 낼 수 있는 최대치는 {@code idleAssumptionGaps}의 실제 유휴 전력 중 큰 것들의 합이다. 통전 노드
      * 집합에서 "배치 전부터 돌던 노드"를 빼면 쓰지 않은 가동 노드가 통째로 사라져 <b>없는 절감</b>이
      * 만들어지고, 그때 총전력이 이 경계 아래로 내려간다.</p>
      */
@@ -1419,9 +1419,9 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 순서 목록과 구현 맵은 서로를 모른다. 목록에만 있는 id 는 {@code null} 이 담겨 한참 뒤 NPE 로 죽고, 맵에만 있는
+     * 순서 목록과 구현 맵은 서로를 모른다. 목록에만 있는 id는 {@code null}이 담겨 한참 뒤 NPE로 죽고, 맵에만 있는
      * 구현은 열이 <b>조용히</b> 빠진 채 응답이 정상이다. 둘 다 전략 목록을 만드는 자리에서 크게 실패해야 한다 —
-     * 대조군을 늘리는 PR 이 바로 그 자리를 건드린다.
+     * 대조군을 늘리는 PR이 바로 그 자리를 건드린다.
      */
     @DisplayName("대조군 순서 목록에 구현이 없는 id 가 있으면 조용히 빠지지 않고 즉시 실패한다")
     @Test
@@ -1641,7 +1641,7 @@ class PlacementBenchmarkServiceTest {
         }
     }
 
-    /** NaN·무한대는 0 으로 새어 나가면 "가장 좋은 값"으로 읽힌다. 값이 없으면 null 이어야 한다. */
+    /** NaN·무한대는 0으로 새어 나가면 "가장 좋은 값"으로 읽힌다. 값이 없으면 null이어야 한다. */
     @DisplayName("응답의 숫자에 NaN 이나 무한대가 없다")
     @Test
     void no_nan_or_infinity_leaks_into_the_response() {
@@ -1853,7 +1853,7 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 온도 상한 열의 정책은 기준 정책 사본에서 온도 상한 하나만 다르다 — 다른 필드가 함께 바뀌면 열 차이가 운영 스케줄 온도 상한의 효과가 아니게 된다.
-     * 선언 필드 전량을 반사로 견주고(SchedulingPolicyCopyTest 와 같은 방식), 다른 열의 정책은 기본 임계 그대로인지 함께 본다.
+     * 선언 필드 전량을 반사로 견주고(SchedulingPolicyCopyTest와 같은 방식), 다른 열의 정책은 기본 임계 그대로인지 함께 본다.
      */
     @DisplayName("온도 상한 열은 기준 정책 사본에서 온도 상한만 기본 경고 온도로 낮추고 다른 열의 정책은 그대로 둔다")
     @Test
@@ -1880,7 +1880,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 주 결과판에서 기본 임계 75℃ 의 weighted 열은 온도 제약 개입이 0 이고, 상한을 65℃ 로 낮춘 열에서는 개입이 생긴다 — 이 열이 그 제약이
+     * 주 결과판에서 기본 임계 75℃의 weighted 열은 온도 제약 개입이 0이고, 상한을 65℃로 낮춘 열에서는 개입이 생긴다 — 이 열이 그 제약이
      * 작동하는 자리를 보이는지의 확인이다. 개입 횟수는 현재 온도 초과 제외와 배치 후 예상 온도 초과 제외의 합이다(규칙 문장).
      */
     @DisplayName("주 결과판에서 온도 상한 열만 온도 제약 개입이 생기고 weighted 열은 0 그대로다")
@@ -2032,8 +2032,8 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 판독 규칙(rules 커밋 본문 · docs/14)의 지점별 부호 집계를 운영 부품으로 낸다 — 지점 집합 I 는 기준 집합 짝 지점 가운데 두 순서 열의 건수가
-     * 기준 건수와 같은 지점, 크기 효과 d 는 조각난 여유 비율(크기 순 − 등록 순), 우선순위 효과 p 는 (등록 순 − weighted)다. 무시 폭 안의 차는 동률이다.
+     * 판독 규칙(rules 커밋 본문 · docs/14)의 지점별 부호 집계를 운영 부품으로 낸다 — 지점 집합 I는 기준 집합 짝 지점 가운데 두 순서 열의 건수가
+     * 기준 건수와 같은 지점, 크기 효과 d는 조각난 여유 비율(크기 순 − 등록 순), 우선순위 효과 p는 (등록 순 − weighted)다. 무시 폭 안의 차는 동률이다.
      * 값은 첫 실행 관측을 리터럴로 고정한 것이고 사전 추정은 테스트로 확인하지 않는다 — 빗나가면 노브를 돌릴 유인이 생긴다.
      */
     @DisplayName("주 결과판 짝 셀 다섯에서 두 스케줄 배치 순서 열의 같은 지점 차 부호 집계가 관측 리터럴과 같다")
@@ -2108,7 +2108,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 전력 제약을 끈 변종의 개입 횟수는 항상 0 이고, 그 0 은 값이 아니라 게이트가 없다는 뜻이라 무효 · null 이어야 한다 — 온도 제약 개입 횟수와 같은 꼴이다.
+     * 전력 제약을 끈 변종의 개입 횟수는 항상 0이고, 그 0은 값이 아니라 게이트가 없다는 뜻이라 무효 · null이어야 한다 — 온도 제약 개입 횟수와 같은 꼴이다.
      */
     @DisplayName("전력 제약을 끈 변종의 전력 제약 개입 횟수는 무효이고 숫자가 없다")
     @Test
@@ -2149,7 +2149,7 @@ class PlacementBenchmarkServiceTest {
     /**
      * 네 판(주 결과판 · 정격 어긋남판 · 오목판 · 반증판) heavytail 60 · 90 · 110% 셀의 weighted · power 전력 제약 개입 횟수 — 첫 실행에서 관측한 값을
      * 리터럴로 고정한다(결과보다 먼저 정한 값이 아니다). 두 전원 상태 셀은 배치가 같아 같은 값과 견준다. 사전 추정은 테스트로 확인하지 않는다.
-     * 110% 셀은 실패한 시도가 있는 셀이라 셈이 성공 확인 앞에 있는지도 함께 본다 — 반증판은 값이 늘 0 이고 나머지 세 판의 60 · 90% 셀은 모든 시도가 성공해 그 자리를 가르지 못한다.
+     * 110% 셀은 실패한 시도가 있는 셀이라 셈이 성공 확인 앞에 있는지도 함께 본다 — 반증판은 값이 늘 0이고 나머지 세 판의 60 · 90% 셀은 모든 시도가 성공해 그 자리를 가르지 못한다.
      */
     @DisplayName("네 판 heavytail 60 · 90 · 110% 셀의 weighted · power 전력 제약 개입 횟수 중앙값 · 최댓값이 관측 리터럴과 같다")
     @Test
@@ -2341,8 +2341,8 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 온도 분포 두 지표는 총량과 <b>같은 지점</b>에서만 표본에 들어가야 한다. 생성식 온도는 CPU 의 함수라
-     * 덜 배치한 전략은 CPU 를 덜 얹어 덜 뜨겁고 분포도 덜 벌어진다 — 건수가 다른 지점을 그냥 세면 열이
+     * 온도 분포 두 지표는 총량과 <b>같은 지점</b>에서만 표본에 들어가야 한다. 생성식 온도는 CPU의 함수라
+     * 덜 배치한 전략은 CPU를 덜 얹어 덜 뜨겁고 분포도 덜 벌어진다 — 건수가 다른 지점을 그냥 세면 열이
      * 아니라 배치량을 재게 된다. 개입 횟수는 시도당 계수라 성공률과 같이 전 지점을 센다.
      *
      * <p>판 넷을 다 본다 — 짝이 어긋나는 셀이 어느 판에서 나올지는 판의 성질이라 하나만 보면 우연히
@@ -2386,8 +2386,8 @@ class PlacementBenchmarkServiceTest {
      * valid 플래그를 보지 않은 인용자에게는 그냥 숫자다. 그런 셀이 지금 판에 없으면 이 테스트는 그 사실을 알린다 —
      * 없다는 것을 조용히 통과로 바꾸지 않는다.
      *
-     * <p>override 열은 셀에 짝 지점이 있어도 자기 배치 건수가 기준 집합과 다른 지점을 빼므로, 그런 지점뿐이면 표본이 0 이 되고
-     * 제외 사유를 단다(노드 배치 스코어 PEI 항에 코어 비율을 곱한 회차부터 반증판 90% 의 {@code power-s250}·{@code power-s0} 이 그렇다).
+     * <p>override 열은 셀에 짝 지점이 있어도 자기 배치 건수가 기준 집합과 다른 지점을 빼므로, 그런 지점뿐이면 표본이 0이 되고
+     * 제외 사유를 단다(노드 배치 스코어 PEI 항에 코어 비율을 곱한 회차부터 반증판 90%의 {@code power-s250}·{@code power-s0}이 그렇다).
      * 그때는 같은 셀의 {@code power} 열에 짝 지점이 있어야 한다. 그런 행은 짝 지점 0 셀이 아니라서 아래 가드의 개수에 세지 않는다.</p>
      */
     @DisplayName("짝 지점이 하나도 없는 셀에서는 온도 분포 두 지표도 값 없이 사유만 싣는다")
@@ -2419,12 +2419,12 @@ class PlacementBenchmarkServiceTest {
                 }
             }
         }
-        // 수용 불가 부하(110%)는 판정 규칙이 일부러 넣은 지점이라 네 판 모두 짝 지점 0 인 셀이 있어야 한다. 하나도 없으면
+        // 수용 불가 부하(110%)는 판정 규칙이 일부러 넣은 지점이라 네 판 모두 짝 지점 0인 셀이 있어야 한다. 하나도 없으면
         // 위 확인이 아무것도 안 본 것이므로 통과가 아니라 실패다 — 로그로 남기면 초록불이 "확인함"으로 읽힌다.
         assertTrue(checked > 0, "짝 지점 0 인 셀이 네 판 어디에도 없다 — 110% 부하가 전략을 구분하지 못한다는 뜻이고, 이 시험이 아무것도 보지 않았다");
     }
 
-    /** 시각 지점을 훑었으므로 최솟값 ≤ 중앙값 ≤ 최댓값 이고, 폭이 0 이 아닌 지표가 있어야 한다. */
+    /** 시각 지점을 훑었으므로 최솟값 ≤ 중앙값 ≤ 최댓값 이고, 폭이 0이 아닌 지표가 있어야 한다. */
     @DisplayName("지표마다 최솟값과 중앙값과 최댓값의 순서가 맞다")
     @Test
     void metric_ranges_are_ordered_and_not_degenerate() {
@@ -2473,7 +2473,7 @@ class PlacementBenchmarkServiceTest {
         assertTrue(anyOnUnmeasured, "미계측 노드에 아무도 배치하지 않았다면 이 판이 아무것도 재지 못한다");
     }
 
-    /** 전수 계측 판에서는 미계측 배치가 0 이고 경고가 붙지 않는다 — 경고가 늘 붙으면 신호가 아니다. */
+    /** 전수 계측 판에서는 미계측 배치가 0이고 경고가 붙지 않는다 — 경고가 늘 붙으면 신호가 아니다. */
     @DisplayName("전수 계측 판에서는 미계측 배치가 없고 경고도 없다")
     @Test
     void the_fully_measured_board_has_no_blind_spot_and_no_warning() {
@@ -2533,7 +2533,7 @@ class PlacementBenchmarkServiceTest {
      *
      * <p>전력 제약의 문턱은 부하율에 비대칭이라 전략마다 배치 건수를 다르게 만들 수 있고, 그러면 총량 열이
      * 통째로 무효가 되어 판정 셀의 주 지표가 사라진다. 그때는 결과가 나쁜 것이 아니라 <b>판을 못 쓰는 것</b>이므로,
-     * 이 테스트가 빨간불이면 판을 다시 떠야 한다. 90·110% 에서 총량 열이 소실되는 것은 사전 등록한 예상 범위라
+     * 이 테스트가 빨간불이면 판을 다시 떠야 한다. 90·110%에서 총량 열이 소실되는 것은 사전 등록한 예상 범위라
      * 여기서 보지 않는다.</p>
      */
     @DisplayName("판정 셀과 같은 판의 30% 셀에서 총전력 지표가 유효하고 표본이 있다")
@@ -2558,11 +2558,11 @@ class PlacementBenchmarkServiceTest {
     // ── 기준 전략 대비 격차 ───────────────────────────────────
 
     /**
-     * 판정 셀에서 격차 열이 <b>쓸 수 있는 칸</b>인지 본다 — 다음 PR 의 판정이 읽을 자리라 여기가 비면
+     * 판정 셀에서 격차 열이 <b>쓸 수 있는 칸</b>인지 본다 — 다음 PR의 판정이 읽을 자리라 여기가 비면
      * 결과가 나쁜 것이 아니라 판을 못 쓰는 것이다.
      *
      * <p>부호도 함께 못 박는다. 지금 이 판에서 우리 전력 엔진은 ΔP 단독 대조군(pabfd)보다 전력을 <b>더</b> 쓰고
-     * (격차 &gt; 0), 그것이 다음 PR 이 줄이려는 값이다. 이 부호가 뒤집히면 세계가 달라진 것이거나 식의
+     * (격차 &gt; 0), 그것이 다음 PR이 줄이려는 값이다. 이 부호가 뒤집히면 세계가 달라진 것이거나 식의
      * 분모·부호가 바뀐 것이므로, 조용히 지나가지 않고 여기서 멈춰 테스트를 함께 고치게 한다.</p>
      */
     @DisplayName("판정 셀의 격차 열이 유효하고 표본이 있으며 기준선보다 큰 쪽에 있다")
@@ -2587,7 +2587,7 @@ class PlacementBenchmarkServiceTest {
     /**
      * 아래 단위 테스트는 배열을 만드는 자리만 본다 — <b>호출부가 걸러진 목록을 넘기면</b> 그 자리는 결백한 채로
      * 정렬이 깨진다. 응답에서 "빈 자리 뒤에 값이 있는" 행을 세어 그 등가 변이까지 막는다. 압축하면 값이
-     * 앞으로 모이고 null 이 뒤로 밀려 이런 행이 하나도 남지 않는다.
+     * 앞으로 모이고 null이 뒤로 밀려 이런 행이 하나도 남지 않는다.
      */
     @DisplayName("응답에도 빈 자리 뒤에 값이 있는 격차 행이 남아 있다")
     @Test
@@ -2615,7 +2615,7 @@ class PlacementBenchmarkServiceTest {
     /**
      * 빈 자리를 <b>있던 자리에</b> 남기는지 — 길이·표본 수·중앙값 확인으로는 볼 수 없는 성질이다.
      *
-     * <p>값을 앞으로 당겨 모으고 뒤를 null 로 채워도 길이·표본 수·중앙값은 전부 그대로다. 바뀌는 것은
+     * <p>값을 앞으로 당겨 모으고 뒤를 null로 채워도 길이·표본 수·중앙값은 전부 그대로다. 바뀌는 것은
      * 인덱스가 가리키는 시각뿐이고, 판정 계산({@link BenchmarkRules#judgeCell})은 정확히 그 인덱스로 두 실행을 맞댄다.
      * 변이 테스트에서 압축 변이가 초록불로 살아남아 이 테스트를 따로 둔다.</p>
      */
@@ -2640,7 +2640,7 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 지점별 값은 <b>두 실행을 지점마다 맞대는</b> 것이 목적이라 정렬이 전부다. 길이가 스윕 지점 수로
-     * 고정되고 짝이 아닌 지점이 null 로 남아야 인덱스가 곧 시각이고, 값만 모아 압축하면 두 실행의
+     * 고정되고 짝이 아닌 지점이 null로 남아야 인덱스가 곧 시각이고, 값만 모아 압축하면 두 실행의
      * 3번 지점이 서로 다른 시각이 된다. 표본 수·중앙값이 그 배열과 같은 것도 함께 본다 — 셋이 갈리면
      * 응답이 스스로 모순된다.
      */
@@ -2718,8 +2718,8 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 기준 전략 자신의 격차는 <b>0 이 아니라 값이 아니다</b>. 0 을 유효한 숫자로 실으면 표에서 그 열이
-     * "격차 없음" 으로 1등처럼 읽히고, 무효 판정이 없으면 그 오독을 막을 자리가 응답에 없다.
+     * 기준 전략 자신의 격차는 <b>0이 아니라 값이 아니다</b>. 0을 유효한 숫자로 실으면 표에서 그 열이
+     * "격차 없음"으로 1등처럼 읽히고, 무효 판정이 없으면 그 오독을 막을 자리가 응답에 없다.
      */
     @DisplayName("기준 전략 행은 자기 격차를 싣지 않고 사유를 적는다")
     @Test
@@ -2743,7 +2743,7 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 대조군 집합을 갈아 끼우는 이음매는 기준 전략이 <b>없는</b> 실행을 만들 수 있다. 그때 격차 열이
-     * 죽거나(NPE) 0 을 싣지 않고, 전 행이 사유를 달고 무효로 나가야 한다 — 기준이 없는 격차는 값이 아니다.
+     * 죽거나(NPE) 0을 싣지 않고, 전 행이 사유를 달고 무효로 나가야 한다 — 기준이 없는 격차는 값이 아니다.
      */
     @DisplayName("기준 전략이 없는 실행에서는 격차 열 전부가 사유를 달고 무효다")
     @Test
@@ -2798,7 +2798,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 유휴 격차 표의 <b>열이 이름대로</b> 실렸는지 본다. 전 필드가 {@code double} 이라 열을 하나 끼워 넣으면
+     * 유휴 격차 표의 <b>열이 이름대로</b> 실렸는지 본다. 전 필드가 {@code double}이라 열을 하나 끼워 넣으면
      * 뒤의 값들이 한 칸씩 밀려도 컴파일이 통과하고, 그러면 표는 그럴듯한 숫자로 가득 찬 채 거짓이 된다.
      * 오라클이 직접 낸 행과 응답의 행을 열마다 맞춰 본다.
      *
@@ -2916,10 +2916,10 @@ class PlacementBenchmarkServiceTest {
     /**
      * 판에서 나올 수 있는 <b>실질 한계 전력의 최댓값</b>을 재서 계약 상수에 못 박는다.
      *
-     * <p>한계 전력 점수의 분모는 노드 정격에서 고정 W 눈금 S 로 바뀌었다({@code PowerModel}). 그 변경이
-     * "일률 편향 하나만 고친다" 가 되려면 판 안에서 {@code realMarginalPower > S} 인 지점이 새로
-     * 생기지 않아야 한다 — 생기면 점수가 0 으로 포화해 노드를 구별하지 못하는 다른 결함이 섞인다.
-     * 그래서 결과를 보기 전에 최댓값을 재어 {@link BenchmarkRules#MAX_REAL_MARGINAL_WATTS} 로 적고,
+     * <p>한계 전력 점수의 분모는 노드 정격에서 고정 W 눈금 S로 바뀌었다({@code PowerModel}). 그 변경이
+     * "일률 편향 하나만 고친다"가 되려면 판 안에서 {@code realMarginalPower > S}인 지점이 새로
+     * 생기지 않아야 한다 — 생기면 점수가 0으로 포화해 노드를 구별하지 못하는 다른 결함이 섞인다.
+     * 그래서 결과를 보기 전에 최댓값을 재어 {@link BenchmarkRules#MAX_REAL_MARGINAL_WATTS}로 적고,
      * 이 테스트가 그 수가 실측과 같은지 지킨다. 판·생성식·정격 원장이 바뀌면 여기가 먼저 깨진다.</p>
      *
      * <p>요구 코어는 상상하지 않고 <b>실제 워크로드 파일</b>이 쓰는 값만 본다 — 판에 없는 요구량으로
@@ -2958,11 +2958,11 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 판정 자격 두 판에서 배치 점수용 PEI 가 1.0 에 포화하지 않는다 — 포화는 판정 대상이 아니다.
+     * 판정 자격 두 판에서 배치 점수용 PEI가 1.0에 포화하지 않는다 — 포화는 판정 대상이 아니다.
      *
-     * <p>노드 배치 스코어 PEI 는 코어 비율(그 노드 코어 수 ÷ 후보 평균 코어 수)을 곱하므로 평균보다 코어가 많은 노드가 1.0 에 먼저 닿는다.
-     * 하네스는 판 스냅샷 전체로 컨텍스트를 만들므로 평균은 그 지점의 {@code nodesAt} 전체로 낸다. 예약은 0 부터 코어 전량까지 모두 본다 —
-     * 예약이 쌓일수록 PEI 가 오르다가 실효 사용률이 100 에 잘린 뒤로는 실효 전력만 늘어 내려가므로, 최댓값은 코어 전량 예약이 아닐 수 있다.
+     * <p>노드 배치 스코어 PEI는 코어 비율(그 노드 코어 수 ÷ 후보 평균 코어 수)을 곱하므로 평균보다 코어가 많은 노드가 1.0에 먼저 닿는다.
+     * 하네스는 판 스냅샷 전체로 컨텍스트를 만들므로 평균은 그 지점의 {@code nodesAt} 전체로 낸다. 예약은 0부터 코어 전량까지 모두 본다 —
+     * 예약이 쌓일수록 PEI가 오르다가 실효 사용률이 100에 잘린 뒤로는 실효 전력만 늘어 내려가므로, 최댓값은 코어 전량 예약이 아닐 수 있다.
      * 이 범위는 실행에서 실제로 생기는 예약보다 넓어, 통과하면 실제 실행에서도 포화가 없다는 충분조건이다.</p>
      */
     @DisplayName("판정 자격 두 판 전 지점·전 계측 노드의 배치용 PEI 는 어떤 예약에서도 1.0 미만이다")
@@ -3002,8 +3002,8 @@ class PlacementBenchmarkServiceTest {
      * 엔진에게 건네는 노드 스냅샷과 평가자의 오라클이 <b>같은 세계</b>를 본다. 둘이 갈라지면 엔진은 A 세계에서
      * 결정하고 표는 B 세계에서 채점하게 되고, 그 차이가 알고리즘 차이로 읽힌다.
      *
-     * <p>볼록 판에서 본다 — β=1 인 판은 스냅샷 쪽이 좌결합 원형 분기를 타서 두 경로가 <b>다른 식</b>으로 같은
-     * 값을 내지만, β≠1 판은 두 경로가 같은 {@code Math.pow} 를 타므로 어긋나면 바로 벌어진다.</p>
+     * <p>볼록 판에서 본다 — β=1인 판은 스냅샷 쪽이 좌결합 원형 분기를 타서 두 경로가 <b>다른 식</b>으로 같은
+     * 값을 내지만, β≠1 판은 두 경로가 같은 {@code Math.pow}를 타므로 어긋나면 바로 벌어진다.</p>
      */
     @DisplayName("엔진에게 준 노드 스냅샷의 전력이 오라클의 같은 시각 값과 같다")
     @Test
@@ -3030,8 +3030,8 @@ class PlacementBenchmarkServiceTest {
      * 통과해 판이 무엇을 재는지가 흐려진다.
      *
      * <p>{@code est = idle − [ (cap−idle)(u − u^β) + δ·cap·u ] / (1−u)},
-     * {@code u} 는 그 시각의 사용률, {@code δ = 엔진이 믿는 정격/생성식 정격 − 1}. β=1·δ=0 이면 우변이
-     * 선언값 그대로가 되어 항등이 되고, 그 항등이 깨지는 판이 이 PR 이 만든 판이다.</p>
+     * {@code u}는 그 시각의 사용률, {@code δ = 엔진이 믿는 정격/생성식 정격 − 1}. β=1·δ=0이면 우변이
+     * 선언값 그대로가 되어 항등이 되고, 그 항등이 깨지는 판이 이 PR이 만든 판이다.</p>
      */
     @DisplayName("등록된 판 전 행·전 지점에서 깨우기 역산이 닫힌 형태와 같다")
     @Test
@@ -3071,7 +3071,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 지수가 1 이고 판이 준 정격이 생성식 정격과 같은 판에서는 역산이 <b>선언값을 정확히 되돌린다</b> —
+     * 지수가 1이고 판이 준 정격이 생성식 정격과 같은 판에서는 역산이 <b>선언값을 정확히 되돌린다</b> —
      * 대수적 항등이라 코드가 깨지지 않는 한 실패하지 않는다. 이 항등이 있는 판에서 격차가 줄어드는 것은
      * 상한이지 개선의 증거가 아니고, 그 사실을 응답의 생성식 문구가 함께 밝힌다.
      */
@@ -3094,7 +3094,7 @@ class PlacementBenchmarkServiceTest {
 
     /**
      * 볼록 판에서는 같은 역산이 <b>선언값보다 작다</b> — 엔진이 빈 노드를 실제보다 싸게 보고 더 자주 깨운다.
-     * 직전 PR 의 역산이 항등식이 아님을 숫자로 보이는 자리다.
+     * 직전 PR의 역산이 항등식이 아님을 숫자로 보이는 자리다.
      */
     @DisplayName("볼록 판에서는 역산이 선언된 유휴 전력보다 작다")
     @Test
@@ -3191,7 +3191,7 @@ class PlacementBenchmarkServiceTest {
     }
 
     /**
-     * 12지점에서 이 노드가 지나는 <b>최소 사용률</b>(%). 역산은 그 순간의 사용률에 걸린 값이고 {@code 1−u} 로
+     * 12지점에서 이 노드가 지나는 <b>최소 사용률</b>(%). 역산은 그 순간의 사용률에 걸린 값이고 {@code 1−u}로
      * 나누므로, 부등호가 깨졌을 때 어느 사용률에서 깨졌는지가 먼저 필요하다 — 실패 메시지에 함께 싣는다.
      */
     private static double minSweepCpu(SyntheticCluster cluster, String nodeId) {
@@ -3200,7 +3200,7 @@ class PlacementBenchmarkServiceTest {
                 .mapToDouble(t -> cluster.cpuUsage(n, t)).min().orElseThrow();
     }
 
-    /** 닫힌 형태 (β·δ 를 함께 넣은 역산). 테스트가 엔진 코드를 부르지 않고 판 파일 값만으로 다시 계산한다. */
+    /** 닫힌 형태 (β·δ를 함께 넣은 역산). 테스트가 엔진 코드를 부르지 않고 판 파일 값만으로 다시 계산한다. */
     private static double closedFormWakeup(SyntheticCluster cluster, SyntheticCluster.Node n, long t) {
         double cap = n.capacityWatts();
         double idle = n.idleWatts();
@@ -3258,7 +3258,7 @@ class PlacementBenchmarkServiceTest {
                         if (m.min() != null) flat.put(key + "min", m.min());
                         if (m.max() != null) flat.put(key + "max", m.max());
                         flat.put(key + "samples", (double) m.samples());
-                        // 지점별 값은 짝이 아닌 지점이 null 이라 그대로 넣으면 유한성 검사가 NPE 로 죽는다.
+                        // 지점별 값은 짝이 아닌 지점이 null이라 그대로 넣으면 유한성 검사가 NPE로 죽는다.
                         // 값이 있는 지점만 인덱스와 함께 넣어 두면 지점이 밀렸는지도 결정론 비교가 잡는다.
                         if (m.points() != null) {
                             for (int i = 0; i < m.points().size(); i++) {

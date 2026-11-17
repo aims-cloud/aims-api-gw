@@ -36,7 +36,7 @@ class ExporterInstanceCandidatesTest {
         List<String> nodes = List.of("a:9100", "b:9100", "c:9100", "d:9100", "e:9100");
         List<NodeExporterMapping> ledger = List.of(
                 row("a:9100", "gpu-a:9400", null),          // 원장으로 잇는다
-                row("d:9100", "c:9400", null));             // c 의 호스트명 시리즈를 d 가 원장으로 가리킨다 → c·d 충돌
+                row("d:9100", "c:9400", null));             // c의 호스트명 시리즈를 d가 원장으로 가리킨다 → c·d 충돌
         Map<String, Integer> dcgm = Map.of(
                 "gpu-a:9400", 4,   // LEDGER (a)
                 "b:9400", 2,       // HOSTNAME (b)

@@ -189,7 +189,7 @@ class ScheduleDraftDryRunTest {
         save("m2", 1, Workload.WorkloadPriority.NORMAL);
         ScheduleRequest form = form(PREFIX + "mt", null, 60.0);
 
-        // 저장 전을 먼저 돌린다 — 저장본 모의 실행은 HOT 에 냉각 대기를 걸어 뒤 호출을 바꾼다
+        // 저장 전을 먼저 돌린다 — 저장본 모의 실행은 HOT에 냉각 대기를 걸어 뒤 호출을 바꾼다
         ScheduleDryRunResponse draft = executionService.dryRunDraft(form);
         assertFalse(thermalModel.isCoolingDown(HOT));
         ScheduleDryRunResponse saved = executionService.dryRun(scheduleService.create(form).id());

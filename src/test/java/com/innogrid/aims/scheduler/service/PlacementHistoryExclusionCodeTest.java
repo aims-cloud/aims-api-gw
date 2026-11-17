@@ -30,7 +30,7 @@ import static org.mockito.Mockito.verify;
  * 배치 이력의 제외 사유 코드 집계 — 엔진이 돌려주는 후보별 제외 코드가 이력에 코드별 건수로 남는지.
  *
  * <p>스프링을 띄우지 않는다 — 저장소 둘은 대역으로 두고 엔진은 직접 만든다. 확인 대상은 응답이 아니라 <b>저장된 행</b>이므로
- * {@code save} 에 들어간 인자를 잡아서 본다({@code PlacementHistoryScoreTest} 와 같은 골격).</p>
+ * {@code save}에 들어간 인자를 잡아서 본다({@code PlacementHistoryScoreTest}와 같은 골격).</p>
  */
 class PlacementHistoryExclusionCodeTest {
 
@@ -54,13 +54,13 @@ class PlacementHistoryExclusionCodeTest {
         return captor.getValue();
     }
 
-    /** 운영 모양대로 — 문장은 한국어, 코드는 이름, details 는 가변 맵(엔진 후처리 규약). */
+    /** 운영 모양대로 — 문장은 한국어, 코드는 이름, details는 가변 맵(엔진 후처리 규약). */
     private static NodeScore score(String node, ExclusionReason code) {
         return new NodeScore("mdc-01", node, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, code == null,
                 code == null ? null : "시험용 제외 사유 " + code.name().toLowerCase(), code, new LinkedHashMap<>());
     }
 
-    /** GPU 없는 노드(자원 부족) + GPU 는 있으나 CPU 95%(기본 정책 상한 80% 초과) + 적격 노드 — 두 종류의 코드가 한 결정에 나온다. */
+    /** GPU 없는 노드(자원 부족) + GPU는 있으나 CPU 95%(기본 정책 상한 80% 초과) + 적격 노드 — 두 종류의 코드가 한 결정에 나온다. */
     private PlacementContext twoCodeContext() {
         NodeResource noGpu = new NodeResource("mdc-01", "nogpu", 32, 131072, 0, 1, 1, 0, 0, 0, 0, 0, 0);
         NodeResource hotCpu = new NodeResource("mdc-01", "hotcpu", 32, 131072, 4, 95, 10, 0, 0, 0, 0, 0, 0);

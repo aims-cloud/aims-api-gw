@@ -21,23 +21,23 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 /**
  * Quartz cron 문자열을 Spring {@link CronExpression} 의미로 옮겨 다음 실행 시각을 계산한다.
  *
- * <p><b>시간대</b> — cron 문자열에는 시간대 정보가 없다. 배포 VM 은 OS·DB 모두 UTC 라서
- * 그대로 두면 화면에서 "매일 02:00" 으로 만든 스케줄이 한국 시간 오전 11시에 돈다.
+ * <p><b>시간대</b> — cron 문자열에는 시간대 정보가 없다. 배포 VM은 OS·DB 모두 UTC라서
+ * 그대로 두면 화면에서 "매일 02:00"으로 만든 스케줄이 한국 시간 오전 11시에 돈다.
  * 그래서 <b>입력을 한국 시간(UTC+9)으로 가정</b>해 해석하고
- * ({@link SchedulerProperties#getTimezone()}), 결과는 UTC {@code OffsetDateTime} 으로 돌려준다.
- * 저장·응답은 전부 UTC 이며 표출 변환은 프런트가 한다.</p>
+ * ({@link SchedulerProperties#getTimezone()}), 결과는 UTC {@code OffsetDateTime}으로 돌려준다.
+ * 저장·응답은 전부 UTC이며 표출 변환은 프런트가 한다.</p>
  *
- * <p><b>내부에서만 {@code ZonedDateTime} 을 쓰는 이유</b> — 표면(입력·반환·저장)은 전부 UTC
- * {@code OffsetDateTime} 이고, {@code ZonedDateTime} 은 이 클래스 안에서 cron 을 진행시킬 때만 쓴다.
- * Spring 의 {@code CronExpression.next()} 는 넘겨받은 Temporal 자신의 규칙으로 필드를 올리므로,
- * 같은 지역 시각을 고정 오프셋으로 넣으면 시간대 전환 규칙이 사라진다. {@code Asia/Seoul} 은
+ * <p><b>내부에서만 {@code ZonedDateTime}을 쓰는 이유</b> — 표면(입력·반환·저장)은 전부 UTC
+ * {@code OffsetDateTime}이고, {@code ZonedDateTime}은 이 클래스 안에서 cron을 진행시킬 때만 쓴다.
+ * Spring의 {@code CronExpression.next()}는 넘겨받은 Temporal 자신의 규칙으로 필드를 올리므로,
+ * 같은 지역 시각을 고정 오프셋으로 넣으면 시간대 전환 규칙이 사라진다. {@code Asia/Seoul}은
  * 서머타임이 없어 결과가 같지만, 해석 시간대를 서머타임이 있는 지역으로 바꾸면 미리보기는
- * 커서를 이어 가므로 전환 이후 목록 전체가 한 시간 어긋난다. Spring 의 {@code CronTrigger} 도
- * {@code next()} 에 넘기기 전에 {@code ZonedDateTime} 으로 바꾼다.</p>
+ * 커서를 이어 가므로 전환 이후 목록 전체가 한 시간 어긋난다. Spring의 {@code CronTrigger}도
+ * {@code next()}에 넘기기 전에 {@code ZonedDateTime}으로 바꾼다.</p>
  *
  * <p><b>왜 요일 변환이 필요한가</b> — 프런트 도움말 모달은 Quartz 규약을 안내하는데 런타임은
- * Spring 이다. 요일 번호 규약이 서로 하나씩 어긋나고, 이 차이는 예외로 드러나지 않고
- * <b>조용히 다른 날 실행</b>되는 형태로 나타난다. 아래는 Spring 7.0.8 로 직접 확인한 값이다.</p>
+ * Spring이다. 요일 번호 규약이 서로 하나씩 어긋나고, 이 차이는 예외로 드러나지 않고
+ * <b>조용히 다른 날 실행</b>되는 형태로 나타난다. 아래는 Spring 7.0.8로 직접 확인한 값이다.</p>
  *
  * <pre>
  * 입력                        Quartz 의미        Spring 이 그대로 해석하면
@@ -55,7 +55,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
  * Spring {@code 0}=일 … {@code 6}=토). 요일 <b>이름</b>({@code MON}~{@code SUN})은 양쪽이
  * 같으므로 변환하지 않는다.</p>
  *
- * <p>지원하지 않는 표기는 조용히 무시하지 않고 400 으로 거부한다. 무시하면 사용자가 의도한
+ * <p>지원하지 않는 표기는 조용히 무시하지 않고 400으로 거부한다. 무시하면 사용자가 의도한
  * 것과 다른 시각에 실행되는데, 그 사실이 어디에도 드러나지 않기 때문이다.</p>
  */
 @Component
@@ -81,7 +81,7 @@ public class CronSupport {
         this.properties = properties;
     }
 
-    /** cron 해석에 쓰는 시간대. 저장·응답은 이 값과 무관하게 UTC 다. */
+    /** cron 해석에 쓰는 시간대. 저장·응답은 이 값과 무관하게 UTC다. */
     public ZoneId zone() {
         return ZoneId.of(properties.getTimezone());
     }
@@ -148,7 +148,7 @@ public class CronSupport {
     /**
      * 기준 시각 다음의 실행 시각. 없으면 {@code null}.
      *
-     * @param after 기준 시각(UTC). {@code null} 이면 현재
+     * @param after 기준 시각(UTC). {@code null}이면 현재
      */
     public OffsetDateTime nextRunAt(String quartzCron, OffsetDateTime after) {
         CronExpression parsed = parse(toSpringExpression(quartzCron), quartzCron);
@@ -193,7 +193,7 @@ public class CronSupport {
         if ("*".equals(token) || "?".equals(token) || WILDCARD_STEP.matcher(token).matches()) {
             return token;
         }
-        // Quartz 의 단독 L 은 "그 주의 마지막 날" = 토요일. Spring 은 앞에 요일이 있어야 한다.
+        // Quartz의 단독 L은 "그 주의 마지막 날" = 토요일. Spring은 앞에 요일이 있어야 한다.
         if ("L".equals(token)) {
             return "6";
         }
@@ -235,7 +235,7 @@ public class CronSupport {
         return String.valueOf(value - 1);
     }
 
-    /** Quartz 의 C(캘린더 기준)는 지원하지 않는다. 요일 이름에는 C 가 들어가지 않아 이 검사로 충분하다. */
+    /** Quartz의 C(캘린더 기준)는 지원하지 않는다. 요일 이름에는 C가 들어가지 않아 이 검사로 충분하다. */
     private boolean containsCalendarChar(String field) {
         return field.indexOf('C') >= 0 || field.indexOf('c') >= 0;
     }

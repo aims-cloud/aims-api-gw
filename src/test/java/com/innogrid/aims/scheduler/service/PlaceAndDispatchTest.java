@@ -23,8 +23,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@link PlaceAndDispatch} 의 예약·되돌림 순서와, 운영 코드에서 예약 되돌림({@link PlacementContext#unreserve})을 부르는 곳이
- * PlaceAndDispatch 뿐인지.
+ * {@link PlaceAndDispatch}의 예약·되돌림 순서와, 운영 코드에서 예약 되돌림({@link PlacementContext#unreserve})을 부르는 곳이
+ * PlaceAndDispatch뿐인지.
  *
  * <pre>
  * 노드      8코어·GPU 2·디스크 100GB 1대, CPU 10%
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * </pre>
  *
  * <p>스프링 컨텍스트 없이 돈다. 실행 루프·재생 수준의 동작은 DispatchRejectionReservationTest·
- * WorkloadChangeDuringRunTest·RunInputReplayTest 가 확인한다.</p>
+ * WorkloadChangeDuringRunTest·RunInputReplayTest가 확인한다.</p>
  */
 class PlaceAndDispatchTest {
 

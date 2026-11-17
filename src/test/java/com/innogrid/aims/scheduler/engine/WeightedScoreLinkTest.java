@@ -20,11 +20,11 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * weighted 엔진의 네트워크 점수가 게이트 on 에서만 링크 품질을 섞는가.
+ * weighted 엔진의 네트워크 점수가 게이트 on에서만 링크 품질을 섞는가.
  *
- * <p>자원이 같은 노드 4대(MDC a·b·c·d), 데이터는 a 에. 링크 a-b 20ms UP(0.714) · a-c 20ms DEGRADED(0.588) ·
- * a-d DOWN. 게이트 off 면 4대 점수가 같고 {@code 링크품질} 키가 없다. 게이트 on 이면 a > b > c 로 갈리고
- * d 는 C5 로 제외된다. 트래픽이 0 이라 local=1.0, linkWeight 0.5 → net = 0.5 + 0.5×link.</p>
+ * <p>자원이 같은 노드 4대(MDC a·b·c·d), 데이터는 a에. 링크 a-b 20ms UP(0.714) · a-c 20ms DEGRADED(0.588) ·
+ * a-d DOWN. 게이트 off면 4대 점수가 같고 {@code 링크품질} 키가 없다. 게이트 on이면 a > b > c로 갈리고
+ * d는 C5로 제외된다. 트래픽이 0이라 local=1.0, linkWeight 0.5 → net = 0.5 + 0.5×link.</p>
  */
 class WeightedScoreLinkTest {
 
@@ -100,7 +100,7 @@ class WeightedScoreLinkTest {
     @DisplayName("데이터 MDC 가 원장에 없으면 모든 원격 후보가 0_5 로 같고 제외되지 않는다")
     @Test
     void unregistered_data_mdc_scores_all_remote_0_5() {
-        Workload w = workload("z");   // z 는 원장에 없다 — 후보 a·b·c·d 전부 원격이고 전부 미등록
+        Workload w = workload("z");   // z는 원장에 없다 — 후보 a·b·c·d 전부 원격이고 전부 미등록
         SchedulingResult r = scheduler.schedule(w, ctx(true));
         Map<String, NodeScore> by = byMdc(r);
 

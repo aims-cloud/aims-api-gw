@@ -14,8 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 /**
  * 열관성 계수 설정의 음수 보정 — setter 경계와 실제 바인딩 경로 둘 다.
  *
- * <p>바인딩 테스트는 {@code @ConfigurationProperties} 와 같은 JavaBean 바인딩({@link Binder} · 기존 인스턴스에 바인딩)으로
- * 설정 키가 setter 를 지나 잘리는 것을 고정한다 — 스프링 컨텍스트 없이 돈다.</p>
+ * <p>바인딩 테스트는 {@code @ConfigurationProperties}와 같은 JavaBean 바인딩({@link Binder} · 기존 인스턴스에 바인딩)으로
+ * 설정 키가 setter를 지나 잘리는 것을 고정한다 — 스프링 컨텍스트 없이 돈다.</p>
  */
 class SchedulerPropertiesThermalGuardTest {
 

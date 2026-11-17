@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 익스포터 대응 원장 API 계약 — 11필드, 검증 400, 중복·공유 instance 409, 부분 수정, 미인증 403, 후보 6필드.
  *
  * <p>원장이 수집 결과에 닿는지는 여기서 보지 않는다 — 이 컨텍스트는 실 게이트웨이라 노드가 없다.
- * {@code ExporterMappingCollectionTest} 가 모의 클러스터로 본다.</p>
+ * {@code ExporterMappingCollectionTest}가 모의 클러스터로 본다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -161,7 +161,7 @@ class NodeExporterMappingApiTest {
 
         assertEquals(CANDIDATE_FIELDS, new TreeSet<>(d.propertyNames()));
         assertTrue(d.get("dcgm").isArray() && d.get("ipmi").isArray() && d.get("nodeInstances").isArray());
-        // 이 컨텍스트는 실 게이트웨이(도달 불가) — DCGM 질의가 답하지 않으면(unavailable) 원장값을 오타로 몰 수 없어 ledgerOnly 가 비고,
+        // 이 컨텍스트는 실 게이트웨이(도달 불가) — DCGM 질의가 답하지 않으면(unavailable) 원장값을 오타로 몰 수 없어 ledgerOnly가 비고,
         // 답했다면(빈 목록) 저장소에 없는 원장값이 '원장에만' 으로 보인다. 어느 쪽이든 서로 어긋나면 안 된다
         List<String> unavailable = new java.util.ArrayList<>();
         d.get("unavailable").forEach(n -> unavailable.add(n.asString()));

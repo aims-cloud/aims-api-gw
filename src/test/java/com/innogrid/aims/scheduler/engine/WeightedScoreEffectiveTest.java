@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * weighted 엔진의 점수가 예약분(실효값)을 반영하는지.
  *
- * <p>배포 VM 실증(2026-09-02): 2코어 노드에 1코어를 예약한 뒤에도 dryRun 의 cpu여유가
- * 0.8733 그대로였다. 같은 요청의 제약 검사는 "가용 CPU 0.7" 로 예약을 봤다 — 제약과 점수가
+ * <p>배포 VM 실증(2026-09-02): 2코어 노드에 1코어를 예약한 뒤에도 dryRun의 cpu여유가
+ * 0.8733 그대로였다. 같은 요청의 제약 검사는 "가용 CPU 0.7"로 예약을 봤다 — 제약과 점수가
  * 다른 세상을 보고 있었다. 이 클래스는 그 실증 수치를 그대로 재현해 고정한다.</p>
  */
 class WeightedScoreEffectiveTest {
@@ -90,7 +90,7 @@ class WeightedScoreEffectiveTest {
     @DisplayName("다건 연속 배치가 한 노드로 몰리지 않는다")
     @Test
     void placements_do_not_pile_up() {
-        // 동일 사양 3대에 2코어 워크로드 6건 — 실측만 보면 [A,A,A,A,A,A] 가 된다
+        // 동일 사양 3대에 2코어 워크로드 6건 — 실측만 보면 [A,A,A,A,A,A]가 된다
         List<NodeResource> nodes = List.of(
                 node("A", 8, 16384, 10, 20, 200, 500, 50),
                 node("B", 8, 16384, 10, 20, 200, 500, 50),

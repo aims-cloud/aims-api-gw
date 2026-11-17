@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SyntheticModeInvariantTest {
 
-    private static final long PERIOD_SECONDS = 3600;   // synthetic-cluster.yml 의 periodMinutes: 60
+    private static final long PERIOD_SECONDS = 3600;   // synthetic-cluster.yml의 periodMinutes: 60
     private static final long STEP_SECONDS = 30;       // 120 표본
     private static final long BASE_EPOCH = 1_800_000_000L;
 
@@ -101,7 +101,7 @@ class SyntheticModeInvariantTest {
         }
         assertTrue(lowest.size() > 1, "최저 PEI 노드가 하나뿐이면 옛 단언을 되살려도 되지만, 실제로는 여럿이다: " + lowest);
         assertTrue(lowest.contains(IDLE_HIGH_POWER), "유휴 고전력 노드는 그중 하나여야 한다: " + lowest);
-        // CPU 가 0 에 가까워지는 순간의 노드는 PEI 도 0 에 가까워 최저가 된다 — "일을 안 하는 것"이지 "비효율"이 아니다.
+        // CPU가 0에 가까워지는 순간의 노드는 PEI도 0에 가까워 최저가 된다 — "일을 안 하는 것"이지 "비효율"이 아니다.
         assertTrue(lowest.stream().anyMatch(id -> !id.equals(IDLE_HIGH_POWER)), "다른 노드도 최저가 되는 순간이 있다: " + lowest);
     }
 }

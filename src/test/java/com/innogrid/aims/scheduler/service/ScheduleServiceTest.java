@@ -48,12 +48,12 @@ class ScheduleServiceTest {
     // ── 컬럼 길이 ────────────────────────────────────────
 
     /**
-     * 컬럼 길이를 넘는 값이 <b>400 으로</b> 막히는지.
+     * 컬럼 길이를 넘는 값이 <b>400으로</b> 막히는지.
      *
-     * <p>검증이 없으면 INSERT 가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 배포 환경에서는
-     * {@code /error} 재요청이 인증에 막혀 클라이언트가 <b>403(본문 없음)</b> 을 받는다(실측). 여기(H2)에서는
-     * {@code DataIntegrityViolationException} 이 그대로 튀어나오므로 <b>MockMvc 가 아니라 서비스 계층</b>에서
-     * 확인해야 한다 — MockMvc 는 {@code perform()} 자체가 던져 확인에 도달하지 못한다.</p>
+     * <p>검증이 없으면 INSERT가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 배포 환경에서는
+     * {@code /error} 재요청이 인증에 막혀 클라이언트가 <b>403(본문 없음)</b>을 받는다(실측). 여기(H2)에서는
+     * {@code DataIntegrityViolationException}이 그대로 튀어나오므로 <b>MockMvc가 아니라 서비스 계층</b>에서
+     * 확인해야 한다 — MockMvc는 {@code perform()} 자체가 던져 확인에 도달하지 못한다.</p>
      */
     @DisplayName("스케줄명이 컬럼 길이를 넘으면 400 이고 사유에 현재 길이가 있다")
     @Test
@@ -108,8 +108,8 @@ class ScheduleServiceTest {
     }
 
     /**
-     * 공백만 있는 엔진 이름은 {@code validateEngine} 의 {@code isBlank()} 를 그대로 통과해 저장됐다.
-     * PostgreSQL 이 {@code varchar} 의 뒤쪽 공백을 잘라 받아 오류도 나지 않았다(실측: 200 으로 생성됨).
+     * 공백만 있는 엔진 이름은 {@code validateEngine}의 {@code isBlank()}를 그대로 통과해 저장됐다.
+     * PostgreSQL이 {@code varchar}의 뒤쪽 공백을 잘라 받아 오류도 나지 않았다(실측: 200으로 생성됨).
      * 공백을 미지정(null)으로 정규화해 실행 시점의 "공백 = 미지정" 규약과 결과를 맞춘다.
      */
     @DisplayName("공백만 있는 엔진·설명은 미지정으로 정규화된다 — 공백이 그대로 저장되지 않는다")
@@ -376,7 +376,7 @@ class ScheduleServiceTest {
 
     /**
      * 상한을 받는 판으로 행 수가 상한과 같을 때와 하나 넘을 때를 본다. 상한과 같은 행 수면 첫 쪽이 꽉 차서
-     * Spring Data 가 건수 질의를 실제로 돌린다(덜 차면 건수 질의를 건너뛰어 비교가 늘 통과한다).
+     * Spring Data가 건수 질의를 실제로 돌린다(덜 차면 건수 질의를 건너뛰어 비교가 늘 통과한다).
      */
     @DisplayName("내보내기는 상한과 같은 행 수까지 파일로 주고 하나라도 넘으면 실제 건수를 담은 400 이다")
     @Test
@@ -422,7 +422,7 @@ class ScheduleServiceTest {
         Long a = scheduleService.create(request("a", "0 0 2 * * ?")).id();
         Long b = scheduleService.create(request("b", "0 0 2 * * ?")).id();
 
-        scheduleService.delete(List.of(a, b, 99999L));   // 없는 ID 는 무시한다
+        scheduleService.delete(List.of(a, b, 99999L));   // 없는 ID는 무시한다
 
         assertEquals(0, scheduleRepository.count());
     }
@@ -449,7 +449,7 @@ class ScheduleServiceTest {
                 preview.nextRuns().get(0).localTime());
     }
 
-    /** 업무 키 r1~r5 · 이름 가~마 · 종류 GPU · NPU · CONTAINER · VM · 없음(키와 이름에는 이 테스트의 검색어가 들어 있지 않다) · NPU 만 사용 안 함. */
+    /** 업무 키 r1~r5 · 이름 가~마 · 종류 GPU · NPU · CONTAINER · VM · 없음(키와 이름에는 이 테스트의 검색어가 들어 있지 않다) · NPU만 사용 안 함. */
     private void seedResourceTypes() {
         Workload.ResourceType[] types = {Workload.ResourceType.GPU, Workload.ResourceType.NPU,
                 Workload.ResourceType.CONTAINER, Workload.ResourceType.VM, null};

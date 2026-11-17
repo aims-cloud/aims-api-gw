@@ -31,12 +31,12 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  * 판이다. 셋 다 주 결과판과 <b>노드 구성이 같아</b>(그 값들을 한 글자도 바꾸지 않았다) 판 사이의 차이를
  * 요인으로 읽을 수 있다 — 모집단이 다르면 그 읽기가 성립하지 않는다.</p>
  *
- * <p>{@link #digest(String)} 가 파일 내용(개행을 LF 로 정규화)의 SHA-256 앞 12자를 준다. 응답이 자기 입력을 지목하게 하려는
+ * <p>{@link #digest(String)}가 파일 내용(개행을 LF로 정규화)의 SHA-256 앞 12자를 준다. 응답이 자기 입력을 지목하게 하려는
  * 것이다 — 표에 적힌 숫자가 어느 파일에서 나왔는지 사람이 대조할 수 없으면, 파일을 고친 뒤 같은 표를
  * 다시 내놓아도 아무도 알 수 없다.</p>
  *
- * <p>지연 로딩 + 캐시 — 기동 시 파일을 읽지 않는다. 이 빈은 벤치마크 API 를 부를 때만 파일을 만지므로,
- * 운영 경로(스케줄링·수집)는 이 판들의 존재를 모른 채 돌아간다. {@code SchedulingEngine} 을 구현하지
+ * <p>지연 로딩 + 캐시 — 기동 시 파일을 읽지 않는다. 이 빈은 벤치마크 API를 부를 때만 파일을 만지므로,
+ * 운영 경로(스케줄링·수집)는 이 판들의 존재를 모른 채 돌아간다. {@code SchedulingEngine}을 구현하지
  * 않으므로 엔진 레지스트리에도 잡히지 않는다.</p>
  */
 @Component
@@ -60,7 +60,7 @@ public class BenchmarkClusters {
     /** 복합판 — 볼록 생성식과 정격 어긋남이 함께 걸린 판. 판정 셀이 여기 있다. */
     public static final String CONVEX_MISRATED = "convex-misrated";
 
-    /** 링크 판 — 주 결과판 노드 블록 + links 절 + 데이터 MDC 순환 배정. {@code BenchmarkRules.LINK_BOARD} 와 같은 문자열. */
+    /** 링크 판 — 주 결과판 노드 블록 + links 절 + 데이터 MDC 순환 배정. {@code BenchmarkRules.LINK_BOARD}와 같은 문자열. */
     public static final String LINK = "link";
 
     /** 주 결과판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
@@ -69,7 +69,7 @@ public class BenchmarkClusters {
     /** 판정판의 위상 독립 짝 — 노드 블록 동일, {@code phaseMode: independent}·{@code seeds} 3. */
     public static final String CONVEX_MISRATED_INDEPENDENT = "convex-misrated-independent";
 
-    /** 오목 생성식판 — 주 결과판과 생성식 지수(0.625 = 1/1.6)만 다른 판. {@code BenchmarkRules.CONCAVE_BOARD} 와 같은 문자열. */
+    /** 오목 생성식판 — 주 결과판과 생성식 지수(0.625 = 1/1.6)만 다른 판. {@code BenchmarkRules.CONCAVE_BOARD}와 같은 문자열. */
     public static final String CONCAVE = "concave";
 
     /** 다이제스트로 남길 자릿수. 12자면 등록된 판을 구분하기에 충분하고 표에 그대로 실을 수 있다. */
@@ -79,7 +79,7 @@ public class BenchmarkClusters {
      * 판 등록부 — <b>한 곳</b>. 순서·파일·역할이 한 레코드에 있어 어긋날 수 없다.
      *
      * <p>예전에는 순서 목록·파일 맵·역할 맵 셋으로 갈라져 있어 판을 더할 때 한 곳만 고치면 판이 응답에서 조용히 빠지거나
-     * 역할이 null 로 나갔고, 그 실수를 클래스 적재 시점의 집합 비교 가드가 잡았다. 등록부를 하나로 접으면 그 불일치가
+     * 역할이 null로 나갔고, 그 실수를 클래스 적재 시점의 집합 비교 가드가 잡았다. 등록부를 하나로 접으면 그 불일치가
      * <b>타입상 불가능</b>해져 가드가 필요 없다 — 가드를 지운 것이 아니라 가드가 필요 없는 구조로 대체했다.
      * 목록의 순서가 곧 응답의 판 순서다. 표의 열 순서가 호출마다 달라지면 두 실행 결과를 눈으로 대조할 수 없다.</p>
      *
@@ -156,7 +156,7 @@ public class BenchmarkClusters {
         return ORDER;
     }
 
-    /** 판 하나. 모르는 {@code boardId} 는 {@link IllegalArgumentException}. */
+    /** 판 하나. 모르는 {@code boardId}는 {@link IllegalArgumentException}. */
     public SyntheticCluster get(String boardId) {
         return loaded.computeIfAbsent(require(boardId), id -> SyntheticCluster.load(BY_ID.get(id).location()));
     }
@@ -169,10 +169,10 @@ public class BenchmarkClusters {
     /**
      * 파일 내용의 SHA-256 앞 12자 — 응답이 자기 입력을 지목한다.
      *
-     * <p><b>개행을 LF 로 정규화한 뒤</b> 해시한다. 저장소는 LF 로 보관하지만 {@code core.autocrlf=true} 인 Windows
-     * 체크아웃은 작업 트리와 jar 안의 yml 을 CRLF 로 만들어, 정규화가 없으면 같은 판이 빌드 OS 에 따라 다른
+     * <p><b>개행을 LF로 정규화한 뒤</b> 해시한다. 저장소는 LF로 보관하지만 {@code core.autocrlf=true}인 Windows
+     * 체크아웃은 작업 트리와 jar 안의 yml을 CRLF로 만들어, 정규화가 없으면 같은 판이 빌드 OS에 따라 다른
      * 다이제스트를 냈다(main: Windows 빌드 {@code add880e1f395} ↔ LF {@code fb011848258b}). 정규화한 값은 저장소
-     * 바이트의 해시와 같으므로 LF 로 빌드한 기록과는 그대로 이어진다. {@code .gitattributes} 도 같은 경로를 LF 로
+     * 바이트의 해시와 같으므로 LF로 빌드한 기록과는 그대로 이어진다. {@code .gitattributes}도 같은 경로를 LF로
      * 고정하지만, 다이제스트는 체크아웃 설정에 기대지 않고 코드에서 보장한다.</p>
      */
     public String digest(String boardId) {
@@ -196,10 +196,10 @@ public class BenchmarkClusters {
     }
 
     /**
-     * 판 파일 내용의 다이제스트 — 개행을 LF 로 정규화한 UTF-8 바이트의 해시. 테스트가 같은 식으로 기대값을 만든다.
+     * 판 파일 내용의 다이제스트 — 개행을 LF로 정규화한 UTF-8 바이트의 해시. 테스트가 같은 식으로 기대값을 만든다.
      *
      * <p><b>정규화 대상은 {@code \r\n} 개행만이다.</b> UTF-8 BOM·단독 {@code \r}·파일 끝 개행 유무는 내용의 일부로
-     * 해시된다 — 등록된 판 파일 전부는 BOM 없음·단독 CR 없음·끝 개행 1개다(수는 등록부가 진실이라 여기 적지 않는다). BOM 을 붙이는 편집기로 저장하면 값이
+     * 해시된다 — 등록된 판 파일 전부는 BOM 없음·단독 CR 없음·끝 개행 1개다(수는 등록부가 진실이라 여기 적지 않는다). BOM을 붙이는 편집기로 저장하면 값이
      * 조용히 바뀌므로 리터럴 테스트가 그것을 잡는다.</p>
      */
     public static String digestOfContent(byte[] fileBytes) {
@@ -221,7 +221,7 @@ public class BenchmarkClusters {
             byte[] hash = MessageDigest.getInstance("SHA-256").digest(bytes);
             return HexFormat.of().formatHex(hash).substring(0, DIGEST_LENGTH);
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 을 쓸 수 없습니다", e);   // JDK 가 늘 제공한다
+            throw new IllegalStateException("SHA-256 을 쓸 수 없습니다", e);   // JDK가 늘 제공한다
         }
     }
 }

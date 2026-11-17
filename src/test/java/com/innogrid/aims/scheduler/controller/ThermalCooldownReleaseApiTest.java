@@ -41,9 +41,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 냉각 대기 해제 API — 실제 평가 경로(단건 모의 배치)로 건 대기를 풀고, 대기가 없거나 만료만 남은 노드는 404 이며,
+ * 냉각 대기 해제 API — 실제 평가 경로(단건 모의 배치)로 건 대기를 풀고, 대기가 없거나 만료만 남은 노드는 404이며,
  * 해제 뒤에도 뜨거운 노드는 다음 평가가 온도 초과로 다시 빼고 대기를 다시 건다.
- * 노드 id 에 점과 콜론을 넣어 경로 변수로 그대로 닿는지도 함께 본다.
+ * 노드 id에 점과 콜론을 넣어 경로 변수로 그대로 닿는지도 함께 본다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

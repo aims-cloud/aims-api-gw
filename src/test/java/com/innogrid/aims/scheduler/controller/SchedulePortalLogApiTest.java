@@ -51,15 +51,15 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 스케줄 화면 API 의 포털 로그 — 붙인 열 곳(목록·상세·실행 이력·리소스 종류 조회와 목록·실행 이력 내보내기 ACCESS, 생성·수정·삭제 AUDIT,
+ * 스케줄 화면 API의 포털 로그 — 붙인 열 곳(목록·상세·실행 이력·리소스 종류 조회와 목록·실행 이력 내보내기 ACCESS, 생성·수정·삭제 AUDIT,
  * 즉시 실행 ACTION)이
  * 유형·작업·내용·결과·연결을 그대로 남기고, 미리보기·모의 실행·실행 주기 검증·실행 상세·실행 재생은 남기지 않는지 본다.
  *
- * <p>행은 요청마다 단 {@code X-Request-Id} 로 고른다. 공유 H2 에 다른 테스트가 남긴 행이나 요청 ID 가 없는 SYSTEM 행이 있어도
- * 섞이지 않는다. 형식이 어긋난 요청 ID 는 필터가 조용히 UUID 로 바꾸므로, 응답 헤더가 보낸 값 그대로인지 먼저 본다.</p>
+ * <p>행은 요청마다 단 {@code X-Request-Id}로 고른다. 공유 H2에 다른 테스트가 남긴 행이나 요청 ID가 없는 SYSTEM 행이 있어도
+ * 섞이지 않는다. 형식이 어긋난 요청 ID는 필터가 조용히 UUID로 바꾸므로, 응답 헤더가 보낸 값 그대로인지 먼저 본다.</p>
  *
  * <p>수집기는 빈 스냅샷(노드 0)으로 둔다. 실제 수집기는 메트릭 질의 실패를 SYSTEM 행으로 남기고, 스텁하지 않은 가짜 빈은
- * 대상이 있을 때 null 스냅샷으로 실행을 500 으로 끝낸다. 포털 로그 쪽 테스트 지원 클래스는 수집기가 실제 객체라 상속하지 않는다.</p>
+ * 대상이 있을 때 null 스냅샷으로 실행을 500으로 끝낸다. 포털 로그 쪽 테스트 지원 클래스는 수집기가 실제 객체라 상속하지 않는다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -330,7 +330,7 @@ class SchedulePortalLogApiTest {
         assertEquals(data.get("runId").asString(), row.getRefId());
     }
 
-    /** 요청 ID 를 달아 보내고 응답 헤더가 보낸 값 그대로인지 먼저 본다(형식이 어긋나면 필터가 UUID 로 바꿔 행을 못 찾는다) */
+    /** 요청 ID를 달아 보내고 응답 헤더가 보낸 값 그대로인지 먼저 본다(형식이 어긋나면 필터가 UUID로 바꿔 행을 못 찾는다) */
     private String send(MockHttpServletRequestBuilder request, String requestId, int expectedStatus) throws Exception {
         return mockMvc.perform(request.header(RequestIdFilter.HEADER, requestId))
                 .andExpect(status().is(expectedStatus))

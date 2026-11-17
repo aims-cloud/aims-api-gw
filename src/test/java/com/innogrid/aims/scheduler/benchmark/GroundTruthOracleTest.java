@@ -29,7 +29,7 @@ class GroundTruthOracleTest {
 
     private static final double EPS = 1e-9;
 
-    /** 엔진 기본 유휴 비율 — {@code SchedulerProperties.Power.idleRatio} 의 기본값. */
+    /** 엔진 기본 유휴 비율 — {@code SchedulerProperties.Power.idleRatio}의 기본값. */
     private static final double ENGINE_IDLE_RATIO = 0.3;
 
     private final GroundTruthOracle oracle =
@@ -71,9 +71,9 @@ class GroundTruthOracleTest {
     }
 
     /**
-     * 엔진 상승 식은 온도 눈금의 <b>원점</b>에 의존한다 — 물리적으로 같은 상태를 ℃ 와 K 로 넣으면 다른 상승이 나온다.
+     * 엔진 상승 식은 온도 눈금의 <b>원점</b>에 의존한다 — 물리적으로 같은 상태를 ℃와 K로 넣으면 다른 상승이 나온다.
      * 이것이 이 표가 정당하게 주장할 수 있는 유일한 문장이고, 생성식과 무관하게 엔진 식만으로 성립한다.
-     * "엔진이 N배 과소평가"는 여기서 주장하지 않는다: ℃ 로 재면 엔진이 생성식보다 작고 K 로 재면 크다 —
+     * "엔진이 N배 과소평가"는 여기서 주장하지 않는다: ℃로 재면 엔진이 생성식보다 작고 K로 재면 크다 —
      * 배수와 부호가 단위 선택에 달려 있다.
      */
     @DisplayName("같은 엔진 식이 섭씨와 켈빈에서 다른 상승을 내고, 생성식과의 대소는 눈금에 따라 뒤집힌다")

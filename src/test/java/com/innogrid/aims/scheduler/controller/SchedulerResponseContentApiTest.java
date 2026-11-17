@@ -242,7 +242,7 @@ class SchedulerResponseContentApiTest {
             assertEquals(0, policyRepository.count(), "읽기 진단은 정책 행을 만들지 않는다");
             assertTrue(policyRepository.findByName(SchedulingService.DEFAULT_POLICY_NAME).isEmpty(), "default 행도 만들지 않는다");
         } finally {
-            // 지운 정책을 이름·설명·종류·활성 상태로 되돌린다(id 는 새로 매김 · 나머지 값은 기본값 — PolicyRulesScenarioTest.restore() 와 같은 방식)
+            // 지운 정책을 이름·설명·종류·활성 상태로 되돌린다(id는 새로 매김 · 나머지 값은 기본값 — PolicyRulesScenarioTest.restore()와 같은 방식)
             policyRepository.deleteAll();
             for (SchedulingPolicy p : snapshot) {
                 SchedulingPolicy copy = new SchedulingPolicy(p.getName(), p.getDescription());

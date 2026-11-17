@@ -39,8 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>합계와 페이징은 같은 조건식을 쓴다 — 그래서 "응답의 창을 그대로 넘긴 같은 필터의 {@code exclusionCode=CODE} 총건수 ==
  * {@code codes[CODE].decisions}" 가 이 스위트의 오라클이다. 형식은 깨졌지만 코드 토큰은 든 행은 페이징(LIKE)에는 걸리고 합계에서는
- * {@code skipped} 로 빠지므로 그 차이도 함께 고정한다. 시드는 이 테스트 전용 워크로드 id 로만 심고, {@code createdAt} 은
- * {@code @PrePersist} 가 덮어쓰므로 창 테스트는 JPQL 일괄 갱신으로 과거로 옮긴다.</p>
+ * {@code skipped}로 빠지므로 그 차이도 함께 고정한다. 시드는 이 테스트 전용 워크로드 id로만 심고, {@code createdAt}은
+ * {@code @PrePersist}가 덮어쓰므로 창 테스트는 JPQL 일괄 갱신으로 과거로 옮긴다.</p>
  *
  * <p>시드는 심은 뒤 모두 1초 전으로 옮긴다 — 기본 창의 끝이 조회 시각이고 끝은 포함하지 않으므로, 심은 시각이 조회와 같은 시계
  * 눈금에 걸리면 마지막 행이 합계에서 빠진다(결정 수 7 대신 6). 1초보다 크게 옮기면 기본 창 끝을 몇십 초 당기는 결함을 기본 창
@@ -82,7 +82,7 @@ class HistoryExclusionSummaryApiTest {
         save("hs-empty", true, "{}");                                    // 운영 경로는 만들지 않지만 열이 평문이라 심을 수 있다
         save("hs-te", false, "{\"TEMPERATURE_EXCEEDED\":1}");
         save("hs-broken", false, "not-json");                            // 토큰 없음 — 페이징에도 안 걸린다
-        save("hs-broken-token", false, "{\"TEMPERATURE_EXCEEDED\":x}");   // 토큰 있음 — 페이징 LIKE 에는 걸린다
+        save("hs-broken-token", false, "{\"TEMPERATURE_EXCEEDED\":x}");   // 토큰 있음 — 페이징 LIKE에는 걸린다
         seededAt = OffsetDateTime.now();
         for (long id : seeded) backdate(id, seededAt.minus(SEEDED_BEFORE));
     }
@@ -140,7 +140,7 @@ class HistoryExclusionSummaryApiTest {
     @Test
     void summary_default_window_filters_and_echoes_bounds() throws Exception {
         OffsetDateTime now = OffsetDateTime.now();
-        backdate(noneId, now.minusDays(31));   // hs-none 을 31일 전으로 — 기본 창 밖
+        backdate(noneId, now.minusDays(31));   // hs-none을 31일 전으로 — 기본 창 밖
 
         JsonNode d = summary("workloadId", W);
         OffsetDateTime from = OffsetDateTime.parse(d.get("from").asString());
@@ -167,7 +167,7 @@ class HistoryExclusionSummaryApiTest {
     @Test
     void window_is_half_open_for_summary_and_page() throws Exception {
         OffsetDateTime t = OffsetDateTime.parse("2026-01-01T00:00:00Z");
-        backdate(ir2Id, t);   // hs-ir2 를 초 단위 고정 시각으로
+        backdate(ir2Id, t);   // hs-ir2를 초 단위 고정 시각으로
         String before = t.minusSeconds(1).toString(), at = t.toString(), after = t.plusSeconds(1).toString();
 
         assertEquals(1, summary("workloadId", W, "from", at, "to", after).get("decisions").asLong(), "from 과 같은 시각은 포함");
@@ -227,7 +227,7 @@ class HistoryExclusionSummaryApiTest {
         return id;
     }
 
-    /** {@code @PrePersist} 가 덮어쓰는 {@code createdAt} 을 JPQL 일괄 갱신으로 옮긴다(갱신은 콜백을 거치지 않는다). */
+    /** {@code @PrePersist}가 덮어쓰는 {@code createdAt}을 JPQL 일괄 갱신으로 옮긴다(갱신은 콜백을 거치지 않는다). */
     private void backdate(long id, OffsetDateTime at) {
         tx.executeWithoutResult(s -> em.createQuery("update SchedulingHistory h set h.createdAt = :t where h.id = :id")
                 .setParameter("t", at).setParameter("id", id).executeUpdate());
@@ -239,7 +239,7 @@ class HistoryExclusionSummaryApiTest {
         return data(req);
     }
 
-    /** 이 테스트 워크로드에 코드·창 필터(와 추가 파라미터 쌍)를 건 페이징 총건수 — null 인 인자는 붙이지 않는다. */
+    /** 이 테스트 워크로드에 코드·창 필터(와 추가 파라미터 쌍)를 건 페이징 총건수 — null인 인자는 붙이지 않는다. */
     private long pageTotal(String code, String from, String to, String... extraPairs) throws Exception {
         var req = get(PAGE).param("size", "1").param("workloadId", W);
         if (code != null) req = req.param("exclusionCode", code);

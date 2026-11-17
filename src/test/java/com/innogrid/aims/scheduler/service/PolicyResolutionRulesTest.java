@@ -15,10 +15,10 @@ import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 활성 정책 선택 규칙 — 둘 이상이면 이름순으로 결정적, 활성이 없으면 {@code default} 를 <b>다시 저장하지 않는다</b>.
+ * 활성 정책 선택 규칙 — 둘 이상이면 이름순으로 결정적, 활성이 없으면 {@code default}를 <b>다시 저장하지 않는다</b>.
  *
- * <p>예전 {@code resolvePolicy} 는 공통 활성이 없으면 {@code new SchedulingPolicy("default")} 를 저장했다. 이름이 유니크라
- * 비활성 {@code default} 가 이미 있으면 유니크 위반으로 배치 경로 전체가 500 이었다(2026-09-02 점검).</p>
+ * <p>예전 {@code resolvePolicy}는 공통 활성이 없으면 {@code new SchedulingPolicy("default")}를 저장했다. 이름이 유니크라
+ * 비활성 {@code default}가 이미 있으면 유니크 위반으로 배치 경로 전체가 500이었다(2026-09-02 점검).</p>
  */
 @SpringBootTest
 @Transactional
@@ -29,7 +29,7 @@ class PolicyResolutionRulesTest {
 
     @BeforeEach
     void clean() {
-        // 트랜잭션 안에서는 Hibernate 가 INSERT 를 DELETE 보다 먼저 내보낸다. 다른 테스트가 남긴 "default" 행이 있으면
+        // 트랜잭션 안에서는 Hibernate가 INSERT를 DELETE보다 먼저 내보낸다. 다른 테스트가 남긴 "default" 행이 있으면
         // 아래 테스트의 같은 이름 저장이 삭제보다 먼저 실행되어 유니크 위반이 나므로, 삭제를 즉시 반영한다.
         repository.deleteAll();
         repository.flush();

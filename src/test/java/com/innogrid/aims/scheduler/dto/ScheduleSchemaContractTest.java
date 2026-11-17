@@ -21,14 +21,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 스케줄 화면 DTO 의 <b>설명·예시·필수 표기가 코드와 갈리지 않는지</b> — 컨텍스트를 띄우지 않고 반사로만 본다.
+ * 스케줄 화면 DTO의 <b>설명·예시·필수 표기가 코드와 갈리지 않는지</b> — 컨텍스트를 띄우지 않고 반사로만 본다.
  *
- * <p>이 대상 record 는 프런트가 문자 그대로 읽는 계약이다. "설명이 있는지" 만 보는 검사는 한 단어로도
+ * <p>이 대상 record는 프런트가 문자 그대로 읽는 계약이다. "설명이 있는지"만 보는 검사는 한 단어로도
  * 통과하므로, 무게는 예시·허용값·필수 표기를 <b>코드의 사실과 대조</b>하는 쪽에 둔다 — 스케줄 ID 예시는
  * 서버 정규식에 맞아야 하고, cron 예시는 서버 검증을 통과해야 하며, 상태 허용값은 전이표가 실제로 받는
- * 값과 같아야 한다. 어느 하나가 갈리면 문서가 서버보다 넓거나 좁아져 프런트는 400 을 만난다.</p>
+ * 값과 같아야 한다. 어느 하나가 갈리면 문서가 서버보다 넓거나 좁아져 프런트는 400을 만난다.</p>
  *
- * <p>대상은 리터럴로 적는다. 새 DTO 를 이 계약에 편입하는 것은 결정이라 명시가 맞다.</p>
+ * <p>대상은 리터럴로 적는다. 새 DTO를 이 계약에 편입하는 것은 결정이라 명시가 맞다.</p>
  */
 class ScheduleSchemaContractTest {
 
@@ -138,7 +138,7 @@ class ScheduleSchemaContractTest {
         Schema schema = schemaOf(component(StatusChangeRequest.class, "status"));
         Set<String> declared = new TreeSet<>(Arrays.asList(schema.allowableValues()));
 
-        // 오라클은 열거형 목록이 아니라 전이표다 — 어떤 출발 상태에서든 도달 가능한 target 만 이 API 가 받는다.
+        // 오라클은 열거형 목록이 아니라 전이표다 — 어떤 출발 상태에서든 도달 가능한 target만 이 API가 받는다.
         Set<String> reachable = new TreeSet<>();
         for (Workload.WorkloadStatus from : Workload.WorkloadStatus.values()) {
             for (Workload.WorkloadStatus to : Workload.WorkloadStatus.values()) {
@@ -157,7 +157,7 @@ class ScheduleSchemaContractTest {
     // ── 도우미 ─────────────────────────────────────────────────
 
     /**
-     * record 컴포넌트의 애너테이션은 대상에 RECORD_COMPONENT 가 없으면 컴포넌트에 남지 않고 접근자·필드로만
+     * record 컴포넌트의 애너테이션은 대상에 RECORD_COMPONENT가 없으면 컴포넌트에 남지 않고 접근자·필드로만
      * 전파된다. 그래서 접근자에서 읽고, 없으면 컴포넌트 자체를 본다.
      */
     private static Schema schemaOf(RecordComponent c) {

@@ -14,12 +14,12 @@ import com.innogrid.aims.scheduler.repository.ScheduleRunRepository;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 러너는 {@code SmartLifecycle} 이라 <b>다른 담당자의 테스트를 포함해 모든 스프링 컨텍스트</b>
+ * 러너는 {@code SmartLifecycle}이라 <b>다른 담당자의 테스트를 포함해 모든 스프링 컨텍스트</b>
  * 에서 함께 기동한다. 여기서 문제가 생기면 스케줄러와 무관한 테스트까지 무너지므로,
  * 기동 자체가 안전한지를 먼저 고정해 둔다.
  *
  * <p>러너를 멈추면 같은 컨텍스트를 공유하는 다른 테스트에 영향이 가므로
- * {@code stop()} 은 호출하지 않는다.</p>
+ * {@code stop()}은 호출하지 않는다.</p>
  */
 @SpringBootTest
 class ScheduleRunnerTest {
@@ -37,7 +37,7 @@ class ScheduleRunnerTest {
     @DisplayName("폴링 스레드는 데몬이다")
     @Test
     void polling_thread_is_daemon() {
-        // 데몬이 아니면 JVM 이 종료되지 않아 테스트 실행이 끝나지 않는다
+        // 데몬이 아니면 JVM이 종료되지 않아 테스트 실행이 끝나지 않는다
         Optional<Thread> poller = findThread("aims-schedule-poller");
 
         assertTrue(poller.isPresent(), "폴링 스레드가 있어야 한다");

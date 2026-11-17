@@ -22,15 +22,15 @@ import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
 
 /**
- * 익스포터 instance 해석의 한 자리 — 원장을 읽고 저장소에 실제로 있는 DCGM·IPMI instance 를 발견해
- * {@link ExporterInstances} 를 만든다.
+ * 익스포터 instance 해석의 한 자리 — 원장을 읽고 저장소에 실제로 있는 DCGM·IPMI instance를 발견해
+ * {@link ExporterInstances}를 만든다.
  *
- * <p>노드 수집기·전력 최적화 추세·노드 전력 효율 추세 세 곳이 IPMI 시리즈를 노드 익스포터 instance 로 찾고 있었다.
+ * <p>노드 수집기·전력 최적화 추세·노드 전력 효율 추세 세 곳이 IPMI 시리즈를 노드 익스포터 instance로 찾고 있었다.
  * 세 곳에 같은 규칙을 심으려면 규칙이 한 자리에 있어야 한다. 이 클래스는 원장과 발견 질의만 갖고, 해석 규칙은
- * {@link ExporterInstances} 에 있다.</p>
+ * {@link ExporterInstances}에 있다.</p>
  *
  * <p>발견 질의는 {@code count by(instance) (…)} 두 개로 값은 쓰지 않고 라벨만 쓴다. 저장소가 답하지 않으면 빈
- * 집합이고, 그러면 해석은 원장과 "그대로" 로만 떨어진다 — 저장소가 멈춰도 수집이 멈추지 않는다.</p>
+ * 집합이고, 그러면 해석은 원장과 "그대로"로만 떨어진다 — 저장소가 멈춰도 수집이 멈추지 않는다.</p>
  */
 @Service
 public class ExporterInstanceResolver {
@@ -39,7 +39,7 @@ public class ExporterInstanceResolver {
 
     static final String DCGM_DISCOVERY = "count by(instance) (DCGM_FI_DEV_GPU_UTIL)";
     static final String IPMI_DISCOVERY = "count by(instance) (ipmi_dcmi_power_consumption_watts)";
-    /** 지금 수집 대상인 노드 — 수집기와 같은 조건({@code up == 1}). 후보 API 가 배정을 계산할 때 쓴다. */
+    /** 지금 수집 대상인 노드 — 수집기와 같은 조건({@code up == 1}). 후보 API가 배정을 계산할 때 쓴다. */
     static final String NODE_DISCOVERY = "up{job=\"%s\"} == 1";
     /** GPU 축 — 카드를 접는 함수가 값마다 다르다: 사용률은 평균, 온도는 가장 뜨거운 카드, 전력은 합. */
     static final String GPU_USAGE = "avg by(instance) (DCGM_FI_DEV_GPU_UTIL)";
@@ -73,7 +73,7 @@ public class ExporterInstanceResolver {
     }
 
     /**
-     * 호출자가 이미 손에 든 instance 집합으로 해석기를 만든다 — 구간 질의 결과의 키가 곧 "저장소에 있는 instance" 다.
+     * 호출자가 이미 손에 든 instance 집합으로 해석기를 만든다 — 구간 질의 결과의 키가 곧 "저장소에 있는 instance"다.
      * 발견 질의를 다시 던지지 않는다.
      */
     public ExporterInstances resolve(Collection<String> dcgmSeen, Collection<String> ipmiSeen) {
@@ -81,7 +81,7 @@ public class ExporterInstanceResolver {
     }
 
     /**
-     * 노드별 GPU 개수 — <b>키는 DCGM 시리즈의 instance</b>. DCGM exporter 가 없으면 빈 맵이고 GPU 요구 워크로드는
+     * 노드별 GPU 개수 — <b>키는 DCGM 시리즈의 instance</b>. DCGM exporter가 없으면 빈 맵이고 GPU 요구 워크로드는
      * 배치되지 않는다. 수집기가 GPU 개수와 DCGM 발견을 한 질의로 겸하려고 여기 둔다.
      */
     @SuppressWarnings("unchecked")
@@ -172,12 +172,12 @@ public class ExporterInstanceResolver {
 
     /**
      * 익스포터 대응 화면이 고를 후보 — 세 발견 질의(DCGM·IPMI·노드)를 동시에 던져 한 상한 안에 받고
-     * {@link ExporterInstanceCandidates} 를 만든다.
+     * {@link ExporterInstanceCandidates}를 만든다.
      *
-     * <p>수집기용 {@link #discoverGpuCounts}·{@link #discoverIpmiInstances} 는 저장소가 답하지 않으면 빈 집합으로 떨어진다 —
-     * 수집이 멈추지 않아야 하기 때문이다. 후보 API 는 반대로 <b>"없다" 와 "못 받았다" 를 구분해야</b> 하므로(빈 목록을 보고
-     * 원장을 지우면 안 된다) 답하지 않은 질의를 {@code unavailable} 에 이름으로 남기고, 그 질의가 뒷받침하는 칸은 모델이
-     * 비운다. 세 질의는 {@link #discoverGpuTelemetry} 와 같은 이유로 동시에 제출한다 — 차례로 기다리면 저장소가 느릴 때
+     * <p>수집기용 {@link #discoverGpuCounts}·{@link #discoverIpmiInstances}는 저장소가 답하지 않으면 빈 집합으로 떨어진다 —
+     * 수집이 멈추지 않아야 하기 때문이다. 후보 API는 반대로 <b>"없다"와 "못 받았다"를 구분해야</b> 하므로(빈 목록을 보고
+     * 원장을 지우면 안 된다) 답하지 않은 질의를 {@code unavailable}에 이름으로 남기고, 그 질의가 뒷받침하는 칸은 모델이
+     * 비운다. 세 질의는 {@link #discoverGpuTelemetry}와 같은 이유로 동시에 제출한다 — 차례로 기다리면 저장소가 느릴 때
      * 상한이 세 번 겹친다. 원장은 질의를 던지기 전에 한 번 읽는다.</p>
      */
     public ExporterInstanceCandidates candidates() {
@@ -245,7 +245,7 @@ public class ExporterInstanceResolver {
         }
     }
 
-    /** 저장소에 지금 있는 IPMI 시리즈의 instance 들. 값은 쓰지 않는다. */
+    /** 저장소에 지금 있는 IPMI 시리즈의 instance들. 값은 쓰지 않는다. */
     @SuppressWarnings("unchecked")
     public Set<String> discoverIpmiInstances() {
         Set<String> out = new LinkedHashSet<>();

@@ -44,7 +44,8 @@ class NovaInventoryApiTest {
     private static final String DRY_RUN = PATH + "/dry-run";
     private static final List<String> DRY_RUN_FIELDS = List.of("source", "status", "message", "inventoryStatus", "unavailable", "policyName", "engine",
             "cpuLimitPercent", "memoryLimitPercent", "order", "checkedAt", "elapsedMs", "nodeCount", "vmCount", "excludedCount", "placedCount",
-            "failedCount", "failedByReason", "hostsInUseBefore", "hostsInUseAfter", "hostChangedCount", "nodes", "decisions", "excluded");
+            "failedCount", "failedByReason", "hostsInUseBefore", "hostsInUseAfter", "hostChangedCount", "overLimitNodeCount", "nodes",
+            "decisions", "excluded");
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -131,6 +132,10 @@ class NovaInventoryApiTest {
         assertEquals("#/components/schemas/NovaDryRunNode", props.path("nodes").path("items").path("$ref").asString());
         assertEquals("#/components/schemas/NovaDryRunDecision", props.path("decisions").path("items").path("$ref").asString());
         assertEquals("#/components/schemas/NovaDryRunExcluded", props.path("excluded").path("items").path("$ref").asString());
+        assertTrue(props.has("overLimitNodeCount"));
+        JsonNode node = schemas.path("NovaDryRunNode").path("properties");
+        assertTrue(node.has("simulatedCpuUsagePercent") && node.has("simulatedMemoryUsagePercent") && node.has("overLimit"),
+                "놓은 뒤 사용률 · 상한 초과");
     }
 
     private JsonNode dryRun() throws Exception {

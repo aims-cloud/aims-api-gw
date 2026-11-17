@@ -152,9 +152,10 @@ public class NovaDryRunService {
                     result.success(), result.reason(), PlacementService.exclusionCodesOf(result)));
         }
 
-        List<NovaDryRunResponse.Node> nodeRows = nodeRows(usable, targets, decisions);
+        List<NovaDryRunResponse.Node> nodeRows = nodeRows(usable, targets, decisions, nodes, policy);
         int placed = (int) decisions.stream().filter(NovaDryRunResponse.Decision::success).count();
         int hostChanged = (int) decisions.stream().filter(NovaDryRunResponse.Decision::hostChanged).count();
+        int overLimit = (int) nodeRows.stream().filter(NovaDryRunResponse.Node::overLimit).count();
         log.info("Nova 모의 배치: 노드 {} · 대상 {} · 놓임 {} · 못 놓임 {} · 대상 밖 {} · 정책 {}",
                 usable.size(), targets.size(), placed, targets.size() - placed, excluded.size(), policy.getName());
         return new NovaDryRunResponse(NovaDryRunResponse.SOURCE, NovaDryRunStatus.OK, NovaDryRunStatus.OK.message(),
@@ -164,26 +165,45 @@ public class NovaDryRunService {
                 usable.size(), targets.size(), excluded.size(), placed, targets.size() - placed, failedByReason,
                 (int) nodeRows.stream().filter(n -> n.currentVmCount() > 0).count(),
                 (int) nodeRows.stream().filter(n -> n.simulatedVmCount() > 0).count(),
-                hostChanged, nodeRows, decisions, excluded);
+                hostChanged, overLimit, nodeRows, decisions, excluded);
     }
 
-    /** 노드별 지금 할당(Nova 값)과 모의 배치 뒤 값. 호스트 이름순(스냅샷 순서). */
+    /**
+     * 노드별 지금 할당(Nova 값)과 모의 배치 뒤 값 · 사용률. 호스트 이름순(스냅샷 순서).
+     *
+     * <p>사용률은 예약이 쌓인 컨텍스트 노드의 실효 사용률을 그대로 읽는다 — 엔진이 다음 VM을 놓을 때 보는 값과 같다.
+     * 상한을 넘었는지는 엔진의 사용률 제약(C2)과 같은 식으로 반올림 전 값을 비교하고, 응답에는 둘째 자리로 반올림한 값을 싣는다.</p>
+     */
     private static List<NovaDryRunResponse.Node> nodeRows(Map<String, NovaInventorySnapshot.Node> usable,
                                                          List<NovaInventorySnapshot.Server> targets,
-                                                         List<NovaDryRunResponse.Decision> decisions) {
+                                                         List<NovaDryRunResponse.Decision> decisions,
+                                                         List<NodeResource> reserved, SchedulingPolicy policy) {
         Map<String, Long> currentVms = targets.stream()
                 .collect(Collectors.groupingBy(NovaInventorySnapshot.Server::hypervisorHostname, Collectors.counting()));
+        Map<String, NodeResource> after = reserved.stream().collect(Collectors.toMap(NodeResource::getNodeId, n -> n));
         List<NovaDryRunResponse.Node> rows = new ArrayList<>(usable.size());
         for (NovaInventorySnapshot.Node node : usable.values()) {
             String host = node.hypervisorHostname();
             List<NovaDryRunResponse.Decision> here = decisions.stream().filter(d -> host.equals(d.simulatedHost())).toList();
+            NodeResource placed = after.get(host);
+            double cpu = placed.effectiveCpuUsagePercent();
+            double memory = placed.effectiveMemoryUsagePercent();
+            boolean overLimit = cpu > policy.getMaxCpuUsagePercent() || memory > policy.getMaxMemoryUsagePercent();
             rows.add(new NovaDryRunResponse.Node(host, node.totalCpu(), node.totalMemoryMb(),
                     node.allocatedCpu(), node.allocatedMemoryMb(), currentVms.getOrDefault(host, 0L).intValue(),
                     here.stream().mapToInt(NovaDryRunResponse.Decision::requiredCpu).sum(),
                     here.stream().mapToLong(NovaDryRunResponse.Decision::requiredMemoryMb).sum(),
-                    here.size()));
+                    here.size(),
+                    placed.getTotalCpu() > 0 ? percent(cpu) : null,
+                    placed.getTotalMemoryMb() > 0 ? percent(memory) : null,
+                    overLimit));
         }
         return rows;
+    }
+
+    /** 응답에 싣는 사용률 — 소수 둘째 자리 반올림(0.5는 올림). 상한 비교에는 쓰지 않는다. */
+    private static double percent(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
     /** 빈 노드 — 사용률 · 전력 · 온도 0(계측 없음), 디스크 총량 0(모름 · 디스크 제약을 보지 않음). */

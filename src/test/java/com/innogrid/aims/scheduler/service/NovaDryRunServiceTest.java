@@ -50,6 +50,10 @@ class NovaDryRunServiceTest {
     /** 서버 모양 입력의 모의 배치 뒤 쓰는 호스트 수와 호스트가 바뀐 VM 수(실물 엔진 결과를 고정). */
     private static final int GOLD_HOSTS_AFTER = 5;
     private static final int GOLD_HOST_CHANGED = 61;
+    /** 서버 모양 입력의 놓은 뒤 CPU 사용률 · 상한 초과 · 메모리 사용률 최댓값(실물 엔진 결과를 고정). */
+    private static final List<Double> GOLD_CPU_USAGE = List.of(83.33, 83.33, 81.25, 45.83, 81.25);
+    private static final List<Boolean> GOLD_OVER_LIMIT = List.of(true, true, true, false, true);
+    private static final double GOLD_MEMORY_MAX = 70.37;
 
     private SchedulingPolicyRepository policies;
     private NovaInventoryGateway gateway;
@@ -113,6 +117,10 @@ class NovaDryRunServiceTest {
         assertFalse(last.hostChanged());
         assertEquals("{INSUFFICIENT_RESOURCE:1}", last.exclusionCodes().replace("\"", ""));
         assertSums(r);
+        NovaDryRunResponse.Node h1 = r.nodes().get(0);
+        assertEquals(80.0, h1.simulatedCpuUsagePercent(), "8/10");
+        assertFalse(h1.overLimit(), "80% 는 상한 80% 를 넘지 않는다(엔진 C2 와 같은 엄격한 비교)");
+        assertEquals(0, r.overLimitNodeCount());
     }
 
     @DisplayName("코어가 남아도 놓기 전 사용률이 정책 상한을 넘은 노드에는 놓지 않는다(CPU_USAGE_EXCEEDED)")
@@ -124,6 +132,64 @@ class NovaDryRunServiceTest {
         assertEquals(1, r.placedCount());
         assertEquals(Map.of("CPU_USAGE_EXCEEDED", 1), r.failedByReason());
         assertEquals(9, r.nodes().get(0).simulatedCpu(), "물리 vCPU 는 1 남지만 놓기 전 90% > 80%");
+        assertEquals(90.0, r.nodes().get(0).simulatedCpuUsagePercent());
+        assertTrue(r.nodes().get(0).overLimit());
+        assertEquals(1, r.overLimitNodeCount());
+    }
+
+    @DisplayName("놓기 전 80% 인 노드에도 놓이므로(80 > 80 거짓) 놓은 뒤 사용률은 상한을 넘을 수 있고 overLimit 이 true 다")
+    @Test
+    void placement_at_the_limit_can_end_over_the_limit() {
+        NovaDryRunResponse r = run(ok(List.of(node("h1", 10, 100_000)), List.of(vm("a", "h1", 8, 1_024), vm("b", "h1", 1, 1_024))));
+
+        assertEquals(2, r.placedCount(), "두 번째 VM 은 놓기 전 80% 라 놓인다");
+        assertEquals(90.0, r.nodes().get(0).simulatedCpuUsagePercent());
+        assertTrue(r.nodes().get(0).overLimit());
+        assertEquals(1, r.overLimitNodeCount());
+    }
+
+    @DisplayName("메모리 사용률이 상한과 같으면 넘지 않고, 메모리만 넘어도 overLimit 이며 노드 수에 든다")
+    @Test
+    void memory_limit_is_compared_like_cpu() {
+        NovaDryRunResponse atLimit = run(ok(List.of(node("h1", 16, 100_000)), List.of(vm("a", "h1", 1, 85_000))));
+        assertEquals(85.0, atLimit.nodes().get(0).simulatedMemoryUsagePercent());
+        assertFalse(atLimit.nodes().get(0).overLimit(), "85% 는 상한 85% 를 넘지 않는다");
+        assertEquals(0, atLimit.overLimitNodeCount());
+
+        NovaDryRunResponse memoryOnly = run(ok(List.of(node("h1", 16, 10_000)), List.of(vm("a", "h1", 1, 9_000))));
+        NovaDryRunResponse.Node h1 = memoryOnly.nodes().get(0);
+        assertEquals(6.25, h1.simulatedCpuUsagePercent(), "CPU 는 상한 아래");
+        assertEquals(90.0, h1.simulatedMemoryUsagePercent());
+        assertTrue(h1.overLimit());
+        assertEquals(1, memoryOnly.overLimitNodeCount(), "메모리만 넘은 노드도 센다");
+    }
+
+    @DisplayName("상한 비교는 반올림 전 값으로 한다 — 85.004% 는 85.0 으로 보이지만 상한 85% 를 넘는다")
+    @Test
+    void over_limit_is_judged_before_rounding() {
+        NovaDryRunResponse r = run(ok(List.of(node("h1", 16, 100_000)), List.of(vm("a", "h1", 1, 85_004))));
+
+        assertEquals(85.0, r.nodes().get(0).simulatedMemoryUsagePercent(), "표시는 둘째 자리 반올림");
+        assertTrue(r.nodes().get(0).overLimit(), "판정은 85.004 > 85");
+    }
+
+    @DisplayName("총량이 0 인 노드는 사용률이 null 이고 overLimit 은 false 다 · 노드 키는 기존 필드 뒤에 붙는다")
+    @Test
+    void zero_total_node_has_no_usage_and_keys_follow_existing_fields() {
+        NovaDryRunResponse r = run(ok(List.of(node("h0", 0, 0), node("h1", 16, 65_536)), List.of(vm("a", "h1", 2, 2_048))));
+
+        NovaDryRunResponse.Node h0 = r.nodes().get(0);
+        assertEquals("h0", h0.hypervisorHostname());
+        assertNull(h0.simulatedCpuUsagePercent());
+        assertNull(h0.simulatedMemoryUsagePercent());
+        assertFalse(h0.overLimit());
+        JsonNode json = new ObjectMapper().valueToTree(h0);
+        List<String> keys = new ArrayList<>();
+        json.propertyNames().forEach(keys::add);
+        assertEquals(List.of("hypervisorHostname", "totalCpu", "totalMemoryMb", "currentAllocatedCpu", "currentAllocatedMemoryMb",
+                "currentVmCount", "simulatedCpu", "simulatedMemoryMb", "simulatedVmCount", "simulatedCpuUsagePercent",
+                "simulatedMemoryUsagePercent", "overLimit"), keys);
+        assertTrue(json.get("simulatedCpuUsagePercent").isNull(), "모르는 사용률은 0 이 아니라 null");
     }
 
     @DisplayName("변환 가능하고 지금 호스트가 쓸 수 있는 노드인 VM 만 다시 놓고 나머지는 사유와 함께 대상 밖에 둔다")
@@ -162,6 +228,7 @@ class NovaDryRunServiceTest {
         assertNull(r.vmCount());
         assertNull(r.excludedCount());
         assertNull(r.placedCount());
+        assertNull(r.overLimitNodeCount());
         assertTrue(r.decisions().isEmpty());
     }
 
@@ -183,6 +250,7 @@ class NovaDryRunServiceTest {
         assertEquals(NovaDryRunStatus.NO_NODES, empty.status());
         assertEquals(InventoryStatus.EMPTY, empty.inventoryStatus());
         assertEquals(0, empty.nodeCount());
+        assertNull(empty.overLimitNodeCount(), "모의 배치를 하지 않은 상태는 null");
 
         NovaDryRunResponse allDisabled = run(ok(List.of(disabled("h2", 64, 131_072)), List.of(vm("b", "h2", 2, 2_048))));
         assertEquals(NovaDryRunStatus.NO_NODES, allDisabled.status());
@@ -193,6 +261,8 @@ class NovaDryRunServiceTest {
         assertEquals(1, noVms.nodeCount());
         assertEquals(0, noVms.vmCount());
         assertNull(noVms.placedCount());
+        assertNull(noVms.overLimitNodeCount());
+        assertNull(allDisabled.overLimitNodeCount());
     }
 
     @DisplayName("플래그가 꺼져 있으면 Nova 를 부르지 않고 DISABLED 다")
@@ -205,6 +275,7 @@ class NovaDryRunServiceTest {
         assertNull(r.nodeCount());
         assertNull(r.excludedCount());
         assertTrue(r.unavailable().isEmpty());
+        assertNull(r.overLimitNodeCount());
         verifyNoInteractions(gateway);
     }
 
@@ -234,6 +305,8 @@ class NovaDryRunServiceTest {
         assertEquals("vm-policy", r.policyName());
         assertEquals(50.0, r.cpuLimitPercent());
         assertEquals(Map.of("CPU_USAGE_EXCEEDED", 1), r.failedByReason(), "놓기 전 60% > 50%");
+        assertEquals(60.0, r.nodes().get(0).simulatedCpuUsagePercent());
+        assertTrue(r.nodes().get(0).overLimit(), "VM 정책의 상한(50%)과 비교한다");
     }
 
     @DisplayName("워크로드 사본은 저장하지 않은 VM 이고 디스크 요구가 0 이다")
@@ -264,6 +337,11 @@ class NovaDryRunServiceTest {
         assertEquals(5, r.hostsInUseBefore());
         assertEquals(GOLD_HOSTS_AFTER, r.hostsInUseAfter());
         assertEquals(GOLD_HOST_CHANGED, r.hostChangedCount());
+        assertEquals(GOLD_CPU_USAGE, r.nodes().stream().map(NovaDryRunResponse.Node::simulatedCpuUsagePercent).toList(),
+                "놓은 뒤 CPU 사용률(노드 순서 = 스냅샷 순서)");
+        assertEquals(GOLD_OVER_LIMIT, r.nodes().stream().map(NovaDryRunResponse.Node::overLimit).toList());
+        assertEquals(4, r.overLimitNodeCount(), "다 놓였지만 5대 가운데 4대가 CPU 상한 80% 를 넘는다");
+        assertEquals(GOLD_MEMORY_MAX, r.nodes().stream().mapToDouble(NovaDryRunResponse.Node::simulatedMemoryUsagePercent).max().orElseThrow());
         List<Integer> cpus = r.decisions().stream().map(NovaDryRunResponse.Decision::requiredCpu).toList();
         for (int i = 1; i < cpus.size(); i++) assertTrue(cpus.get(i - 1) >= cpus.get(i), "요구 vCPU 큰 순");
         assertSums(r);

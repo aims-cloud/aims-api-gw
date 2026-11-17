@@ -61,6 +61,8 @@ public record NovaDryRunResponse(
         Integer hostsInUseAfter,
         @Schema(description = "놓인 VM 가운데 지금 호스트와 다른 호스트에 놓인 수 — 이동 계획이 아니라 지금 Nova 배치와 다른 정도. 모의 배치를 하지 않았으면 null", example = "1")
         Integer hostChangedCount,
+        @Schema(description = "모의 배치 뒤 사용률이 정책 상한을 넘은 노드 수(nodes에서 overLimit이 true인 수). 모의 배치를 하지 않았으면 null", example = "1")
+        Integer overLimitNodeCount,
         @Schema(description = "쓸 수 있는 하이퍼바이저별 지금 할당과 모의 배치 뒤 값(호스트 이름순)")
         List<Node> nodes,
         @Schema(description = "다시 놓은 VM 별 결정(놓은 순서)")
@@ -94,7 +96,17 @@ public record NovaDryRunResponse(
             @Schema(description = "모의 배치 뒤 이 노드에 놓인 VM 의 요구 메모리 합(MB)", example = "12288")
             long simulatedMemoryMb,
             @Schema(description = "모의 배치 뒤 이 노드에 놓인 VM 수", example = "2")
-            int simulatedVmCount
+            int simulatedVmCount,
+            @Schema(description = "모의 배치 뒤 CPU 사용률(%) — 놓인 VM의 요구 vCPU 합 ÷ 물리 vCPU × 100. 실측 사용률이 아니라 엔진이 정책 상한과 "
+                    + "비교하는 값이며 소수 둘째 자리로 반올림해 싣는다. 물리 vCPU가 0이면 null", example = "37.5")
+            Double simulatedCpuUsagePercent,
+            @Schema(description = "모의 배치 뒤 메모리 사용률(%) — 놓인 VM의 요구 메모리 합 ÷ Nova memory_mb × 100(호스트 예약분을 빼지 않음). "
+                    + "소수 둘째 자리로 반올림해 싣는다. 메모리가 0이면 null", example = "18.75")
+            Double simulatedMemoryUsagePercent,
+            @Schema(description = "모의 배치 뒤 CPU나 메모리 사용률이 정책 상한을 넘었는지. 판정은 반올림 전 값으로 하므로 표시가 상한과 같아 보여도 "
+                    + "true일 수 있다. 규칙 위반이 아니다 — 상한은 놓기 전 값으로 지키므로 마지막에 놓인 VM 때문에 넘을 수 있고, "
+                    + "true면 그 뒤로 이 노드에는 더 놓이지 않는다")
+            boolean overLimit
     ) {
     }
 
@@ -145,7 +157,7 @@ public record NovaDryRunResponse(
         return new NovaDryRunResponse(SOURCE, status, status.message(), inventoryStatus, unavailable,
                 null, null, null, null, ORDER, checkedAt, elapsedMs,
                 nodeCount, vmCount, excluded == null ? null : excluded.size(),
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
                 List.of(), List.of(), excluded == null ? List.of() : excluded);
     }
 }

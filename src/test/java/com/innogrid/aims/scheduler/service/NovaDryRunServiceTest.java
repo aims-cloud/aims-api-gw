@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -39,6 +41,7 @@ import com.innogrid.aims.scheduler.model.InventoryStatus;
 import com.innogrid.aims.scheduler.model.NovaDryRunStatus;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
+import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -62,6 +65,8 @@ class NovaDryRunServiceTest {
     private static final double GOLD_MEMORY_MAX = 70.37;
 
     private SchedulingPolicyRepository policies;
+    private WorkloadRepository workloads;
+    private PlacementService placement;
     private NovaInventoryGateway gateway;
     private SchedulerProperties properties;
     private NovaDryRunService service;
@@ -69,11 +74,15 @@ class NovaDryRunServiceTest {
     @BeforeEach
     void setUp() {
         policies = mock(SchedulingPolicyRepository.class);
+        // 저장 경로로 바뀌어도 다른 테스트가 null 정책으로 먼저 죽지 않게 — 저장 없음은 saves_nothing 하나가 본다
+        when(policies.save(any(SchedulingPolicy.class))).thenAnswer(call -> call.getArgument(0));
+        workloads = mock(WorkloadRepository.class);
+        placement = mock(PlacementService.class);
         gateway = mock(NovaInventoryGateway.class);
         properties = new SchedulerProperties();
         EngineRegistry engines = new EngineRegistry(List.of(new WeightedScoreScheduler()));
         SchedulingService scheduling = SchedulingServiceBuilder.aSchedulingService()
-                .policies(policies).engines(engines).properties(properties).build();
+                .policies(policies).workloads(workloads).placement(placement).engines(engines).properties(properties).build();
         service = new NovaDryRunService(gateway, scheduling, engines, properties);
     }
 
@@ -383,6 +392,59 @@ class NovaDryRunServiceTest {
         assertSums(r);
         assertEquals(r.decisions(), again.decisions(), "같은 입력이면 같은 결정");
         assertEquals(r.nodes(), again.nodes());
+    }
+
+    @DisplayName("저장하지 않는다 — 워크로드 · 배치 쪽을 부르지 않고 정책도 저장하지 않는다")
+    @Test
+    void saves_nothing() throws Exception {
+        NovaDryRunResponse r = run(serverShaped());
+
+        assertEquals(72, r.placedCount());
+        verifyNoInteractions(workloads, placement);
+        verify(policies, never()).save(any());
+    }
+
+    @DisplayName("못 놓인 VM 하나의 후보 노드 둘이 같은 코드로 빠지면 그 코드는 한 번만 센다")
+    @Test
+    void same_code_on_two_nodes_counts_once() {
+        NovaDryRunResponse r = run(ok(List.of(node("h1", 4, 65_536), node("h2", 4, 65_536)), List.of(vm("big", "h1", 8, 1_024))));
+
+        assertEquals(1, r.failedCount());
+        assertEquals(Map.of("INSUFFICIENT_RESOURCE", 1), r.failedByReason(), "노드 둘이 같은 코드여도 VM 하나");
+    }
+
+    @DisplayName("평가 중 오류가 난 VM 은 못 놓인 것으로 남고 사유 코드 집계에는 들지 않으며 다른 VM 은 계속 놓는다")
+    @Test
+    void evaluation_error_is_failed_but_not_counted_by_code() {
+        WeightedScoreScheduler weighted = new WeightedScoreScheduler();
+        SchedulingEngine boom = new SchedulingEngine() {
+            @Override
+            public SchedulingResult schedule(Workload workload, PlacementContext context) {
+                if ("vm-boom".equals(workload.getName())) throw new IllegalStateException("boom");
+                return weighted.schedule(workload, context);
+            }
+
+            @Override
+            public String getName() {
+                return weighted.getName();
+            }
+
+            @Override
+            public String getId() {
+                return weighted.getId();
+            }
+        };
+
+        NovaDryRunResponse r = serviceWith(boom).simulate(ok(List.of(node("h1", 16, 65_536)),
+                List.of(vm("boom", "h1", 4, 1_024), vm("ok", "h1", 2, 1_024))), T0, System.nanoTime());
+
+        NovaDryRunResponse.Decision failed = r.decisions().stream().filter(d -> d.serverId().equals("boom")).findFirst().orElseThrow();
+        assertFalse(failed.success());
+        assertEquals("평가 중 오류: boom", failed.reason());
+        assertNull(failed.exclusionCodes());
+        assertEquals(1, r.failedCount());
+        assertEquals(Map.of(), r.failedByReason(), "코드가 없어 세지 않는다");
+        assertEquals(1, r.placedCount(), "다른 VM 은 놓인다");
     }
 
     @DisplayName("정책의 기본 엔진으로 실제 평가한다 — 응답의 engine 과 평가에 쓰인 엔진이 같다")

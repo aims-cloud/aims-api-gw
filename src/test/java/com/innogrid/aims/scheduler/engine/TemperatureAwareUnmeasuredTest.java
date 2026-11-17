@@ -45,8 +45,9 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>균형 항을 검증하려면 최소 2노드가 있어야 한다 — 노드가 하나뿐이면 평균이 0이 되어
  * {@code ThermalModel.balanceScore}의 기존 가드({@code averageTemperature <= 0 → 0.5})에
- * 걸려, 새 가드가 없어도 균형이 0.5로 나온다(증명력이 없다). 그래서 8번 메서드를 제외한
- * 나머지는 모두 2노드 픽스처를 쓴다. 계측 노드가 <b>1대</b>뿐이면 평균이 곧 그 노드의 온도라
+ * 걸려, 새 가드가 없어도 균형이 0.5로 나온다(증명력이 없다). 그래서 노드 1대 픽스처는
+ * {@link #lone_unmeasured_node_total_score_pinned}·{@link #negative_temperature_treated_as_unmeasured}뿐이고
+ * 나머지는 2대 이상을 쓴다. 계측 노드가 <b>1대</b>뿐이면 평균이 곧 그 노드의 온도라
  * 균형이 자명하게 0.5가 나오므로, 평균 수정을 점수에서 실제로 관측하려면 계측 2대가 필요하다
  * ({@link #average_over_two_measured_nodes_shapes_balance}).</p>
  *
@@ -407,7 +408,7 @@ class TemperatureAwareUnmeasuredTest {
     @DisplayName("계측 노드가 둘이면 평균이 두 노드의 균형 점수를 가른다")
     @Test
     void average_over_two_measured_nodes_shapes_balance() {
-        // 다른 손 픽스처는 계측 노드가 1대라 평균이 곧 자기 온도가 되어 균형이 자명하게 0.5다.
+        // 미계측 노드를 섞은 다른 손 픽스처는 계측 노드가 1대 이하라 균형이 자명하게 0.5다.
         // 계측 2대를 넣어야 "평균을 계측 노드만으로 낸다"(겹2)가 점수에서 실제로 관측된다.
         //   계측만의 평균 (40+60)/2 = 50 → M1 0.5+0.5×10/50 = 0.6, M2 0.5−0.5×10/50 = 0.4
         //   U의 0°C를 섞었다면 평균 33.3 → M1 0.4, M2 0.1로 둘 다 달라진다.

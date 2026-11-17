@@ -140,8 +140,8 @@ public class NodeResource {
      * 잇달아 배치하면 예약만 쌓이고 사용률은 그대로라, 제약 검사가 매번 같은 값을 보게 된다.
      * 그래서 예약분을 사용률로 환산해 더한 값을 따로 둔다.</p>
      *
-     * <p><b>이름에 {@code get}을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
-     * 나가므로 {@code get} 접두어를 쓰면 API에 필드가 늘어난다.
+     * <p><b>이름에 {@code get}을 붙이지 않는다.</b> 응답 형태는 {@code NodeResponse}가 정하지만, 모델을 조회 응답과
+     * 혼동하지 않도록 계산용 메서드는 {@code get} 없이 짓는다.
      * {@code NodeResourceSerializationTest}가 이 규칙을 지킨다.</p>
      */
     public double effectiveCpuUsagePercent() {
@@ -171,8 +171,8 @@ public class NodeResource {
      * 질의를 날리므로, 후보 노드마다 새로 수집하면 한 요청에 수백 건이 나간다. 게다가 메트릭
      * 클라이언트에는 읽기 타임아웃이 없어 저장소가 느려지면 요청이 오래 붙잡힌다.</p>
      *
-     * <p><b>이름에 {@code get}을 붙이지 않는다.</b> 이 클래스는 DTO 없이 그대로 응답으로
-     * 나가므로 {@code get} 접두어를 쓰면 API에 필드가 늘어난다.</p>
+     * <p><b>이름에 {@code get}을 붙이지 않는다.</b> 응답 형태는 {@code NodeResponse}가 정하지만, 모델을 조회 응답과
+     * 혼동하지 않도록 이 메서드도 {@code get} 없이 짓는다.</p>
      */
     public NodeResource snapshot() {
         NodeResource copy = new NodeResource(mdcId, nodeId, totalCpu, totalMemoryMb, totalGpu,

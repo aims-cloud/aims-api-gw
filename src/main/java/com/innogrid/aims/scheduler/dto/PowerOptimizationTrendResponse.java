@@ -52,10 +52,10 @@ public record PowerOptimizationTrendResponse(
      * @param consumedKwh            실측 전력의 소비 에너지(kWh). 실측 노드가 없으면 null
      * @param reclaimableKwh         유휴 노드를 반납했다면 아꼈을 에너지(kWh). 적분할 표본이 없으면 null
      * @param reclaimableEstimatedKwh 그중 실측이 아닌 값에서 온 몫(kWh) — 정격으로 어림한 미계측 노드가 여기 든다
-     * @param integratedFrom         실제로 적분이 걸친 구간의 시작. 없으면 null
-     * @param integratedTo           실제로 적분이 걸친 구간의 끝. 없으면 null
-     * @param integratedHours        실제로 적분이 걸친 시간(시). 끊긴 구멍은 빠져 있다
-     * @param integratedNodes        적분에 쓴 노드 수
+     * @param integratedFrom         회수 가능 적분이 실제로 걸친 구간의 시작. 없으면 null
+     * @param integratedTo           회수 가능 적분이 실제로 걸친 구간의 끝. 없으면 null
+     * @param integratedHours        회수 가능 적분에서 한 노드가 덮은 시간 중 가장 긴 것(시). 끊긴 구멍은 빠져 있다
+     * @param integratedNodes        회수 가능 적분에 쓴 노드 수
      * @param gaps                   표본이 멀어 잇지 않고 끊은 횟수
      * @param reason                 값이 비거나 좁아진 까닭. 정상이면 null
      */

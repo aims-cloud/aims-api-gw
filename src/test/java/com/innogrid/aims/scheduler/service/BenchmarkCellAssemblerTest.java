@@ -33,11 +33,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>등록된 판의 응답에는 나오지 않는 사유가 있다(계측 노드가 둘 미만 · 전 시각 지점에서 배치 0건 · 기준 집합과 건수가 다른 지점뿐 ·
  * 값이 나오지 않은 셀). 그래서 응답이나 증거 파일로는 이 자리를 지킬 수 없어, 결과 표 조립의 두 메서드를 직접 부른다. 기대 문장은
- * 분리 전 서비스의 문장을 글자 그대로 옮겼다.</p>
+ * {@link BenchmarkCellAssembler}가 내는 문장과 글자까지 같다.</p>
  */
 class BenchmarkCellAssemblerTest {
 
-    // ── 기대 문장(분리 전 서비스의 문장 그대로) ──────────────────────
+    // ── 기대 문장(BenchmarkCellAssembler가 내는 문장 그대로) ─────────
     private static final String NO_BASELINE = "기준 전략(전력 인지 최적적합)이 이 실행에 없다";
     private static final String BASELINE_SELF = "기준 전략 자신 — 0 은 값이 아니다";
     private static final String GAP_UNPAIRED = "기준 전략과 배치 건수가 같은 시각 지점이 없다";

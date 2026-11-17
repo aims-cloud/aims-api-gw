@@ -50,10 +50,10 @@ class ScheduleServiceTest {
     /**
      * 컬럼 길이를 넘는 값이 <b>400으로</b> 막히는지.
      *
-     * <p>검증이 없으면 INSERT가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 배포 환경에서는
-     * {@code /error} 재요청이 인증에 막혀 클라이언트가 <b>403(본문 없음)</b>을 받는다(실측). 여기(H2)에서는
-     * {@code DataIntegrityViolationException}이 그대로 튀어나오므로 <b>MockMvc가 아니라 서비스 계층</b>에서
-     * 확인해야 한다 — MockMvc는 {@code perform()} 자체가 던져 확인에 도달하지 못한다.</p>
+     * <p>검증이 없으면 INSERT가 컬럼 길이에서 실패하고, 그 예외({@code DataIntegrityViolationException})는
+     * {@code SchedulerExceptionAdvice}가 잡아 클라이언트가 400이 아니라 500(데이터베이스 처리 실패)을 받는다.
+     * 그래서 INSERT 전에 400과 사유가 나오는지를 <b>서비스 계층</b>에서 확인한다. 데이터베이스 예외가 500이
+     * 되는 것은 {@code DataAccessErrorVisibilityTest}가 확인한다.</p>
      */
     @DisplayName("스케줄명이 컬럼 길이를 넘으면 400 이고 사유에 현재 길이가 있다")
     @Test

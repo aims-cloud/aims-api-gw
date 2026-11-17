@@ -59,8 +59,8 @@ public final class SyntheticCluster {
     /**
      * 판이 선언하는 MDC 사이 링크 한 줄 — 원장 엔티티({@code MdcLink})의 판 파일 표현.
      *
-     * <p>지금 등록된 판에는 {@code links:} 절이 없어 이 목록은 비어 있고, 아무 계산도 읽지 않는다. 링크 판이 들어올 때
-     * 판 파일이 진실이 되도록 <b>파서만 먼저</b> 갈라 둔다 — 노드 절과 링크 절은 서로 다른 축이라 한 파서에 섞이면
+     * <p>등록된 판 가운데 {@code links:} 절은 링크 판에만 있고, 나머지 판에서는 이 목록이 비어 있다. 링크 절은
+     * 노드 절과 <b>다른 파서</b>로 읽는다 — 두 절은 서로 다른 축이라 한 파서에 섞이면
      * 판을 늘릴 때마다 같은 메서드를 두 번 연다. 절이 없는 판은 파일 바이트가 그대로라 다이제스트·값이 변하지 않는다.</p>
      */
     public record Link(String mdcA, String mdcB, double latencyMs, Double bandwidthMbps, Double packetLossPercent,
@@ -285,7 +285,7 @@ public final class SyntheticCluster {
     }
 
     /**
-     * {@code links:} 절 — 판의 링크 축. 절이 없으면 빈 목록(지금 등록된 판 전부). 항목은 {@code mdcA}·{@code mdcB}·
+     * {@code links:} 절 — 판의 링크 축. 절이 없으면 빈 목록(링크 판을 뺀 등록된 판 전부). 항목은 {@code mdcA}·{@code mdcB}·
      * {@code latencyMs}가 필수이고 {@code bandwidthMbps}(0 초과)·{@code packetLossPercent}(0~100)는 선택, {@code status}는
      * 원장 열거형 {@link MdcLink.LinkStatus}({@code UP} 기본). 같은 MDC 사이 링크·중복 쌍·<b>판의 노드에 없는 MDC</b>를 가리키는
      * 링크는 거부한다 — 노드 절이 진실이고 링크는 그 위에 얹히는 축이라, 없는 MDC로의 링크는 판 파일 오타다.
@@ -383,8 +383,8 @@ public final class SyntheticCluster {
     }
 
     /**
-     * 위상 계산 — 시드·식별자의 순수 함수. legacy 식은 <b>글자 그대로</b> 보존한다({@code h = seed; h = h*31 + c}): 등록된 판 전부의
-     * 값이 이 식에 묶여 있어 괄호 하나만 바꿔도 6판의 다이제스트 기준선이 무효가 된다.
+     * 위상 계산 — 시드·식별자의 순수 함수. legacy 식은 <b>글자 그대로</b> 보존한다({@code h = seed; h = h*31 + c}): legacy 판 전부의
+     * 값이 이 식에 묶여 있어 괄호 하나만 바꿔도 그 판들의 다이제스트 기준선이 무효가 된다.
      *
      * <p>{@code independent}는 SplitMix64 마무리 함수를 코드 안에서 돈다(JDK 난수기의 값열에 기대지 않는다 — JDK를 바꿔도 값이
      * 같다). 입력은 {@code seed × GOLDEN ^ hash(nodeId)}이고 {@code String.hashCode}는 명세로 고정된 값이다. 하위 10진 3자리를

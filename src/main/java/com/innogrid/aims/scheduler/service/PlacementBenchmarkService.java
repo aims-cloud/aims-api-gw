@@ -154,8 +154,8 @@ public class PlacementBenchmarkService {
     /**
      * 판 하나를 부하율 네 지점 × 전원 상태 두 가정으로 비교한다.
      *
-     * @param boardId      {@code main}(주 결과) · {@code adversarial}(반증) · {@code sparse}(계측 공백) ·
-     *                     {@code convex}(볼록 생성식) · {@code misrated}(정격 어긋남) · {@code convex-misrated}(복합·판정)
+     * @param boardId      {@link BenchmarkClusters#boardIds()}의 판 이름. 비우면 {@link BenchmarkClusters#MAIN}이고,
+     *                     모르는 이름은 400으로 거절한다
      * @param distribution {@code heavytail} 또는 {@code uniform}
      */
     public PlacementBenchmarkResponse compare(String boardId, String distribution) {

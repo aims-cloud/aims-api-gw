@@ -322,8 +322,8 @@ final class BenchmarkCellAssembler {
                                         boolean baselinePresent, boolean paired, boolean dataMdcAssigned) {
         BenchmarkMetricKind kind = BenchmarkMetricKind.of(metric.key());
         if (kind == BenchmarkMetricKind.GAP) {
-            // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0이나 빈 값을 내면 "격차가
-            // 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
+            // 대조군 집합을 갈아 끼운 실행에는 기준 열이 없을 수 있다. 그때 0이나 빈 값을 내면
+            // "격차가 없다"로 읽히므로, 전 행이 사유를 달고 무효로 나간다.
             if (!baselinePresent) {
                 return "기준 전략(전력 인지 최적적합)이 이 실행에 없다";
             }

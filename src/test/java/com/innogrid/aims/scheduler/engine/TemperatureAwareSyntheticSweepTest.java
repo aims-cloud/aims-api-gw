@@ -198,8 +198,8 @@ class TemperatureAwareSyntheticSweepTest {
             double selectedTotal = score(result, result.selectedNodeId()).totalScore();
             assertFalse(Double.isNaN(selectedTotal), "t=" + t + " 선택 노드 총점이 NaN");
 
-            // score()는 eligible을 보지 않는다 — 부적격(제외된) 노드까지 포함하면 "선택될 수 없는 노드와의
-            // 마진"을 재게 된다. 적격 미계측 노드로 한정한다(현 픽스처는 전원 적격이라 지금은 무해하다).
+            // score()는 eligible을 보지 않는다 — 부적격(제외된) 노드까지 포함하면
+            // "선택될 수 없는 노드와의 마진"을 재게 된다. 적격 미계측 노드로 한정한다(현 픽스처는 전원 적격이라 지금은 무해하다).
             OptionalDouble bestUnmeasuredTotalOpt = UNMEASURED.stream()
                     .map(nodeId -> score(result, nodeId))
                     .filter(NodeScore::eligible)

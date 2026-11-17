@@ -221,8 +221,8 @@ public class PowerOptimizationService {
                     properties.getNodeJob()), start, end, interval);
             Map<String, Map<Long, Double>> allCpu = toSeries(cpuResults, metric -> true);
             // 전력 시계열의 키는 IPMI 시리즈의 instance라 노드 익스포터와 다를 수 있다(실장비: 중앙 IPMI 주소).
-            // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance에 다시 키 매긴다. 구간 결과의 키가 곧 "저장소에 있는
-            // IPMI instance"라 발견 질의를 따로 던지지 않는다.
+            // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance에 다시 키 매긴다. 구간 결과의 키가 곧
+            // "저장소에 있는 IPMI instance"라 발견 질의를 따로 던지지 않는다.
             Map<String, Map<Long, Double>> rawPower = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
             Map<String, Map<Long, Double>> power = rekeyToNodes(rawPower, allCpu.keySet());
 

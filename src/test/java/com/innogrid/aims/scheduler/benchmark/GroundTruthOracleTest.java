@@ -22,7 +22,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>합성 클러스터 파일을 그대로 읽어 쓴다 — 손으로 계산할 수 있는 값들이라 기대값을 식과 함께 적어 둔다.
  * 여기가 빨간불이면 벤치마크의 주 지표가 다른 물리를 재고 있다는 뜻이다.</p>
  *
- * <p>다섯째·여섯째·일곱째 테스트는 <b>순환 논증이 아님을 보이는 증거</b>다. 엔진의 유휴 전력 가정
+ * <p>{@link #engine_assumption_differs_most_on_the_planted_node}·
+ * {@link #four_of_eight_nodes_match_the_engine_assumption}·{@link #planted_node_is_the_cheapest_per_core}는
+ * <b>순환 논증이 아님을 보이는 증거</b>다. 엔진의 유휴 전력 가정
  * (정격 × 0.3)과 파일에 적힌 실제 유휴 전력이 노드마다 얼마나 다른지 고정해 둔다.</p>
  */
 class GroundTruthOracleTest {

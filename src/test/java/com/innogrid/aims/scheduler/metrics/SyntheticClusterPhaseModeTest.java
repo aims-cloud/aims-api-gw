@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SyntheticClusterPhaseModeTest {
 
-    /** 주 결과판(legacy, seed 7) 노드별 위상 — 1000분위 정수. 이 값에 6판의 다이제스트 기준선이 묶여 있다. */
+    /** 주 결과판(legacy, seed 7) 노드별 위상 — 1000분위 정수. 이 값에 seed 7 legacy 판들의 다이제스트 기준선이 묶여 있다. */
     private static final Map<String, Integer> LEGACY_MAIN_PHASE_MILLI = Map.ofEntries(
             Map.entry("bm-01:9100", 446),
             Map.entry("bm-02:9100", 597),

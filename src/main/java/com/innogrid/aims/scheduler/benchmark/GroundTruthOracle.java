@@ -15,7 +15,7 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  *
  * <p><b>왜 전력 모델을 쓰지 않는가 — 순환 논증이기 때문이다.</b> 배치 비교의 주 지표로 엔진의
  * 한계 전력({@code PowerModel.realMarginalPower})을 쓰면, 그것은 <b>우리 전력 엔진 총점의 한 항을
- * 그대로 합한 값</b>이다(가중치 0.35 × {@code marginalScore}, {@code marginalScore = 1 −
+ * 그대로 합한 값</b>이다(전력 점수 안의 가중치 {@code marginalWeight} × {@code marginalScore}, {@code marginalScore = 1 −
  * realMarginalPower / S}(S는 W 눈금, 기본 500)). 그 지표에서 우리 전략이 1등인 것은 발견이 아니라 <b>정의</b>다.
  * 목적 함수를 그대로 평가 함수로 쓰면 어떤 전략을 넣어도 그 목적 함수를 최대화한 전략이 이긴다.</p>
  *
@@ -158,8 +158,8 @@ public final class GroundTruthOracle {
      * 그 밖의 값이 없고, 자르지 않으면 정격을 넘는 전력을 만들어낸다.</p>
      *
      * <p>깨우는 비용은 {@code AVAILABLE} 판에서만 든다. {@code UNAVAILABLE} 판에서는 그 노드가 이미 통전되어
-     * 유휴 전력을 먹고 있으므로 <b>새로 드는 유휴 전력이 없다</b>. 엔진은 이 자리에서 파일 선언값 대신
-     * {@code 정격 × 0.3}을 쓴다 — 그 격차가 엔진 가정과 생성식의 차이다.</p>
+     * 유휴 전력을 먹고 있으므로 <b>새로 드는 유휴 전력이 없다</b>. 엔진은 이 자리에 {@code PowerModel.wakeupPower}를
+     * 쓴다(계측된 유휴 노드는 실측 역산, 그 밖은 정격 × idleRatio) — 선언값과의 격차가 엔진 가정과 생성식의 차이다.</p>
      */
     public double marginalPowerWatts(String nodeId, double cpuBeforePercent, int requiredCpu,
                                      boolean nodeWasIdle, PowerControl mode) {
@@ -180,10 +180,10 @@ public final class GroundTruthOracle {
     /**
      * 엔진 가정({@code 정격 × engineIdleRatio})과 파일 선언값 {@code idleWatts}의 노드별 격차. 응답의 전제 블록에 그대로 싣는다.
      *
-     * <p>이 목록이 <b>엔진의 가정과 생성식이 어디서 갈리는지</b>를 보이는 표다. 엔진이 쓰는 유휴 전력은 정격의
-     * 상수배이고, 오라클이 쓰는 유휴 전력은 파일에 선언된 값이다. 두 값이 노드마다 얼마나 다른지 밝혀 두면,
-     * 생성식 기준 전력이 엔진 점수의 재탕이 아니라는 것이 표에서 바로 보인다 — 다만 그것은 두 계산이
-     * 독립이라는 뜻이고, 어느 쪽이 실물에 가까운지는 이 표가 말하지 않는다.</p>
+     * <p>이 목록이 <b>엔진의 가정과 생성식이 어디서 갈리는지</b>를 보이는 표다. 엔진이 가정하는 유휴 전력은 정격의
+     * 상수배이고, 오라클이 쓰는 유휴 전력은 파일에 선언된 값이다. 다만 계측된 유휴 노드의 유휴 기준선은 엔진이
+     * 실측에서 역산하므로({@code PowerModel.wakeupPower}) 이 격차가 그 노드의 실질 한계 전력 점수에 그대로 들어가지는
+     * 않는다. 어느 쪽이 실물에 가까운지도 이 표가 말하지 않는다.</p>
      *
      * <p>정렬은 {@link #nodeIds()}와 같다(노드 id 오름차순) — 표의 행 순서가 실행마다 바뀌지 않게.</p>
      */

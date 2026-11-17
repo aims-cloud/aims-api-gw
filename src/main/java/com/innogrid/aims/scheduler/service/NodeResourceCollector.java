@@ -32,7 +32,7 @@ import com.innogrid.aims.scheduler.model.NodeResource.PowerSource;
  * 스케줄링 엔진에 NodeResource 목록을 제공한다.
  *
  * <p><b>핵심 메트릭(CPU 사용률·코어 수·MemTotal·MemAvailable)을 알 수 없는 노드는 수집하지
- * 않는다.</b> 질의가 실패하거나 시리즈가 없을 때 0으로 채우면 그 노드는 "CPU 0% 의 빈 노드"로
+ * 않는다.</b> 질의가 실패하거나 시리즈가 없을 때 0으로 채우면 그 노드는 "CPU 0%의 빈 노드"로
  * 보인다 — 점수가 치솟아 배치가 몰리고, 통합 진단은 가동 중인 노드를 반납 후보로 판정한다.
  * 코어 수가 0이면 {@code Math.max(…, 1)}로 1코어짜리 가짜 노드가 만들어지기도 했다.
  * 모르는 노드는 후보가 아니다. 제외 사실은 WARN 로그로 남긴다.</p>
@@ -312,7 +312,7 @@ public class NodeResourceCollector {
 
 
     /**
-     * 핵심 메트릭 질의 — "값이 없다"와 "값이 0 이다"를 구분한다.
+     * 핵심 메트릭 질의 — "값이 없다"와 "값이 0이다"를 구분한다.
      *
      * <p>{@code queryScalar}는 질의 실패도 시리즈 없음도 0.0으로 돌려주므로 구분할 수 없다.
      * 결과 벡터를 직접 받아 비어 있으면 {@code empty}, 예외도 {@code empty}로 돌려준다.</p>

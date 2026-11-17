@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 경로 변수·쿼리 파라미터를 해석하지 못했을 때 <b>사유가 있는 400</b> 이 나가는가.
+ * 경로 변수·쿼리 파라미터를 해석하지 못했을 때 <b>사유가 있는 400</b>이 나가는가.
  *
  * <p><b>상태 코드만 봐서는 증명이 안 된다.</b> 핸들러가 없어도 스프링 기본 처리가 {@code sendError(400)}을
  * 부르므로 MockMvc에서는 똑같이 400으로 보인다. 차이는 <b>본문</b>이다 — 기본 처리는 본문을 비우고,

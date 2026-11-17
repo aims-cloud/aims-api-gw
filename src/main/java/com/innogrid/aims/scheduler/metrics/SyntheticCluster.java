@@ -139,7 +139,7 @@ public final class SyntheticCluster {
      * 돌리려면 사본이 필요하다. 등록부는 판당 인스턴스 하나를 캐시하므로 사본은 호출자가 든다.
      */
     public SyntheticCluster withSeed(long newSeed) {
-        // 사본의 seeds는 자기 seed 하나 — "seed 는 seeds 의 첫 항목" 불변식을 사본에서도 지킨다. 원본의 seeds 목록은 하네스가 원본에서 읽는다
+        // 사본의 seeds는 자기 seed 하나 — "seed는 seeds의 첫 항목" 불변식을 사본에서도 지킨다. 원본의 seeds 목록은 하네스가 원본에서 읽는다
         return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds,
                 phaseMode, List.of(newSeed), workloadBandwidthMbps);
     }

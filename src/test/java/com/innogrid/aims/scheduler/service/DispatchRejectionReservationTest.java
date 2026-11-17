@@ -33,9 +33,9 @@ import static org.mockito.Mockito.when;
  *
  * <pre>
  * 노드      8코어 1대 (수집기 대역), CPU 10% → 가용 7.2코어
- * 워크로드  GPU 종류 2건: w1 HIGH 5코어, w2 NORMAL 5코어 (우선순위 순으로 w1 이 먼저)
- * 디스패처  w1 만 거부, 나머지 수락
- * 기대      w1 은 FAILED·배정 없음, w2 는 같은 노드에 SCHEDULED — w1 의 5코어 예약이 되돌아갔기 때문
+ * 워크로드  GPU 종류 2건: w1 HIGH 5코어, w2 NORMAL 5코어 (우선순위 순으로 w1이 먼저)
+ * 디스패처  w1만 거부, 나머지 수락
+ * 기대      w1은 FAILED·배정 없음, w2는 같은 노드에 SCHEDULED — w1의 5코어 예약이 되돌아갔기 때문
  * </pre>
  */
 @SpringBootTest

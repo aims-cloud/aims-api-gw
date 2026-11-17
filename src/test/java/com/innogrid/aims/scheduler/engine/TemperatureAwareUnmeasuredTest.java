@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * </ul>
  *
  * <p><b>겹1만 고치고 겹2를 고치지 않으면 여전히 미계측 노드가 이긴다.</b> 미계측 노드 U는
- * 가드 덕에 스스로 0.5를 받지만, 계측 노드 M의 균형 점수는 여전히 "U 의 0°C 가 섞인 평균"을
+ * 가드 덕에 스스로 0.5를 받지만, 계측 노드 M의 균형 점수는 여전히 "U의 0°C가 섞인 평균"을
  * 분모로 계산된다 — 2노드(M=40°C, U=0°C)에서 그 평균은 20이 되어 M의 균형이
  * {@code 1 − 0.5×40/20 = 0}으로 잘리고, M 총점은 0.4581로 주저앉는다. 반대로 U는 겹1 가드로
  * 0.5500을 받으므로 U가 여전히 이긴다({@link #unmeasured_not_favored_mixed_ipmi} 주석 참고).
@@ -203,8 +203,8 @@ class TemperatureAwareUnmeasuredTest {
     @DisplayName("음수 온도는 미계측으로 다룬다")
     @Test
     void negative_temperature_treated_as_unmeasured() {
-        // 가드가 "0 인가"가 아니라 "0 보다 큰가"여야 하는 이유. 센서가 음수를 돌려주는 경우
-        // (오프셋 오류·부호 반전)도 판단 근거가 없기는 마찬가지다. 0 만 걸러내면 -5°C가
+        // 가드가 "0인가"가 아니라 "0보다 큰가"여야 하는 이유. 센서가 음수를 돌려주는 경우
+        // (오프셋 오류·부호 반전)도 판단 근거가 없기는 마찬가지다. 0만 걸러내면 -5°C가
         // 계측값으로 들어가고, headroomScore에는 상한 클램프가 없어 (75−(−5))/75 = 1.0667로
         // 1.0을 넘는 점수가 나온다 — 만점보다 더한 만점이다.
         SchedulingResult result = scheduler.schedule(new Workload("w", 1, 512),

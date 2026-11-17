@@ -64,7 +64,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *
  * <p>선택 사유는 <b>승자 기준</b>으로 갈린다. 후보 집합에 계측 노드가 있어도 <b>승자가 미계측이면</b>
  * 열 점수 셋은 잰 값이 아니라 중립값이므로 숫자로 늘어놓지 않는다 — 늘어놓으면 "재 봤더니 전부
- * 평균 수준" 과 구분되지 않고, 그 문장이 {@code scheduling_history} 에 그대로 저장된다.</p>
+ * 평균 수준"과 구분되지 않고, 그 문장이 {@code scheduling_history}에 그대로 저장된다.</p>
  */
 @Component
 public class TemperatureAwareScheduler extends AbstractScoringEngine<TemperatureAwareScheduler.TempRun> {

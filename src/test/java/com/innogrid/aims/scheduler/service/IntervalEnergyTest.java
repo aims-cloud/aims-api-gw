@@ -82,7 +82,7 @@ class IntervalEnergyTest {
         IntervalEnergy.Result r = IntervalEnergy.integrate(both);
 
         assertEquals(2, r.nodes());
-        // 노드별로 적분하므로 0.1(1시간) + 0.017(10분) 이다. 합계 시계열을 적분하면 합이 뛴 자리가 에너지로 둔갑한다.
+        // 노드별로 적분하므로 0.1(1시간) + 0.017(10분)이다. 합계 시계열을 적분하면 합이 뛴 자리가 에너지로 둔갑한다.
         assertEquals(0.117, r.kwh());
     }
 

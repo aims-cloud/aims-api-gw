@@ -221,8 +221,8 @@ public class PowerOptimizationService {
                     properties.getNodeJob()), start, end, interval);
             Map<String, Map<Long, Double>> allCpu = toSeries(cpuResults, metric -> true);
             // 전력 시계열의 키는 IPMI 시리즈의 instance라 노드 익스포터와 다를 수 있다(실장비: 중앙 IPMI 주소).
-            // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance 에 다시 키 매긴다. 구간 결과의 키가 곧 "저장소에 있는
-            // IPMI instance" 라 발견 질의를 따로 던지지 않는다.
+            // 원장 → 호스트명 일치 → 그대로 순으로 노드 instance에 다시 키 매긴다. 구간 결과의 키가 곧 "저장소에 있는
+            // IPMI instance"라 발견 질의를 따로 던지지 않는다.
             Map<String, Map<Long, Double>> rawPower = seriesByInstance("ipmi_dcmi_power_consumption_watts", start, end, interval);
             Map<String, Map<Long, Double>> power = rekeyToNodes(rawPower, allCpu.keySet());
 
@@ -276,7 +276,7 @@ public class PowerOptimizationService {
      * 구간 전체의 에너지 요약.
      *
      * <p><b>지점 배열을 적분하지 않는다.</b> 그 배열은 전력을 못 읽은 노드를 0으로 채워 만든 것이라, 적분하면
-     * 결손이 "0 W 를 썼다"가 되어 조용히 적게 나온다. 대신 <b>0을 채우기 전의 원시 시계열</b>을 노드별로
+     * 결손이 "0 W를 썼다"가 되어 조용히 적게 나온다. 대신 <b>0을 채우기 전의 원시 시계열</b>을 노드별로
      * 적분한다 — 그 맵에는 애초에 결손 자리가 없고, 지점 배열과 달리 이미 받아 둔 값이라 질의도 늘지 않는다.</p>
      *
      * <p>에너지 계산이 터져도 추세는 그대로 낸다. 곁들이는 요약이지 추세의 일부가 아니다.</p>

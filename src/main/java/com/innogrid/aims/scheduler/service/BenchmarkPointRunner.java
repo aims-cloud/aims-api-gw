@@ -408,7 +408,7 @@ final class BenchmarkPointRunner {
      * 전력이 오라클의 같은 시각 값과 같은지를 본다. 테스트가 사본을 두면 두 세계가 갈라져도 초록불이 된다.</p>
      *
      * <p><b>정격 전력은 계측 여부와 무관하게 싣는다.</b> 운영에서도 정격은 원장에서 오고 IPMI와 별개다 —
-     * 계측이 없는 노드는 "지금 몇 W 인지"를 모르는 것이고 "몇 W 까지 쓸 수 있는지"를 모르는 게 아니다.
+     * 계측이 없는 노드는 "지금 몇 W인지"를 모르는 것이고 "몇 W까지 쓸 수 있는지"를 모르는 게 아니다.
      * 이 구분이 계측 공백판의 뜻이다.</p>
      */
     static List<NodeResource> nodesAt(SyntheticCluster cluster, long t) {

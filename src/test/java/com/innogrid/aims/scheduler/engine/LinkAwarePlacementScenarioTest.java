@@ -30,8 +30,8 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * ① data=a, 게이트 off   → 4대 동점 · 링크품질 키 없음 · d 후보 유지                (현행과 동일)
  * ② data=a, 게이트 on    → a(1.0) > b(0.714) > c(0.588) · d 제외 "MDC 링크 단절"
- * ③ data=b, 게이트 on    → b(1.0) > a(0.714) > c(40ms UP 0.556) > d(미등록 0.5) · d 는 후보 유지
- * ④ data=a, a 만석       → b 선택 (a 는 C1 제외, d 는 C5 제외)
+ * ③ data=b, 게이트 on    → b(1.0) > a(0.714) > c(40ms UP 0.556) > d(미등록 0.5) · d는 후보 유지
+ * ④ data=a, a 만석       → b 선택 (a는 C1 제외, d는 C5 제외)
  * ⑤ data=a, power 엔진   → d 제외(C5 공유), 나머지 점수는 링크 무관(power 식)
  * ⑥ data=a, temperature  → d 제외(C5 공유)
  * </pre>

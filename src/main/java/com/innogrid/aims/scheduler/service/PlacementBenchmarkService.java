@@ -205,7 +205,7 @@ public class PlacementBenchmarkService {
 
     /**
      * 캐시·동시 제한을 거치지 않는 계산 — <b>테스트 전용</b>(패키지 밖에서 보이지 않는다). 결정론 테스트가 "두 번 계산해도 같은
-     * 숫자" 를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
+     * 숫자"를 확인할 때 캐시 적중이 그 확인을 무의미하게 만들지 않도록 이 경로를 쓴다.
      */
     PlacementBenchmarkResponse compareFresh(String boardId, String distribution) {
         String board = blank(boardId) ? BenchmarkClusters.MAIN : boardId;

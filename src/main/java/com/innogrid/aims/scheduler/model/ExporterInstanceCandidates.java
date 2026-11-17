@@ -20,7 +20,7 @@ import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
  *
  * <p>배정은 수집기와 같은 규칙 {@link ExporterInstances}(원장 → 호스트명 일치 → 그대로, 둘 이상이 같은 시리즈를 가리키면
  * 전부 자기 instance로 되돌림)의 <b>역방향</b>이다 — 규칙을 여기서 다시 쓰지 않고 {@link ExporterInstances#dcgmFor}의 결과를
- * 뒤집는다. 그래서 화면이 보는 "이 instance 는 어느 노드에 붙는가"와 수집기가 실제로 하는 일이 어긋날 수 없다.</p>
+ * 뒤집는다. 그래서 화면이 보는 "이 instance는 어느 노드에 붙는가"와 수집기가 실제로 하는 일이 어긋날 수 없다.</p>
  *
  * <p><b>답하지 않은 질의는 그 질의가 뒷받침하는 칸을 비운다.</b> 노드 목록을 못 받으면 배정을 계산할 수 없으니 후보의 배정은
  * {@link Assignment#UNKNOWN}이고, DCGM(IPMI) 목록을 못 받으면 원장값을 대조할 것이 없으니 그쪽 {@code ledgerOnly}는 빈

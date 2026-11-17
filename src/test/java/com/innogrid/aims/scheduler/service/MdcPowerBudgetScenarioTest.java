@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 배경   가상 클러스터는 MDC 3곳(mdc-seoul 3대·mdc-busan 3대·mdc-daejeon 2대)이고, 전력을 수집하는 노드는 seoul 3대와 busan 2대다.
  *        노드 한 대의 정격(C4)만 보면 각자 여유가 있어도 MDC 합계로는 넘을 수 있다 — 그 상황을 만든다.
  * 절차   ① 예산이 없을 때 mdc-seoul 노드가 후보에 있다  ② 현재 합계의 절반으로 예산을 건다
- *        ③ mdc-seoul 3대가 전부 "MDC 예산 초과"로 빠지고 배치는 다른 MDC 로 간다  ④ 진단에 초과가 표시된다
+ *        ③ mdc-seoul 3대가 전부 "MDC 예산 초과"로 빠지고 배치는 다른 MDC로 간다  ④ 진단에 초과가 표시된다
  *        ⑤ 예산을 지우면 원복된다
  * </pre>
  *

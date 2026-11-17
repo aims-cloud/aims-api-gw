@@ -39,7 +39,7 @@ import static org.mockito.Mockito.when;
  *
  * <pre>
  * 노드      8코어 1대 (수집기 대역), CPU 10%, 100W / 정격 500W
- * 엔진      weighted 를 스파이로 두고, 이름이 boom 으로 시작하면 RuntimeException · nocls 면 LinkageError 를 던진다
+ * 엔진      weighted를 스파이로 두고, 이름이 boom으로 시작하면 RuntimeException · nocls면 LinkageError를 던진다
  * 워크로드  GPU 종류 4건: ok1 CRITICAL · boom HIGH · nocls NORMAL · ok2 LOW (모두 1코어, 우선순위 순)
  *           CONTAINER 종류 1건: boom-solo (전부 실패 문구 확인용)
  * </pre>

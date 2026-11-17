@@ -156,7 +156,7 @@ class BannedClaimsSourceScanTest {
                 Matcher sl = STRING_LITERAL.matcher(tail);
                 int cursor = 0;
                 while (sl.find(cursor)) {
-                    // 인자 값은 리터럴을 + 로 잇는다. 다음 인자 이름(쉼표 뒤 식별자 =) 이 나오기 전까지만 취한다
+                    // 인자 값은 리터럴을 + 로 잇는다. 다음 인자 이름(쉼표 뒤 식별자 =)이 나오기 전까지만 취한다
                     String between = tail.substring(cursor, sl.start());
                     if (between.matches("(?s).*,\\s*\\w+\\s*=.*")) break;
                     joined.append(sl.group(1)).append(' ');

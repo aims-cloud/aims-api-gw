@@ -124,7 +124,7 @@ final class BenchmarkColumns {
 
         // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id는 여기서 크게 실패해야 한다. 목록에만 있으면
         // null이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200이다. 테스트 전용 이음매로 부분 집합을
-        // 줄 수는 있으므로 검사는 "목록 ⊆ 맵"과 "각 id 의 record id 일치"다.
+        // 줄 수는 있으므로 검사는 "목록 ⊆ 맵"과 "각 id의 record id 일치"다.
         for (String id : baselineOrder) {
             PlacementStrategy strategy = baselines.get(id);
             if (strategy == null) {

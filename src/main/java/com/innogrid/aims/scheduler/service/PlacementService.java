@@ -173,7 +173,7 @@ public class PlacementService {
         history.setCandidateCount(context.nodes().size());
         history.setExclusionCodes(exclusionCodesOf(result));
 
-        // 승자를 nodeId로 찍어 쓴다 — 아래 context.node(...) 와 같은 키여야 점수와 사용률이 같은 노드에서 온다.
+        // 승자를 nodeId로 찍어 쓴다 — 아래 context.node(...)와 같은 키여야 점수와 사용률이 같은 노드에서 온다.
         // 못 찾으면(배치 실패) 0으로 둔다. 그 행은 총점·노드 상태도 0이라 행 전체가 일관된다.
         result.candidateScores().stream()
                 .filter(score -> score.nodeId().equals(result.selectedNodeId()))

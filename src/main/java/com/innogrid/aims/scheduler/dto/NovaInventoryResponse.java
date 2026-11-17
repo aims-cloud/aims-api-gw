@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * Nova 인벤토리 조회 응답 — 하이퍼바이저를 스케줄러 노드 입력 모양으로, VM 을 워크로드 입력 모양으로 바꾼 것.
  *
- * <p>읽기 전용이고 저장하지 않는다. 배치 입력에는 아직 쓰지 않는다(다음 단계에서 모의 배치에 쓴다).</p>
+ * <p>읽기 전용이고 저장하지 않는다. 실행 경로의 배치 입력에는 쓰지 않고, 저장 없는 모의 배치는 {@code POST /inventory/nova/dry-run} 이 한다.</p>
  */
 @Schema(description = "Nova 인벤토리 조회 — 하이퍼바이저 · VM 을 스케줄러 입력 모양으로. 실제로 빈 인벤토리(EMPTY)와 연동 실패를 나눈다. 저장 없음")
 public record NovaInventoryResponse(
@@ -46,7 +46,7 @@ public record NovaInventoryResponse(
     /** 출처 표시 — 합성 모드(메트릭 소스 synthetic)와 섞이지 않게 응답마다 싣는다. */
     public static final String SOURCE = "NOVA";
 
-    @Schema(name = "NovaInventoryNode", description = "하이퍼바이저 한 대 — 필드 이름은 스케줄러 노드 입력과 같음")
+    @Schema(name = "NovaInventoryNode", description = "하이퍼바이저 한 대 — 총량 필드(totalCpu · totalMemoryMb · diskCapacityGb) 이름은 스케줄러 노드 입력과 같고, Nova 가 이미 할당한 양은 allocated 로 시작하는 필드에 따로 둠")
     public record Node(
             @Schema(description = "하이퍼바이저 호스트 이름", example = "compute-a.local")
             String hypervisorHostname,
@@ -62,13 +62,13 @@ public record NovaInventoryResponse(
             Integer allocatedCpu,
             @Schema(description = "메모리(MB · Nova memory_mb)", example = "65536")
             Long totalMemoryMb,
-            @Schema(description = "VM 에 할당한 메모리(MB · Nova memory_mb_used)", example = "8192")
+            @Schema(description = "할당한 메모리(MB · Nova memory_mb_used). 호스트 예약분이 들어 있어 VM 합보다 클 수 있다", example = "8704")
             Long allocatedMemoryMb,
-            @Schema(description = "로컬 디스크(GB · Nova local_gb)", example = "450")
+            @Schema(description = "디스크 용량(GB · Nova local_gb). 공유 스토리지면 노드마다 같은 값이 나온다", example = "450")
             Long diskCapacityGb,
-            @Schema(description = "VM 에 할당한 로컬 디스크(GB · Nova local_gb_used)", example = "40")
+            @Schema(description = "할당한 디스크(GB · Nova local_gb_used). 볼륨으로 부팅한 VM 은 들어가지 않는다", example = "40")
             Long allocatedDiskGb,
-            @Schema(description = "실행 중인 VM 수(Nova running_vms)", example = "2")
+            @Schema(description = "이 하이퍼바이저에 있는 VM 수(Nova running_vms). 이름과 달리 꺼진 · 일시 정지 VM 도 센다", example = "2")
             Integer runningVms,
             @Schema(description = "배치 입력으로 쓸 수 있는지 — state up · status enabled 이고 필수 필드(호스트 이름 · vcpus · memory_mb)가 숫자로 있을 때 true")
             boolean usable,

@@ -42,7 +42,7 @@ import jakarta.annotation.PreDestroy;
  * {@link NovaClient} 와 Keystone 클라이언트는 다른 담당 코드라 고치지 않는다.</p>
  *
  * <p>OpenStack 클라이언트에는 응답 시간 상한이 없어, 조회 전체를 전용 스레드 하나에서 돌리고 {@code timeoutMs} 까지만 기다린다.
- * 상한을 넘기면 기다리기만 멈추며 HTTP 호출은 상류가 응답할 때까지 그 스레드를 붙잡는다. 그 동안 들어온 조회는 상류를 다시 부르지 않고
+ * 상한을 넘기면 기다리기만 멈추며 HTTP 호출은 OpenStack 이 응답할 때까지 그 스레드를 붙잡는다. 앞선 조회가 끝나기 전(정상 진행 중 포함)에 들어온 조회는 다시 부르지 않고
  * {@link InventoryStatus#TIMEOUT} 으로 바로 돌려준다 — 메트릭 질의 상한({@code MetricsQueryGuard})과 같은 한계이고, 풀을 따로 두어
  * 노드 메트릭 수집에는 영향이 없다.</p>
  */

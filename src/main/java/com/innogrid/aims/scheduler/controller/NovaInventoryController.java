@@ -36,7 +36,7 @@ public class NovaInventoryController {
     @Operation(summary = "Nova 인벤토리 조회",
                description = "OpenStack Nova 의 하이퍼바이저와 VM 을 읽어 스케줄러 노드 · 워크로드 입력 모양으로 돌려줍니다. 읽기 전용이며 저장하지 않습니다. "
                        + "조회 실패도 200 이고 status 로 구분합니다 — EMPTY 는 연동이 정상이고 하이퍼바이저가 0대인 경우이며, 나머지 실패 값이면 nodes · servers 가 비고 건수가 null 입니다. "
-                       + "조회 전체 상한은 aims.scheduler.inventory.timeout-ms(기본 5초)이고, 앞선 조회가 아직 상류 응답을 기다리면 다시 부르지 않고 TIMEOUT 을 돌려줍니다. "
+                       + "조회 전체 상한은 aims.scheduler.inventory.timeout-ms(기본 5초)이고, 앞선 조회가 아직 끝나지 않았으면(정상 진행 중 포함) Nova 를 다시 부르지 않고 바로 TIMEOUT 을 돌려줍니다(elapsedMs 가 0 에 가까움). "
                        + "주기적으로 부르지 마세요.")
     @GetMapping("/inventory/nova")
     public ApiResponse<NovaInventoryResponse> novaInventory() {

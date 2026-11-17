@@ -15,11 +15,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>저장하지 않는다. 노드에 사용률 · 전력 · 온도가 없어 정책의 사용률 상한과 물리 vCPU · 메모리만 결과를 가른다 —
  * 엔진 비교나 통합 권고의 근거로 쓰지 않는다. 건수는 그 값을 알 때만 채우고, 모르면 null이다(0과 다름).</p>
  */
-@Schema(description = "Nova 인벤토리 모의 배치 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고 그 위 VM 을 정책 상한 아래 다시 놓아 본 결과. 저장 없음")
+@Schema(description = "Nova 인벤토리 모의 배치 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고 그 위 VM을 다시 놓아 본 결과. "
+        + "정책 상한은 놓기 전 값으로 지키므로 놓은 뒤 사용률은 상한을 넘을 수 있다(nodes의 overLimit). 저장 없음")
 public record NovaDryRunResponse(
         @Schema(description = "결과 출처. 실 인벤토리 결과는 NOVA(합성 모드는 GET /metrics-source 의 synthetic)", example = "NOVA")
         String source,
-        @Schema(description = "OK(모의 배치함) · DISABLED(플래그 꺼짐 · Nova 를 부르지 않음) · INVENTORY_FAILED(하이퍼바이저나 VM 목록을 못 읽음) · "
+        @Schema(description = "OK(모의 배치함) · DISABLED(플래그 꺼짐 · Nova 를 부르지 않음) · INVENTORY_FAILED(하이퍼바이저나 VM 목록을 못 읽음, "
+                + "또는 쓸 수 있는 호스트 위 VM의 flavor를 못 읽어 다시 놓을 VM이 0 — 이때는 inventoryStatus OK · vmCount 0 · unavailable에 flavors) · "
                 + "NO_NODES(쓸 수 있는 하이퍼바이저 0) · NO_VMS(다시 놓을 VM 0)")
         NovaDryRunStatus status,
         @Schema(description = "상태별 고정 안내 문구", example = "Nova 인벤토리로 모의 배치를 했습니다(자원 가용성만 반영 · 전력 · 온도는 계측 없음)")
@@ -30,9 +32,11 @@ public record NovaDryRunResponse(
         List<String> unavailable,
         @Schema(description = "적용한 배치 정책 이름 — VM 배치와 같은 규칙(VM 종류 활성 → 공통 활성 → default). 모의 배치를 하지 않았으면 null", example = "default")
         String policyName,
-        @Schema(description = "놓을 때 쓴 엔진. 계측이 없는 노드라 엔진에 따른 차이는 없다. 모의 배치를 하지 않았으면 null", example = "weighted")
+        @Schema(description = "놓을 때 쓴 엔진(정책의 기본 엔진, 없으면 weighted). 계측이 없는 노드라 자원 여유로만 고르지만 "
+                + "노드 배치 스코어 식과 소수 넷째 자리 반올림 뒤 동점 여부가 엔진마다 달라 VM별 결정은 다를 수 있다. 모의 배치를 하지 않았으면 null", example = "weighted")
         String engine,
-        @Schema(description = "정책의 CPU 사용률 상한(%) — 놓기 전 노드의 실효 사용률이 이 값을 넘으면 그 노드에 놓지 않는다. 모의 배치를 하지 않았으면 null", example = "80.0")
+        @Schema(description = "정책의 CPU 사용률 상한(%) — 놓기 전 노드의 실효 사용률이 이 값을 넘으면 그 노드에 놓지 않는다. "
+                + "놓은 뒤 사용률은 이 값을 넘을 수 있다(nodes의 overLimit). 모의 배치를 하지 않았으면 null", example = "80.0")
         Double cpuLimitPercent,
         @Schema(description = "정책의 메모리 사용률 상한(%). 뜻은 cpuLimitPercent 와 같다. 모의 배치를 하지 않았으면 null", example = "85.0")
         Double memoryLimitPercent,
@@ -53,7 +57,7 @@ public record NovaDryRunResponse(
         @Schema(description = "못 놓인 VM 수. 모의 배치를 하지 않았으면 null", example = "0")
         Integer failedCount,
         @Schema(description = "못 놓인 VM 을 제외 사유 코드별로 센 수 — 한 VM 의 후보 노드들이 서로 다른 코드로 빠졌으면 코드마다 한 번씩 센다. "
-                + "모의 배치를 하지 않았으면 null")
+                + "평가 중 오류로 못 놓인 VM은 코드가 없어 세지 않는다. 모의 배치를 하지 않았으면 null")
         Map<String, Integer> failedByReason,
         @Schema(description = "지금 대상 VM 이 하나 이상 있는 쓸 수 있는 하이퍼바이저 수. 모의 배치를 하지 않았으면 null", example = "2")
         Integer hostsInUseBefore,
@@ -61,6 +65,8 @@ public record NovaDryRunResponse(
         Integer hostsInUseAfter,
         @Schema(description = "놓인 VM 가운데 지금 호스트와 다른 호스트에 놓인 수 — 이동 계획이 아니라 지금 Nova 배치와 다른 정도. 모의 배치를 하지 않았으면 null", example = "1")
         Integer hostChangedCount,
+        @Schema(description = "모의 배치 뒤 사용률이 정책 상한을 넘은 노드 수(nodes에서 overLimit이 true인 수). 모의 배치를 하지 않았으면 null", example = "1")
+        Integer overLimitNodeCount,
         @Schema(description = "쓸 수 있는 하이퍼바이저별 지금 할당과 모의 배치 뒤 값(호스트 이름순)")
         List<Node> nodes,
         @Schema(description = "다시 놓은 VM 별 결정(놓은 순서)")
@@ -94,7 +100,17 @@ public record NovaDryRunResponse(
             @Schema(description = "모의 배치 뒤 이 노드에 놓인 VM 의 요구 메모리 합(MB)", example = "12288")
             long simulatedMemoryMb,
             @Schema(description = "모의 배치 뒤 이 노드에 놓인 VM 수", example = "2")
-            int simulatedVmCount
+            int simulatedVmCount,
+            @Schema(description = "모의 배치 뒤 CPU 사용률(%) — 놓인 VM의 요구 vCPU 합 ÷ 물리 vCPU × 100. 실측 사용률이 아니라 엔진이 정책 상한과 "
+                    + "비교하는 값이며 소수 둘째 자리로 반올림해 싣는다. 물리 vCPU가 0이면 null", example = "37.5")
+            Double simulatedCpuUsagePercent,
+            @Schema(description = "모의 배치 뒤 메모리 사용률(%) — 놓인 VM의 요구 메모리 합 ÷ Nova memory_mb × 100(호스트 예약분을 빼지 않음). "
+                    + "소수 둘째 자리로 반올림해 싣는다. 메모리가 0이면 null", example = "18.75")
+            Double simulatedMemoryUsagePercent,
+            @Schema(description = "모의 배치 뒤 CPU나 메모리 사용률이 정책 상한을 넘었는지. 판정은 반올림 전 값으로 하므로 표시가 상한과 같아 보여도 "
+                    + "true일 수 있다. 규칙 위반이 아니다 — 상한은 놓기 전 값으로 지키므로 마지막에 놓인 VM 때문에 넘을 수 있고, "
+                    + "true면 그 뒤로 이 노드에는 더 놓이지 않는다. 물리 총량이 0인 자원은 넘지 않은 것으로 본다(사용률은 null)")
+            boolean overLimit
     ) {
     }
 
@@ -145,7 +161,7 @@ public record NovaDryRunResponse(
         return new NovaDryRunResponse(SOURCE, status, status.message(), inventoryStatus, unavailable,
                 null, null, null, null, ORDER, checkedAt, elapsedMs,
                 nodeCount, vmCount, excluded == null ? null : excluded.size(),
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
                 List.of(), List.of(), excluded == null ? List.of() : excluded);
     }
 }

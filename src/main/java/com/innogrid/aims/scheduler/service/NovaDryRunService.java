@@ -32,12 +32,14 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
 /**
  * Nova 인벤토리 모의 배치 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고, 그 위에 있는 VM을 스케줄러가 다시 놓아 본다.
  *
- * <p>답하는 질문은 「지금 실 VM 이 정책의 사용률 상한과 물리 vCPU · 메모리 안에 다 들어가는가, 못 들어가면 왜인가」다.
+ * <p>답하는 질문은 「지금 실 VM을 정책 상한(놓기 전 값)과 물리 vCPU · 메모리를 지키며 다시 놓을 수 있는가, 놓은 뒤 노드 사용률은
+ * 어떤가, 못 놓이면 왜인가」다.
  * 저장하지 않는다 — 워크로드 · 배치 이력 · 정책 어느 행도 쓰지 않고, 실행 계층에 넘기지 않는다. 스케줄 모의 실행과 같은
  * 방식으로 한 컨텍스트에 차례로 놓고 성공한 건의 요구량을 예약으로 쌓는다.</p>
  *
- * <p>Nova 노드는 메트릭 저장소의 노드와 이을 키가 없어 사용률 · 전력 · 온도를 넣지 않는다. 그래서 엔진 셋이 모두 자원 여유가
- * 큰 노드를 고르는 같은 결과를 내므로, 정책의 엔진 하나만 쓰고 엔진 비교 · 통합 권고의 근거로 쓰지 않는다. 디스크는 보지 않는다
+ * <p>Nova 노드는 메트릭 저장소의 노드와 이을 키가 없어 사용률 · 전력 · 온도를 넣지 않는다. 그래서 엔진 셋 모두 자원 여유로만
+ * 고르지만, 노드 배치 스코어 식과 소수 넷째 자리 반올림 뒤 동점 여부가 엔진마다 달라 VM별 결정은 다를 수 있다.
+ * 정책의 엔진 하나만 쓰고 엔진 비교 · 통합 권고의 근거로 쓰지 않는다. 디스크는 보지 않는다
  * (서버의 하이퍼바이저 디스크 값이 공유 스토리지라 노드별 값이 아니다). 기능 플래그
  * {@code aims.scheduler.inventory.simulation-enabled}를 호출마다 읽고, 꺼져 있으면 Nova를 부르지 않는다.</p>
  */
@@ -112,7 +114,10 @@ public class NovaDryRunService {
                     elapsedMs(start), 0, targets.size(), excluded);
         }
         if (targets.isEmpty()) {
-            return NovaDryRunResponse.notRun(NovaDryRunStatus.NO_VMS, inventoryStatus, snapshot.unavailable(), checkedAt,
+            // 쓸 수 있는 호스트 위 VM의 flavor를 못 읽어 대상이 빈 것은 「VM 0대」가 아니라 연동 실패다
+            NovaDryRunStatus status = flavorUnreadOnUsableHost(snapshot.servers(), usable)
+                    ? NovaDryRunStatus.INVENTORY_FAILED : NovaDryRunStatus.NO_VMS;
+            return NovaDryRunResponse.notRun(status, inventoryStatus, snapshot.unavailable(), checkedAt,
                     elapsedMs(start), usable.size(), 0, excluded);
         }
 
@@ -152,9 +157,10 @@ public class NovaDryRunService {
                     result.success(), result.reason(), PlacementService.exclusionCodesOf(result)));
         }
 
-        List<NovaDryRunResponse.Node> nodeRows = nodeRows(usable, targets, decisions);
+        List<NovaDryRunResponse.Node> nodeRows = nodeRows(usable, targets, decisions, nodes, policy);
         int placed = (int) decisions.stream().filter(NovaDryRunResponse.Decision::success).count();
         int hostChanged = (int) decisions.stream().filter(NovaDryRunResponse.Decision::hostChanged).count();
+        int overLimit = (int) nodeRows.stream().filter(NovaDryRunResponse.Node::overLimit).count();
         log.info("Nova 모의 배치: 노드 {} · 대상 {} · 놓임 {} · 못 놓임 {} · 대상 밖 {} · 정책 {}",
                 usable.size(), targets.size(), placed, targets.size() - placed, excluded.size(), policy.getName());
         return new NovaDryRunResponse(NovaDryRunResponse.SOURCE, NovaDryRunStatus.OK, NovaDryRunStatus.OK.message(),
@@ -164,26 +170,55 @@ public class NovaDryRunService {
                 usable.size(), targets.size(), excluded.size(), placed, targets.size() - placed, failedByReason,
                 (int) nodeRows.stream().filter(n -> n.currentVmCount() > 0).count(),
                 (int) nodeRows.stream().filter(n -> n.simulatedVmCount() > 0).count(),
-                hostChanged, nodeRows, decisions, excluded);
+                hostChanged, overLimit, nodeRows, decisions, excluded);
     }
 
-    /** 노드별 지금 할당(Nova 값)과 모의 배치 뒤 값. 호스트 이름순(스냅샷 순서). */
+    /**
+     * 노드별 지금 할당(Nova 값)과 모의 배치 뒤 값 · 사용률. 호스트 이름순(스냅샷 순서).
+     *
+     * <p>사용률은 예약이 쌓인 컨텍스트 노드의 실효 사용률을 그대로 읽는다 — 엔진이 다음 VM을 놓을 때 보는 값과 같다.
+     * 상한을 넘었는지는 엔진의 사용률 제약(C2)과 같은 식으로 반올림 전 값을 비교하고, 응답에는 둘째 자리로 반올림한 값을 싣는다.</p>
+     */
     private static List<NovaDryRunResponse.Node> nodeRows(Map<String, NovaInventorySnapshot.Node> usable,
                                                          List<NovaInventorySnapshot.Server> targets,
-                                                         List<NovaDryRunResponse.Decision> decisions) {
+                                                         List<NovaDryRunResponse.Decision> decisions,
+                                                         List<NodeResource> reserved, SchedulingPolicy policy) {
         Map<String, Long> currentVms = targets.stream()
                 .collect(Collectors.groupingBy(NovaInventorySnapshot.Server::hypervisorHostname, Collectors.counting()));
+        Map<String, NodeResource> after = reserved.stream().collect(Collectors.toMap(NodeResource::getNodeId, n -> n));
         List<NovaDryRunResponse.Node> rows = new ArrayList<>(usable.size());
         for (NovaInventorySnapshot.Node node : usable.values()) {
             String host = node.hypervisorHostname();
             List<NovaDryRunResponse.Decision> here = decisions.stream().filter(d -> host.equals(d.simulatedHost())).toList();
+            NodeResource placed = after.get(host);
+            double cpu = placed.effectiveCpuUsagePercent();
+            double memory = placed.effectiveMemoryUsagePercent();
+            boolean overLimit = cpu > policy.getMaxCpuUsagePercent() || memory > policy.getMaxMemoryUsagePercent();
             rows.add(new NovaDryRunResponse.Node(host, node.totalCpu(), node.totalMemoryMb(),
                     node.allocatedCpu(), node.allocatedMemoryMb(), currentVms.getOrDefault(host, 0L).intValue(),
                     here.stream().mapToInt(NovaDryRunResponse.Decision::requiredCpu).sum(),
                     here.stream().mapToLong(NovaDryRunResponse.Decision::requiredMemoryMb).sum(),
-                    here.size()));
+                    here.size(),
+                    placed.getTotalCpu() > 0 ? percent(cpu) : null,
+                    placed.getTotalMemoryMb() > 0 ? percent(memory) : null,
+                    overLimit));
         }
         return rows;
+    }
+
+    /**
+     * 쓸 수 있는 호스트 위 VM 가운데 flavor를 못 읽어 요구 자원을 모르는 것이 있는지 — 게이트웨이의 flavor 조회 실패 · 조회 상한 초과
+     * (flavor id는 있고 요구 자원이 없음). 「flavor 없음」은 Nova가 flavor를 주지 않은 경우라 flavor id가 없어 들지 않는다.
+     */
+    private static boolean flavorUnreadOnUsableHost(List<NovaInventorySnapshot.Server> servers,
+                                                    Map<String, NovaInventorySnapshot.Node> usable) {
+        return servers.stream().anyMatch(s -> !s.convertible() && s.flavorId() != null && s.requiredCpu() == null
+                && s.hypervisorHostname() != null && usable.containsKey(s.hypervisorHostname()));
+    }
+
+    /** 응답에 싣는 사용률 — 소수 둘째 자리 반올림(0.5는 올림). 상한 비교에는 쓰지 않는다. */
+    private static double percent(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
     /** 빈 노드 — 사용률 · 전력 · 온도 0(계측 없음), 디스크 총량 0(모름 · 디스크 제약을 보지 않음). */

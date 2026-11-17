@@ -30,7 +30,7 @@ import com.innogrid.aims.scheduler.model.NovaDryRunStatus;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
 /**
- * Nova 인벤토리 모의 배치 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고, 그 위에 있는 VM 을 스케줄러가 다시 놓아 본다.
+ * Nova 인벤토리 모의 배치 — 쓸 수 있는 하이퍼바이저를 빈 노드로 두고, 그 위에 있는 VM을 스케줄러가 다시 놓아 본다.
  *
  * <p>답하는 질문은 「지금 실 VM 이 정책의 사용률 상한과 물리 vCPU · 메모리 안에 다 들어가는가, 못 들어가면 왜인가」다.
  * 저장하지 않는다 — 워크로드 · 배치 이력 · 정책 어느 행도 쓰지 않고, 실행 계층에 넘기지 않는다. 스케줄 모의 실행과 같은
@@ -39,7 +39,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * <p>Nova 노드는 메트릭 저장소의 노드와 이을 키가 없어 사용률 · 전력 · 온도를 넣지 않는다. 그래서 엔진 셋이 모두 자원 여유가
  * 큰 노드를 고르는 같은 결과를 내므로, 정책의 엔진 하나만 쓰고 엔진 비교 · 통합 권고의 근거로 쓰지 않는다. 디스크는 보지 않는다
  * (서버의 하이퍼바이저 디스크 값이 공유 스토리지라 노드별 값이 아니다). 기능 플래그
- * {@code aims.scheduler.inventory.simulation-enabled} 를 호출마다 읽고, 꺼져 있으면 Nova 를 부르지 않는다.</p>
+ * {@code aims.scheduler.inventory.simulation-enabled}를 호출마다 읽고, 꺼져 있으면 Nova를 부르지 않는다.</p>
  */
 @Service
 public class NovaDryRunService {

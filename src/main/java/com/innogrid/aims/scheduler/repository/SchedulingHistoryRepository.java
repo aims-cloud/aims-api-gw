@@ -23,13 +23,13 @@ public interface SchedulingHistoryRepository extends JpaRepository<SchedulingHis
 
     /**
      * 실행 1건이 만든 결정들. 실행 상세에서 쓴다. 결정 시각이 같으면 {@code id} 오름차순 —
-     * 배치 이력 페이징 {@code sort=createdAt,asc} 와 행 순서가 같다.
+     * 배치 이력 페이징 {@code sort=createdAt,asc}와 행 순서가 같다.
      */
     List<SchedulingHistory> findByScheduleRunIdOrderByCreatedAtAscIdAsc(Long scheduleRunId);
 
     /**
      * 실행 이력을 지울 때 연결을 끊을 대상.
-     * 외래키가 없어 DB 가 정리해 주지 않으므로 코드에서 직접 찾아 끊는다.
+     * 외래키가 없어 DB가 정리해 주지 않으므로 코드에서 직접 찾아 끊는다.
      */
     List<SchedulingHistory> findByScheduleRunIdIn(Collection<Long> scheduleRunIds);
 }

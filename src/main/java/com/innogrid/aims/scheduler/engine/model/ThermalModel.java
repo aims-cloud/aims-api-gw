@@ -19,13 +19,13 @@ import com.innogrid.aims.scheduler.model.NodeResource.ThermalState;
 /**
  * 온도 모델 — 온도 제어 기반 자원 할당의 판단 근거를 계산한다.
  *
- * 기존 TemperatureAwareScheduler 의 수식(열적 여유, 열적 균형, 냉각 비용, 열관성)을
+ * 기존 TemperatureAwareScheduler의 수식(열적 여유, 열적 균형, 냉각 비용, 열관성)을
  * 그대로 옮기고, 경고/임계 2단 상태와 쿨다운을 추가했다.
  *
  * <p>쿨다운 상태는 인메모리에 둔다. 단일 인스턴스 운영을 전제하며 재기동 시 초기화된다.</p>
  *
- * <p>냉각 대기는 (노드, 그 대기를 건 온도 상한) 단위로 든다. 상한 t 의 대기는 「실측 온도가 t 를 넘었다」는 관측이라
- * 상한이 t 이하인 평가만 막는다 — 상한이 더 높은 평가에는 넘었다는 근거가 없다. 정책 id 가 아니라 상한 값을 쓰는 것은
+ * <p>냉각 대기는 (노드, 그 대기를 건 온도 상한) 단위로 든다. 상한 t의 대기는 「실측 온도가 t 를 넘었다」는 관측이라
+ * 상한이 t 이하인 평가만 막는다 — 상한이 더 높은 평가에는 넘었다는 근거가 없다. 정책 id가 아니라 상한 값을 쓰는 것은
  * 스케줄이 상한을 id 없는 정책 사본에 싣기 때문이다. 같은 상한의 대기가 이미 있으면 만료됐더라도 덮지 않는다(만료 삭제는
  * 확인이 맡는다). 시계는 맵 갱신(compute) 밖에서 읽는다 — 갱신 함수 안에서 같은 맵을 다시 건드리지 않기 위해서다.</p>
  */
@@ -67,7 +67,7 @@ public class ThermalModel {
 
     /**
      * 열적 균형 점수 (0~1). 클러스터 평균보다 낮으면 가점, 높으면 감점하는 대칭식이다 — 핫스팟을 피하는 것이
-     * 목표이며, 실제로 피했는지는 실측 온도 관측 지표가 있어야 말할 수 있다. 지금은 비교 API 의 생성식 온도
+     * 목표이며, 실제로 피했는지는 실측 온도 관측 지표가 있어야 말할 수 있다. 지금은 비교 API의 생성식 온도
      * 지표(경고 구간 노드 수·온도 표준편차, 보조)만 있다.
      */
     public double balanceScore(double temperature, double averageTemperature) {
@@ -96,11 +96,11 @@ public class ThermalModel {
     /**
      * 예약분까지 반영한 온도(℃).
      *
-     * <p>{@link #predictedTemperature} 와 같은 열관성 식을 예약분에 적용한다. 한 실행에서
+     * <p>{@link #predictedTemperature}와 같은 열관성 식을 예약분에 적용한다. 한 실행에서
      * 여러 워크로드를 배치할 때 실측 온도만 보면 상승분이 누적되지 않아, 배치 후 예상 온도
      * 검사가 <b>워크로드 하나만 얹은 값</b>에 머문다.</p>
      *
-     * <p>온도를 수집하지 못한 노드(0℃)는 0 을 유지한다. 없는 값에 상승분을 얹으면 근거 없는
+     * <p>온도를 수집하지 못한 노드(0℃)는 0을 유지한다. 없는 값에 상승분을 얹으면 근거 없는
      * 숫자가 된다.</p>
      */
     public double effectiveTemperature(NodeResource node) {
@@ -111,7 +111,7 @@ public class ThermalModel {
 
     /**
      * 온도 상태를 판정한다.
-     * 온도를 수집하지 못한 노드(0℃)는 판단 근거가 없으므로 NORMAL 로 본다.
+     * 온도를 수집하지 못한 노드(0℃)는 판단 근거가 없으므로 NORMAL로 본다.
      */
     public ThermalState state(double temperature, double warningTemperature, double maxTemperature) {
         if (maxTemperature > 0 && temperature >= maxTemperature) return ThermalState.CRITICAL;
@@ -125,7 +125,7 @@ public class ThermalModel {
     }
 
     /**
-     * 경고 구간에서의 감점 비율 (0~1). NORMAL 은 0, 임계 직전은 1 에 가까워진다.
+     * 경고 구간에서의 감점 비율 (0~1). NORMAL은 0, 임계 직전은 1에 가까워진다.
      */
     public double warningPenalty(double temperature, double warningTemperature, double maxTemperature) {
         if (maxTemperature <= warningTemperature) return 0;
@@ -147,7 +147,7 @@ public class ThermalModel {
 
     /**
      * 지금 맵에 있는 냉각 대기 기록 그대로 — 노드별 · 상한별 시작 시각. 실행 입력 저장이 읽는다.
-     * 읽기만 한다: {@link #isCoolingDown} 과 달리 만료된 기록을 지우지 않으므로, 읽은 뒤의 판정이 읽기 전과 같다.
+     * 읽기만 한다: {@link #isCoolingDown}과 달리 만료된 기록을 지우지 않으므로, 읽은 뒤의 판정이 읽기 전과 같다.
      */
     public Map<String, Map<Double, Instant>> cooldownMarks() {
         return Map.copyOf(criticalSince);
@@ -177,7 +177,7 @@ public class ThermalModel {
     }
 
     /**
-     * 상한이 {@code limitCelsius} 인 평가에서 쿨다운 중인지 — 상한이 그 값 이상인 살아 있는 대기가 있으면 참.
+     * 상한이 {@code limitCelsius}인 평가에서 쿨다운 중인지 — 상한이 그 값 이상인 살아 있는 대기가 있으면 참.
      * 온도가 내려가도 설정 시간 동안은 배치를 보류해 진동(hysteresis)을 막는다.
      */
     public boolean isCoolingDown(String nodeId, double limitCelsius) {
@@ -190,7 +190,7 @@ public class ThermalModel {
     }
 
     /**
-     * 냉각 대기 중인 노드가 하나라도 있는지. 기록 전부를 {@link #isCoolingDown} 으로 확인하므로
+     * 냉각 대기 중인 노드가 하나라도 있는지. 기록 전부를 {@link #isCoolingDown}으로 확인하므로
      * 설정 시간이 지난 기록은 이때 모두 지워진다. 중간에 멈추지 않고 끝까지 돈다 — 멈추면 어느
      * 만료 기록이 지워지는지가 맵의 순회 순서에 좌우된다.
      */
@@ -202,7 +202,7 @@ public class ThermalModel {
         return any;
     }
 
-    /** 상한이 {@code limitCelsius} 인 평가를 막는 대기 가운데 가장 늦게 풀리는 것까지 남은 시간(분). 제외 사유 메시지에 쓴다. */
+    /** 상한이 {@code limitCelsius}인 평가를 막는 대기 가운데 가장 늦게 풀리는 것까지 남은 시간(분). 제외 사유 메시지에 쓴다. */
     public long remainingCooldownMinutes(String nodeId, double limitCelsius) {
         return remaining(nodeId, limitCelsius);
     }

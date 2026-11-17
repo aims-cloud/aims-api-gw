@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * 저장 전 워크로드 모의 배치 — 초안은 어떤 행도 쓰지 않고, 정책 선택은 저장된 워크로드의 모의 배치와 같은 규칙이되
- * 정책이 하나도 없어도 {@code default} 를 만들지 않는다.
+ * 정책이 하나도 없어도 {@code default}를 만들지 않는다.
  */
 @SpringBootTest
 @Transactional

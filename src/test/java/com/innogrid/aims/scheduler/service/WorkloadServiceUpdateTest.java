@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 워크로드 편집(부분 갱신) 규칙 — 보낸 키만, 비울 수 있는 여섯 칸의 명시적 null, 생성과 같은 검증, 상태 409, 전부 검증한 뒤 일괄 반영,
  * 재시도 회계 불변.
  *
- * <p>요청은 JSON 문자열을 실제 매퍼로 읽어 만든다 — "키 없음" 과 "명시적 null" 의 구분이 HTTP 와 같은 경로로 생긴다.</p>
+ * <p>요청은 JSON 문자열을 실제 매퍼로 읽어 만든다 — "키 없음"과 "명시적 null"의 구분이 HTTP와 같은 경로로 생긴다.</p>
  */
 @SpringBootTest
 @Transactional
@@ -54,7 +54,7 @@ class WorkloadServiceUpdateTest {
                 300.0, 70.0, 100.0, "HIGH"));
     }
 
-    /** DB 에서 다시 읽는다 — 영속성 컨텍스트를 비워 메모리 사본이 아니라 저장된 값을 본다. */
+    /** DB에서 다시 읽는다 — 영속성 컨텍스트를 비워 메모리 사본이 아니라 저장된 값을 본다. */
     private Workload reload(Workload w) {
         repository.flush();
         em.clear();

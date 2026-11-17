@@ -39,11 +39,11 @@ import jakarta.persistence.criteria.Predicate;
 /**
  * 배치 결정을 실행 계층으로 넘기고(디스패치), 실행 계층의 결과를 되돌려 받는다.
  *
- * <p><b>호출 시점.</b> {@link PlacementService#place} 의 트랜잭션이 끝난 뒤 호출자가 부른다. 결정·예약·이력은 이미 커밋된
- * 상태라 여기서 무슨 일이 나도 결정은 되돌아가지 않는다 — 디스패처 예외는 UNAVAILABLE 로 기록하고 삼킨다.
- * 실행 컨텍스트에 잡힌 예약은 호출자가 {@code PlaceAndDispatch} 를 거쳐 되돌린다(받지 않은 배치만 · 전달이 예외를 내면 남김).</p>
+ * <p><b>호출 시점.</b> {@link PlacementService#place}의 트랜잭션이 끝난 뒤 호출자가 부른다. 결정·예약·이력은 이미 커밋된
+ * 상태라 여기서 무슨 일이 나도 결정은 되돌아가지 않는다 — 디스패처 예외는 UNAVAILABLE로 기록하고 삼킨다.
+ * 실행 컨텍스트에 잡힌 예약은 호출자가 {@code PlaceAndDispatch}를 거쳐 되돌린다(받지 않은 배치만 · 전달이 예외를 내면 남김).</p>
  *
- * <p><b>거부·불가.</b> 실행 계층이 받지 않으면 워크로드를 FAILED 로 돌리고 배정을 해제한다({@link Workload#failDispatch}).
+ * <p><b>거부·불가.</b> 실행 계층이 받지 않으면 워크로드를 FAILED로 돌리고 배정을 해제한다({@link Workload#failDispatch}).
  * 그러면 다음 스케줄 실행이 재시도 상한 안에서 다시 대상으로 잡는다.</p>
  */
 @Service
@@ -60,8 +60,8 @@ public class PlacementDispatchService {
     private final ScheduleActorResolver actorResolver;
 
     /**
-     * 결과 반영(디스패치 행 + 워크로드)을 한 트랜잭션으로 묶는다. 같은 빈 안에서 {@code this.settle()} 을 부르면 프록시를
-     * 거치지 않아 {@code @Transactional} 이 무시되므로(리뷰에서 확인) 템플릿으로 명시한다.
+     * 결과 반영(디스패치 행 + 워크로드)을 한 트랜잭션으로 묶는다. 같은 빈 안에서 {@code this.settle()}을 부르면 프록시를
+     * 거치지 않아 {@code @Transactional}이 무시되므로(리뷰에서 확인) 템플릿으로 명시한다.
      */
     private final TransactionTemplate tx;
 
@@ -165,7 +165,7 @@ public class PlacementDispatchService {
      * 옛 결정의 기록           → 200 · 기록만 전이표대로 갱신(비고 표지 "옛 결정의 기록 — 워크로드는 바꾸지 않음") · 워크로드 불변
      * </pre>
      * 워크로드 전이는 기존 전이표({@link Workload#transitionTo})를 쓴다. 디스패치는 바뀌는데 워크로드가 이미 다른 상태라
-     * 전이가 안 되면(워크로드가 다른 경로로 먼저 바뀐 경우) 디스패치만 갱신하고 그 사실을 message 에 남긴다.
+     * 전이가 안 되면(워크로드가 다른 경로로 먼저 바뀐 경우) 디스패치만 갱신하고 그 사실을 message에 남긴다.
      * 기록이 워크로드의 <b>현재 결정</b>이 아니면({@link #isCurrentDecision} — 요청 시각이 배정 시각보다 앞서면 옛 결정)
      * 실행 계층이 말한 사실은 기록에 남기되 워크로드·재시도 회계·배정은 건드리지 않는다. 옛 결정의 열린 기록은 단건 재배치나
      * 되살려 다시 배치한 워크로드에 남는데, 전에는 그 기록에 늦게 온 콜백이 현재 결정의 워크로드를 옮기고 재시도 횟수를 올렸다.
@@ -208,7 +208,7 @@ public class PlacementDispatchService {
             if (w.getStatus() == workloadTarget) return;
             if (w.transitionTo(workloadTarget)) {
                 if (workloadTarget == Workload.WorkloadStatus.FAILED) {
-                    // message 는 실행 계층 계약에서 선택값이다. 사유가 없어도 실패 회계와 백오프 시각은 반드시 남긴다.
+                    // message는 실행 계층 계약에서 선택값이다. 사유가 없어도 실패 회계와 백오프 시각은 반드시 남긴다.
                     // 실행 실패가 배치 재시도 상한을 함께 쓰는 것은 의도다(반복 실패 워크로드가 영영 재배치되지 않게).
                     String reason = message == null || message.isBlank() ? "실행 실패" : "실행 실패: " + message;
                     w.markFailed(reason.length() > PlacementDispatch.MESSAGE_MAX ? reason.substring(0, PlacementDispatch.MESSAGE_MAX) : reason);
@@ -262,7 +262,7 @@ public class PlacementDispatchService {
 
     /**
      * 상태 변경 — 운영자가 워크로드를 끝 상태(COMPLETED·FAILED)로 바꿀 때 <b>최신 전달 기록</b>이 열려 있으면 같은 끝 상태로
-     * 마감한다(비고 앞에 "운영자 상태 변경 — "). 전에는 워크로드만 바뀌고 기록은 ACCEPTED 로 그대로 남아, 대기로 되살려 다시
+     * 마감한다(비고 앞에 "운영자 상태 변경 — "). 전에는 워크로드만 바뀌고 기록은 ACCEPTED로 그대로 남아, 대기로 되살려 다시
      * 배치한 뒤 그 옛 기록에 늦게 온 콜백이 새 결정의 워크로드를 옮길 수 있었다.
      *
      * <pre>
@@ -270,8 +270,8 @@ public class PlacementDispatchService {
      * 끝 상태(COMPLETED·FAILED·REJECTED·…)       → 그대로
      * REQUESTED · ACCEPTED · RUNNING(열린 상태) → 대상 끝 상태로 마감
      * </pre>
-     * 현재 결정은 멱등키가 아니라 <b>요청 시각이 가장 늦은 행</b>(같으면 id 가 큰 행)으로 본다 — 배정 시각은 나노초로 들고
-     * 있다가 DB 에는 마이크로초로 반올림되어 저장되므로, 저장 뒤 다시 읽은 값으로 만든 키가 드물게 1ms 어긋난다.
+     * 현재 결정은 멱등키가 아니라 <b>요청 시각이 가장 늦은 행</b>(같으면 id가 큰 행)으로 본다 — 배정 시각은 나노초로 들고
+     * 있다가 DB에는 마이크로초로 반올림되어 저장되므로, 저장 뒤 다시 읽은 값으로 만든 키가 드물게 1ms 어긋난다.
      * 디스패처 취소 훅은 부르지 않는다 — 상태 변경은 실행 계층에 명령하는 경로가 아니라 결과를 대신 적는 경로다
      * (기록형 디스패처는 할 일이 없고, 원격 구현체를 붙일 때 취소 알림 여부를 다시 판단한다).
      * 호출자의 트랜잭션 안에서 부른다.
@@ -292,7 +292,7 @@ public class PlacementDispatchService {
     public enum RestartRecovery {
         /** 실행 계층이 이미 받았다(ACCEPTED·RUNNING) — 워크로드를 그대로 둔다. */
         KEPT,
-        /** 전달 중(REQUESTED)이었다 — 기록을 UNAVAILABLE 로 닫고 워크로드를 실패로 돌린다. */
+        /** 전달 중(REQUESTED)이었다 — 기록을 UNAVAILABLE로 닫고 워크로드를 실패로 돌린다. */
         CLOSED_AND_FAILED,
         /** 현재 결정의 기록이 없거나 이미 끝났다 — 워크로드를 실패로 돌린다. */
         FAILED,
@@ -309,7 +309,7 @@ public class PlacementDispatchService {
     /**
      * 기록이 워크로드의 <b>현재 결정</b>인지 — 기록의 요청 시각이 워크로드의 배정 시각보다 앞서지 않으면 현재 결정이다.
      * 기록은 배치가 커밋된 뒤에 만들어지므로 현재 결정이면 항상 성립하고, 옛 결정의 기록(단건 재배치·되살려 다시 배치한 뒤
-     * 남은 것)은 배정 시각보다 앞선다. DB 의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다. 멱등키(밀리초)는 같은
+     * 남은 것)은 배정 시각보다 앞선다. DB의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다. 멱등키(밀리초)는 같은
      * 반올림으로 1ms 어긋날 수 있어 쓰지 않는다. 배정 시각이 없는 워크로드는 코드상 기록이 생기지 않으므로 현재 결정이
      * 아닌 것으로 본다. 결과 콜백·재시작 정리·시작 시각 조회({@link #runningSince})가 함께 쓴다.
      */
@@ -318,11 +318,11 @@ public class PlacementDispatchService {
     }
 
     /**
-     * 실행 중 워크로드마다 <b>시작 시각</b> — 현재 결정({@link #isCurrentDecision})의 기록이 RUNNING 이 된 시각, 곧 실행
+     * 실행 중 워크로드마다 <b>시작 시각</b> — 현재 결정({@link #isCurrentDecision})의 기록이 RUNNING이 된 시각, 곧 실행
      * 계층의 RUNNING 콜백을 받은 서버 시각(응답 시각 칸)이다. 예약 반영이 실행 중 워크로드의 CPU·메모리·디스크 예약을
      * 언제까지 남길지 정하는 기준이다. 조회는 한 번이다.
      *
-     * <p>결과에 없는 워크로드: 운영자가 상태 변경 API 로 RUNNING 으로 바꾸고 RUNNING 콜백은 아직 오지 않은 것(기록은 수락
+     * <p>결과에 없는 워크로드: 운영자가 상태 변경 API로 RUNNING으로 바꾸고 RUNNING 콜백은 아직 오지 않은 것(기록은 수락
      * 상태로 남는다) · 옛 결정의 RUNNING 기록만 있는 것 · 응답 시각이 없는 것. 호출자는 이들을 배치 시각으로 대신 본다.</p>
      */
     @Transactional(readOnly = true)
@@ -349,9 +349,9 @@ public class PlacementDispatchService {
      * 현재 결정의 기록이 REQUESTED         → 기록 UNAVAILABLE(비고 "재시작 — 전달 결과 모름") + 워크로드 실패·배정 해제
      * 기록 없음 · 옛 결정의 기록 · 끝난 기록 → 워크로드 실패·배정 해제(전과 같음)
      * </pre>
-     * 현재 결정은 <b>요청 시각이 가장 늦은 기록</b>(같으면 id 가 큰 기록)이 워크로드의 배정 시각보다 앞서지 않는 것으로 본다 — 기록은 배치가
+     * 현재 결정은 <b>요청 시각이 가장 늦은 기록</b>(같으면 id가 큰 기록)이 워크로드의 배정 시각보다 앞서지 않는 것으로 본다 — 기록은 배치가
      * 커밋된 뒤에 만들어지므로 현재 결정이면 항상 성립하고, 옛 결정의 기록(단건 재배치·이전 실패 처리로 남은 것)은
-     * 배정 시각보다 앞선다. DB 의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다.
+     * 배정 시각보다 앞선다. DB의 마이크로초 반올림은 두 시각의 순서를 바꾸지 않는다.
      * 디스패처 취소 훅은 부르지 않는다 — 기동 정리는 실행 계층에 명령하는 경로가 아니다.
      *
      * @param reason 실패로 돌릴 때 워크로드에 남길 사유

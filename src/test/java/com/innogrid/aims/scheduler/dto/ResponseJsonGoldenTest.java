@@ -25,16 +25,16 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * 워크로드·배치 이력·배치 정책 응답의 JSON 계약을 고정한다.
  *
- * <p>{@code /scheduler/workloads}·{@code /scheduler/history}·{@code /scheduler/policies} 는 예전에 JPA 엔티티를
- * 그대로 응답으로 내보냈고, 지금은 응답 DTO 가 같은 키와 값을 낸다. 프런트가 이미 쓰고 있으므로 <b>키 집합과 값이
+ * <p>{@code /scheduler/workloads}·{@code /scheduler/history}·{@code /scheduler/policies}는 예전에 JPA 엔티티를
+ * 그대로 응답으로 내보냈고, 지금은 응답 DTO가 같은 키와 값을 낸다. 프런트가 이미 쓰고 있으므로 <b>키 집합과 값이
  * 바이트 단위로 같아야</b> 한다. 이 테스트가 그 "같아야 할 것"의 원본이다.</p>
  *
  * <p>스프링이 구성한 Jackson 3({@code tools.jackson}) 매퍼를 주입받아 쓴다. HTTP 응답을 만드는 것이
  * 그 매퍼이며, {@code com.fasterxml} 쪽은 별개 인스턴스라 계약과 무관하다. 노드 응답(27필드)의 키 집합은
- * {@code NodeResourceSerializationTest} 가 같은 방식으로 고정하고 있다.</p>
+ * {@code NodeResourceSerializationTest}가 같은 방식으로 고정하고 있다.</p>
  *
- * <p>키 <b>순서</b>는 {@code *_ORDER} 가 응답 DTO 의 선언 순서로 고정한다. 키 집합 상수 {@code *_FIELDS} 는 그 순서 목록에서
- * 만들어 출처를 하나로 둔다. 응답은 record DTO 를 선언 순서로 직렬화하므로, 매퍼로 직렬화한 순서가 곧 HTTP 응답의 순서다.</p>
+ * <p>키 <b>순서</b>는 {@code *_ORDER}가 응답 DTO의 선언 순서로 고정한다. 키 집합 상수 {@code *_FIELDS}는 그 순서 목록에서
+ * 만들어 출처를 하나로 둔다. 응답은 record DTO를 선언 순서로 직렬화하므로, 매퍼로 직렬화한 순서가 곧 HTTP 응답의 순서다.</p>
  */
 @SpringBootTest
 public class ResponseJsonGoldenTest {
@@ -128,7 +128,7 @@ public class ResponseJsonGoldenTest {
     @DisplayName("성공 여부가 비어 있는 옛 이력 행은 success 가 null 로 나간다")
     @Test
     void history_success_null_for_legacy_row() {
-        // 옛 행(컬럼 도입 전 + 단건 배치가 실행 연결 없이 만든 것)은 success 가 비어 있고, 응답은 그 값을 그대로 낸다
+        // 옛 행(컬럼 도입 전 + 단건 배치가 실행 연결 없이 만든 것)은 success가 비어 있고, 응답은 그 값을 그대로 낸다
         Map<String, Object> json = toMap(new SchedulingHistory(1L, "w", "mdc-01", "n1", 0.5, "r", "weighted", "default"));
 
         assertEquals(HISTORY_FIELDS, new TreeSet<>(json.keySet()));

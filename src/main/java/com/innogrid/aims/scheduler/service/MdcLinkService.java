@@ -22,8 +22,8 @@ import tools.jackson.databind.JsonNode;
  * 손실률(비용 함수가 뒤집힘), 모르는 상태·출처. MDC 식별자의 <b>존재</b>는 검증하지 않는다 — 그러려면 원장이
  * 메트릭 저장소를 불러야 한다.</p>
  *
- * <p>쌍 중복은 DB 유니크 제약이 잡아 주지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다. 조회는 반드시
- * {@link MdcLink.Pair#of} 로 정렬한 뒤 한다 — 역방향 등록이 여기서 잡힌다.</p>
+ * <p>쌍 중복은 DB 유니크 제약이 잡아 주지만 그때는 500으로 새므로 먼저 조회해 409를 낸다. 조회는 반드시
+ * {@link MdcLink.Pair#of}로 정렬한 뒤 한다 — 역방향 등록이 여기서 잡힌다.</p>
  */
 @Service
 public class MdcLinkService {
@@ -41,7 +41,7 @@ public class MdcLinkService {
 
     // ── 조회 ───────────────────────────────────────────────────
 
-    /** 목록. {@code mdcId} 는 어느 편이든 걸린 링크, {@code status} 는 상태 필터. 둘 다 선택. */
+    /** 목록. {@code mdcId}는 어느 편이든 걸린 링크, {@code status}는 상태 필터. 둘 다 선택. */
     public List<MdcLink> list(String mdcId, String status) {
         MdcLink.LinkStatus wanted = status == null || status.isBlank() ? null
                 : EnumSupport.parse(MdcLink.LinkStatus.class, status, "링크 상태");
@@ -82,7 +82,7 @@ public class MdcLinkService {
         return repository.save(link);
     }
 
-    /** 부분 수정. 요청에 있는 키만 반영한다. 쌍은 {@code mdcA}·{@code mdcB} 를 함께 줘야 바꾼다. */
+    /** 부분 수정. 요청에 있는 키만 반영한다. 쌍은 {@code mdcA}·{@code mdcB}를 함께 줘야 바꾼다. */
     @Transactional
     public MdcLink update(Long id, MdcLinkRequest r) {
         MdcLink link = require(id);
@@ -113,7 +113,7 @@ public class MdcLinkService {
         repository.delete(require(id));
     }
 
-    // ── 반영 — 생성·수정 공통 (키 없음은 유지, 명시적 null 은 비움) ──
+    // ── 반영 — 생성·수정 공통 (키 없음은 유지, 명시적 null은 비움) ──
 
     private void apply(MdcLink link, MdcLinkRequest r) {
         if (r.bandwidthMbps() != null) {
@@ -152,7 +152,7 @@ public class MdcLinkService {
         return v;
     }
 
-    /** 명시적 null 은 null(모름), 숫자는 값, 그 외는 400. */
+    /** 명시적 null은 null(모름), 숫자는 값, 그 외는 400. */
     private static Double number(JsonNode node, String label) {
         if (node.isNull()) return null;
         if (!node.isNumber()) throw badRequest(label + "은(는) 숫자여야 합니다");

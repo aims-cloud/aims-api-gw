@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 비교판의 <b>성질</b>을 고정한다 — 파일을 고치면 여기가 깨진다.
  *
  * <p>판을 잘 읽는지가 아니라 판이 <b>의도한 성질</b>을 갖는지를 본다. 주 결과판의 유휴 비율이 어느 날
- * 전부 0.3 이 되면 그 판은 대조군이 아니라 엔진 가정을 확인하는 판이 되고, 반증판의 유휴 비율이 올라가면
+ * 전부 0.3이 되면 그 판은 대조군이 아니라 엔진 가정을 확인하는 판이 되고, 반증판의 유휴 비율이 올라가면
  * 그 판은 더 이상 우리 엔진이 지는 판이 아니다. 두 경우 모두 결과가 조용히 좋아지는 방향의 사고라 계약으로 막는다.</p>
  *
  * <p>스프링을 띄우지 않는다 — 이 클래스는 파일만 읽으므로 컨텍스트가 필요 없다.</p>
@@ -54,9 +54,9 @@ class BenchmarkClustersTest {
     }
 
     /**
-     * 원격 MDC 배치 비율은 워크로드에 데이터 MDC 를 배정한 판에서만 값이 있다 — 서비스가 이 지표를 유효로 내는 조건과 같다.
-     * 판 설명이 이 지표를 적는 판과 실제로 데이터 MDC 를 배정한 판이 어긋나면, 응답을 읽는 사람은 값이 없는 판에서 이 지표를
-     * 찾거나 값이 있는 판에서 이 지표를 놓친다. 지표 이름은 등록부의 label 을 그대로 쓴다.
+     * 원격 MDC 배치 비율은 워크로드에 데이터 MDC를 배정한 판에서만 값이 있다 — 서비스가 이 지표를 유효로 내는 조건과 같다.
+     * 판 설명이 이 지표를 적는 판과 실제로 데이터 MDC를 배정한 판이 어긋나면, 응답을 읽는 사람은 값이 없는 판에서 이 지표를
+     * 찾거나 값이 있는 판에서 이 지표를 놓친다. 지표 이름은 등록부의 label을 그대로 쓴다.
      */
     @DisplayName("데이터 MDC 를 배정한 판만 설명에 원격 MDC 배치 비율을 적는다")
     @Test
@@ -84,7 +84,7 @@ class BenchmarkClustersTest {
     @Test
     void main_board_has_five_idle_nodes() {
         double activeCpu = BenchmarkRules.POWERED_ON_CPU_PERCENT;   // 하네스의 회계 문턱 — 엔진 노브가 아니다
-        // 아래는 기준 사용률만 본다. 진폭을 더한 실효 하한은 the_powered_on_threshold_separates_idle_from_busy 가 본다.
+        // 아래는 기준 사용률만 본다. 진폭을 더한 실효 하한은 the_powered_on_threshold_separates_idle_from_busy가 본다.
         List<Node> nodes = clusters.get(BenchmarkClusters.MAIN).nodes();
         List<Node> idle = nodes.stream().filter(n -> peakCpu(n) <= activeCpu).toList();
         assertEquals(5, idle.size(), "유휴 5대 · 가동 9대 — 통합의 이득을 잴 빈 노드가 있어야 한다");
@@ -105,10 +105,10 @@ class BenchmarkClustersTest {
     /**
      * 통전 문턱이 유휴와 가동을 <b>진폭까지 더한 실효값</b>으로 가른다.
      *
-     * <p>{@link BenchmarkRules#POWERED_ON_CPU_PERCENT} javadoc 이 "이 문턱이 두 무리 사이에 있다"고
-     * 주장하는데, 그 주장이 참인 구간은 <b>유휴 상한 &lt; 문턱 ≤ 가동 하한</b> 뿐이다. 판 파일의
-     * {@code swing} 을 한 칸만 키우면 가동 하한이 문턱 아래로 내려가 그 문단이 조용히 거짓이 된다 —
-     * 그때 여기가 빨간불이 되어야 한다. 주 결과판의 실제 여유는 3.0~5.0% 로 <b>문턱이 상단 경계에 붙어 있다.</b></p>
+     * <p>{@link BenchmarkRules#POWERED_ON_CPU_PERCENT} javadoc이 "이 문턱이 두 무리 사이에 있다"고
+     * 주장하는데, 그 주장이 참인 구간은 <b>유휴 상한 &lt; 문턱 ≤ 가동 하한</b>뿐이다. 판 파일의
+     * {@code swing}을 한 칸만 키우면 가동 하한이 문턱 아래로 내려가 그 문단이 조용히 거짓이 된다 —
+     * 그때 여기가 빨간불이 되어야 한다. 주 결과판의 실제 여유는 3.0~5.0%로 <b>문턱이 상단 경계에 붙어 있다.</b></p>
      */
     @DisplayName("통전 문턱이 유휴 상한과 가동 하한 사이에 있다 — 진폭까지 더한 실효값으로")
     @Test
@@ -231,7 +231,7 @@ class BenchmarkClustersTest {
         assertEquals(5, ipmiDiff, "계측 플래그만 5대 다르다 — 그 5대가 곧 센서 공백의 크기다");
         assertEquals(14, main.stream().filter(Node::ipmi).count(), "주 결과판은 전수 계측");
         assertEquals(9, sparse.stream().filter(Node::ipmi).count(), "계측 공백판은 9대만 계측");
-        // 위상은 nodeId 해시 + seed 로 정해진다. 같은 시각에 같은 사용률이 나와야 차이가 센서 하나로 좁혀진다.
+        // 위상은 nodeId 해시 + seed로 정해진다. 같은 시각에 같은 사용률이 나와야 차이가 센서 하나로 좁혀진다.
         long at = 1_800_000_000L;
         for (int i = 0; i < main.size(); i++) {
             assertEquals(mainBoard.cpuUsage(main.get(i), at), sparseBoard.cpuUsage(sparse.get(i), at), 1e-9,
@@ -364,7 +364,7 @@ class BenchmarkClustersTest {
 
     /**
      * 판정 셀이 <b>실제로 존재하는 판</b>을 가리키는지 본다. 사전 등록은 판이 생기기 전에 쓰였으므로,
-     * 이 확인이 없으면 등록된 판 id 가 오타여도 아무도 모른 채 다른 판에서 판정하게 된다.
+     * 이 확인이 없으면 등록된 판 id가 오타여도 아무도 모른 채 다른 판에서 판정하게 된다.
      */
     @DisplayName("사전 등록된 판정 셀의 판이 실제로 등록된 판이다")
     @Test
@@ -451,8 +451,8 @@ class BenchmarkClustersTest {
 
     /**
      * 한 주기 안에서 도달할 <b>최고</b> 사용률. 기준값이 아니라 진폭을 더한 값으로 봐야
-     * 한 주기 내내 유휴라고 말할 수 있다. 노드별 swing 은 파일에 적혀 있어야 한다 —
-     * 클러스터 공통 진폭을 읽는 {@code swingOf} 는 metrics 패키지 밖에서 부를 수 없다.
+     * 한 주기 내내 유휴라고 말할 수 있다. 노드별 swing은 파일에 적혀 있어야 한다 —
+     * 클러스터 공통 진폭을 읽는 {@code swingOf}는 metrics 패키지 밖에서 부를 수 없다.
      */
     private static double peakCpu(Node node) {
         assertNotNull(node.swing(), "노드마다 swing 을 파일에 적어 둔다 — 계약이 파일만 보고 상한을 계산한다: " + node.nodeId());
@@ -461,7 +461,7 @@ class BenchmarkClustersTest {
 
     /**
      * 한 주기의 <b>12지점 표본</b>이 전부 통전 문턱 아래에 머무는 계측 노드인가 — 이것이 판의 회계 규칙이
-     * 정의하는 유휴 층이다. 지점 식 {@code 주기초 × i / 지점수} 는 서비스의 {@code sweepPoints} 와 같으며,
+     * 정의하는 유휴 층이다. 지점 식 {@code 주기초 × i / 지점수}는 서비스의 {@code sweepPoints}와 같으며,
      * 패키지가 달라 그 메서드를 부를 수 없어 여기서 재계산한다.
      */
     private static boolean staysIdleAcrossSweep(SyntheticCluster cluster, Node node) {
@@ -476,13 +476,13 @@ class BenchmarkClustersTest {
         return true;
     }
 
-    /** 사용률 하한 = 기준 − 진폭. {@link #peakCpu} 의 대칭이다 — 통전 문턱이 두 무리 사이에 있는지 잴 때 쓴다. */
+    /** 사용률 하한 = 기준 − 진폭. {@link #peakCpu}의 대칭이다 — 통전 문턱이 두 무리 사이에 있는지 잴 때 쓴다. */
     private static double troughCpu(Node node) {
         assertNotNull(node.swing(), "노드마다 swing 을 파일에 적어 둔다: " + node.nodeId());
         return Math.max(0.0, node.cpuUsage() - node.swing());
     }
 
-    /** 최고 온도 = 기준 온도 + 0.3 × 최고 사용률 ({@code SyntheticCluster.temperature} 와 같은 식). */
+    /** 최고 온도 = 기준 온도 + 0.3 × 최고 사용률 ({@code SyntheticCluster.temperature}와 같은 식). */
     private static double peakTemperature(Node node) {
         return node.baseTemperature() + 0.3 * peakCpu(node);
     }
@@ -526,7 +526,7 @@ class BenchmarkClustersTest {
 
     /**
      * 깨우기 벌점 평균의 편향 {@code |Σ r/(1+δ) − Σ r| / Σ r} — 엔진에 <b>실제로 들어가는 양</b>이다.
-     * 벌점이 {@code 깨우기/정격} 형이라 개수나 정격 합을 맞춰도 {@code 1/(1+δ)} 의 비선형으로 평균이 기운다.
+     * 벌점이 {@code 깨우기/정격} 형이라 개수나 정격 합을 맞춰도 {@code 1/(1+δ)}의 비선형으로 평균이 기운다.
      */
     private static double penaltyBias(Set<String> over, List<Node> tier) {
         double declared = 0;

@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 /**
  * 합성 클러스터 시나리오 — 실효 점수와 수집 제외 수정이 세 엔진과 수집기에서 함께 동작하는지.
  *
- * <p>배포 VM 은 노드 1대라 "여러 노드 사이의 분산"을 실환경에서 볼 수 없다. 합성 데이터가
+ * <p>배포 VM은 노드 1대라 "여러 노드 사이의 분산"을 실환경에서 볼 수 없다. 합성 데이터가
  * 유일한 수단이다. 각 시나리오는 <b>입력 → 예상 출력</b>을 주석에 적고 표로 출력한다.</p>
  */
 class EffectiveScoringScenarioTest {
@@ -79,7 +79,7 @@ class EffectiveScoringScenarioTest {
     }
 
     /**
-     * 시나리오 2 — IPMI 가 섞인 클러스터. 자원은 전부 같고 전력·온도 계측 여부만 다르다.
+     * 시나리오 2 — IPMI가 섞인 클러스터. 자원은 전부 같고 전력·온도 계측 여부만 다르다.
      *
      * <pre>
      * 입력   M1(200W·40°C) · M2(220W·45°C) 계측  /  U1 · U2 미계측(0W·0°C).  1코어 6건, weighted
@@ -190,7 +190,7 @@ class EffectiveScoringScenarioTest {
     }
 
     /**
-     * 시나리오 5 — 메트릭 저장소가 CPU 를 전부 못 준다(전 노드 제외).
+     * 시나리오 5 — 메트릭 저장소가 CPU를 전부 못 준다(전 노드 제외).
      *
      * <pre>
      * 입력   n1·n2·n3 모두 CPU 질의 예외.  dryRun(weighted) + 진단
@@ -245,7 +245,7 @@ class EffectiveScoringScenarioTest {
         return vm;
     }
 
-    /** 저장소만 가짜인 실제 SchedulingService. DB 는 기본 정책·워크로드 1건만 돌려준다. */
+    /** 저장소만 가짜인 실제 SchedulingService. DB는 기본 정책·워크로드 1건만 돌려준다. */
     private SchedulingService realSchedulingService(VictoriaMetricsClient vm) {
         var policyRepository = mock(com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository.class);
         var workloadRepository = mock(com.innogrid.aims.scheduler.repository.WorkloadRepository.class);

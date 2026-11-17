@@ -30,7 +30,7 @@ import static org.mockito.Mockito.*;
  * 이 표는 연구 근거라 지워지지 않으므로, 틀린 채로 쌓이면 되돌릴 수 없다.</p>
  *
  * <p>스프링을 띄우지 않는다 — 저장소 둘은 대역으로 두고 엔진은 직접 만든다. 확인 대상이 응답이 아니라
- * <b>저장된 행</b>이므로 {@code save} 에 들어간 인자를 잡아서 본다.</p>
+ * <b>저장된 행</b>이므로 {@code save}에 들어간 인자를 잡아서 본다.</p>
  */
 class PlacementHistoryScoreTest {
 
@@ -46,8 +46,8 @@ class PlacementHistoryScoreTest {
     /**
      * 제외된 노드가 총점 1위인 상황을 결정적으로 만든다.
      *
-     * <p>{@code nogpu} 는 GPU 가 없어 제외되지만 CPU·메모리가 거의 비어 총점이 가장 높고, {@code gpu} 는
-     * GPU 가 있어 적격이지만 사용률이 높아 총점이 낮다. 전력·온도·트래픽을 0 으로 두어 그 세 항이
+     * <p>{@code nogpu}는 GPU가 없어 제외되지만 CPU·메모리가 거의 비어 총점이 가장 높고, {@code gpu}는
+     * GPU가 있어 적격이지만 사용률이 높아 총점이 낮다. 전력·온도·트래픽을 0으로 두어 그 세 항이
      * 두 노드에서 같은 값이 되게 했다 — 차이가 CPU·메모리에서만 나므로 결과가 흔들리지 않는다.</p>
      */
     private PlacementContext context() {
@@ -77,13 +77,13 @@ class PlacementHistoryScoreTest {
 
         SchedulingHistory saved = captureSaved();
         assertEquals("gpu", saved.getSelectedNodeId(), "이 시나리오는 GPU 가 있는 노드가 뽑혀야 성립한다");
-        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다 — 예전엔 여기가 NULL 이라 성공 필터에서 빠졌다.
+        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다 — 예전엔 여기가 NULL이라 성공 필터에서 빠졌다.
         assertEquals(Boolean.TRUE, saved.getSuccess(), "단건 배치의 성공 여부가 기록되지 않았다");
         assertNull(saved.getScheduleRunId(), "실행 연결이 없는데 runId 가 채워졌다");
 
         // 저장된 다섯 점수가 모두 선택된 노드에서 왔는가 — 한 행 안의 불변식으로 본다.
         // 총점은 승자 것이므로, 다섯 중 하나라도 다른 노드에서 오면 가중합이 총점과 어긋난다.
-        // (우선순위 NORMAL·선호 MDC 없음이라 배수가 1.0 이고, 엔진이 반올림하므로 오차를 둔다)
+        // (우선순위 NORMAL·선호 MDC 없음이라 배수가 1.0이고, 엔진이 반올림하므로 오차를 둔다)
         double weighted = saved.getCpuScore() * CPU_W + saved.getMemoryScore() * MEM_W
                 + saved.getPowerScore() * PWR_W + saved.getTemperatureScore() * TEMP_W
                 + saved.getNetworkScore() * NET_W;
@@ -97,7 +97,7 @@ class PlacementHistoryScoreTest {
         placementService.place(gpuWorkload(), context(), "weighted");
 
         SchedulingHistory saved = captureSaved();
-        // 예약이 없는 첫 배치라 실효 사용률 = 실측 사용률이고, CPU 점수는 (100 - 사용률)/100 이다.
+        // 예약이 없는 첫 배치라 실효 사용률 = 실측 사용률이고, CPU 점수는 (100 - 사용률)/100이다.
         assertEquals((100 - saved.getNodeCpuUsage()) / 100.0, saved.getCpuScore(), 1e-3,
                 "CPU 점수와 CPU 사용률이 다른 노드에서 왔다");
         assertEquals((100 - saved.getNodeMemoryUsage()) / 100.0, saved.getMemoryScore(), 1e-3,
@@ -106,7 +106,7 @@ class PlacementHistoryScoreTest {
 
     /**
      * 배치에 실패하면 선택된 노드가 없다. 그때 제외 노드의 점수를 남기면 <b>그 숫자가 어느 노드 것인지
-     * 적을 자리가 없는</b> 행이 영구히 남는다. 총점과 노드 상태가 이미 0 이므로 점수도 0 으로 둔다.
+     * 적을 자리가 없는</b> 행이 영구히 남는다. 총점과 노드 상태가 이미 0이므로 점수도 0으로 둔다.
      */
     @DisplayName("배치에 실패하면 차원별 점수를 0 으로 남긴다 — 제외 노드 점수를 넣지 않는다")
     @Test

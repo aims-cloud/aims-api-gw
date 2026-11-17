@@ -19,7 +19,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 기본(플래그 꺼짐) 컨텍스트 — 소스는 victoria, 모의 정보는 null. 배포 VM 의 기대 응답과 같다. */
+/** 기본(플래그 꺼짐) 컨텍스트 — 소스는 victoria, 모의 정보는 null. 배포 VM의 기대 응답과 같다. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser

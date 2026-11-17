@@ -11,8 +11,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>메트릭 저장소에서 그때그때 읽어 만든다. 별도 테이블에 쌓지 않는다 — 원본 시계열은
  * 이미 저장소가 보관하고 있어 같은 데이터를 두 곳에 두면 어긋날 일만 생긴다.</p>
  *
- * <p>저장소가 응답하지 않거나 해당 구간에 데이터가 없으면 {@code points} 가 비고
- * {@code message} 에 사유가 담긴다. 오류가 아니다 — IPMI 가 연동되지 않은 환경에서는
+ * <p>저장소가 응답하지 않거나 해당 구간에 데이터가 없으면 {@code points}가 비고
+ * {@code message}에 사유가 담긴다. 오류가 아니다 — IPMI가 연동되지 않은 환경에서는
  * 이것이 정상 응답이다.</p>
  */
 public record PowerEfficiencyTrendResponse(
@@ -36,8 +36,8 @@ public record PowerEfficiencyTrendResponse(
     /**
      * 한 시점의 값.
      *
-     * <p>전력과 CPU 는 서로 다른 시계열이라 한쪽만 값이 있는 지점이 생길 수 있다.
-     * 그때 {@code peiRaw} 는 계산하지 않고 {@code null} 로 둔다.</p>
+     * <p>전력과 CPU는 서로 다른 시계열이라 한쪽만 값이 있는 지점이 생길 수 있다.
+     * 그때 {@code peiRaw}는 계산하지 않고 {@code null}로 둔다.</p>
      */
     @Schema(name = "PowerEfficiencyTrendPoint")
     public record Point(

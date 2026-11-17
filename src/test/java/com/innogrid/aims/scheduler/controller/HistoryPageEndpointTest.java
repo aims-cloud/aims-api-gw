@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code GET /scheduler/history/page} — 페이지 경계·필터·정렬·상한, 그리고 기존 {@code /history} 가 배열로 그대로인가.
+ * {@code GET /scheduler/history/page} — 페이지 경계·필터·정렬·상한, 그리고 기존 {@code /history}가 배열로 그대로인가.
  *
  * <p>이력 25건(엔진 weighted 15·power 10, 성공 20·실패 5)을 심고 끝에 지운다.</p>
  */
@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HistoryPageEndpointTest {
 
     private static final String PAGE = "/api/v1/scheduler/history/page";
-    /** {@code SchedulerController.HISTORY_MAX} 와 같다. {@link HistoryReturnLimitTest} 가 그 값을 고정한다. */
+    /** {@code SchedulerController.HISTORY_MAX}와 같다. {@link HistoryReturnLimitTest}가 그 값을 고정한다. */
     private static final int HISTORY_RETURN_MAX = 1000;
 
     @Autowired MockMvc mockMvc;
@@ -52,20 +52,20 @@ class HistoryPageEndpointTest {
     private static final long WORKLOAD_B = 9_900_002L;
     /** 위 둘의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_C = 9_900_003L;
-    /** 실행 필터 테스트 전용 — 실행에 묶인 행은 이 id 로만 심는다. */
+    /** 실행 필터 테스트 전용 — 실행에 묶인 행은 이 id로만 심는다. */
     private static final long WORKLOAD_D = 9_900_004L;
-    /** 제외 코드 키 경계 테스트 전용 — A·B 의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
+    /** 제외 코드 키 경계 테스트 전용 — A·B의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_E = 9_900_005L;
     /**
-     * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id 는 1 부터 자라 이 대역에 닿지 않고, FK 가 없어 실행 행이
+     * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id는 1부터 자라 이 대역에 닿지 않고, FK가 없어 실행 행이
      * 없어도 저장된다. 테스트마다 다른 값을 써 서로의 정리에 기대지 않는다.
      */
     private static final long RUN_X = 9_900_777L;
     /** 위와 같은 용도, 다른 테스트용. */
     private static final long RUN_Y = 9_900_778L;
-    /** 아무 행도 묶지 않는 실행 id — "없는 실행 id 는 빈 페이지" 를 볼 때만 쓴다. */
+    /** 아무 행도 묶지 않는 실행 id — "없는 실행 id 는 빈 페이지"를 볼 때만 쓴다. */
     private static final long RUN_NONE = 9_900_999L;
-    /** 동률 페이지 경계 테스트 전용 — 성공 12건만 심어 success 가 전부 같은 값이 되게 한다. 다른 시드의 건수 확인과 겹치지 않는 id. */
+    /** 동률 페이지 경계 테스트 전용 — 성공 12건만 심어 success가 전부 같은 값이 되게 한다. 다른 시드의 건수 확인과 겹치지 않는 id. */
     private static final long WORKLOAD_G = 9_900_011L;
 
     @BeforeEach
@@ -74,7 +74,7 @@ class HistoryPageEndpointTest {
             SchedulingHistory h = new SchedulingHistory(i < 12 ? WORKLOAD_A : WORKLOAD_B, "hp-" + String.format("%02d", i),
                     "mdc-01", "n1", i / 100.0, "r", i < 15 ? "weighted" : "power", "default");
             h.linkToRun(null, i % 5 != 0);   // 0,5,10,15,20 실패 → 5건 (실행 연결 없이 결과만)
-            // 집계 값이 있는 행 셋 — DB 왕복(hp-03)과 코드 필터(hp-03·hp-07 은 성공, hp-20 은 실패·power) 확인용
+            // 집계 값이 있는 행 셋 — DB 왕복(hp-03)과 코드 필터(hp-03·hp-07은 성공, hp-20은 실패·power) 확인용
             if (i == 3) h.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":2}");
             if (i == 7) h.setExclusionCodes("{\"COOLING_DOWN\":1,\"INSUFFICIENT_RESOURCE\":1}");
             if (i == 20) h.setExclusionCodes("{\"TEMPERATURE_EXCEEDED\":1}");
@@ -142,15 +142,15 @@ class HistoryPageEndpointTest {
     }
 
     /**
-     * 짧은 코드로 긴 이름의 행을 물을 때만 앞 따옴표가 일한다 — 반대 방향(긴 코드로 짧은 행)은 따옴표 없이도 0 이라
+     * 짧은 코드로 긴 이름의 행을 물을 때만 앞 따옴표가 일한다 — 반대 방향(긴 코드로 짧은 행)은 따옴표 없이도 0이라
      * 증거가 못 된다. 밑줄 자리만 다른 키는 실제 코드에 없지만 열이 평문 TEXT(CHECK 없음)라 합성 키로 심는다.
      */
     @DisplayName("제외 코드 필터는 키 이름 전체로 맞춘다 — 긴 이름의 꼬리나 밑줄 자리의 다른 글자에 걸리지 않는다")
     @Test
     void exclusion_code_filter_matches_whole_key_only() throws Exception {
         List<Long> ids = new ArrayList<>();
-        for (String codes : List.of("{\"WORKLOAD_TEMPERATURE_EXCEEDED\":1}",   // 앞 따옴표가 없으면 TEMPERATURE_EXCEEDED 에 걸린다
-                                    "{\"INSUFFICIENTxRESOURCE\":1}")) {        // 밑줄을 풀면 INSUFFICIENT_RESOURCE 에 걸린다
+        for (String codes : List.of("{\"WORKLOAD_TEMPERATURE_EXCEEDED\":1}",   // 앞 따옴표가 없으면 TEMPERATURE_EXCEEDED에 걸린다
+                                    "{\"INSUFFICIENTxRESOURCE\":1}")) {        // 밑줄을 풀면 INSUFFICIENT_RESOURCE에 걸린다
             SchedulingHistory h = new SchedulingHistory(WORKLOAD_E, "hp-key", "mdc-01", "n1", 0.5, "r", "weighted", "default");
             h.linkToRun(null, true);
             h.setExclusionCodes(codes);
@@ -184,7 +184,7 @@ class HistoryPageEndpointTest {
     @Test
     void filters_single_and_combined() throws Exception {
         assertEquals(10, data(get(PAGE).param("size", "100").param("engineName", "power")).get("totalElements").asInt());
-        // 실패 5건 중 심은 것만 세기 위해 workloadId 와 함께
+        // 실패 5건 중 심은 것만 세기 위해 workloadId와 함께
         assertEquals(3, data(get(PAGE).param("size", "100").param("success", "false")
                 .param("workloadId", String.valueOf(WORKLOAD_A))).get("totalElements").asInt(), "A 의 실패: 0,5,10");
         assertEquals(2, data(get(PAGE).param("size", "100").param("success", "false")
@@ -194,18 +194,18 @@ class HistoryPageEndpointTest {
     }
 
     /**
-     * {@code success} 가 NULL 인 행은 두 가지다 — 이 컬럼이 생기기 전에 쌓인 행, 그리고 단건 배치가 실행 연결 없이
-     * 만든 옛 행(지금은 둘 다 값을 남긴다). 실패한 결정은 언제나 명시적 false 로 저장되므로 <b>NULL 은 전부 성공</b>
+     * {@code success}가 NULL인 행은 두 가지다 — 이 컬럼이 생기기 전에 쌓인 행, 그리고 단건 배치가 실행 연결 없이
+     * 만든 옛 행(지금은 둘 다 값을 남긴다). 실패한 결정은 언제나 명시적 false로 저장되므로 <b>NULL은 전부 성공</b>
      * 인데, 조회 필터만 그 해석을 따르지 않아 성공한 결정이 통째로 빠졌다.
      *
-     * <p>다른 시드(WORKLOAD_A·B, 엔진 weighted·power)를 건드리지 않도록 <b>제3의 워크로드 id 와 다른 엔진명</b>
+     * <p>다른 시드(WORKLOAD_A·B, 엔진 weighted·power)를 건드리지 않도록 <b>제3의 워크로드 id와 다른 엔진명</b>
      * 으로 심는다 — 그러지 않으면 위의 건수 확인들이 함께 실패한다.</p>
      */
     @DisplayName("성공을 물으면 성공 여부가 비어 있는 행도 함께 나온다 — 실패를 물을 때는 아니다")
     @Test
     void success_filter_includes_null_rows() throws Exception {
         SchedulingHistory unlinked = new SchedulingHistory(WORKLOAD_C, "hp-null", "mdc-01", "n1",
-                0.5, "r", "solo", "default");   // linkToRun 을 부르지 않는다 → success 가 NULL
+                0.5, "r", "solo", "default");   // linkToRun을 부르지 않는다 → success가 NULL
         Long id = repository.save(unlinked).getId();
         try {
             assertEquals(1, data(get(PAGE).param("size", "100").param("success", "true")
@@ -220,8 +220,8 @@ class HistoryPageEndpointTest {
     }
 
     /**
-     * 필터가 최상위 OR 로 잘못 조립되면 다른 조건이 무력화된다 — 그러면 위 확인은 통과하면서
-     * {@code success=true} 에 {@code workloadId} 를 함께 준 결과가 전체 행으로 부풀어 오른다.
+     * 필터가 최상위 OR로 잘못 조립되면 다른 조건이 무력화된다 — 그러면 위 확인은 통과하면서
+     * {@code success=true}에 {@code workloadId}를 함께 준 결과가 전체 행으로 부풀어 오른다.
      * 그래서 조합 필터의 건수와, 성공·실패 두 필터의 합이 전체와 같은지를 함께 본다.
      */
     @DisplayName("성공·실패 필터의 합이 전체와 같고, 다른 조건과 함께 걸어도 무너지지 않는다")
@@ -239,8 +239,8 @@ class HistoryPageEndpointTest {
     }
 
     /**
-     * 실행 필터의 모집단은 실행 상세 결정 목록과 같다 — 그 실행에 {@code linkToRun} 으로 묶인 행 전부.
-     * 기존 시드(A·B)는 실행 연결이 없으므로 제4의 워크로드 id 로 심어 위 건수 확인과 겹치지 않게 한다.
+     * 실행 필터의 모집단은 실행 상세 결정 목록과 같다 — 그 실행에 {@code linkToRun}으로 묶인 행 전부.
+     * 기존 시드(A·B)는 실행 연결이 없으므로 제4의 워크로드 id로 심어 위 건수 확인과 겹치지 않게 한다.
      */
     @DisplayName("실행 필터는 그 실행이 만든 결정만 돌려주고 다른 필터와 함께 걸어도 무너지지 않는다")
     @Test
@@ -263,8 +263,8 @@ class HistoryPageEndpointTest {
     }
 
     /**
-     * 실행 연결이 NULL 인 행은 어떤 값으로도 되찾을 수 없다 — 묶인 행만 돌아오는지는
-     * {@link #run_filter_returns_only_that_runs_rows} 가 보므로, 여기서는 NULL 인 모집단(A 12건) 쪽에서 본다.
+     * 실행 연결이 NULL인 행은 어떤 값으로도 되찾을 수 없다 — 묶인 행만 돌아오는지는
+     * {@link #run_filter_returns_only_that_runs_rows}가 보므로, 여기서는 NULL인 모집단(A 12건) 쪽에서 본다.
      */
     @DisplayName("실행 연결이 없는 행은 어떤 실행 id 로도 걸리지 않고, 행이 없는 실행 id 는 빈 페이지다")
     @Test
@@ -363,7 +363,7 @@ class HistoryPageEndpointTest {
         return data(req).get("totalElements").asInt();
     }
 
-    /** 실행 {@code runId} 에 묶인 행 {@code n} 건 — 마지막 한 건만 실패. {@code WORKLOAD_D} 로만 심는다. */
+    /** 실행 {@code runId}에 묶인 행 {@code n} 건 — 마지막 한 건만 실패. {@code WORKLOAD_D}로만 심는다. */
     private List<Long> seedRun(long runId, int n) {
         List<Long> ids = new ArrayList<>();
         for (int i = 0; i < n; i++) {

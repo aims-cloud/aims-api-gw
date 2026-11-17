@@ -77,7 +77,7 @@ class WorkloadDryRunApiTest {
         mockMvc.perform(post(BASE + "/dry-run"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
         mockMvc.perform(post(BASE + "/dry-run?engine=nope").contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("워크로드 이름은(는) 필수입니다"));   // 칸 400 이 엔진 400 보다 먼저
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("워크로드 이름은(는) 필수입니다"));   // 칸 400이 엔진 400보다 먼저
     }
 
     @DisplayName("빈 엔진 값은 비운 것과 같아 400 이 아니다")

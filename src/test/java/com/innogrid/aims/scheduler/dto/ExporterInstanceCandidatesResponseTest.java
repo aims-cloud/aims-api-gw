@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 후보 한 줄의 응답 계약 — 7필드, 배정은 열거형 이름 그대로, 붙는 노드가 없으면 null 로 직렬화된다. */
+/** 후보 한 줄의 응답 계약 — 7필드, 배정은 열거형 이름 그대로, 붙는 노드가 없으면 null로 직렬화된다. */
 class ExporterInstanceCandidatesResponseTest {
 
     static final Set<String> CANDIDATE_FIELDS = new TreeSet<>(List.of("instance", "host", "gpuCount", "assignedNodeId", "assignedBy",

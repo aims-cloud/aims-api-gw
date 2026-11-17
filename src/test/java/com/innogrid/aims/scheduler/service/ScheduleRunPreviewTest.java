@@ -36,7 +36,7 @@ import static org.mockito.Mockito.verify;
 /**
  * 스케줄 실행 미리보기 — 실행과 같은 정책·엔진·건수·문구를 저장 없이 돌려준다.
  *
- * <p>테스트 환경에는 메트릭 저장소가 없어 실제 실행은 "활성 노드 없음" 으로 끝나지만, 미리보기가 보는 것은 실행
+ * <p>테스트 환경에는 메트릭 저장소가 없어 실제 실행은 "활성 노드 없음"으로 끝나지만, 미리보기가 보는 것은 실행
  * 직전까지의 해석(정책·엔진·대상 선정)이라 그 부분은 결정적으로 대조할 수 있다.</p>
  */
 @SpringBootTest
@@ -57,7 +57,7 @@ class ScheduleRunPreviewTest {
         runRepository.deleteAll();
         scheduleRepository.deleteAll();
         workloadRepository.deleteAll();
-        // 트랜잭션 안에서 INSERT 가 DELETE 보다 먼저 나가면 같은 이름 저장이 유니크에 걸린다 — 삭제를 즉시 반영한다.
+        // 트랜잭션 안에서 INSERT가 DELETE보다 먼저 나가면 같은 이름 저장이 유니크에 걸린다 — 삭제를 즉시 반영한다.
         policyRepository.deleteAll();
         policyRepository.flush();
         // 테스트 환경에는 메트릭 저장소가 없다 — 실제 실행이 부르는 수집은 빈 스냅샷으로 답한다(미리보기는 부르지 않아야 한다)
@@ -320,7 +320,7 @@ class ScheduleRunPreviewTest {
     @DisplayName("대상 0건 문구 세 가지는 설정값으로 조립된 전문과 같다")
     @Test
     void empty_messages_full_text() {
-        // 3장 주의 6·7 이 이 전문을 인용한다 — 바꾸면 계약 문서도 함께 고칠 것
+        // 3장 주의 6·7이 이 전문을 인용한다 — 바꾸면 계약 문서도 함께 고칠 것
         ScheduleExecutionService.EmptyTargetOutcome none = executionService.outcomeOf(0, () -> 0);
         ScheduleExecutionService.EmptyTargetOutcome waiting = executionService.outcomeOf(0, () -> 2);
         ScheduleExecutionService.EmptyTargetOutcome exhausted = executionService.outcomeOf(3, () -> {

@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 저장 전 미리보기({@code POST /schedules/preview})의 HTTP 계약 — 실행 미리보기와 같은 열네 키와 순서, id null,
  * 저장 없음, 오류 래퍼.
  *
- * <p>트랜잭션을 걸지 않는다(읽기 전용 트랜잭션을 그대로 탄다). 비교용 스케줄만 API 로 만들고 끝에 지운다.</p>
+ * <p>트랜잭션을 걸지 않는다(읽기 전용 트랜잭션을 그대로 탄다). 비교용 스케줄만 API로 만들고 끝에 지운다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

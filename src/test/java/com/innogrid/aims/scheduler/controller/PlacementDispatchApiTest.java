@@ -40,8 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 디스패치 API 4종의 HTTP 계약 — 필드 13개, 콜백 상태 코드, 페이지 필터, 워크로드 삭제 시 정리, 인증.
  *
- * <p>수집기를 대역으로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API 로 결정을 만든다. 기본(record) 모드라 디스패치는
- * ACCEPTED 로 시작한다.</p>
+ * <p>수집기를 대역으로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API로 결정을 만든다. 기본(record) 모드라 디스패치는
+ * ACCEPTED로 시작한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -84,7 +84,7 @@ class PlacementDispatchApiTest {
         long wid = w.get("id").asLong();
         mockMvc.perform(post(BASE + "/workloads/" + wid + "/schedule")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.success").value(true))
-                .andExpect(jsonPath("$.data.policyName").isString());   // 응답 JSON 에 적용 정책 이름이 실린다
+                .andExpect(jsonPath("$.data.policyName").isString());   // 응답 JSON에 적용 정책 이름이 실린다
         JsonNode list = data(mockMvc.perform(get(BASE + "/workloads/" + wid + "/dispatches")).andExpect(status().isOk()).andReturn());
         assertEquals(1, list.size());
         return new long[] {wid, list.get(0).get("id").asLong()};

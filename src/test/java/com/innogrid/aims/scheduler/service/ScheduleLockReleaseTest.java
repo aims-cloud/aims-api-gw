@@ -18,12 +18,12 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 실행 권한(락)이 <b>어떤 경우에도</b> 풀리는가.
  *
- * <p>권한은 실행 시작 시 DB 에 남고 마무리에서 풀린다. 그런데 마무리가 실패하면 권한이 남아
- * 그 스케줄은 자동·수동 실행도 삭제도 영구히 거부된다 — 푸는 길이 psql 뿐이었다.</p>
+ * <p>권한은 실행 시작 시 DB에 남고 마무리에서 풀린다. 그런데 마무리가 실패하면 권한이 남아
+ * 그 스케줄은 자동·수동 실행도 삭제도 영구히 거부된다 — 푸는 길이 psql뿐이었다.</p>
  *
- * <p><b>이 클래스는 {@code @Transactional} 을 쓰지 않는다.</b> 실행 서비스는 운영에서 트랜잭션 밖에서 도는데,
+ * <p><b>이 클래스는 {@code @Transactional}을 쓰지 않는다.</b> 실행 서비스는 운영에서 트랜잭션 밖에서 도는데,
  * 테스트가 트랜잭션으로 감싸면 커밋되지 않은 상태를 보게 되어 "정말 풀렸는가"를 확인할 수 없다.
- * 여기서는 DB 에 실제로 반영된 값을 다시 읽어 확인한다.</p>
+ * 여기서는 DB에 실제로 반영된 값을 다시 읽어 확인한다.</p>
  */
 @SpringBootTest
 class ScheduleLockReleaseTest {
@@ -111,14 +111,14 @@ class ScheduleLockReleaseTest {
     }
 
     /**
-     * cron 을 읽을 수 없어도 <b>권한 해제를 막지 않는다.</b> 다만 폴 주기만큼만 밀면
+     * cron을 읽을 수 없어도 <b>권한 해제를 막지 않는다.</b> 다만 폴 주기만큼만 밀면
      * "실행 → 실패 → 주기 뒤 재실행"이 끝없이 도는 핫 루프가 되므로 넉넉히 민다.
      */
     @DisplayName("cron 을 읽을 수 없어도 권한이 풀리고, 다음 실행 시각은 폴 주기가 아니라 넉넉히 밀린다")
     @Test
     void broken_cron_still_releases_lock_without_hot_loop() {
         Schedule schedule = save("lock-cron", "0 0 3 * * ?");
-        // 검증을 우회해 DB 에 깨진 cron 을 심는다 — 수동 수정·라이브러리 변화로 실제 가능한 상태다.
+        // 검증을 우회해 DB에 깨진 cron을 심는다 — 수동 수정·라이브러리 변화로 실제 가능한 상태다.
         Schedule broken = reload(schedule);
         broken.setCronExpression("이건 cron 이 아니다");
         scheduleRepository.save(broken);
@@ -154,8 +154,8 @@ class ScheduleLockReleaseTest {
     }
 
     /**
-     * 실행 중에 자동 실행을 켜면, 낡은 사본으로 계산한 {@code nextRunAt = null} 이 그 값을 덮어
-     * <b>그 스케줄만 조용히 자동 실행되지 않게</b> 된다(폴러는 null 을 건너뛴다).
+     * 실행 중에 자동 실행을 켜면, 낡은 사본으로 계산한 {@code nextRunAt = null}이 그 값을 덮어
+     * <b>그 스케줄만 조용히 자동 실행되지 않게</b> 된다(폴러는 null을 건너뛴다).
      */
     @DisplayName("실행 중 자동 실행을 켜면 다음 실행 시각이 살아남는다 — 낡은 사본으로 지우면 안 된다")
     @Test
@@ -164,7 +164,7 @@ class ScheduleLockReleaseTest {
         schedule.setEnabled(true);
         schedule.setAutoRun(false);            // 자동 실행 꺼진 채 시작
         scheduleRepository.save(schedule);
-        Schedule detached = reload(schedule);  // 이 사본은 autoRun=false 다
+        Schedule detached = reload(schedule);  // 이 사본은 autoRun=false다
 
         Schedule current = reload(schedule);   // 그 사이 사용자가 자동 실행을 켠다
         current.setAutoRun(true);

@@ -21,7 +21,7 @@ import tools.jackson.databind.JsonNode;
  * NaN·무한대 정격, 모르는 출처. <b>정격의 크기 상한은 일부러 두지 않는다.</b> 실데이터가 없는 지금 상한은
  * 추측이라 정당한 장비를 막을 수 있고, 값이 이상하면 노드 응답과 원장 목록에 그대로 드러난다.</p>
  *
- * <p>노드 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다.</p>
+ * <p>노드 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500으로 새므로 먼저 조회해 409를 낸다.</p>
  */
 @Service
 public class NodePowerSpecService {
@@ -36,7 +36,7 @@ public class NodePowerSpecService {
 
     // ── 조회 ───────────────────────────────────────────────────
 
-    /** 목록. {@code nodeId} 를 주면 그 문자열을 포함하는 노드만(부분 일치, 대소문자 무시). */
+    /** 목록. {@code nodeId}를 주면 그 문자열을 포함하는 노드만(부분 일치, 대소문자 무시). */
     @Transactional(readOnly = true)
     public List<NodePowerSpec> list(String nodeId) {
         List<NodePowerSpec> all = repository.findAllByOrderByNodeIdAsc();
@@ -96,10 +96,10 @@ public class NodePowerSpecService {
     }
 
     /**
-     * 저장하며 <b>동시 등록 경합</b>을 409 로 바꾼다.
+     * 저장하며 <b>동시 등록 경합</b>을 409로 바꾼다.
      *
      * <p>중복은 먼저 조회해 막지만, 같은 노드를 동시에 등록·수정하면 그 검사를 지나쳐 유니크 제약에 걸린다.
-     * 그대로 두면 500 으로 새므로 여기서 409 로 바꾼다(디스패치 기록의 멱등키 경합과 같은 처리). 제약 위반 뒤의
+     * 그대로 두면 500으로 새므로 여기서 409로 바꾼다(디스패치 기록의 멱등키 경합과 같은 처리). 제약 위반 뒤의
      * 영속성 컨텍스트는 신뢰할 수 없어 다시 조회하지 않고, 어떤 노드가 걸렸는지만 알린다.</p>
      */
     NodePowerSpec saveOrConflict(NodePowerSpec spec) {
@@ -129,10 +129,10 @@ public class NodePowerSpecService {
     }
 
     /**
-     * 정격 검증 — 0 보다 크고 유한해야 한다. <b>크기 상한은 없다.</b>
+     * 정격 검증 — 0보다 크고 유한해야 한다. <b>크기 상한은 없다.</b>
      *
-     * <p>무한대만 막는 이유: 여유율이 {@code (∞ − 실측) / ∞ = NaN} 이 되어 후보 정렬이 깨지고 응답 직렬화도
-     * 표준을 벗어난다. 큰 유한값은 그 노드의 여유율이 1 에 가까워질 뿐 계산이 깨지지 않고, 값 자체가 노드 응답과
+     * <p>무한대만 막는 이유: 여유율이 {@code (∞ − 실측) / ∞ = NaN}이 되어 후보 정렬이 깨지고 응답 직렬화도
+     * 표준을 벗어난다. 큰 유한값은 그 노드의 여유율이 1에 가까워질 뿐 계산이 깨지지 않고, 값 자체가 노드 응답과
      * 원장 목록에 그대로 보인다.</p>
      */
     private static double capacity(double v) {

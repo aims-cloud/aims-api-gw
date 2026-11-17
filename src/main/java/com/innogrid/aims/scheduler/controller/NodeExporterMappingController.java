@@ -15,12 +15,12 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * 익스포터 대응 원장 API — 노드 한 대의 DCGM·IPMI 시리즈가 어떤 {@code instance} 로 저장소에 있는지 운영자가 적는다.
+ * 익스포터 대응 원장 API — 노드 한 대의 DCGM·IPMI 시리즈가 어떤 {@code instance}로 저장소에 있는지 운영자가 적는다.
  *
  * <p>프로메테우스의 {@code instance} 라벨은 익스포터마다 다르다(노드 {@code host:9100}, DCGM {@code host:9400},
- * IPMI 는 중앙 주소). 수집기는 노드 익스포터의 값을 키로 GPU 개수·전력·온도를 찾아 왔으므로 실장비에서는 셋 다
+ * IPMI는 중앙 주소). 수집기는 노드 익스포터의 값을 키로 GPU 개수·전력·온도를 찾아 왔으므로 실장비에서는 셋 다
  * 빈손이었다. 여기에 값을 넣으면 다음 수집부터 그 노드의 GPU 개수·전력·온도가 이어진다. 비어 있으면 수집기가
- * 호스트명 일치로 대체하고, 그것도 안 되면 노드 instance 를 그대로 쓴다.</p>
+ * 호스트명 일치로 대체하고, 그것도 안 되면 노드 instance를 그대로 쓴다.</p>
  */
 @Tag(name = "노드 익스포터 instance 대응", description = "노드별 DCGM·IPMI instance 원장. 값을 넣으면 다음 수집부터 GPU 개수·전력·온도가 이어진다")
 @RestController

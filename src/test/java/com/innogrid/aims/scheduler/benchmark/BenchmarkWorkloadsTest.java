@@ -15,8 +15,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 벤치마크 워크로드 분포 로딩·표본 추출·배치 순서.
  *
- * <p>스프링을 띄우지 않는다 — {@link BenchmarkWorkloads} 가 만드는 워크로드는 저장하지 않는
- * detached 엔티티라 DB 도 컨텍스트도 필요 없다.</p>
+ * <p>스프링을 띄우지 않는다 — {@link BenchmarkWorkloads}가 만드는 워크로드는 저장하지 않는
+ * detached 엔티티라 DB도 컨텍스트도 필요 없다.</p>
  */
 class BenchmarkWorkloadsTest {
 

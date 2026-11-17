@@ -29,12 +29,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * 네 칸 값이 실행 계층의 전용 UPDATE({@code acquireForRun}·{@code recordRunResult})를 덮어, 실행 권한이 풀리거나
  * 끝난 실행이 실행 중으로 되살아난다. 운영의 경합 창은 편집 트랜잭션 길이(ms)라 스레드로는 재현할 수 없으므로
  * 여기서는 트랜잭션을 겹쳐 결정적으로 만든다 — 바깥 트랜잭션(REQUIRED) 안에서 스케줄을 읽어 1차 캐시에 올리고,
- * 안쪽 별도 트랜잭션(REQUIRES_NEW)으로 실행 쪽 UPDATE 를 커밋한 뒤, 같은 바깥 트랜잭션에서 편집을 부르면 편집은
- * 낡은 엔티티를 그대로 쓴다. 안쪽을 REQUIRED 로 바꾸면 실행 쪽 UPDATE 가 따로 커밋되지 않고, {@code acquireForRun} 을
- * 쓰는 두 테스트는 그 {@code clearAutomatically} 가 1차 캐시를 비워 재현되지 않는다 — 별도 트랜잭션이 전제다.</p>
+ * 안쪽 별도 트랜잭션(REQUIRES_NEW)으로 실행 쪽 UPDATE를 커밋한 뒤, 같은 바깥 트랜잭션에서 편집을 부르면 편집은
+ * 낡은 엔티티를 그대로 쓴다. 안쪽을 REQUIRED로 바꾸면 실행 쪽 UPDATE가 따로 커밋되지 않고, {@code acquireForRun}을
+ * 쓰는 두 테스트는 그 {@code clearAutomatically}가 1차 캐시를 비워 재현되지 않는다 — 별도 트랜잭션이 전제다.</p>
  *
- * <p><b>이 클래스는 {@code @Transactional} 을 쓰지 않는다.</b> 커밋된 값을 다시 읽어 확인한다. 반대 방향(실행 쪽
- * 사본이 편집을 되돌리지 않는가)은 {@link ScheduleLockReleaseTest} 가 본다.</p>
+ * <p><b>이 클래스는 {@code @Transactional}을 쓰지 않는다.</b> 커밋된 값을 다시 읽어 확인한다. 반대 방향(실행 쪽
+ * 사본이 편집을 되돌리지 않는가)은 {@link ScheduleLockReleaseTest}가 본다.</p>
  */
 @SpringBootTest
 class ScheduleEditDuringRunTest {
@@ -88,12 +88,12 @@ class ScheduleEditDuringRunTest {
         return new ScheduleUpdateRequest(null, null, null, cron, null, null, null, null, null, null, null, null);
     }
 
-    /** 편집이 읽은 뒤 실행 쪽 UPDATE 가 커밋되고, 같은 트랜잭션에서 편집이 저장되는 운영의 겹침을 그대로 만든다. */
+    /** 편집이 읽은 뒤 실행 쪽 UPDATE가 커밋되고, 같은 트랜잭션에서 편집이 저장되는 운영의 겹침을 그대로 만든다. */
     private void editAfter(Long id, Runnable runSideUpdate, ScheduleUpdateRequest request) {
         outer().executeWithoutResult(status -> {
             scheduleRepository.findById(id).orElseThrow();          // 편집이 읽은 시점의 사본을 1차 캐시에 올린다
             inner().executeWithoutResult(s -> runSideUpdate.run());  // 그 사이 실행 쪽이 커밋한다
-            scheduleService.update(id, request);                     // REQUIRED 로 합류 → 낡은 사본으로 저장
+            scheduleService.update(id, request);                     // REQUIRED로 합류 → 낡은 사본으로 저장
         });
     }
 

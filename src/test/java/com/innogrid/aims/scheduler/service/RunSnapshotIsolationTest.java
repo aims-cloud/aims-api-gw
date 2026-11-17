@@ -104,8 +104,8 @@ class RunSnapshotIsolationTest {
     @Test
     void a_linkage_error_in_the_snapshot_does_not_break_the_run() {
         givenOneNodeAndOneWorkload("rsi-linkage");
-        // 배포가 돌고 있는 JVM 의 jar 를 덮어쓰면 아직 안 읽은 클래스에서 이 오류가 난다.
-        // RuntimeException 만 잡으면 하필 그때 "실행은 계속한다"는 약속이 깨진다.
+        // 배포가 돌고 있는 JVM의 jar를 덮어쓰면 아직 안 읽은 클래스에서 이 오류가 난다.
+        // RuntimeException만 잡으면 하필 그때 "실행은 계속한다"는 약속이 깨진다.
         when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
                 .thenThrow(new NoClassDefFoundError("RunClusterSnapshot$Fixed"));
 

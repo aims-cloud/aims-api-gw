@@ -21,7 +21,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 가중치 스코어 기반 스케줄러.
  *
  * 논문 수준 알고리즘:
- * 1. 하드 제약 조건 필터링 (ConstraintEvaluator 가 담당)
+ * 1. 하드 제약 조건 필터링 (ConstraintEvaluator가 담당)
  * 2. 소프트 스코어링 (5개 차원의 가중합)
  *    - CPU 여유율 스코어: (100 - cpuUsage) / 100
  *    - 메모리 여유율 스코어: (100 - memUsage) / 100
@@ -38,13 +38,13 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 메트릭을 실행당 한 번만 수집하므로, 한 실행에서 워크로드를 잇달아 배치하면 방금 배치한
  * 부하는 메트릭에 없다. 실측만 보면 점수가 매번 같아 최고점 노드 하나로 몰리고, 제약
  * (C1·C2)이 막아설 때까지 계속된다 — 제약은 실효값을 보는데 점수는 실측을 보는 셈이다.
- * 배포 VM 에서 2코어 노드에 1코어를 예약한 뒤에도 cpu여유가 0.8733 그대로였던 것이 이 결함이다.
+ * 배포 VM에서 2코어 노드에 1코어를 예약한 뒤에도 cpu여유가 0.8733 그대로였던 것이 이 결함이다.
  * 예약이 없으면 실효=실측이므로 단건 배치의 결과는 달라지지 않는다.</p>
  *
  * <p>네트워크 점수만 실측을 유지한다 — 예약(코어·메모리)을 트래픽으로 환산할 근거가 없다.</p>
  *
- * <p><b>전력·온도를 수집하지 못한 노드는 그 차원에서 중립 0.5 를 받는다.</b> 0W·0°C 를 그대로
- * 계산하면 여유 100% 로 읽혀 IPMI 가 없는 노드가 전력·온도 만점(가중치 합 0.35)을 받고, IPMI 가
+ * <p><b>전력·온도를 수집하지 못한 노드는 그 차원에서 중립 0.5를 받는다.</b> 0W·0°C를 그대로
+ * 계산하면 여유 100%로 읽혀 IPMI가 없는 노드가 전력·온도 만점(가중치 합 0.35)을 받고, IPMI가
  * 섞인 클러스터에서 계측된 노드보다 체계적으로 유리해진다. {@code power} 엔진과 같은 원칙이다.</p>
  */
 @Component
@@ -93,7 +93,7 @@ public class WeightedScoreScheduler extends AbstractScoringEngine<AbstractScorin
         double cpuScore = (100.0 - node.effectiveCpuUsagePercent()) / 100.0;
         double memScore = (100.0 - node.effectiveMemoryUsagePercent()) / 100.0;
         // 전력·온도를 수집하지 못한 노드(0W·0°C)는 판단 근거가 없으므로 중립 0.5.
-        // 실측 0 을 그대로 계산하면 여유 100% 로 읽혀 미계측 노드가 만점을 받는다.
+        // 실측 0을 그대로 계산하면 여유 100%로 읽혀 미계측 노드가 만점을 받는다.
         double powerScore = Measured.weightedPowerNeutral(policy, node)
                 ? 0.5
                 : powerModel.effectiveHeadroomPercent(node) / 100.0;
@@ -103,7 +103,7 @@ public class WeightedScoreScheduler extends AbstractScoringEngine<AbstractScorin
                                              policy.getMaxTemperatureCelsius());
         double netScore = networkModel.localTrafficScore(node);   // 예약을 트래픽으로 환산할 근거 없음
         // 게이트(정책 affinityEnabled + 워크로드 dataMdcId)가 켜졌을 때만 데이터 MDC ↔ 노드 MDC 링크 품질을 섞는다.
-        // 같은 MDC 는 1.0, 미등록 원격은 설정값(기본 0.5)이라 등록된 양호 링크 아래로 간다. DOWN 은 C5 가 이미 제외했다.
+        // 같은 MDC는 1.0, 미등록 원격은 설정값(기본 0.5)이라 등록된 양호 링크 아래로 간다. DOWN은 C5가 이미 제외했다.
         Double linkScore = null;
         Double linkRegistered = null;
         if (context.linkAware(workload)) {
@@ -111,8 +111,8 @@ public class WeightedScoreScheduler extends AbstractScoringEngine<AbstractScorin
             linkScore = networkModel.linkScore(dataMdc, node.getMdcId(), context.linkMatrix(),
                                                workload.getRequiredBandwidthMbps());
             netScore = networkModel.blend(netScore, linkScore);
-            // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC 는 링크를 타지
-            // 않으므로 "등록됨" 과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.
+            // 링크 점수가 측정에서 왔는지 기본값인지를 응답에서 구분할 수 있게. 같은 MDC는 링크를 타지
+            // 않으므로 "등록됨"과 같은 1.0 — 게이트가 켜진 후보는 모두 이 키를 가져 키 집합이 노드마다 다르지 않다.
             boolean sameMdc = dataMdc.equals(node.getMdcId());
             linkRegistered = sameMdc || networkModel.isRegistered(dataMdc, node.getMdcId(), context.linkMatrix())
                     ? 1.0 : 0.0;
@@ -143,7 +143,7 @@ public class WeightedScoreScheduler extends AbstractScoringEngine<AbstractScorin
         details.put("온도여유", Scores.round(tempScore));
         details.put("네트워크한산도", Scores.round(netScore));
         putDiskCheck(details, workload, node);
-        if (linkScore != null) {   // 게이트 on 일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
+        if (linkScore != null) {   // 게이트 on일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
             details.put("링크품질", Scores.round(linkScore));
             details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)
         }

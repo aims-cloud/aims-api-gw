@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 전력 엔진의 <b>관찰 가능한 계약</b>을 고정한다.
  *
- * <p>{@link PowerAwareSchedulerTest} 는 "어느 노드가 뽑히는가"라는 결론만 본다. 점수식을 다시
+ * <p>{@link PowerAwareSchedulerTest}는 "어느 노드가 뽑히는가"라는 결론만 본다. 점수식을 다시
  * 쓸 때는 결론이 같아도 순위·응답 구조가 조용히 달라질 수 있어, 그것까지 여기서 못 박는다.</p>
  *
  * <p>점수의 <b>절대값</b>은 고정하지 않는다. 수식을 개선하면 값은 당연히 달라지고, 값을 박아두면
@@ -72,7 +72,7 @@ class PowerAwareSchedulerBehaviourTest {
     }
 
     /**
-     * 판단 근거를 {@code details} 로 남긴다.
+     * 판단 근거를 {@code details}로 남긴다.
      *
      * <p>항목 이름은 수식을 바꾸면 함께 바뀌므로 고정하지 않는다. 대신 <b>비어 있지 않을 것</b>과
      * 전력 엔진이라면 반드시 설명해야 하는 두 가지 — 전력 효율과 배치 후 예상 전력 — 이
@@ -98,9 +98,9 @@ class PowerAwareSchedulerBehaviourTest {
         policy.setMaxCpuUsagePercent(70);
 
         // 코어를 넉넉히 줘 C1(자원 가용성)을 통과시켜야 C2(사용률 임계)에 도달한다.
-        // 8코어에 90% 를 쓰면 가용이 0.8 코어뿐이라 C1 이 먼저 걸린다.
+        // 8코어에 90%를 쓰면 가용이 0.8 코어뿐이라 C1이 먼저 걸린다.
         List<NodeResource> nodes = List.of(
-                bigNode("busy", 90, 40, 250, 55),   // CPU 90% > 70% → C2 로 제외
+                bigNode("busy", 90, 40, 250, 55),   // CPU 90% > 70% → C2로 제외
                 bigNode("calm", 30, 40, 250, 55));
 
         SchedulingResult result = scheduler.schedule(workload(2), nodes, policy);
@@ -167,7 +167,7 @@ class PowerAwareSchedulerBehaviourTest {
                 node("cool-idle", 5, 10, 300, 35));
     }
 
-    /** 코어가 넉넉해 사용률이 높아도 C1 이 아니라 C2 로 걸리는 노드. */
+    /** 코어가 넉넉해 사용률이 높아도 C1이 아니라 C2로 걸리는 노드. */
     private NodeResource bigNode(String nodeId, double cpuUsage, double memUsage,
                                  double power, double temp) {
         return new NodeResource("mdc-01", nodeId, 64, 131072, 0,

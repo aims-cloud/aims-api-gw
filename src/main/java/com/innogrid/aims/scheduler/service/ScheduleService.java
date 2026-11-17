@@ -52,25 +52,25 @@ import com.innogrid.aims.scheduler.repository.SchedulingHistoryRepository;
 import jakarta.persistence.criteria.Predicate;
 
 /**
- * 스케줄 CRUD 와 조회.
+ * 스케줄 CRUD와 조회.
  *
- * <p>실행 흐름은 {@link ScheduleExecutionService} 가 맡는다. 실행은 외부 메트릭 조회를
+ * <p>실행 흐름은 {@link ScheduleExecutionService}가 맡는다. 실행은 외부 메트릭 조회를
  * 포함해 오래 걸리므로 트랜잭션 경계를 분리해 두었다.</p>
  *
  * <p>요청 검증은 여기서 한다. 저장소 최신 DTO 관례가 검증 애너테이션을 쓰지 않기도 하고,
- * 서비스에서 {@code BusinessException} 을 던지는 편이 400 이 확실하게 나간다.</p>
+ * 서비스에서 {@code BusinessException}을 던지는 편이 400이 확실하게 나간다.</p>
  */
 @Service
 public class ScheduleService {
 
-    /** 목록 정렬을 허용할 필드. 여기 없는 이름은 400 으로 막는다. */
+    /** 목록 정렬을 허용할 필드. 여기 없는 이름은 400으로 막는다. */
     private static final Set<String> SORTABLE = Set.of(
             "scheduleId", "name", "resourceType", "cronExpression", "description",
             "autoRun", "enabled", "lastRunAt", "lastRunFinishedAt", "lastRunStatus",
             "nextRunAt", "createdAt", "updatedAt");
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
-    /** 실행 이력 정렬 허용 필드. message · scheduleKey 는 화면의 「메시지」 · 「스케줄 ID」 열이 보내는 이름이다. */
+    /** 실행 이력 정렬 허용 필드. message · scheduleKey는 화면의 「메시지」 · 「스케줄 ID」 열이 보내는 이름이다. */
     private static final Set<String> RUN_SORTABLE = Set.of(
             "startedAt", "finishedAt", "status", "triggerType", "targetCount",
             "successCount", "failedCount", "message", "scheduleKey");
@@ -82,7 +82,7 @@ public class ScheduleService {
 
     /**
      * Excel 내보내기 한 번에 담는 행 상한. 5분 주기 스케줄이 보존 90일 동안 대상 있는 회차만으로 남기는 실행 이력
-     * 25,920행을 덮는다. 넘으면 400 으로 실제 건수를 알린다(검색어 · 필터 · 기간으로 좁히게).
+     * 25,920행을 덮는다. 넘으면 400으로 실제 건수를 알린다(검색어 · 필터 · 기간으로 좁히게).
      */
     static final int EXPORT_MAX_ROWS = 30_000;
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -121,7 +121,7 @@ public class ScheduleService {
 
     // ── 조회 ───────────────────────────────────────────────────
 
-    /** 목록. page 는 1부터다. */
+    /** 목록. page는 1부터다. */
     @Transactional(readOnly = true)
     public PageResponse<ScheduleResponse> list(String keyword, Workload.ResourceType resourceType,
                                                Boolean enabled, int page, int size, String sort) {
@@ -133,7 +133,7 @@ public class ScheduleService {
 
     /**
      * 목록 Excel 내보내기 — 같은 검색어 · 필터 · 정렬로 목록의 모든 쪽을 이어 붙인 행을 화면 표기로 쓴다.
-     * 행이 {@link #EXPORT_MAX_ROWS} 를 넘으면 400.
+     * 행이 {@link #EXPORT_MAX_ROWS}를 넘으면 400.
      */
     @Transactional(readOnly = true)
     public ScheduleSheetWriter.Sheet exportSchedules(String keyword, Workload.ResourceType resourceType,
@@ -141,7 +141,7 @@ public class ScheduleService {
         return exportSchedules(keyword, resourceType, enabled, sort, EXPORT_MAX_ROWS);
     }
 
-    /** 상한을 받는 판 — 같은 패키지의 테스트가 작은 상한을 넘겨 400 을 확인한다. */
+    /** 상한을 받는 판 — 같은 패키지의 테스트가 작은 상한을 넘겨 400을 확인한다. */
     ScheduleSheetWriter.Sheet exportSchedules(String keyword, Workload.ResourceType resourceType,
                                               Boolean enabled, String sort, int cap) {
         Sort order = StableSort.withIdTiebreaker(SortSupport.parse(sort, SORTABLE, DEFAULT_SORT));
@@ -179,12 +179,12 @@ public class ScheduleService {
     /**
      * 실행 이력. 자동 실행이 대상 0건으로 끝난 경우는 이력이 남지 않는다.
      *
-     * <p>필터는 전부 선택이고 AND 로 겹친다. {@code from}·{@code to} 는 시작 시각({@code startedAt})의
-     * 반개구간 {@code [from, to)} 이며 기본 창이 없다 — 배치 이력 페이징과 같은 규칙이다.
+     * <p>필터는 전부 선택이고 AND로 겹친다. {@code from}·{@code to}는 시작 시각({@code startedAt})의
+     * 반개구간 {@code [from, to)}이며 기본 창이 없다 — 배치 이력 페이징과 같은 규칙이다.
      * 시작이 끝보다 뒤면 400.</p>
      *
-     * <p>{@code keyword} 는 실행 메시지와 스케줄 ID(업무 키)의 부분 일치다. 규칙은 스케줄 목록 검색어와 같다 — 앞뒤 공백 제거 ·
-     * 대소문자 무시 · {@code %}·{@code _} 는 문자 그대로. 처리 상태와 시각은 {@code status}·{@code from}·{@code to} 로 찾는다.</p>
+     * <p>{@code keyword}는 실행 메시지와 스케줄 ID(업무 키)의 부분 일치다. 규칙은 스케줄 목록 검색어와 같다 — 앞뒤 공백 제거 ·
+     * 대소문자 무시 · {@code %}·{@code _}는 문자 그대로. 처리 상태와 시각은 {@code status}·{@code from}·{@code to}로 찾는다.</p>
      */
     @Transactional(readOnly = true)
     public PageResponse<ScheduleRunResponse> runs(Long id, String keyword, ScheduleRun.RunStatus status,
@@ -200,7 +200,7 @@ public class ScheduleService {
 
     /**
      * 실행 이력 Excel 내보내기 — 같은 검색어 · 필터 · 기간 · 정렬로 실행 이력의 모든 쪽을 이어 붙인 행을 화면 표기로 쓴다.
-     * 행이 {@link #EXPORT_MAX_ROWS} 를 넘으면 400. 스케줄이 없으면 404, 기간이 거꾸로면 400(실행 이력과 같은 검사).
+     * 행이 {@link #EXPORT_MAX_ROWS}를 넘으면 400. 스케줄이 없으면 404, 기간이 거꾸로면 400(실행 이력과 같은 검사).
      */
     @Transactional(readOnly = true)
     public ScheduleSheetWriter.Sheet exportRuns(Long id, String keyword, ScheduleRun.RunStatus status,
@@ -209,7 +209,7 @@ public class ScheduleService {
         return exportRuns(id, keyword, status, triggerType, from, to, sort, EXPORT_MAX_ROWS);
     }
 
-    /** 상한을 받는 판 — 같은 패키지의 테스트가 작은 상한을 넘겨 400 을 확인한다. */
+    /** 상한을 받는 판 — 같은 패키지의 테스트가 작은 상한을 넘겨 400을 확인한다. */
     ScheduleSheetWriter.Sheet exportRuns(Long id, String keyword, ScheduleRun.RunStatus status,
                                          ScheduleRun.TriggerType triggerType, OffsetDateTime from, OffsetDateTime to,
                                          String sort, int cap) {
@@ -236,7 +236,7 @@ public class ScheduleService {
         }
     }
 
-    /** 스케줄은 필수, 나머지는 null 이면 조건 없음. */
+    /** 스케줄은 필수, 나머지는 null이면 조건 없음. */
     private static Specification<ScheduleRun> runFilter(Long scheduleId, String keyword, ScheduleRun.RunStatus status,
                                                         ScheduleRun.TriggerType triggerType,
                                                         OffsetDateTime from, OffsetDateTime to) {
@@ -272,13 +272,13 @@ public class ScheduleService {
     }
 
     /**
-     * 실행 1건을 저장한 입력으로 다시 계산해 배치 이력과 대조한다. DB 에 저장하지 않는다 — 엔진·모델은 요청마다 새로 만들고
+     * 실행 1건을 저장한 입력으로 다시 계산해 배치 이력과 대조한다. DB에 저장하지 않는다 — 엔진·모델은 요청마다 새로 만들고
      * 운영 냉각 대기도 건드리지 않는다.
      *
      * <p>404: 실행이 없거나 다른 스케줄의 실행이거나 저장한 입력이 없다. 409: 아직 실행 중이거나, 형식 판이 지금 읽을 수
      * 있는 판이 아니거나, 원문이 없거나 저장한 지문과 다르거나, 지금 코드로 읽을 수 없거나, 엔진이 없거나 다시 만들 수 없는
      * 엔진이거나, 저장한 설정 노브를 지금 코드에 적용할 수 없다. 500: 그 밖에 다시 조립·계산하다 예외가 났다(엔진 계산 중이면
-     * 워크로드 id 를 사유에 싣는다).</p>
+     * 워크로드 id를 사유에 싣는다).</p>
      */
     @Transactional(readOnly = true)
     public ScheduleRunReplayResponse replay(Long id, Long runId) {
@@ -287,7 +287,7 @@ public class ScheduleService {
         try {
             steps = RunInputReplay.replay(stored.inputs(), stored.history(), stored.rolledBack());
         } catch (RuntimeException e) {
-            // 처리하지 않은 예외는 인증 없는 오류 경로로 넘어가 본문 없는 403 이 된다 — 사유를 실어 500 으로 돌려준다
+            // 처리하지 않은 예외는 인증 없는 오류 경로로 넘어가 본문 없는 403이 된다 — 사유를 실어 500으로 돌려준다
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "실행 재생에 실패했습니다: " + e.getMessage());
         }
         RunInputReplay.Report report = RunInputReplay.compare(steps, stored.history(), stored.missingDispatch());
@@ -295,12 +295,12 @@ public class ScheduleService {
     }
 
     /**
-     * 실행 1건을 저장한 입력으로 운영 엔진 세 개마다 다시 계산해 워크로드별 선택 노드·성공 여부를 나란히 돌려준다. DB 에 저장하지
+     * 실행 1건을 저장한 입력으로 운영 엔진 세 개마다 다시 계산해 워크로드별 선택 노드·성공 여부를 나란히 돌려준다. DB에 저장하지
      * 않는다. 엔진마다 설정·모델·컨텍스트를 새로 만들고, 실제로 쓴 엔진은 한 번만 계산해 그 결과로 재생 판정도 낸다.
      *
-     * <p>404·409 는 실행 재생과 같은 검사를 거친다. 엔진 계산 전에 저장한 입력을 다시 조립하지 못하면 실행 재생과 같은 500
-     * 이다(사유에 엔진 id 없음). 그 밖에 세 엔진 중 하나라도 다시 계산하다 예외를 내면 500 이며(사유에 엔진 id), 실행 재생이
-     * 200 인 실행에서도 날 수 있다.</p>
+     * <p>404·409는 실행 재생과 같은 검사를 거친다. 엔진 계산 전에 저장한 입력을 다시 조립하지 못하면 실행 재생과 같은 500
+     * 이다(사유에 엔진 id 없음). 그 밖에 세 엔진 중 하나라도 다시 계산하다 예외를 내면 500이며(사유에 엔진 id), 실행 재생이
+     * 200인 실행에서도 날 수 있다.</p>
      */
     @Transactional(readOnly = true)
     public ScheduleRunEngineReplayResponse replayEngines(Long id, Long runId) {
@@ -335,7 +335,7 @@ public class ScheduleService {
         if (input.getFormatVersion() != RunInputCapture.FORMAT_VERSION) {
             throw new BusinessException(HttpStatus.CONFLICT, "재생할 수 없는 입력 형식 판입니다: " + input.getFormatVersion());
         }
-        // 아래 검사들은 처리하지 않은 예외가 본문 없는 403 으로 나가지 않게 한다 — 읽지 못한 입력은 409, 그 밖은 사유를 실은 500
+        // 아래 검사들은 처리하지 않은 예외가 본문 없는 403으로 나가지 않게 한다 — 읽지 못한 입력은 409, 그 밖은 사유를 실은 500
         if (input.getPayload() == null) {
             throw new BusinessException(HttpStatus.CONFLICT, "저장한 입력 원문이 없습니다: " + runId);
         }
@@ -468,8 +468,8 @@ public class ScheduleService {
     }
 
     /**
-     * 편집(부분 갱신). 보낸 키만 바꾸고 없는 키는 유지한다. 스케줄 ID 는 업무 키라 바꿀 수 없다.
-     * cron 이나 사용 여부가 바뀌면 다음 실행 시각을 반드시 다시 계산한다 —
+     * 편집(부분 갱신). 보낸 키만 바꾸고 없는 키는 유지한다. 스케줄 ID는 업무 키라 바꿀 수 없다.
+     * cron이나 사용 여부가 바뀌면 다음 실행 시각을 반드시 다시 계산한다 —
      * 그러지 않으면 예전 주기로 한 번 더 실행된다.
      *
      * <pre>
@@ -478,9 +478,9 @@ public class ScheduleService {
      * 칸 검증 실패                → 400 (생성과 같은 규칙 · 비울 수 있는 다섯 칸은 JSON 타입도 검사)
      * </pre>
      *
-     * <p>지정 정책·엔진·전력 상한·온도 상한·설명은 명시적 null 로 비운다(정책·온도는 상속으로, 전력은 제약 없음으로 복귀).
-     * <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400 이면 엔티티는 전혀 바뀌지 않는다.
-     * 깨진 JSON 이나 리소스 종류·불리언 타입 오류처럼 본문을 읽지 못한 400 은 이 메서드에 오기 전에 프레임워크가 낸다.</p>
+     * <p>지정 정책·엔진·전력 상한·온도 상한·설명은 명시적 null로 비운다(정책·온도는 상속으로, 전력은 제약 없음으로 복귀).
+     * <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400이면 엔티티는 전혀 바뀌지 않는다.
+     * 깨진 JSON이나 리소스 종류·불리언 타입 오류처럼 본문을 읽지 못한 400은 이 메서드에 오기 전에 프레임워크가 낸다.</p>
      */
     @Transactional
     public ScheduleResponse update(Long id, ScheduleUpdateRequest request) {
@@ -524,7 +524,7 @@ public class ScheduleService {
         return ScheduleResponse.from(scheduleRepository.save(schedule));
     }
 
-    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null 이면 {@code null}). */
+    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null이면 {@code null}). */
     private record Clearable<T>(boolean sent, T value) {
         static <T> Clearable<T> keep() { return new Clearable<>(false, null); }
         static <T> Clearable<T> set(T value) { return new Clearable<>(true, value); }
@@ -557,7 +557,7 @@ public class ScheduleService {
 
     /**
      * 키 없음 → 유지, 명시적 null → 비움, JSON 숫자 → 값, 그 외(숫자 문자열 포함) → 400.
-     * 값은 {@code numberValue().doubleValue()} 로 꺼낸다 — {@code asDouble()} 은 double 범위를 넘는 큰 정수에서 예외를 던진다.
+     * 값은 {@code numberValue().doubleValue()}로 꺼낸다 — {@code asDouble()}은 double 범위를 넘는 큰 정수에서 예외를 던진다.
      * 값의 범위는 생성과 같이 검사하지 않는다.
      */
     private Clearable<Double> clearableNumber(JsonNode node, String label) {
@@ -572,7 +572,7 @@ public class ScheduleService {
      *
      * <p>실행 중인 스케줄이 하나라도 섞이면 전체를 거부한다. 일부만 지워지면 화면과
      * 실제 상태가 어긋나는데, 응답 형식상 어느 것이 실패했는지 알릴 방법이 없다.
-     * 없는 ID 는 무시한다(같은 요청을 두 번 보내도 결과가 같다).</p>
+     * 없는 ID는 무시한다(같은 요청을 두 번 보내도 결과가 같다).</p>
      */
     @Transactional
     public void delete(List<Long> ids) {
@@ -604,7 +604,7 @@ public class ScheduleService {
 
     /**
      * 실행 이력을 지우기 전에 배치 결정과의 연결만 끊는다.
-     * 외래키가 없어 DB 가 정리해 주지 않으며, 결정 이력 자체는 연구 근거라 남긴다.
+     * 외래키가 없어 DB가 정리해 주지 않으며, 결정 이력 자체는 연구 근거라 남긴다.
      */
     private void unlinkHistories(List<ScheduleRun> runs) {
         if (runs.isEmpty()) return;
@@ -620,7 +620,7 @@ public class ScheduleService {
      * 실행 주기를 검증하고 다음 실행 시각을 미리 보여준다.
      *
      * <p>요일을 이름으로 함께 돌려준다. 도움말 모달은 Quartz 규약을 안내하는데 런타임은
-     * Spring 이라 숫자 요일 해석이 하루씩 다르다. 백엔드가 변환하지만 사용자가 의도한
+     * Spring이라 숫자 요일 해석이 하루씩 다르다. 백엔드가 변환하지만 사용자가 의도한
      * 요일에 실제로 실행되는지 눈으로 확인할 수 있어야 한다.</p>
      */
     public CronPreviewResponse previewCron(String cronExpression) {
@@ -639,11 +639,11 @@ public class ScheduleService {
     }
 
     /**
-     * 저장하지 않는 초안 — 폼 값을 실행이 보는 형태의 {@link Schedule} 로 바꾼다(저장 전 미리보기용).
+     * 저장하지 않는 초안 — 폼 값을 실행이 보는 형태의 {@link Schedule}로 바꾼다(저장 전 미리보기용).
      *
      * <p>스케줄명·실행 주기는 보지 않는다 — 폼을 채우는 중에도 부를 수 있어야 하고, 실행 주기는
-     * {@code /cron/validate} 가 따로 맡는다. 검증은 생성과 같은 규칙으로 엔진 등록 여부·배치 순서·설명 길이만 본다
-     * (설명은 결과에 쓰이지 않지만 길이 상한은 {@code apply} 가 생성과 같이 건다). 편집과 달리 "키 없음" 은 기존 값이
+     * {@code /cron/validate}가 따로 맡는다. 검증은 생성과 같은 규칙으로 엔진 등록 여부·배치 순서·설명 길이만 본다
+     * (설명은 결과에 쓰이지 않지만 길이 상한은 {@code apply}가 생성과 같이 건다). 편집과 달리 "키 없음"은 기존 값이
      * 아니라 기본값(종류 VM · 사용 중 · 정책 상속)이다. 어떤 행도 쓰지 않는다.</p>
      *
      * <p>스케줄명·실행 주기가 비어 있어 저장하면 안 된다 — 같은 패키지의 미리보기만 쓰도록 접근을 좁힌다.</p>
@@ -673,7 +673,7 @@ public class ScheduleService {
     /**
      * 다음 자동 실행 시각을 현재 기준으로 다시 계산한다.
      *
-     * <p>사용 여부를 껐다 켜거나 cron 을 바꾼 뒤 예전 값을 그대로 두면 그 값이 이미
+     * <p>사용 여부를 껐다 켜거나 cron을 바꾼 뒤 예전 값을 그대로 두면 그 값이 이미
      * 과거라서 켜자마자 실행된다. 자동 실행이 꺼져 있으면 예정 시각을 비운다.</p>
      */
     public void refreshNextRunAt(Schedule schedule) {
@@ -684,7 +684,7 @@ public class ScheduleService {
      * 다음 실행 시각을 값만으로 계산한다. 자동 실행 대상이 아니면 {@code null}.
      *
      * <p>실행이 끝날 때는 엔티티가 <b>실행 시작 시점의 사본</b>이라 그 사이 바뀐 cron·자동 실행 여부를 모른다.
-     * 그래서 호출자가 DB 의 최신 값을 읽어 넘길 수 있게 열어 둔다.</p>
+     * 그래서 호출자가 DB의 최신 값을 읽어 넘길 수 있게 열어 둔다.</p>
      */
     public OffsetDateTime nextRunAt(String cronExpression, boolean autoRunnable) {
         return autoRunnable ? cronSupport.nextRunAt(cronExpression, OffsetDateTime.now()) : null;
@@ -710,7 +710,7 @@ public class ScheduleService {
         if (request.enabled() != null) schedule.setEnabled(request.resolveEnabled());
     }
 
-    /** 배치 순서 — 정식 이름 외에 "size"·"age" 도 받는다(화면에서 짧게 보내기 쉽게). 모르는 값은 400. */
+    /** 배치 순서 — 정식 이름 외에 "size"·"age"도 받는다(화면에서 짧게 보내기 쉽게). 모르는 값은 400. */
     static Schedule.PlacementOrder parsePlacementOrder(String raw) {
         String v = raw.trim().toUpperCase();
         if (v.equals("SIZE") || v.equals("PRIORITY_THEN_SIZE")) return Schedule.PlacementOrder.PRIORITY_THEN_SIZE;
@@ -719,7 +719,7 @@ public class ScheduleService {
     }
 
     private void validateEngine(String engine) {
-        // 저장 직전에 trim 하므로 검증도 trim 한 값으로 — 그러지 않으면 "weighted " 가 알 수 없는 엔진으로 거부된다.
+        // 저장 직전에 trim 하므로 검증도 trim 한 값으로 — 그러지 않으면 "weighted "가 알 수 없는 엔진으로 거부된다.
         String trimmed = engine == null ? null : engine.trim();
         if (trimmed != null && !trimmed.isEmpty() && !engineRegistry.contains(trimmed)) {
             throw badRequest("알 수 없는 스케줄링 엔진입니다: " + trimmed);
@@ -729,8 +729,8 @@ public class ScheduleService {
     /**
      * 길이 상한이 <b>다른 곳에서 이미 강제되는</b> 값 전용 — 지금은 스케줄 ID 하나뿐이다.
      *
-     * <p>{@link Schedule#ID_PATTERN} 이 50자를 강제하므로 여기서 또 재면 중복이고, 먼저 걸리면
-     * "영문·숫자로 시작하고…" 라는 기존 사유가 길이 사유로 바뀐다. 그 외의 값에는 길이를 받는 쪽을 쓴다.</p>
+     * <p>{@link Schedule#ID_PATTERN}이 50자를 강제하므로 여기서 또 재면 중복이고, 먼저 걸리면
+     * "영문·숫자로 시작하고…"라는 기존 사유가 길이 사유로 바뀐다. 그 외의 값에는 길이를 받는 쪽을 쓴다.</p>
      */
     private String requireText(String value, String label) {
         if (value == null || value.isBlank()) {
@@ -747,13 +747,13 @@ public class ScheduleService {
     }
 
     /**
-     * 컬럼 길이를 넘는 값을 400 으로 막는다.
+     * 컬럼 길이를 넘는 값을 400으로 막는다.
      *
-     * <p>없으면 INSERT 가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 스프링 기본 처리가 {@code /error} 를
-     * 다시 태우고 그 재요청이 인증에 막혀 <b>클라이언트는 400 이 아니라 403(본문 없음)</b> 을 받는다.
+     * <p>없으면 INSERT가 컬럼 길이에서 실패하는데, 그 예외를 잡는 곳이 없어 스프링 기본 처리가 {@code /error}를
+     * 다시 태우고 그 재요청이 인증에 막혀 <b>클라이언트는 400이 아니라 403(본문 없음)</b>을 받는다.
      * 같은 패키지의 다른 원장 서비스 다섯은 이미 이 형태를 쓴다.</p>
      *
-     * <p><b>스케줄 ID 에는 쓰지 않는다</b> — {@link Schedule#ID_PATTERN} 이 이미 50자를 강제하고 있어
+     * <p><b>스케줄 ID에는 쓰지 않는다</b> — {@link Schedule#ID_PATTERN}이 이미 50자를 강제하고 있어
      * 중복 검증이 되고, 여기서 먼저 걸리면 기존 사유 문구가 바뀐다.</p>
      */
     private String limit(String value, String label, int max) {
@@ -766,9 +766,9 @@ public class ScheduleService {
     /**
      * 선택 입력의 앞뒤 공백을 떼고, 비면 미지정(null)으로 본다.
      *
-     * <p>공백만 있는 엔진 이름은 {@code validateEngine} 의 {@code isBlank()} 를 그대로 통과해 저장됐다.
-     * PostgreSQL 이 {@code varchar} 의 뒤쪽 공백은 잘라 받으므로 오류도 나지 않고 값만 이상하게 남는다(실측).
-     * 공백을 null 로 정규화하면 {@code ScheduleExecutionService} 가 이미 쓰는 "공백 = 미지정" 규약과 결과가 같아진다.</p>
+     * <p>공백만 있는 엔진 이름은 {@code validateEngine}의 {@code isBlank()}를 그대로 통과해 저장됐다.
+     * PostgreSQL이 {@code varchar}의 뒤쪽 공백은 잘라 받으므로 오류도 나지 않고 값만 이상하게 남는다(실측).
+     * 공백을 null로 정규화하면 {@code ScheduleExecutionService}가 이미 쓰는 "공백 = 미지정" 규약과 결과가 같아진다.</p>
      */
     private String optionalText(String value, String label, int max) {
         String trimmed = value.trim();
@@ -776,8 +776,8 @@ public class ScheduleService {
     }
 
     /**
-     * 스프링 {@link Page} 를 저장소 표준 응답으로 옮긴다.
-     * {@code PageResponse.of} 는 전체 목록을 메모리에 올린 뒤 자르는 형태라, DB 에서
+     * 스프링 {@link Page}를 저장소 표준 응답으로 옮긴다.
+     * {@code PageResponse.of}는 전체 목록을 메모리에 올린 뒤 자르는 형태라, DB에서
      * 이미 잘라 온 결과에는 표준 생성자를 직접 쓴다.
      */
     private <T> PageResponse<T> toPageResponse(Page<T> page, int requestedPage, int size) {
@@ -790,7 +790,7 @@ public class ScheduleService {
         return (root, query, cb) -> {
             var predicates = new ArrayList<Predicate>();
             if (keyword != null && !keyword.isBlank()) {
-                // %·_ 는 문자 그대로 — 워크로드 페이징과 같은 이스케이프 규칙(escape 인자를 명시해 DB 기본값에 기대지 않는다)
+                // %·_는 문자 그대로 — 워크로드 페이징과 같은 이스케이프 규칙(escape 인자를 명시해 DB 기본값에 기대지 않는다)
                 String needle = keyword.trim().toLowerCase(Locale.ROOT);
                 String like = LikePatterns.contains(needle);
                 var anyField = new ArrayList<Predicate>();
@@ -806,7 +806,7 @@ public class ScheduleService {
             }
             if (resourceType != null) {
                 Predicate same = cb.equal(root.get("resourceType"), resourceType);
-                // 종류를 비워 둔 스케줄은 실행이 VM 으로 해석한다(Schedule.resolveResourceType) — 워크로드 페이징과 같은 규칙
+                // 종류를 비워 둔 스케줄은 실행이 VM으로 해석한다(Schedule.resolveResourceType) — 워크로드 페이징과 같은 규칙
                 predicates.add(resourceType == Workload.ResourceType.VM
                         ? cb.or(same, cb.isNull(root.get("resourceType"))) : same);
             }

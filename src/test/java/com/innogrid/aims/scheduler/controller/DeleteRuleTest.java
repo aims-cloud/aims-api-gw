@@ -24,8 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 삭제 규칙 — 실행 중 워크로드 409, 참조 중 정책 409, 없는 것 404.
  *
- * <p>예전에는 셋 다 조용히 200 이었다. 실행 중 워크로드를 지우면 예약 장부(=워크로드 행)가 사라져 노드가
- * 비어 보이고, 참조 중 정책을 지우면 스케줄의 다음 실행이 404 로 실패했다.</p>
+ * <p>예전에는 셋 다 조용히 200이었다. 실행 중 워크로드를 지우면 예약 장부(=워크로드 행)가 사라져 노드가
+ * 비어 보이고, 참조 중 정책을 지우면 스케줄의 다음 실행이 404로 실패했다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -47,7 +47,7 @@ class DeleteRuleTest {
     @DisplayName("실행 중 워크로드 삭제는 409 종료 후에는 200")
     @Test
     void delete_running_workload_409() throws Exception {
-        // 테스트 환경에는 노드가 없어 API 로는 배치할 수 없다 — 배치된 상태를 직접 만든다
+        // 테스트 환경에는 노드가 없어 API로는 배치할 수 없다 — 배치된 상태를 직접 만든다
         Workload w = new Workload("del-rule", 1, 512);
         w.assignTo("mdc-01", "node-1", 0.9, "test");            // SCHEDULED
         Long id = workloadRepository.save(w).getId();
@@ -57,7 +57,7 @@ class DeleteRuleTest {
                 .andExpect(jsonPath("$.message").value(containsString("실행 중인 워크로드는 삭제할 수 없습니다")))
                 .andExpect(jsonPath("$.message").value(containsString("node-1")));
 
-        // SCHEDULED → RUNNING 도 실행 중
+        // SCHEDULED → RUNNING도 실행 중
         mockMvc.perform(patch("/api/v1/scheduler/workloads/" + id + "/status")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RUNNING\"}"))
                 .andExpect(status().isOk());

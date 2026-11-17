@@ -34,7 +34,7 @@ public class Workload {
 
     /**
      * 리소스 종류. 스케줄이 이 값으로 배치 대상을 고른다.
-     * 기존 행은 null 이며 {@link #resolveResourceType()} 이 VM 으로 해석한다.
+     * 기존 행은 null이며 {@link #resolveResourceType()}이 VM으로 해석한다.
      */
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
@@ -52,11 +52,11 @@ public class Workload {
     private Double maxTemperatureCelsius;
 
     /**
-     * 데이터 MDC 와 주고받을 때 필요한 대역폭(Mbps). 모르면 null.
+     * 데이터 MDC와 주고받을 때 필요한 대역폭(Mbps). 모르면 null.
      *
-     * <p>{@code dataMdcId} 가 있고 정책의 친화도 게이트가 켜진 배치에서만 읽힌다 — 링크 대역폭이
+     * <p>{@code dataMdcId}가 있고 정책의 친화도 게이트가 켜진 배치에서만 읽힌다 — 링크 대역폭이
      * 이 값에 못 미치면 그만큼 링크 점수를 깎는다. 제약이 아니라 점수라, 부족해도 배치는 된다.
-     * null 인 기존 행은 예전과 똑같이 계산된다.</p>
+     * null인 기존 행은 예전과 똑같이 계산된다.</p>
      */
     private Double requiredBandwidthMbps;
 
@@ -87,7 +87,7 @@ public class Workload {
      * 모자란 워크로드는 매 실행마다 실패해 실행 이력을 끝없이 채운다(5분 주기면 하루 288건).
      * 이 값이 상한을 넘으면 대상에서 제외한다.</p>
      *
-     * <p>기존 행은 null 이며 {@link #resolveRetryCount()} 가 0 으로 해석한다.</p>
+     * <p>기존 행은 null이며 {@link #resolveRetryCount()}가 0으로 해석한다.</p>
      */
     private Integer retryCount;
 
@@ -97,9 +97,9 @@ public class Workload {
      * <p>재시도를 횟수로만 막으면 5분 주기 스케줄은 25분에 다섯 번을 전부 태운다. 그런데 실패
      * 원인 중에는 저절로 회복되는 것이 있다 — 임계 온도를 넘긴 노드의 냉각 대기, 아직 도착하지
      * 않은 메트릭. 둘 다 10분 눈금이라, 그보다 짧은 간격의 재시도는 회복 전에 기회를 소모한다.
-     * 이 시각을 남겨 두면 후보 질의가 "마지막 실패로부터 얼마나 지났는가" 를 함께 볼 수 있다.</p>
+     * 이 시각을 남겨 두면 후보 질의가 "마지막 실패로부터 얼마나 지났는가"를 함께 볼 수 있다.</p>
      *
-     * <p>기존 행은 null 이고, null 이면 간격 제한 없이 대상이 된다 — 백오프를 도입하기 전에
+     * <p>기존 행은 null이고, null이면 간격 제한 없이 대상이 된다 — 백오프를 도입하기 전에
      * 실패한 워크로드를 새 규칙으로 소급해 묶어 두지 않는다.</p>
      */
     private OffsetDateTime lastFailedAt;
@@ -144,7 +144,7 @@ public class Workload {
     public OffsetDateTime getScheduledAt() { return scheduledAt; }
 
     // Setters
-    /** 이름 변경은 편집 API 만 쓴다. 배치 이력·전달 기록은 결정 당시 이름을 따로 저장하므로 바뀌지 않는다. */
+    /** 이름 변경은 편집 API만 쓴다. 배치 이력·전달 기록은 결정 당시 이름을 따로 저장하므로 바뀌지 않는다. */
     public void setName(String name) { this.name = name; }
     public void setDescription(String description) { this.description = description; }
     public void setRequiredCpu(int requiredCpu) { this.requiredCpu = requiredCpu; }
@@ -190,7 +190,7 @@ public class Workload {
      * 실행 계층이 배치 요청을 거부했거나 닿지 못했다 — 실패로 돌리고 <b>배정을 해제</b>한다.
      *
      * <p>엔진 실패({@link #markFailed})는 배정 컬럼을 건드리지 않지만, 이 경로는 이미 노드가 정해진 뒤 실행이 무산된
-     * 것이어서 배정을 남기면 화면에 "실패했는데 노드가 있는" 상태가 보인다. {@code scheduledAt} 은 추적을 위해 남긴다.
+     * 것이어서 배정을 남기면 화면에 "실패했는데 노드가 있는" 상태가 보인다. {@code scheduledAt}은 추적을 위해 남긴다.
      * 재시도 횟수는 엔진 실패와 같이 누적된다 — 실행 계층 거부가 반복되면 상한에서 대상에서 빠진다.</p>
      */
     public void failDispatch(String reason) {
@@ -203,12 +203,12 @@ public class Workload {
     /**
      * 운영자가 배치 예약을 취소한다 — 배정을 풀고 <b>대기(PENDING)</b>로 돌아간다.
      *
-     * <p>실패가 아니므로 재시도 횟수·마지막 실패 시각은 건드리지 않는다({@link #failDispatch} 와 다른 점). 전이표
-     * ({@link WorkloadStatus#canTransitionTo})에는 SCHEDULED→PENDING 이 없고 그대로 둔다 — 상태 변경 API 로는 배정과
+     * <p>실패가 아니므로 재시도 횟수·마지막 실패 시각은 건드리지 않는다({@link #failDispatch}와 다른 점). 전이표
+     * ({@link WorkloadStatus#canTransitionTo})에는 SCHEDULED→PENDING이 없고 그대로 둔다 — 상태 변경 API로는 배정과
      * 전달 기록을 정리하지 못한 채 되돌아가는 일이 없어야 하므로, 되돌리기는 이 <b>별도 진입점</b>으로만 한다.
-     * {@code scheduledAt} 은 추적을 위해 남긴다. 대기로 돌아간 워크로드는 다음 스케줄 실행이 다시 대상으로 잡는다.</p>
+     * {@code scheduledAt}은 추적을 위해 남긴다. 대기로 돌아간 워크로드는 다음 스케줄 실행이 다시 대상으로 잡는다.</p>
      *
-     * @return SCHEDULED 가 아니어서 아무것도 바꾸지 않았으면 false
+     * @return SCHEDULED가 아니어서 아무것도 바꾸지 않았으면 false
      */
     public boolean release(String reason) {
         if (this.status != WorkloadStatus.SCHEDULED) return false;
@@ -221,9 +221,9 @@ public class Workload {
     }
 
     /**
-     * 실행 상태를 전이한다. 허용되지 않는 전이는 false 를 돌려준다.
+     * 실행 상태를 전이한다. 허용되지 않는 전이는 false를 돌려준다.
      *
-     * <p>FAILED 에서 PENDING 으로 되돌릴 때는 재시도 횟수를 지운다. 그러지 않으면
+     * <p>FAILED에서 PENDING으로 되돌릴 때는 재시도 횟수를 지운다. 그러지 않으면
      * 되살려도 곧바로 상한에 걸려 다시 대상에서 빠진다.</p>
      */
     public boolean transitionTo(WorkloadStatus target) {
@@ -242,12 +242,12 @@ public class Workload {
         this.lastFailedAt = null;
     }
 
-    /** 값이 없으면 VM 으로 해석한 리소스 종류. */
+    /** 값이 없으면 VM으로 해석한 리소스 종류. */
     public ResourceType resolveResourceType() {
         return ResourceType.orDefault(resourceType);
     }
 
-    /** 값이 없으면 0 으로 해석한 재시도 횟수. */
+    /** 값이 없으면 0으로 해석한 재시도 횟수. */
     public int resolveRetryCount() {
         return retryCount == null ? 0 : retryCount;
     }
@@ -260,7 +260,7 @@ public class Workload {
          *
          * <p>배치된(SCHEDULED)·실행 중(RUNNING) 워크로드는 행 자체가 노드 예약 장부라 요구량을 바꾸면 재배치 없이 장부만
          * 어긋나고, 실행 계층이 받은 요구와도 달라진다. 완료(COMPLETED)는 무엇을 돌렸는지의 유일한 기록이다(배치 이력은
-         * 요구량을 저장하지 않는다). 엔티티가 아니라 열거형에 둔다 — 엔티티에 {@code isX} 를 더하면 엔티티 직렬화 키가 늘어
+         * 요구량을 저장하지 않는다). 엔티티가 아니라 열거형에 둔다 — 엔티티에 {@code isX}를 더하면 엔티티 직렬화 키가 늘어
          * 응답 DTO 동등성 테스트({@code ResponseDtoEquivalenceTest})가 깨진다.</p>
          */
         public boolean isEditable() {
@@ -272,8 +272,8 @@ public class Workload {
          * 배치(PENDING→SCHEDULED)와 실패 처리는 스케줄링 엔진이 직접 수행하므로
          * 여기서는 배치 이후의 실행 흐름만 다룬다.
          *
-         * <p>FAILED→PENDING 만 예외로 허용한다. 재시도 상한에 걸려 대상에서 빠진 워크로드를
-         * 운영자가 되살릴 유일한 경로다. SCHEDULED→PENDING(예약 취소)은 여기 없고 {@link Workload#release} 라는
+         * <p>FAILED→PENDING만 예외로 허용한다. 재시도 상한에 걸려 대상에서 빠진 워크로드를
+         * 운영자가 되살릴 유일한 경로다. SCHEDULED→PENDING(예약 취소)은 여기 없고 {@link Workload#release}라는
          * 별도 진입점이 배정·전달 기록 정리와 함께 한다.</p>
          */
         public boolean canTransitionTo(WorkloadStatus target) {
@@ -288,12 +288,12 @@ public class Workload {
 
     /**
      * 리소스 종류.
-     * 값을 추가할 때는 DB 의 CHECK 제약도 함께 바꿔야 한다.
+     * 값을 추가할 때는 DB의 CHECK 제약도 함께 바꿔야 한다.
      */
     public enum ResourceType {
         VM, GPU, NPU, CONTAINER;
 
-        /** 기존 행처럼 값이 없으면 VM 으로 본다. */
+        /** 기존 행처럼 값이 없으면 VM으로 본다. */
         public static ResourceType orDefault(ResourceType value) {
             return value != null ? value : VM;
         }

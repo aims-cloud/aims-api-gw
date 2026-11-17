@@ -20,7 +20,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 /**
  * 대조군 배치 규칙 — 우리 엔진과 <b>비교할 상대</b>.
  *
- * <p>전부 {@link PlacementStrategy} 를 돌려주고 {@code SchedulingEngine} 을 구현하지 않는다.
+ * <p>전부 {@link PlacementStrategy}를 돌려주고 {@code SchedulingEngine}을 구현하지 않는다.
  * 이유는 {@link PlacementStrategy} 클래스 주석에 있다(레지스트리 자동 수집 · cron 실배치).
  * 이 클래스에는 스프링 애너테이션이 하나도 없고, 인스턴스로 만들 수도 없다.</p>
  *
@@ -35,7 +35,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *
  * <p><b>세 가지를 전부가 똑같이 한다.</b></p>
  * <ol>
- *   <li><b>제약 파이프라인</b>: {@code context.exclusionReason} 을 후보 <b>전원</b>에 적용한다.
+ *   <li><b>제약 파이프라인</b>: {@code context.exclusionReason}을 후보 <b>전원</b>에 적용한다.
  *       대조군이 우리 엔진보다 나쁘게 나오는 것이 "제약을 덜 받았기 때문"이면 비교가 아니라 반칙이다.</li>
  *   <li><b>후보 전원의 {@link NodeScore}</b>: 적격 여부와 제외 사유를 그대로 싣는다. 그래야 테스트가
  *       전략 간 제외 사유 집합을 대조해 "같은 파이프라인을 통과했다"를 증명할 수 있다.</li>
@@ -44,15 +44,15 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *       한다 — 하네스가 정렬해 주기를 기대하면 언젠가 빠진다.</li>
  * </ol>
  *
- * <p><b>{@code candidateScores} 는 총점 순이 아니라 nodeId 순</b>이다. 대조군은 총점으로 고르지
- * 않으므로(pabfd 는 절대 와트로 고르고 정규화 점수는 동률이 잘 난다) 총점 내림차순으로 늘어놓으면
+ * <p><b>{@code candidateScores}는 총점 순이 아니라 nodeId 순</b>이다. 대조군은 총점으로 고르지
+ * 않으므로(pabfd는 절대 와트로 고르고 정규화 점수는 동률이 잘 난다) 총점 내림차순으로 늘어놓으면
  * 첫 줄이 선택된 노드인 것처럼 읽힌다. 주사 순서 그대로 두는 편이 오해가 없다.</p>
  *
- * <p><b>{@code powerScore}·{@code temperatureScore}·{@code networkScore} 칸은 0 이다.</b> 대조군은
- * 그 세 차원을 우리 엔진의 점수식으로 계산하지 않는다 — 최저 온도 우선도 실측 온도를 {@code details} 에
- * 남길 뿐 그 칸에 우리 열 점수를 채우지 않는다. {@code NodeScore} 의 칸이 원시 {@code double} 이라 "모른다"를
- * 넣을 수 없으므로, 0 이 "포화"나 "최악"으로 읽히지 않게 {@code details} 에 {@link #UNSCORED_DIMENSIONS}
- * 표시를 함께 싣는다. {@code cpuScore}·{@code memoryScore} 는 실효 여유를 그대로 담는다 — 전부가
+ * <p><b>{@code powerScore}·{@code temperatureScore}·{@code networkScore} 칸은 0이다.</b> 대조군은
+ * 그 세 차원을 우리 엔진의 점수식으로 계산하지 않는다 — 최저 온도 우선도 실측 온도를 {@code details}에
+ * 남길 뿐 그 칸에 우리 열 점수를 채우지 않는다. {@code NodeScore}의 칸이 원시 {@code double}이라 "모른다"를
+ * 넣을 수 없으므로, 0이 "포화"나 "최악"으로 읽히지 않게 {@code details}에 {@link #UNSCORED_DIMENSIONS}
+ * 표시를 함께 싣는다. {@code cpuScore}·{@code memoryScore}는 실효 여유를 그대로 담는다 — 전부가
  * 실제로 이 값에 의존한다(적격 판정이 여기서 나온다).</p>
  */
 public final class BaselinePlacers {
@@ -65,12 +65,12 @@ public final class BaselinePlacers {
     /**
      * 크기만 내림차순 — <b>순수 FFD</b>(first-fit-decreasing). 우선순위를 보지 않는다.
      *
-     * <p>{@code ScheduleExecutionService.BY_PRIORITY_THEN_SIZE} 와 일부러 다르다. 그쪽은 공정성을
+     * <p>{@code ScheduleExecutionService.BY_PRIORITY_THEN_SIZE}와 일부러 다르다. 그쪽은 공정성을
      * 지키려고 우선순위를 첫 기준으로 두는 <b>운영</b> 비교자이고, 이쪽은 빈 패킹 문헌의 FFD 그대로다.
      * 두 순서가 배치 결과를 얼마나 바꾸는지가 측정 대상이므로 섞으면 안 된다.</p>
      *
      * <p>마지막 기준을 이름으로 둔 이유: 이 비교에 쓰는 워크로드는 영속되지 않아
-     * {@code createdAt} 이 전부 {@code null} 이다. 운영 비교자처럼 생성 시각을 마지막 기준으로 두면
+     * {@code createdAt}이 전부 {@code null}이다. 운영 비교자처럼 생성 시각을 마지막 기준으로 두면
      * 동률이 풀리지 않아 정렬이 입력 순서에 좌우된다.</p>
      */
     public static final Comparator<Workload> BY_SIZE_DESC =
@@ -81,7 +81,7 @@ public final class BaselinePlacers {
     /**
      * 우선순위 → 크기 내림차순. 운영 비교자와 같은 <b>기준 순서</b>를 쓰되 마지막 동률 기준만 이름이다.
      *
-     * <p>우선순위를 첫 기준으로 둔 크기 내림차순이다. 두 분포 모두 HIGH 가 대형뿐이라 {@link #BY_SIZE_DESC} 와의 차이로는
+     * <p>우선순위를 첫 기준으로 둔 크기 내림차순이다. 두 분포 모두 HIGH가 대형뿐이라 {@link #BY_SIZE_DESC}와의 차이로는
      * 크기 순의 조각화 효과를 가르지 못한다(docs/14).</p>
      */
     public static final Comparator<Workload> BY_PRIORITY_THEN_SIZE_DESC =
@@ -90,7 +90,7 @@ public final class BaselinePlacers {
 
     // ── details 키 ────────────────────────────────────────────
 
-    /** 대조군이 전력·열·네트워크 차원을 계산하지 않았다는 표시. 세 칸의 0 을 "측정값"으로 읽지 않게 한다. */
+    /** 대조군이 전력·열·네트워크 차원을 계산하지 않았다는 표시. 세 칸의 0을 "측정값"으로 읽지 않게 한다. */
     public static final String UNSCORED_DIMENSIONS = "전력열네트워크미계산";
 
     private static final String RANK = "순번";
@@ -113,7 +113,7 @@ public final class BaselinePlacers {
                 BY_SIZE_DESC, (workload, context) -> placeFirstFit(workload, context, label));
     }
 
-    /** 선착순(우선순위→크기) — 노드 선택 규칙은 {@link #ffdBySize} 와 같고 워크로드 순서만 다르다. */
+    /** 선착순(우선순위→크기) — 노드 선택 규칙은 {@link #ffdBySize}와 같고 워크로드 순서만 다르다. */
     public static PlacementStrategy ffdByPriorityThenSize() {
         String label = "선착순(우선순위→크기)";
         return new PlacementStrategy("ffd-priority-size", label, Kind.BASELINE, PolicyVariant.BASE,
@@ -122,13 +122,13 @@ public final class BaselinePlacers {
 
     /**
      * 전력 인지 최적적합(PABFD) — <b>엔진 전력식을 공유하는 ΔP 단독 대조군</b>. 배치로 늘어나는 전력이 가장 적은 노드를 고른다.
-     * <!-- ban-ok: 금지 문구를 "이렇게 부르지 않는다" 고 설명하는 자리 -->
-     * 우리 {@code PowerModel} 의 선형 ΔP 식({@code marginalPower})을 그대로 쓰므로 "문헌 기준선" 이라 부르지 않는다 —
+     * <!-- ban-ok: 금지 문구를 "이렇게 부르지 않는다"고 설명하는 자리 -->
+     * 우리 {@code PowerModel}의 선형 ΔP 식({@code marginalPower})을 그대로 쓰므로 "문헌 기준선"이라 부르지 않는다 —
      * 인용할 문헌 구현이 없고, 유휴비 노브({@code idleRatio})를 엔진과 공유한다. 엔진과의 차이는 셋이다: 깨우기항이 없고,
-     * 곡선 지수 α 를 타지 않으며(기본 α=1 에서는 동적항이 같다), PEI·비낭비·열·자원을 가중 결합하지 않고 ΔP 하나로 고른다.
+     * 곡선 지수 α를 타지 않으며(기본 α=1에서는 동적항이 같다), PEI·비낭비·열·자원을 가중 결합하지 않고 ΔP 하나로 고른다.
      *
-     * <p><b>반드시 {@link PowerModel#marginalPower} 를 쓴다</b> — 정격과 요구 코어 비율만 보는 고전
-     * 선형 모델이라 <b>빈 노드를 깨우는 비용이 없다</b>. {@link PowerModel#realMarginalPower} 를 쓰면
+     * <p><b>반드시 {@link PowerModel#marginalPower}를 쓴다</b> — 정격과 요구 코어 비율만 보는 고전
+     * 선형 모델이라 <b>빈 노드를 깨우는 비용이 없다</b>. {@link PowerModel#realMarginalPower}를 쓰면
      * 유휴 전력 가산이 들어가 그건 우리 엔진의 판단이 되고, 대조군은 우리 모델을 조금 바꾼 것이 되어
      * 비교의 의미가 사라진다. 두 수식이 갈리는 지점이 곧 우리 기여이므로 대조군은 갈라진 반대편을
      * 그대로 지켜야 한다.</p>
@@ -158,8 +158,8 @@ public final class BaselinePlacers {
      * 이면 앞선 실행이 소비한 난수만큼 뒤 실행의 추첨 열이 밀려, 같은 시드로도 결과가 재현되지 않는다.
      * 재현성은 시드 값이 아니라 "누가 그 난수열을 소비하는가"에서 온다.</p>
      *
-     * <p>난수원은 {@link BenchmarkRules#randomFor(long)} 에서 받는다 — {@code new Random(seed)} 를
-     * 쓰면 시드 1~31 의 첫 뽑기가 <b>전부 같은 값</b>이 되어 시드를 늘려도 표본이 늘지 않는다.
+     * <p>난수원은 {@link BenchmarkRules#randomFor(long)}에서 받는다 — {@code new Random(seed)}를
+     * 쓰면 시드 1~31의 첫 뽑기가 <b>전부 같은 값</b>이 되어 시드를 늘려도 표본이 늘지 않는다.
      * 그 이유는 해당 메서드의 설명에 있다.</p>
      *
      * <p>워크로드 순서는 {@code null}(도착 순서)이다. 무작위 전략에 정렬을 붙이면 순서 효과와 추첨
@@ -174,18 +174,18 @@ public final class BaselinePlacers {
 
     /**
      * 최저 온도 우선(재평가 없음) — <b>단순 규칙 열 대조군</b>. 큰 작업부터, 적격 후보 중 실측 온도가 가장 낮은 노드에 놓는다.
-     * <!-- ban-ok: 금지 문구를 "이렇게 부르지 않는다" 고 설명하는 자리 -->
-     * 문헌(TASA 계열)에서 착안했지만 재평가 단계가 없어 그 구현이 아니므로 "문헌 기준선" 이라 부르지 않는다.
+     * <!-- ban-ok: 금지 문구를 "이렇게 부르지 않는다"고 설명하는 자리 -->
+     * 문헌(TASA 계열)에서 착안했지만 재평가 단계가 없어 그 구현이 아니므로 "문헌 기준선"이라 부르지 않는다.
      *
      * <p>Wang·von Laszewski 등의 TASA(2009) 계열이다 — "가장 뜨거운 작업을 가장 시원한 노드에". 발열의 대리로
-     * 요구 코어를 쓰므로 워크로드 순서는 {@link #BY_SIZE_DESC} 다. 문헌의 TASA 는 배치마다 자기 열 모델로 노드 온도를
+     * 요구 코어를 쓰므로 워크로드 순서는 {@link #BY_SIZE_DESC}다. 문헌의 TASA는 배치마다 자기 열 모델로 노드 온도를
      * 다시 추정하지만, 이 대조군에는 그 단계가 <b>없다</b>. 우리에게 엔진 모델 아닌 열 모델이 없기 때문이다 —
-     * {@code ThermalModel} 을 쓰면 {@link #pabfd} 가 {@code realMarginalPower} 를 쓰는 것과 같아져 대조군이 우리 모델을
+     * {@code ThermalModel}을 쓰면 {@link #pabfd}가 {@code realMarginalPower}를 쓰는 것과 같아져 대조군이 우리 모델을
      * 조금 바꾼 것이 되고, 생성식(오라클)을 쓰면 평가자의 식이 전략에 새는 것이다. 그래서 <b>엔진이 보는 것만</b>
-     * 본다: {@code NodeResource} 의 실측 온도. 예약은 실측 온도를 바꾸지 않으므로 한 시각 지점 안에서 선택 순서는
+     * 본다: {@code NodeResource}의 실측 온도. 예약은 실측 온도를 바꾸지 않으므로 한 시각 지점 안에서 선택 순서는
      * 상수이고, 가장 시원한 노드에 제약이 막을 때까지 <b>쌓인다</b>(비교 판들에서는 배치 후 예상 온도 제약이 시원한
-     * 노드에 닿지 않아 실제로 막는 것은 CPU 상한 C2 다). 이것은 "초기 온도로 정렬한 통합"이며 기제가
-     * {@link #bfd} 와 같다 — 그 열과의 차이가 곧 정렬 기준에 온도를 넣은 효과의 전부다. 이 사실은 판정 규칙의
+     * 노드에 닿지 않아 실제로 막는 것은 CPU 상한 C2다). 이것은 "초기 온도로 정렬한 통합"이며 기제가
+     * {@link #bfd}와 같다 — 그 열과의 차이가 곧 정렬 기준에 온도를 넣은 효과의 전부다. 이 사실은 판정 규칙의
      * 한계 문구가 밝힌다.</p>
      *
      * <p><b>미계측 노드(0℃)는 후순위다.</b> 문헌은 전수 계측을 전제한다. 미계측을 "가장 시원하다"로 읽으면 우리가
@@ -235,7 +235,7 @@ public final class BaselinePlacers {
         for (Candidate c : candidates) {
             if (!c.eligible()) continue;
             double delta = powerModel.marginalPower(c.node(), requiredCpu);
-            // 부등호가 strict 라 동률이면 앞선 후보가 남는다 — 목록이 nodeId 순이므로 동률은 nodeId 순
+            // 부등호가 strict라 동률이면 앞선 후보가 남는다 — 목록이 nodeId 순이므로 동률은 nodeId 순
             if (delta < best) {
                 best = delta;
                 chosen = c;
@@ -249,7 +249,7 @@ public final class BaselinePlacers {
                 label, chosen.node().getNodeId(), best, candidates.size(), eligibleCount(candidates));
 
         // 정규화 점수는 정격이 다른 노드끼리도 동률이 잘 난다(ΔP/정격 = 0.7 × 요구코어/총코어).
-        // 선택은 절대 와트로 하고, 그 와트를 details 에 남겨야 표에서 근거를 되짚을 수 있다.
+        // 선택은 절대 와트로 하고, 그 와트를 details에 남겨야 표에서 근거를 되짚을 수 있다.
         return assemble(candidates, chosen, reason, c -> {
             double delta = powerModel.marginalPower(c.node(), requiredCpu);
             double capacity = c.node().getPowerCapacityWatts();
@@ -286,7 +286,7 @@ public final class BaselinePlacers {
 
     /**
      * 잔여 용량이 더 적은가 — {@code availableCpu} 최소, 동률은 {@code availableMemoryMb} 최소.
-     * 그래도 동률이면 {@code false} 를 돌려 앞선 후보(nodeId 가 작은 쪽)를 남긴다.
+     * 그래도 동률이면 {@code false}를 돌려 앞선 후보(nodeId가 작은 쪽)를 남긴다.
      */
     private static boolean tighter(NodeResource candidate, NodeResource incumbent) {
         int byCpu = Double.compare(candidate.availableCpu(), incumbent.availableCpu());
@@ -329,8 +329,8 @@ public final class BaselinePlacers {
                     label, chosen.node().getNodeId(), candidates.size(), eligibleCount(candidates));
         }
 
-        // 총점은 다른 대조군처럼 0~1 로 두되, 근거는 details 의 온도다 — 표에서 "왜 이 노드였나"를 온도로 되짚을 수
-        // 있어야 한다. 미계측은 온도 0 이 아니라 계측 표시 0 으로 구분한다(NodeScore 의 열 칸은 여전히 0 + 미계산 표시).
+        // 총점은 다른 대조군처럼 0~1로 두되, 근거는 details의 온도다 — 표에서 "왜 이 노드였나"를 온도로 되짚을 수
+        // 있어야 한다. 미계측은 온도 0이 아니라 계측 표시 0으로 구분한다(NodeScore의 열 칸은 여전히 0 + 미계산 표시).
         return assemble(candidates, chosen, reason, c -> {
             NodeResource n = c.node();
             boolean m = measured(n);
@@ -361,7 +361,7 @@ public final class BaselinePlacers {
         String reason = String.format("[%s] 시드 %d — 적격 %d개 중 %s 추첨 (후보 %d개)",
                 label, seed, eligible.size(), chosen.node().getNodeId(), candidates.size());
 
-        // 점수를 0 으로 둔다. 무작위에는 "이 노드가 좋다"는 근거가 없어서, 숫자를 채우면 없는 근거를
+        // 점수를 0으로 둔다. 무작위에는 "이 노드가 좋다"는 근거가 없어서, 숫자를 채우면 없는 근거를
         // 만들어 내는 것이 된다. 추첨의 폭(적격수)만 남긴다.
         double drawPool = eligible.size();
         return assemble(candidates, chosen, reason,
@@ -415,7 +415,7 @@ public final class BaselinePlacers {
         return candidates;
     }
 
-    /** 후보 전원의 {@link NodeScore} 를 채워 결과를 만든다. */
+    /** 후보 전원의 {@link NodeScore}를 채워 결과를 만든다. */
     private static SchedulingResult assemble(List<Candidate> candidates, Candidate chosen,
                                              String reason, Basis basis) {
         List<NodeScore> scores = new ArrayList<>(candidates.size());

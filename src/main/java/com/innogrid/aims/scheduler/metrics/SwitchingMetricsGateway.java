@@ -12,12 +12,12 @@ import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 
 /**
- * 스케줄러가 주입받는 게이트웨이 — 설정 {@code aims.scheduler.mock-enabled} 로 실제 저장소와 가상 클러스터 중 하나에 위임한다.
+ * 스케줄러가 주입받는 게이트웨이 — 설정 {@code aims.scheduler.mock-enabled}로 실제 저장소와 가상 클러스터 중 하나에 위임한다.
  *
- * <p>팀의 다른 모듈은 서비스 안에서 {@code mockEnabled ? mock : live} 로 가르는데(GPU 대시보드·자원 탐색기), 스케줄러는
+ * <p>팀의 다른 모듈은 서비스 안에서 {@code mockEnabled ? mock : live}로 가르는데(GPU 대시보드·자원 탐색기), 스케줄러는
  * 질의를 쓰는 서비스가 셋이라 그 분기를 이 한곳에 모았다. 플래그는 기동 시 읽는다 — 바꾸려면 환경변수
- * {@code AIMS_SCHEDULER_MOCK_ENABLED} 를 고치고 재시작한다. 켜져 있으면 기동 로그에 WARN 을 남기고
- * {@code GET /api/v1/scheduler/metrics-source} 가 {@code synthetic} 을 보여 준다.</p>
+ * {@code AIMS_SCHEDULER_MOCK_ENABLED}를 고치고 재시작한다. 켜져 있으면 기동 로그에 WARN을 남기고
+ * {@code GET /api/v1/scheduler/metrics-source}가 {@code synthetic}을 보여 준다.</p>
  */
 @Component
 public class SwitchingMetricsGateway implements SchedulerMetricsGateway {
@@ -51,7 +51,7 @@ public class SwitchingMetricsGateway implements SchedulerMetricsGateway {
     }
     @Override public String source() { return current().source(); }
 
-    /** 표시 API 용 — 어느 소스인지, 모의면 어떤 파일·규모인지. */
+    /** 표시 API용 — 어느 소스인지, 모의면 어떤 파일·규모인지. */
     public MetricsSource describe() {
         if (synthetic == null) return new MetricsSource(VictoriaMetricsGateway.SOURCE, false, null, null, null, null);
         SyntheticCluster c = synthetic.cluster();

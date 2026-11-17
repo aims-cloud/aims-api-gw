@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * GPU 축의 미계측과 병합 금지 — 모의 클러스터(8노드, GPU 노드 2: seoul-02 4장·IPMI 있음, busan-03 2장·IPMI 없음)로 본다.
  *
- * <p>세 경우가 만나는 자리다: 둘 다 계측(seoul-02) · GPU 만 계측(busan-03) · GPU 없음(나머지 6). 다른 단위 테스트는
- * 이 셋을 한 판에 두지 않으므로 여기서 값으로 고정한다. 원장으로 DCGM instance 를 다른 노드에 넘겨 재대응이 값으로
- * 보이는 것까지 — {@code ExporterMappingCollectionTest} 의 관례 그대로 리포지터리에 직접 저장한다.</p>
+ * <p>세 경우가 만나는 자리다: 둘 다 계측(seoul-02) · GPU만 계측(busan-03) · GPU 없음(나머지 6). 다른 단위 테스트는
+ * 이 셋을 한 판에 두지 않으므로 여기서 값으로 고정한다. 원장으로 DCGM instance를 다른 노드에 넘겨 재대응이 값으로
+ * 보이는 것까지 — {@code ExporterMappingCollectionTest}의 관례 그대로 리포지터리에 직접 저장한다.</p>
  */
 @SpringBootTest
 @TestPropertySource(properties = "aims.scheduler.mock-enabled=true")
@@ -82,7 +82,7 @@ class GpuTelemetryScenarioTest {
         NodeResource seoul02 = nodes.get("seoul-02:9100");
         NodeResource seoul01 = nodes.get("seoul-01:9100");
 
-        // seoul-02 의 섀시 전력은 정격 900W 이하 — GPU 전력(최대 1,200W)이 더해졌다면 넘을 수 있다
+        // seoul-02의 섀시 전력은 정격 900W 이하 — GPU 전력(최대 1,200W)이 더해졌다면 넘을 수 있다
         assertTrue(seoul02.getPowerWatts() > 0 && seoul02.getPowerWatts() <= 900, "섀시 전력은 IPMI 식 범위 안");
         // 섀시 온도는 기준 42 + 0.3×CPU ≤ 72 — GPU 온도(카드 35 + 0.4×사용률)와 다른 식
         assertTrue(seoul02.getTemperatureCelsius() > 0 && seoul02.getTemperatureCelsius() <= 72);

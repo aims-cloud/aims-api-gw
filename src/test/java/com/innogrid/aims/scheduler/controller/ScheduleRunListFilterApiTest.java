@@ -40,9 +40,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 실행 이력 목록({@code GET /schedules/{id}/runs})의 필터 규칙 — {@code status}·{@code triggerType}·{@code from}·{@code to}·{@code keyword}
  * 와 화면 열 정렬({@code message}·{@code scheduleKey}).
  *
- * <p>필터는 전부 선택이고 AND 로 겹치며, 창은 시작 시각({@code startedAt})의 반개구간 {@code [from, to)} 에 기본 창이 없다.
+ * <p>필터는 전부 선택이고 AND로 겹치며, 창은 시작 시각({@code startedAt})의 반개구간 {@code [from, to)}에 기본 창이 없다.
  * 이 컨텍스트는 실 게이트웨이라 즉시 실행으로는 실행 이력이 생기지 않으므로 행을 저장소에 직접 심는다.
- * {@code startedAt} 은 생성자가 지금 시각으로 채우므로 JPQL 일괄 갱신으로 고정 시각에 흩어 놓는다(배치 이력 테스트의 선례).</p>
+ * {@code startedAt}은 생성자가 지금 시각으로 채우므로 JPQL 일괄 갱신으로 고정 시각에 흩어 놓는다(배치 이력 테스트의 선례).</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -217,7 +217,7 @@ class ScheduleRunListFilterApiTest {
             assertEquals(1, total(s, "keyword", "alpha", "status", "FAILED"), "ALPHA retry");
             assertEquals(0, total(s, "keyword", "alpha", "status", "RUNNING"));
             assertEquals(1, total(s, "keyword", "alpha", "from", s.base().minusHours(4).toString()), "T−4h 이후의 ALPHA retry 만");
-            // 크기 1 이면 두 쪽 모두 꽉 차서 건수 질의가 실제로 돈다(첫 쪽이 덜 차면 Spring Data 가 건수 질의를 건너뛴다)
+            // 크기 1이면 두 쪽 모두 꽉 차서 건수 질의가 실제로 돈다(첫 쪽이 덜 차면 Spring Data가 건수 질의를 건너뛴다)
             List<Long> stitched = new ArrayList<>();
             for (int p = 1; p <= 2; p++) {
                 JsonNode d = page(s, "keyword", "alpha", "sort", "startedAt,asc", "size", "1", "page", String.valueOf(p));
@@ -268,7 +268,7 @@ class ScheduleRunListFilterApiTest {
     private record Seeded(long scheduleId, String key, List<Long> runIds, OffsetDateTime base) { }
 
     /**
-     * 스케줄 1 · 실행 6 — 시작 시각은 T−5h … T 로 한 시간 간격(T 는 초 단위 고정).
+     * 스케줄 1 · 실행 6 — 시작 시각은 T−5h … T로 한 시간 간격(T는 초 단위 고정).
      * <pre>
      *   T−5h COMPLETED MANUAL   T−4h COMPLETED AUTO   T−3h FAILED MANUAL
      *   T−2h FAILED AUTO        T−1h RUNNING MANUAL   T    COMPLETED MANUAL
@@ -286,8 +286,8 @@ class ScheduleRunListFilterApiTest {
     }
 
     /**
-     * 검색어 · 메시지 정렬용 — 스케줄 1 · 실행 6, 시작 시각은 {@link #seed()} 와 같이 T−5h … T.
-     * 업무 키는 {@code rkw-<16진수>} 라 아래 메시지의 검색어(alpha · 노드 없음 · % · _ · 백슬래시 · zzz)와 겹치지 않는다.
+     * 검색어 · 메시지 정렬용 — 스케줄 1 · 실행 6, 시작 시각은 {@link #seed()}와 같이 T−5h … T.
+     * 업무 키는 {@code rkw-<16진수>}라 아래 메시지의 검색어(alpha · 노드 없음 · % · _ · 백슬래시 · zzz)와 겹치지 않는다.
      * 완료 행 셋의 메시지 순서(alpha · c · d)는 id 순서(alpha · d · c)와 일부러 다르게 둔다 — 메시지 정렬이 id 순서로 바뀌면 드러나게.
      * <pre>
      *   T−5h COMPLETED "alpha done"       T−4h FAILED "ALPHA retry"      T−3h FAILED "beta 노드 없음 a\b"

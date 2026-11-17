@@ -67,7 +67,7 @@ public record ScheduleRunDetailResponse(
                     + "전·후 차는 온도 × 계수 × 예약 CPU 비율로 완전히 결정되고 온도계 관측을 포함하지 않는다")
             Double avgTemperatureAfter
     ) {
-        /** 기록이 없는 회차는 통째로 null 이다 — 열마다 0 을 내리면 "쟀는데 0" 으로 읽힌다. */
+        /** 기록이 없는 회차는 통째로 null이다 — 열마다 0을 내리면 "쟀는데 0"으로 읽힌다. */
         public static ClusterSnapshot from(ScheduleRun r) {
             if (r.getSnapshotStatus() == null) return null;
             return new ClusterSnapshot(
@@ -81,8 +81,8 @@ public record ScheduleRunDetailResponse(
     }
 
     /**
-     * 13필드 — 설명 누락과 스케줄 화면 DTO 9종의 합계는 {@code ScheduleSchemaContractTest} 가, 13이라는 수와 순서(맨 끝)는
-     * {@code ScheduleRunDetailDecisionApiTest} 가 고정한다. {@code exclusionCodes} 는 배치 이력 응답의 같은 이름 필드와 같은
+     * 13필드 — 설명 누락과 스케줄 화면 DTO 9종의 합계는 {@code ScheduleSchemaContractTest}가, 13이라는 수와 순서(맨 끝)는
+     * {@code ScheduleRunDetailDecisionApiTest}가 고정한다. {@code exclusionCodes}는 배치 이력 응답의 같은 이름 필드와 같은
      * 문자열을 그대로 싣는다 — 엔진이 배치 시점에 본 후보 제외 집계라, 실행 계층이 그 뒤 배치를 되돌린 건도 그대로 남는다.
      */
     @Schema(description = "워크로드 한 건에 대한 배치 결정 — 어느 노드를 왜 골랐는지, 또는 왜 못 골랐는지")

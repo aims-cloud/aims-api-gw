@@ -27,13 +27,13 @@ import com.innogrid.aims.scheduler.dto.PlacementBenchmarkResponse.StrategyResult
 /**
  * 판정 기준선 파일의 <b>형식과 생산 경로</b> — 테스트 쪽에 둔다(파일 내용은 결과이므로 규칙 클래스는 값을 들지 않는다).
  *
- * <p>같은 코드가 세 곳에서 쓰인다: 증거 묶음 테스트가 후보 파일을 {@code build/} 에 쓰고, 사람이 그 후보를
- * {@link BenchmarkRules#JUDGMENT_BASELINE_PATH} 로 복사해 커밋하며(이력 행과 함께), 판정 회전 테스트가 현 실행을 같은 형식으로
- * 만들어 파일과 견준다. 생산 경로가 하나라 B 와 N 이 다른 조립으로 갈리지 않는다 — 규칙이 요구하는 "같은 생산 경로" 다.</p>
+ * <p>같은 코드가 세 곳에서 쓰인다: 증거 묶음 테스트가 후보 파일을 {@code build/}에 쓰고, 사람이 그 후보를
+ * {@link BenchmarkRules#JUDGMENT_BASELINE_PATH}로 복사해 커밋하며(이력 행과 함께), 판정 회전 테스트가 현 실행을 같은 형식으로
+ * 만들어 파일과 견준다. 생산 경로가 하나라 B와 N이 다른 조립으로 갈리지 않는다 — 규칙이 요구하는 "같은 생산 경로"다.</p>
  *
  * <p>담는 것: 판정 셀·방향 셀의 {@code power}·눈금 3열·역산 차단 열 {@code gapVsPabfdPercent} 지점 배열(길이 12, null 자리 보존)과 표본 수·중앙값,
- * 위상 독립 짝 판 2장의 seed 별 판정 좌표 셀 중앙값, 오목 판의 같은 좌표 {@code power}·{@code power-idle-fixed} 중앙값, 그리고 출처.
- * 지점별 배치 건수는 응답에 없어 담지 않는다 — 짝이 안 된 지점은 points 의 null 자리와 samples 로 드러나되 "건수 불일치" 와 "분모 0" 은 갈리지 않는다.</p>
+ * 위상 독립 짝 판 2장의 seed별 판정 좌표 셀 중앙값, 오목 판의 같은 좌표 {@code power}·{@code power-idle-fixed} 중앙값, 그리고 출처.
+ * 지점별 배치 건수는 응답에 없어 담지 않는다 — 짝이 안 된 지점은 points의 null 자리와 samples로 드러나되 "건수 불일치"와 "분모 0"은 갈리지 않는다.</p>
  */
 final class JudgmentBaselines {
 
@@ -69,7 +69,7 @@ final class JudgmentBaselines {
     record Provenance(String gitHead, String productionPath, String distribution, Map<String, String> boardDigests, String workloadDigest,
                       String configDigest, List<String> engineIds, Map<String, String> ruleAxisDigests, JudgmentConstants judgment) {}
 
-    /** 판정 자격 두 판의 셀 하나 — power 행만. 키는 {@code 판:부하율:전원제어}. 판정 셀·방향 셀 자신도 들어 있고 표 G 가 그 둘을 뺀다. */
+    /** 판정 자격 두 판의 셀 하나 — power 행만. 키는 {@code 판:부하율:전원제어}. 판정 셀·방향 셀 자신도 들어 있고 표 G가 그 둘을 뺀다. */
     record OutsideCell(String board, int loadRatioPercent, String powerControl, Column power) {}
 
     record JudgmentBaseline(int schemaVersion, Provenance provenance, Map<String, CellBlock> cells, Map<String, List<PhaseEntry>> phase,
@@ -79,7 +79,7 @@ final class JudgmentBaselines {
         return board + ":" + loadRatioPercent + ":" + powerControl;
     }
 
-    /** 응답(판 → 응답, 전부 판정 분포) 에서 기준선 형식을 만든다. */
+    /** 응답(판 → 응답, 전부 판정 분포)에서 기준선 형식을 만든다. */
     static JudgmentBaseline build(Map<String, PlacementBenchmarkResponse> byBoard, String gitHead) {
         for (String b : boards()) {
             if (!byBoard.containsKey(b)) throw new IllegalArgumentException("판정 기준선에 필요한 판이 없다: " + b);
@@ -150,7 +150,7 @@ final class JudgmentBaselines {
                 .orElseThrow(() -> new IllegalStateException(strategyId + " 에 " + BenchmarkRules.GAP_VS_PABFD + " 가 없다"));
     }
 
-    /** 개행 LF · 들여쓰기 2 · 맵 키 정렬 — OS 와 무관하게 같은 바이트가 나오게. */
+    /** 개행 LF · 들여쓰기 2 · 맵 키 정렬 — OS와 무관하게 같은 바이트가 나오게. */
     static ObjectMapper mapper() {
         DefaultPrettyPrinter printer = new DefaultPrettyPrinter()
                 .withObjectIndenter(new DefaultIndenter("  ", "\n"))
@@ -171,7 +171,7 @@ final class JudgmentBaselines {
         return read(file);
     }
 
-    /** 셸 없이 .git/HEAD 를 읽는다 — 산출물이 "어느 소스 리비전의 값인가" 를 지목할 수 있게. 작업 트리 청결 여부는 알 수 없다. */
+    /** 셸 없이 .git/HEAD를 읽는다 — 산출물이 "어느 소스 리비전의 값인가"를 지목할 수 있게. 작업 트리 청결 여부는 알 수 없다. */
     static String gitHead() {
         try {
             Path git = Path.of(".git");
@@ -200,7 +200,7 @@ final class JudgmentBaselines {
         return mapper().readValue(in, JudgmentBaseline.class);
     }
 
-    /** 저장소의 기준선 파일 경로 — 작업 디렉터리가 프로젝트 루트라는 테스트 실행의 전제를 그대로 쓴다(증거 묶음의 {@code build/} 와 같다). */
+    /** 저장소의 기준선 파일 경로 — 작업 디렉터리가 프로젝트 루트라는 테스트 실행의 전제를 그대로 쓴다(증거 묶음의 {@code build/}와 같다). */
     static Path repositoryFile() {
         return Path.of(BenchmarkRules.JUDGMENT_BASELINE_PATH);
     }

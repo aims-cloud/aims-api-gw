@@ -30,14 +30,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배치 비교 API 의 HTTP 계약 — 응답 골격, 잘못된 값의 400 <b>본문</b>, 인증, 그리고 <b>저장 부작용 없음</b>.
+ * 배치 비교 API의 HTTP 계약 — 응답 골격, 잘못된 값의 400 <b>본문</b>, 인증, 그리고 <b>저장 부작용 없음</b>.
  *
  * <p>이 진단은 우리 엔진이 대조군에 어떻게 나오는지를 밝히는 것이라 대외 산출물로 인용될 가능성이 높다.
  * 그래서 API 계층에서 지킬 것이 둘이다. 하나는 <b>숫자가 언제 의미를 갖는지 응답이 스스로 밝히는가</b>
  * (전제·유효성·한계·짝짓기 사유), 다른 하나는 <b>진단이 데이터를 만들지 않는가</b>다.</p>
  *
- * <p>모르는 판·분포를 400 <b>본문</b>으로 확인하는 이유: 처리되지 않은 예외는 {@code sendError} 를 타고
- * {@code /error} 로 다시 디스패치되며 그 경로는 인증을 요구하므로 <b>403 빈 응답</b>이 된다. 호출자는
+ * <p>모르는 판·분포를 400 <b>본문</b>으로 확인하는 이유: 처리되지 않은 예외는 {@code sendError}를 타고
+ * {@code /error}로 다시 디스패치되며 그 경로는 인증을 요구하므로 <b>403 빈 응답</b>이 된다. 호출자는
  * 무엇이 틀렸는지 알 수 없고, 서버 로그에만 원인이 남는다.</p>
  */
 @SpringBootTest
@@ -365,7 +365,7 @@ class PlacementBenchmarkApiTest {
 
     // ── 도움 메서드 ───────────────────────────────────────────
 
-    /** 이름을 {@code get} 으로 두면 정적 임포트한 요청 빌더를 가려 컴파일이 엉킨다. */
+    /** 이름을 {@code get}으로 두면 정적 임포트한 요청 빌더를 가려 컴파일이 엉킨다. */
     private JsonNode body(String url) throws Exception {
         MvcResult result = mockMvc.perform(get(url)).andExpect(status().isOk()).andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString());

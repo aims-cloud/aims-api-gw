@@ -77,22 +77,22 @@ class ConsolidationCooldownScenarioTest {
         assertTrue(policy.isTemperatureAwareEnabled(), "테스트 전제: 통합 권고 정책이 온도를 본다");
         assertTrue(limit > 10, "테스트 전제: 온도 상한이 " + limit + "℃");
 
-        hostTemperature = limit - 5;                                   // (0) 대기가 없으면 host 로 옮긴다
+        hostTemperature = limit - 5;                                   // (0) 대기가 없으면 host로 옮긴다
         Candidate before = src();
         assertTrue(before.reclaimable(), before.blockedReason());
         assertEquals(List.of(HOST), before.moves().stream().map(Move::toNodeId).toList());
 
-        hostTemperature = limit + 5;                                   // (가) 실제 배치 평가가 상한 limit 의 대기를 건다
+        hostTemperature = limit + 5;                                   // (가) 실제 배치 평가가 상한 limit의 대기를 건다
         assertEquals(ExclusionReason.TEMPERATURE_EXCEEDED, placementExclusion(policy).reason());
 
-        hostTemperature = limit - 5;                                   // (나) 식은 뒤에도 대기가 남아 통합 권고가 host 를 뺀다
+        hostTemperature = limit - 5;                                   // (나) 식은 뒤에도 대기가 남아 통합 권고가 host를 뺀다
         Exclusion cooling = placementExclusion(policy);
         assertEquals(ExclusionReason.COOLING_DOWN, cooling.reason(), "테스트 전제: " + cooling.message());
         Candidate blocked = src();
         assertFalse(blocked.reclaimable());
         assertTrue(blocked.blockedReason().contains("받을 노드가 없습니다"), blocked.blockedReason());
 
-        thermalModel.clearCritical(HOST);                              // (다) 통합 권고는 뜨거운 host 를 보고도 대기를 걸지 않는다
+        thermalModel.clearCritical(HOST);                              // (다) 통합 권고는 뜨거운 host를 보고도 대기를 걸지 않는다
         hostTemperature = limit + 5;
         src();
         assertFalse(thermalModel.isCoolingDown(HOST), "통합 권고 조회가 냉각 대기를 걸었다");

@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * {@code GET /scheduler/workloads/retry-policy} — 설정의 상한·간격을 그대로 돌려주고, 리터럴 경로가
- * {@code /workloads/{workloadId}} 에 잡히지 않는다(200 이 곧 증명).
+ * {@code /workloads/{workloadId}}에 잡히지 않는다(200이 곧 증명).
  */
 @SpringBootTest
 @AutoConfigureMockMvc

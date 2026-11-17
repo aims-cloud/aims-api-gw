@@ -18,8 +18,8 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 /**
  * C6 MDC 전력 예산 — MDC 한 곳의 합계 상한.
  *
- * <p>노드는 전부 정격 1000W·8코어이고 유휴 비율 0.3 이라 유휴는 300W 다. 실측 400W 인 노드에 2코어를 얹으면
- * 한계 전력이 {@code (1000−300)×2/8 = 175W} 라 배치 후 예상은 575W — 노드 한 대 기준(C4)으로는 여유가 있다.
+ * <p>노드는 전부 정격 1000W·8코어이고 유휴 비율 0.3이라 유휴는 300W다. 실측 400W인 노드에 2코어를 얹으면
+ * 한계 전력이 {@code (1000−300)×2/8 = 175W}라 배치 후 예상은 575W — 노드 한 대 기준(C4)으로는 여유가 있다.
  * MDC 합계로 봐야 걸리는 상황을 만든다.</p>
  */
 class ConstraintEvaluatorMdcBudgetTest {
@@ -28,7 +28,7 @@ class ConstraintEvaluatorMdcBudgetTest {
 
     // ── 헬퍼 ───────────────────────────────────────────────────
 
-    /** 정격 1000W·8코어·CPU 20%·메모리 20% 노드. 전력 0 은 "수집 실패"를 뜻한다. */
+    /** 정격 1000W·8코어·CPU 20%·메모리 20% 노드. 전력 0은 "수집 실패"를 뜻한다. */
     private static NodeResource node(String mdcId, String nodeId, double watts) {
         return new NodeResource(mdcId, nodeId, 8, 16384, 0, 20.0, 20.0, 0,
                 watts, 1000, 40.0, 0, 0);
@@ -130,8 +130,8 @@ class ConstraintEvaluatorMdcBudgetTest {
         assertNull(evaluator.exclusionReason(workload(2), a, ctx));
         ctx.reserve("a", workload(2));
 
-        // 두 번째 배치: a 의 실효 전력이 예약분만큼 올라 합계가 예산을 넘는다.
-        // 실측(400+400)만 더했다면 여기서도 975 로 계산돼 그냥 통과했을 것이다.
+        // 두 번째 배치: a의 실효 전력이 예약분만큼 올라 합계가 예산을 넘는다.
+        // 실측(400+400)만 더했다면 여기서도 975로 계산돼 그냥 통과했을 것이다.
         String reason = evaluator.exclusionReason(workload(2), b, ctx);
         assertNotNull(reason, "예약분이 합계에 반영되지 않으면 예산이 누적되지 않는다");
         assertTrue(reason.startsWith("MDC seoul 전력 합계 예상"), reason);

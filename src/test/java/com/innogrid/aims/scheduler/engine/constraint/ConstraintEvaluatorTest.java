@@ -195,7 +195,7 @@ class ConstraintEvaluatorTest {
     @DisplayName("배치 후 예상 전력이 용량을 넘으면 제외한다")
     @Test
     void predicted_power_over_capacity_excluded() {
-        // 여유 12% 로 여유율 검사는 통과하지만, ΔP 175W 를 더하면 용량 500W 를 넘는다
+        // 여유 12%로 여유율 검사는 통과하지만, ΔP 175W를 더하면 용량 500W를 넘는다
         NodeResource node = node("node-1", 8, 16384, 0, 10, 10, 440, 50);
 
         String reason = evaluate(new Workload("job", 4, 1024), node);
@@ -232,7 +232,7 @@ class ConstraintEvaluatorTest {
     /**
      * 실측 전력만 보면 몇 개를 얹든 "하나 얹은 값"이 나와 용량 초과를 놓친다.
      * 8코어·250W·용량 500W 노드에 2코어를 연속으로 얹으면 실효 전력은
-     * 250 → 337.5 → 425 → 512.5W 로 오르고, 마지막에 용량을 넘는다.
+     * 250 → 337.5 → 425 → 512.5W로 오르고, 마지막에 용량을 넘는다.
      */
     @DisplayName("연속 배치가 예상 전력에 누적된다")
     @Test
@@ -313,7 +313,7 @@ class ConstraintEvaluatorTest {
     }
 
     /**
-     * 요구 CPU 가 0 인 워크로드(메모리만 쓰는 작업)는 한계 전력이 0 이라 "배치 후 예상 전력"
+     * 요구 CPU가 0인 워크로드(메모리만 쓰는 작업)는 한계 전력이 0이라 "배치 후 예상 전력"
      * 검사를 언제나 통과한다. 여유율 검사가 실측만 보면 예약이 아무리 쌓여도 이런 워크로드가
      * 무한히 들어간다 — 전력 상한이 사실상 없는 것과 같다.
      */
@@ -344,7 +344,7 @@ class ConstraintEvaluatorTest {
                 "전력이 0 인 것은 미수집이지 여유가 없다는 뜻이 아니다");
     }
 
-    /** 온도 미수집 노드도 같다. 0℃ 에 예약 상승분을 얹어 임계를 넘겼다고 판정하면 안 된다. */
+    /** 온도 미수집 노드도 같다. 0℃에 예약 상승분을 얹어 임계를 넘겼다고 판정하면 안 된다. */
     @DisplayName("온도 미수집 노드는 예약이 있어도 온도로 막지 않는다")
     @Test
     void unmeasured_temp_not_blocked() {

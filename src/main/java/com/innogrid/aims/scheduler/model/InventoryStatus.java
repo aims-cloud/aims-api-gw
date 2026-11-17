@@ -4,7 +4,7 @@ package com.innogrid.aims.scheduler.model;
  * Nova 인벤토리 조회 결과의 상태.
  *
  * <p>실제로 비어 있는 인벤토리({@link #EMPTY})와 조회 실패(나머지 실패 값)를 나눈다. 실패 값은 하이퍼바이저 목록을
- * 읽지 못한 이유이며, 그때 노드 · 서버 목록은 비고 건수는 null 이다.</p>
+ * 읽지 못한 이유이며, 그때 노드 · 서버 목록은 비고 건수는 null이다.</p>
  */
 public enum InventoryStatus {
     /** 하이퍼바이저를 1대 이상 읽음 */
@@ -13,7 +13,7 @@ public enum InventoryStatus {
     EMPTY("Nova 가 하이퍼바이저 0대를 돌려줬습니다(연동은 정상)"),
     /** OpenStack 접속 정보가 설정되지 않음 */
     NOT_CONFIGURED("OpenStack 연동 설정이 없습니다(OPENSTACK_* 환경변수)"),
-    /** Keystone · Nova 가 인증 실패(401)로 응답 */
+    /** Keystone · Nova가 인증 실패(401)로 응답 */
     AUTH_FAILED("인증에 실패했습니다(401)"),
     /** 권한 부족(403) — 하이퍼바이저 목록은 관리자 권한이 필요하다 */
     FORBIDDEN("권한이 없습니다(403) — 하이퍼바이저 목록은 관리자 권한이 필요합니다"),

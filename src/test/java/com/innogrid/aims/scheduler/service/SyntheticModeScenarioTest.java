@@ -96,9 +96,9 @@ class SyntheticModeScenarioTest {
         assertEquals(8, eff.summary().totalNodes());
         assertEquals(5, eff.summary().evaluableNodes(), "IPMI 있는 노드만 평가 가능");
         assertTrue(eff.summary().gradeAvailable(), eff.summary().gradeUnavailableReason());
-        // 시각과 무관한 성질만 확인한다. "최저 PEI 는 언제나 busan-02" 는 여유 노드(busan-01)의 CPU 가 0 에 가까워지는
-        // 구간(한 주기의 8.6%)에 뒤집힌다 — 일을 안 하는 노드의 PEI 도 0 에 가깝기 때문이다. 한 주기 전체를 훑어
-        // 확인한 불변 성질은 metrics/SyntheticModeInvariantTest 에 있다.
+        // 시각과 무관한 성질만 확인한다. "최저 PEI 는 언제나 busan-02"는 여유 노드(busan-01)의 CPU가 0에 가까워지는
+        // 구간(한 주기의 8.6%)에 뒤집힌다 — 일을 안 하는 노드의 PEI도 0에 가깝기 때문이다. 한 주기 전체를 훑어
+        // 확인한 불변 성질은 metrics/SyntheticModeInvariantTest에 있다.
         PowerEfficiencyResponse.NodeEfficiency idleHighPower = eff.nodes().stream()
                 .filter(n -> n.nodeId().startsWith("busan-02")).findFirst().orElseThrow();
         assertNotNull(idleHighPower.peiRaw(), "유휴 고전력 노드는 IPMI 계측 노드라 PEI 가 있다");
@@ -153,8 +153,8 @@ class SyntheticModeScenarioTest {
     @DisplayName("구간 에너지 — 실값으로 소비·회수 가능이 나오고 추정분이 갈려 나온다")
     @Test
     void interval_energy_on_real_values() {
-        // 배포 서버는 노드 1대·전력 0 이라 이 경로를 실값으로 볼 수 없다. 가상 클러스터가 그 자리를 대신한다 —
-        // IPMI 있음 5대·없음 3대라 "일부만 계측" 이라는 실환경 모양을 그대로 만든다.
+        // 배포 서버는 노드 1대·전력 0이라 이 경로를 실값으로 볼 수 없다. 가상 클러스터가 그 자리를 대신한다 —
+        // IPMI 있음 5대·없음 3대라 "일부만 계측"이라는 실환경 모양을 그대로 만든다.
         PowerOptimizationTrendResponse.Energy energy = optimization.trend(null, null, "5m").energy();
 
         assertNotNull(energy, "추세를 낼 수 있으면 에너지 요약도 낸다");
@@ -172,7 +172,7 @@ class SyntheticModeScenarioTest {
     @Test
     void a_coarse_step_still_yields_energy() {
         // 허용 간격을 5분 하한으로 고정하면 1시간 간격 조회가 통째로 구멍으로 잘려 값이 전부 비고,
-        // 사유는 "표본이 모자라다" 는 엉뚱한 까닭을 낸다. 7일을 1시간으로 보는 것은 정상적인 사용이다.
+        // 사유는 "표본이 모자라다"는 엉뚱한 까닭을 낸다. 7일을 1시간으로 보는 것은 정상적인 사용이다.
         PowerOptimizationTrendResponse.Energy coarse = optimization.trend(null, null, "1h").energy();
 
         assertNotNull(coarse.consumedKwh(), "간격이 커졌다고 에너지가 사라지면 안 된다");
@@ -215,7 +215,7 @@ class SyntheticModeScenarioTest {
         assertNotNull(t.energy().consumedKwh());
         // 이 클러스터는 IPMI 없는 3대의 시리즈가 통째로 없다 — 시리즈 안에 구멍이 뚫린 것이 아니다.
         // 그런 판에서는 두 계산이 수학적으로 같아야 하고, 갈리면 눈금이 어긋난 것이다.
-        // 두 계산이 실제로 달라지는 것은 시리즈 중간이 비는 경우이고, 그 자리는 IntervalEnergyTest 가 값으로 고정한다.
+        // 두 계산이 실제로 달라지는 것은 시리즈 중간이 비는 경우이고, 그 자리는 IntervalEnergyTest가 값으로 고정한다.
         assertEquals(Math.round(fromPoints * 10), Math.round(t.energy().consumedKwh() * 10),
                 "구간 에너지와 지점 적분의 눈금이 어긋난다");
     }
@@ -223,7 +223,7 @@ class SyntheticModeScenarioTest {
     @DisplayName("MDC 필터 — 세 MDC 추세를 더하면 클러스터 추세와 같다(노드 수 · 총 전력 · 회수 가능 전력 · 소비 에너지)")
     @Test
     void mdc_trends_add_up_to_cluster() throws Exception {
-        // 배포 서버는 MDC 하나·전력 0 이라 MDC 별 값과 합을 볼 수 없다. 가상 클러스터(MDC 3곳)가 그 자리를 대신한다.
+        // 배포 서버는 MDC 하나·전력 0이라 MDC별 값과 합을 볼 수 없다. 가상 클러스터(MDC 3곳)가 그 자리를 대신한다.
         String from = "2026-11-01T00:00:00Z", to = "2026-11-01T02:00:00Z";
         JsonNode all = trendData(from, to, null);
         List<JsonNode> mdcs = List.of(trendData(from, to, "mdc-seoul"), trendData(from, to, "mdc-busan"),
@@ -244,7 +244,7 @@ class SyntheticModeScenarioTest {
             }
             assertEquals(8, c.get("totalNodes").asInt());
             assertEquals(8, nodes, "MDC 마다 그 MDC 노드만 — 필터를 무시하면 24");
-            // 지점 전력은 소수 2자리로 반올림되므로 세 MDC 값과 클러스터 값의 반올림 오차(각 0.005)를 허용한다. kWh 는 3자리라 0.002.
+            // 지점 전력은 소수 2자리로 반올림되므로 세 MDC 값과 클러스터 값의 반올림 오차(각 0.005)를 허용한다. kWh는 3자리라 0.002.
             assertEquals(c.get("totalPowerWatts").asDouble(), watts, 0.03);
             // 이 판의 미계측 3대는 늘 가동(CPU 최저 10%)이라 정격 대체값이 들지 않아 회수 가능 전력도 더해진다.
             assertEquals(c.get("reclaimableIdleWatts").asDouble(), reclaimable, 0.03);

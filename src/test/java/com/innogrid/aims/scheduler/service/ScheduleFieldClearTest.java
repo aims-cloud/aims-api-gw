@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 /**
  * 스케줄 편집 지정 해제 — 비울 수 있는 다섯 칸의 명시적 null, 키 없음 유지, 타입 엄격 400, 전부 검증 뒤 일괄 반영.
  *
- * <p>요청은 JSON 문자열을 실제 매퍼로 읽어 만든다 — "키 없음" 과 "명시적 null" 의 구분이 HTTP 와 같은 경로로 생긴다.</p>
+ * <p>요청은 JSON 문자열을 실제 매퍼로 읽어 만든다 — "키 없음"과 "명시적 null"의 구분이 HTTP와 같은 경로로 생긴다.</p>
  */
 @SpringBootTest
 @Transactional

@@ -121,7 +121,7 @@ class ThermalModelTest {
         ThermalModel cooling = new ThermalModel(new SchedulerProperties(), clock);
         assertFalse(cooling.anyCoolingDown(), "기록이 없으면 거짓이다");
 
-        // 기록 맵은 node-1 을 node-2 보다 먼저 돈다 — 만료 기록을 뒤(node-2)에 두어, 대기 노드에서 멈추는 구현이면 지우지 못한다
+        // 기록 맵은 node-1을 node-2보다 먼저 돈다 — 만료 기록을 뒤(node-2)에 두어, 대기 노드에서 멈추는 구현이면 지우지 못한다
         cooling.markCritical("node-2", LIMIT);
         clock.advance(Duration.ofMinutes(5));
         cooling.markCritical("node-1", LIMIT);
@@ -230,7 +230,7 @@ class ThermalModelTest {
         props.getThermal().setInertiaK(-0.15);
         ThermalModel guarded = new ThermalModel(props);
 
-        // 가드가 없으면 k=-0.15, 8코어 중 4코어 → 60 x (1 - 0.075) = 55.5 로 배치할수록 식는다
+        // 가드가 없으면 k=-0.15, 8코어 중 4코어 → 60 x (1 - 0.075) = 55.5로 배치할수록 식는다
         assertEquals(60.0, guarded.predictedTemperature(node(60), 4), 1e-9);
     }
 

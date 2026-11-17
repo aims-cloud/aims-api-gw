@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * C1 디스크 검사 — 총량을 아는 노드에서만, 예약 누적 반영.
  *
- * <p>{@code requiredDiskGb} 는 저장·검증만 되고 C1 이 보지 않던 필드였다(2026-09-02 격차 분석).
+ * <p>{@code requiredDiskGb}는 저장·검증만 되고 C1이 보지 않던 필드였다(2026-09-02 격차 분석).
  * 총량을 모르는 노드(0)는 검사하지 않는다 — 모르는 값으로 배치를 막지 않는다.</p>
  */
 class ConstraintEvaluatorDiskTest {
@@ -78,7 +78,7 @@ class ConstraintEvaluatorDiskTest {
     @Test
     void cpu_mem_gpu_reported_first() {
         NodeResource node = node(0).withDiskCapacityGb(10);
-        Workload w = workload(64, 500);                             // CPU 도 디스크도 부족
+        Workload w = workload(64, 500);                             // CPU도 디스크도 부족
 
         String reason = evaluator.exclusionReason(w, node, context(node));
         assertTrue(reason.startsWith("자원 부족"), "기존 사유 문구·순서는 그대로: " + reason);

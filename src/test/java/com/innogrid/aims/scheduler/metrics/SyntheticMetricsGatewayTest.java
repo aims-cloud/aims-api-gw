@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 스케줄러가 실제로 보내는 PromQL 16종에 가상 클러스터가 어떤 형태로 답하는가. 시각은 고정.
- * 질의 문자열은 NodeResourceCollector·PowerEfficiencyService·PowerOptimizationService 의 것을 그대로 복사했다.
+ * 질의 문자열은 NodeResourceCollector·PowerEfficiencyService·PowerOptimizationService의 것을 그대로 복사했다.
  */
 class SyntheticMetricsGatewayTest {
 
@@ -60,7 +60,7 @@ class SyntheticMetricsGatewayTest {
         double avail = gw.queryScalar("node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"/\",instance=\"" + i + "\"}");
         assertEquals(500.0 * 1024 * 1024 * 1024, size);
         assertTrue(avail > 0 && avail < size);
-        // IPMI 는 노드 익스포터와 다른 포트의 시리즈다 — 실환경대로 호스트:9290 으로 묻는다.
+        // IPMI는 노드 익스포터와 다른 포트의 시리즈다 — 실환경대로 호스트:9290으로 묻는다.
         String ipmi = i.replace(":9100", ":9290");
         double watts = gw.queryScalar("ipmi_dcmi_power_consumption_watts{instance=\"" + ipmi + "\"}");
         double temp = gw.queryScalar("avg(ipmi_temperature_celsius{name=~\"CPU.*\",instance=\"" + ipmi + "\"})");
@@ -129,7 +129,7 @@ class SyntheticMetricsGatewayTest {
                 "DCGM 시리즈는 :9400 이라 :9100 으로는 없다");
         assertFalse(gw.queryResults("ipmi_dcmi_power_consumption_watts{instance=\"seoul-01:9290\"}").isEmpty());
         assertFalse(gw.queryResults("DCGM_FI_DEV_GPU_UTIL{instance=\"seoul-02:9400\"}").isEmpty());
-        // 노드 익스포터 메트릭은 그대로 :9100 이다.
+        // 노드 익스포터 메트릭은 그대로 :9100이다.
         assertFalse(gw.queryResults("node_memory_MemTotal_bytes{instance=\"seoul-01:9100\"}").isEmpty());
     }
 
@@ -183,7 +183,7 @@ class SyntheticMetricsGatewayTest {
     @DisplayName("구간 집계도 메트릭 없는 노드는 빈 결과다")
     @Test
     void range_aggregates_keep_the_missing_metric_rule() {
-        // IPMI 없는 노드는 전력 시리즈가 통째로 없다. 집계라고 0 으로 채우지 않는다.
+        // IPMI 없는 노드는 전력 시리즈가 통째로 없다. 집계라고 0으로 채우지 않는다.
         String missing = "avg_over_time(ipmi_dcmi_power_consumption_watts{job=\"mdc-nodes\",instance=\"daejeon-02:9290\"}[24h])";
 
         assertTrue(gw.queryResults(missing).isEmpty(), "0 으로 채우면 미계측이 실측으로 둔갑한다");

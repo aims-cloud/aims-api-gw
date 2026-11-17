@@ -26,7 +26,7 @@ class NodeResourceDiskTest {
     @DisplayName("총량을 모르면 가용 디스크는 0 이다")
     @Test
     void unknown_capacity_disk_0() {
-        NodeResource node = node(40);                             // withDiskCapacityGb 를 부르지 않음
+        NodeResource node = node(40);                             // withDiskCapacityGb를 부르지 않음
 
         assertEquals(0, node.diskCapacityGb(), "0 = 모름");
         assertEquals(0, node.availableDiskGb());

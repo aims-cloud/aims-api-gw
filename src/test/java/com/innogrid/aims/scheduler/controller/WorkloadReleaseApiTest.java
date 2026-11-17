@@ -34,9 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 배치 예약 취소({@code POST /workloads/{id}/release})의 HTTP 계약 — 키 4개, 상태·배정·전달 기록의 뒤처리, 409·404, 늦은 콜백,
- * 삭제 가능, 상태 변경 API 의 되돌리기 400 회귀.
+ * 삭제 가능, 상태 변경 API의 되돌리기 400 회귀.
  *
- * <p>수집기를 대역으로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API 로 결정을 만든다(기본 record 모드 → ACCEPTED).
+ * <p>수집기를 대역으로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API로 결정을 만든다(기본 record 모드 → ACCEPTED).
  * 이 테스트는 트랜잭션을 걸지 않아 롤백이 없다 — 이름 접두어로 정리한다.</p>
  */
 @SpringBootTest
@@ -57,7 +57,7 @@ class WorkloadReleaseApiTest {
     @AfterEach
     void clean() {
         dispatchRepository.findAll().stream().filter(d -> d.getWorkloadName() != null && d.getWorkloadName().startsWith("rel-")).forEach(dispatchRepository::delete);
-        workloadRepository.findAll().stream().filter(w -> w.getName().startsWith("rel-")).forEach(workloadRepository::delete);   // RUNNING 도 저장소 직접 삭제라 409 없음
+        workloadRepository.findAll().stream().filter(w -> w.getName().startsWith("rel-")).forEach(workloadRepository::delete);   // RUNNING도 저장소 직접 삭제라 409 없음
     }
 
     private void bigNode() {
@@ -173,7 +173,7 @@ class WorkloadReleaseApiTest {
     void released_workload_can_be_deleted() throws Exception {
         long[] ids = placed("rel-del");
         long histories = historyRepository.count();
-        mockMvc.perform(delete(BASE + "/workloads/" + ids[0])).andExpect(status().isConflict());   // SCHEDULED 는 409
+        mockMvc.perform(delete(BASE + "/workloads/" + ids[0])).andExpect(status().isConflict());   // SCHEDULED는 409
 
         mockMvc.perform(post(BASE + "/workloads/" + ids[0] + "/release")).andExpect(status().isOk());
         mockMvc.perform(delete(BASE + "/workloads/" + ids[0])).andExpect(status().isOk());

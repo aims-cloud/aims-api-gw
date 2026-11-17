@@ -107,7 +107,7 @@ class ExporterInstancesTest {
     @DisplayName("같은 시리즈로 해석된 노드가 둘이면 둘 다 그대로 떨어진다 — 한 값을 두 노드에 넣지 않는다")
     @Test
     void nodes_resolving_to_one_series_all_fall_back() {
-        // 중앙 IPMI 를 두 노드에 적은 원장 + 셋째 노드는 호스트명 일치
+        // 중앙 IPMI를 두 노드에 적은 원장 + 셋째 노드는 호스트명 일치
         ExporterInstances r = ExporterInstances.of(List.of(
                 mapping("a:9100", null, "ipmi-exporter:9290"),
                 mapping("b:9100", null, "ipmi-exporter:9290")),

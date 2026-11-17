@@ -10,7 +10,7 @@ import com.innogrid.aims.scheduler.entity.MdcLink;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 링크 스냅샷 — 방향 없는 조회, 같은 MDC·미등록·null 은 비어 있음(해석은 호출자 몫 — 제약은 통과, 점수는 같은 MDC 1.0 · 미등록 기본 0.5).
+ * 링크 스냅샷 — 방향 없는 조회, 같은 MDC·미등록·null은 비어 있음(해석은 호출자 몫 — 제약은 통과, 점수는 같은 MDC 1.0 · 미등록 기본 0.5).
  */
 class LinkMatrixTest {
 

@@ -44,7 +44,7 @@ class ConstraintReasonWordingTest {
         assertEquals("CPU 사용률 초과 (95.0% > 80.0%)", reason(workload(1, 512), busyNode(95, 10)));
         assertEquals("메모리 사용률 초과 (95.0% > 85.0%)", reason(workload(1, 512), busyNode(10, 95)));
 
-        // 온도 초과는 그 노드를 냉각 대기로 표시하므로, 뒤이은 사례는 다른 노드 id 를 쓴다
+        // 온도 초과는 그 노드를 냉각 대기로 표시하므로, 뒤이은 사례는 다른 노드 id를 쓴다
         assertEquals("온도 초과 (90.0°C > 75.0°C)", reason(workload(1, 512), hotNode("n-hot", 90), thermalPolicy()));
         assertEquals("배치 후 예상 온도 75.3°C > 임계치 75.0°C",
                 reason(workload(32, 512), hotNode("n-predict", 70), thermalPolicy()));
@@ -80,7 +80,7 @@ class ConstraintReasonWordingTest {
     @DisplayName("사유는 먼저 걸린 제약 하나만 돌려준다")
     @Test
     void only_the_first_matching_constraint_is_reported() {
-        // 자원도 모자라고 사용률도 넘는 노드 — C1 이 먼저라 자원 사유가 나온다
+        // 자원도 모자라고 사용률도 넘는 노드 — C1이 먼저라 자원 사유가 나온다
         NodeResource node = busyNode(95, 10);
         String r = reason(workload(999, 512), node);
         assertNotNull(r);
@@ -138,7 +138,7 @@ class ConstraintReasonWordingTest {
         return new NodeResource("mdc-a", nodeId, 64, 65536, 0, 10, 10, 15, 400, 1000, celsius, 0, 0);
     }
 
-    /** 전력 여유가 0 인 노드 — 실측이 정격과 같다. */
+    /** 전력 여유가 0인 노드 — 실측이 정격과 같다. */
     private static NodeResource fullPowerNode() {
         return new NodeResource("mdc-a", "n-a", 8, 16384, 0, 10, 10, 15, 1000, 1000, 40, 0, 0);
     }

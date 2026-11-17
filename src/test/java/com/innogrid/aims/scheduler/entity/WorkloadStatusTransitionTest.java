@@ -211,7 +211,7 @@ class WorkloadStatusTransitionTest {
         assertEquals(nodeBefore, workload.getAssignedNodeId(), "배정도 그대로");
     }
 
-    /** 각 상태에 놓인 워크로드 — PENDING 은 새 객체, 나머지는 배정 뒤 전이로 만든다. */
+    /** 각 상태에 놓인 워크로드 — PENDING은 새 객체, 나머지는 배정 뒤 전이로 만든다. */
     private Workload inState(WorkloadStatus target) {
         if (target == WorkloadStatus.PENDING) return new Workload("job", 1, 1024);
         Workload workload = scheduled();

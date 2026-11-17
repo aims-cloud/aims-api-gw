@@ -38,12 +38,12 @@ import jakarta.annotation.PreDestroy;
  * Nova 인벤토리를 읽어 스케줄러 입력 모양으로 바꾼다 — 읽기 전용이고 저장하지 않는다.
  *
  * <p>다른 담당의 가상화 자산 조회는 OpenStack 예외를 삼켜 빈 목록을 내므로 연동 실패와 실제로 빈 인벤토리를 가를 수 없다.
- * 여기서는 {@link NovaClient} 를 직접 불러 예외를 그대로 받아 {@link InventoryStatus} 로 나눈다.
- * {@link NovaClient} 와 Keystone 클라이언트는 다른 담당 코드라 고치지 않는다.</p>
+ * 여기서는 {@link NovaClient}를 직접 불러 예외를 그대로 받아 {@link InventoryStatus}로 나눈다.
+ * {@link NovaClient}와 Keystone 클라이언트는 다른 담당 코드라 고치지 않는다.</p>
  *
- * <p>OpenStack 클라이언트에는 응답 시간 상한이 없어, 조회 전체를 전용 스레드 하나에서 돌리고 {@code timeoutMs} 까지만 기다린다.
- * 상한을 넘기면 기다리기만 멈추며 HTTP 호출은 OpenStack 이 응답할 때까지 그 스레드를 붙잡는다. 앞선 조회가 끝나기 전(정상 진행 중 포함)에 들어온 조회는 다시 부르지 않고
- * {@link InventoryStatus#TIMEOUT} 으로 바로 돌려준다 — 메트릭 질의 상한({@code MetricsQueryGuard})과 같은 한계이고, 풀을 따로 두어
+ * <p>OpenStack 클라이언트에는 응답 시간 상한이 없어, 조회 전체를 전용 스레드 하나에서 돌리고 {@code timeoutMs}까지만 기다린다.
+ * 상한을 넘기면 기다리기만 멈추며 HTTP 호출은 OpenStack이 응답할 때까지 그 스레드를 붙잡는다. 앞선 조회가 끝나기 전(정상 진행 중 포함)에 들어온 조회는 다시 부르지 않고
+ * {@link InventoryStatus#TIMEOUT}으로 바로 돌려준다 — 메트릭 질의 상한({@code MetricsQueryGuard})과 같은 한계이고, 풀을 따로 두어
  * 노드 메트릭 수집에는 영향이 없다.</p>
  */
 @Component
@@ -51,7 +51,7 @@ public class NovaInventoryGateway {
 
     private static final Logger log = LoggerFactory.getLogger(NovaInventoryGateway.class);
 
-    /** 한 번의 조회에서 따로 요청하는 flavor 수 상한. 넘는 VM 은 요구 자원을 모른다고 적는다. */
+    /** 한 번의 조회에서 따로 요청하는 flavor 수 상한. 넘는 VM은 요구 자원을 모른다고 적는다. */
     static final int FLAVOR_LOOKUP_LIMIT = 50;
 
     /** 지워졌거나 오류 상태라 워크로드 입력으로 쓰지 않는 VM 상태. */
@@ -126,12 +126,12 @@ public class NovaInventoryGateway {
     }
 
     /**
-     * 실패 예외를 상태로 나눈다. 순서가 중요하다 — 응답 오류와 연결 오류가 둘 다 {@link RestClientException} 의 하위형이다.
+     * 실패 예외를 상태로 나눈다. 순서가 중요하다 — 응답 오류와 연결 오류가 둘 다 {@link RestClientException}의 하위형이다.
      */
     static InventoryStatus classify(Throwable failure) {
         if (failure instanceof MalformedInventoryException) return InventoryStatus.MALFORMED;
         if (failure instanceof BusinessException business) {
-            // 503 은 접속 정보 미설정(Nova · Keystone 모두), 502 는 토큰 헤더 없는 Keystone 응답
+            // 503은 접속 정보 미설정(Nova · Keystone 모두), 502는 토큰 헤더 없는 Keystone 응답
             return business.getStatus() == HttpStatus.SERVICE_UNAVAILABLE ? InventoryStatus.NOT_CONFIGURED : InventoryStatus.UPSTREAM_ERROR;
         }
         if (failure instanceof RestClientResponseException response) {
@@ -213,7 +213,7 @@ public class NovaInventoryGateway {
             Flavor flavor = null;
             String reason = null;
             if (server.get("flavor") instanceof Map<?, ?> embedded) {
-                // 마이크로버전 2.47 이상은 id 대신 original_name 과 자원 값을 직접 싣는다
+                // 마이크로버전 2.47 이상은 id 대신 original_name과 자원 값을 직접 싣는다
                 flavorId = text(embedded.get("id") != null ? embedded.get("id") : embedded.get("original_name"));
                 flavor = Flavor.of(embedded);
                 if (flavor == null && flavorId == null) reason = "flavor 없음";
@@ -241,7 +241,7 @@ public class NovaInventoryGateway {
         return List.copyOf(servers);
     }
 
-    /** flavor 하나를 읽는다. 실패하면 null — 그 flavor 를 쓰는 VM 만 요구 자원을 모른다고 적는다. */
+    /** flavor 하나를 읽는다. 실패하면 null — 그 flavor를 쓰는 VM만 요구 자원을 모른다고 적는다. */
     private Flavor lookupFlavor(String flavorId) {
         try {
             Map<String, Object> response = nova.getFlavor(flavorId);
@@ -302,7 +302,7 @@ public class NovaInventoryGateway {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
     }
 
-    /** VM 이 요구하는 자원 — 서버 상세에 들어 있거나(마이크로버전 2.47 이상) flavor 를 따로 읽어 얻는다. */
+    /** VM이 요구하는 자원 — 서버 상세에 들어 있거나(마이크로버전 2.47 이상) flavor를 따로 읽어 얻는다. */
     record Flavor(int vcpus, int ramMb, int diskGb) {
         static Flavor of(Object value) {
             if (!(value instanceof Map<?, ?> map)) return null;

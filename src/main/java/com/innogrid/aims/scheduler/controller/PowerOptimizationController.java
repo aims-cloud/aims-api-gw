@@ -22,17 +22,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 /**
  * 클러스터 전력 최적화 진단.
  *
- * <p>노드 하나의 효율은 {@code /scheduler/nodes/power-efficiency} 가 답한다. 여기서는 한 층 위에서
+ * <p>노드 하나의 효율은 {@code /scheduler/nodes/power-efficiency}가 답한다. 여기서는 한 층 위에서
  * <b>클러스터 전체로 무엇을 할 수 있는지</b>를 답한다 — 몇 대가 놀고 있고, 통합하면 얼마를
  * 반납할 수 있는가.</p>
  *
- * <p>비용·VM 단위 진단인 {@code /api/v1/optimization/**} 과는 <b>관점이 다르다.</b> 그쪽은 과금
+ * <p>비용·VM 단위 진단인 {@code /api/v1/optimization/**}과는 <b>관점이 다르다.</b> 그쪽은 과금
  * 데이터로 비용을 보고, 이쪽은 전력 메트릭으로 소비 전력을 본다. 경로 접두어가 달라 서로
  * 영향을 주지 않는다.</p>
  *
- * <p><b>{@code SchedulerController} 와 별도 클래스로 둔다.</b> 그쪽은 {@code /nodes/{nodeId}} 같은
+ * <p><b>{@code SchedulerController}와 별도 클래스로 둔다.</b> 그쪽은 {@code /nodes/{nodeId}} 같은
  * 경로 변수를 잡고 있어, 같은 클래스에 리터럴 경로를 더하면 어느 쪽이 먼저 잡히는지가 매핑
- * 순서에 걸린다. {@code /nodes/power-efficiency} 가 {@code /nodes/{nodeId}} 로 잡힐
+ * 순서에 걸린다. {@code /nodes/power-efficiency}가 {@code /nodes/{nodeId}}로 잡힐
  * 뻔한 선례가 있다.</p>
  */
 @Tag(name = "스케줄러 (전력 최적화 진단)",

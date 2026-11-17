@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 import com.innogrid.aims.scheduler.entity.NodePowerSpec;
 
-/** 노드 전력 사양 응답 — 11필드. 계약은 {@code NodePowerSpecApiTest} 가 고정한다. */
+/** 노드 전력 사양 응답 — 11필드. 계약은 {@code NodePowerSpecApiTest}가 고정한다. */
 public record NodePowerSpecResponse(
         Long id,
         String nodeId,

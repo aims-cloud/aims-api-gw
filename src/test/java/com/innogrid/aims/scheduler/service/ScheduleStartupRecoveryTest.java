@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>이것이 유일한 회수 수단이다. 실행 권한은 실행이 끝나며 풀리는데, 그 "끝"에 도달하지 못하고
  * 프로세스가 죽으면(= 배포 절차인 재시작) 표시가 남아 그 스케줄은 실행도 삭제도 영구히 거부된다.</p>
  *
- * <p>{@code start()} 를 다시 부르지 않고 회수 메서드를 직접 부른다 — 러너 스레드를 늘리지 않기 위해서다.</p>
+ * <p>{@code start()}를 다시 부르지 않고 회수 메서드를 직접 부른다 — 러너 스레드를 늘리지 않기 위해서다.</p>
  */
 @SpringBootTest
 class ScheduleStartupRecoveryTest {
@@ -264,7 +264,7 @@ class ScheduleStartupRecoveryTest {
         executionService.recoverStuckRuns();
 
         Schedule after = reload(healthy);
-        // DB 는 나노초를 마이크로초로 잘라 저장하므로 밀리초까지만 비교한다.
+        // DB는 나노초를 마이크로초로 잘라 저장하므로 밀리초까지만 비교한다.
         assertEquals(overdue.toInstant().toEpochMilli(), after.getNextRunAt().toInstant().toEpochMilli(),
                 "연체된 예정 시각을 회수가 밀어버리면 지난 예정 1회 실행 계약이 깨진다");
         assertNull(after.getLastRunStatus());

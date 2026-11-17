@@ -16,10 +16,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * HTTP 계약 확인.
  *
  * <p>테스트 환경에는 메트릭 저장소가 없어 노드 수집이 빈 목록을 돌려준다. 그래서 이
- * 테스트가 검증하는 것은 <b>데이터가 없을 때 API 가 올바르게 비어 있다고 답하는가</b>다.
- * 배포 VM 도 IPMI 가 없어 같은 경로를 타므로, 여기서 고정한 계약이 실환경 계약이기도 하다.</p>
+ * 테스트가 검증하는 것은 <b>데이터가 없을 때 API가 올바르게 비어 있다고 답하는가</b>다.
+ * 배포 VM도 IPMI가 없어 같은 경로를 타므로, 여기서 고정한 계약이 실환경 계약이기도 하다.</p>
  *
- * <p>지표·등급 값 검증은 {@code PowerEfficiencyServiceTest} 가 합성 스냅샷으로 한다.</p>
+ * <p>지표·등급 값 검증은 {@code PowerEfficiencyServiceTest}가 합성 스냅샷으로 한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -43,8 +43,8 @@ class PowerEfficiencyApiTest {
     }
 
     /**
-     * {@code /nodes/power-efficiency} 와 {@code /nodes/{nodeId}} 는 둘 다 두 조각짜리 경로다.
-     * 리터럴이 경로 변수보다 우선한다는 전제가 깨지면 평가 API 가 노드 단건 조회로 잡힌다.
+     * {@code /nodes/power-efficiency}와 {@code /nodes/{nodeId}}는 둘 다 두 조각짜리 경로다.
+     * 리터럴이 경로 변수보다 우선한다는 전제가 깨지면 평가 API가 노드 단건 조회로 잡힌다.
      */
     @DisplayName("리터럴 경로가 경로 변수보다 우선한다")
     @Test

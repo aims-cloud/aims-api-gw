@@ -129,7 +129,7 @@ class RequestValidationScenarioTest {
             Object m = objectMapper.readValue(r.getResponse().getContentAsString(), Map.class).get("message");
             message = m == null ? null : m.toString();
         } catch (Exception ignored) {
-            // 본문이 JSON 이 아니면 사유 없음
+            // 본문이 JSON이 아니면 사유 없음
         }
         steps.add(new Step(no, input, expected, expectMessage, r.getResponse().getStatus(), message));
         return r;

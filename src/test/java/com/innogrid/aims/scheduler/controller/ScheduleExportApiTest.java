@@ -61,10 +61,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Excel 내보내기({@code GET /schedules/export} · {@code GET /schedules/{id}/runs/export}).
  *
  * <p>파일의 행이 같은 파라미터로 목록 · 실행 이력의 모든 쪽을 이어 붙여 화면 표기로 바꾼 것과 같은지, 셀 표기 · 수식 · 특수 문자,
- * 오류 응답이 JSON 인지, 헤더와 zip 부품을 본다. 파일은 JDK 의 {@link ZipInputStream} 과 DOM 파서로 읽는다.</p>
+ * 오류 응답이 JSON인지, 헤더와 zip 부품을 본다. 파일은 JDK의 {@link ZipInputStream}과 DOM 파서로 읽는다.</p>
  *
  * <p>이 컨텍스트는 실 게이트웨이라 즉시 실행으로는 실행 이력이 생기지 않으므로 행을 저장소에 직접 심고, 시각은 JPQL 일괄 갱신으로
- * 고정한다({@link ScheduleRunListFilterApiTest} 와 같은 방식). 업무 키는 숫자만 붙여 검색어(영문자)와 겹치지 않게 한다.</p>
+ * 고정한다({@link ScheduleRunListFilterApiTest}와 같은 방식). 업무 키는 숫자만 붙여 검색어(영문자)와 겹치지 않게 한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -330,7 +330,7 @@ class ScheduleExportApiTest {
         return actual;
     }
 
-    /** 크기 2 로 1쪽부터 총건수만큼 이어 붙인다. */
+    /** 크기 2로 1쪽부터 총건수만큼 이어 붙인다. */
     private List<JsonNode> stitch(String path, String... pairs) throws Exception {
         List<JsonNode> out = new ArrayList<>();
         long total = -1;
@@ -354,7 +354,7 @@ class ScheduleExportApiTest {
                 .andReturn().getResponse().getContentAsByteArray();
     }
 
-    // ── 화면 표기(프론트 schedulerPresentation · schedulerMapper 와 같은 규칙) ──
+    // ── 화면 표기(프론트 schedulerPresentation · schedulerMapper와 같은 규칙) ──
 
     private static String text(JsonNode v) {
         if (v == null || v.isNull()) return "-";
@@ -394,7 +394,7 @@ class ScheduleExportApiTest {
         return f.newDocumentBuilder().parse(new ByteArrayInputStream(xml));
     }
 
-    /** 시트의 모든 행(머리글 포함) — 셀 참조가 A1 부터 빈틈없이 이어지는지도 본다. */
+    /** 시트의 모든 행(머리글 포함) — 셀 참조가 A1부터 빈틈없이 이어지는지도 본다. */
     private static List<List<String>> cells(byte[] sheetXml) throws Exception {
         NodeList rows = parse(sheetXml).getElementsByTagNameNS(MAIN_NS, "row");
         List<List<String>> out = new ArrayList<>();
@@ -424,7 +424,7 @@ class ScheduleExportApiTest {
         return rows.stream().map(r -> r.get(index)).toList();
     }
 
-    /** 공유 DB 의 다른 행을 빼고 이 테스트가 심은 업무 키의 행만 순서대로 고른다. */
+    /** 공유 DB의 다른 행을 빼고 이 테스트가 심은 업무 키의 행만 순서대로 고른다. */
     private static List<List<String>> ownRows(List<List<String>> rows, Schedules s) {
         return rows.stream().filter(r -> r.get(0).startsWith(s.prefix())).toList();
     }
@@ -447,8 +447,8 @@ class ScheduleExportApiTest {
     private record Schedules(String prefix, List<String> keys, List<Long> ids) { }
 
     /**
-     * 스케줄 1 · 실행 6 — 시작 시각은 T−5h … T 로 한 시간 간격(T 는 초 단위 고정). 업무 키는 {@code exr-<숫자>}.
-     * 메시지에 a 가 든 넷의 값 순서(alpha · bravo · charlie · delta)는 id 순서(delta · alpha · charlie · bravo)와 일부러 다르다.
+     * 스케줄 1 · 실행 6 — 시작 시각은 T−5h … T로 한 시간 간격(T는 초 단위 고정). 업무 키는 {@code exr-<숫자>}.
+     * 메시지에 a가 든 넷의 값 순서(alpha · bravo · charlie · delta)는 id 순서(delta · alpha · charlie · bravo)와 일부러 다르다.
      * <pre>
      *   T−5h COMPLETED MANUAL "delta ok"     T−4h FAILED AUTO "alpha fail"     T−3h COMPLETED AUTO "charlie ok"
      *   T−2h FAILED MANUAL "bravo fail"      T−1h COMPLETED MANUAL "echo ok"   T    RUNNING MANUAL (메시지 없음)

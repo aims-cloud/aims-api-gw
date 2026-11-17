@@ -24,12 +24,12 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 원장에 없는 원격 MDC 의 링크 점수.
+ * 원장에 없는 원격 MDC의 링크 점수.
  *
- * <p>데이터는 a 에 있고 후보는 a(같은 MDC) · b(a-b 20ms UP 등록) · z(원장에 없음) 셋이다. 예전에는 같은 MDC 와
- * 미등록 쌍을 똑같이 1.0 으로 보아 <b>측정된 양호 링크(b, 0.714)가 측정되지 않은 경로(z)보다 낮게</b> 평가됐다
- * — 링크 원장을 채운 MDC 가 채우지 않은 MDC 보다 불리했다. 지금은 z 가 설정값(기본 0.5)을 받아 b 아래로 간다.
- * 순위 a > b > z 가 이 수정의 증거다. 설정을 1.0 으로 돌리면 예전 순위가 그대로 나온다.</p>
+ * <p>데이터는 a에 있고 후보는 a(같은 MDC) · b(a-b 20ms UP 등록) · z(원장에 없음) 셋이다. 예전에는 같은 MDC와
+ * 미등록 쌍을 똑같이 1.0으로 보아 <b>측정된 양호 링크(b, 0.714)가 측정되지 않은 경로(z)보다 낮게</b> 평가됐다
+ * — 링크 원장을 채운 MDC가 채우지 않은 MDC보다 불리했다. 지금은 z가 설정값(기본 0.5)을 받아 b 아래로 간다.
+ * 순위 a > b > z가 이 수정의 증거다. 설정을 1.0으로 돌리면 예전 순위가 그대로 나온다.</p>
  */
 class UnknownMdcLinkScoreTest {
 
@@ -89,7 +89,7 @@ class UnknownMdcLinkScoreTest {
         assertEquals(0.0, by.get("unknown").details().get("링크등록"));
         assertTrue(by.get("unknown").eligible());
 
-        // 데이터가 "unknown" 에 있다고 적으면 라벨 없는 노드 전부가 같은 MDC 1.0 이 된다 — 특별 취급이 없다는 뜻
+        // 데이터가 "unknown"에 있다고 적으면 라벨 없는 노드 전부가 같은 MDC 1.0이 된다 — 특별 취급이 없다는 뜻
         Map<String, NodeScore> data = byMdc(scheduler.schedule(workload("unknown"), ctx));
         assertEquals(1.0, data.get("unknown").details().get("링크품질"), EPS);
         assertEquals(0.5, data.get("a").details().get("링크품질"), EPS);

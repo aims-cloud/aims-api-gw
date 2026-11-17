@@ -20,7 +20,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * "실행 계층이 전부 받았을 때" 실행이 남길 값과 같다.</p>
  *
  * <p>실행 미리보기({@link ScheduleRunPreviewResponse})는 노드를 모으지 않고 건수만 세는 반면, 여기는 노드를 모으고
- * 결정까지 낸다. {@code targetCount} 는 미리보기(상한 적용 전)와 달리 실행 이력과 같은 상한 적용 뒤 값이다.</p>
+ * 결정까지 낸다. {@code targetCount}는 미리보기(상한 적용 전)와 달리 실행 이력과 같은 상한 적용 뒤 값이다.</p>
  */
 @Schema(description = "스케줄 모의 실행 — 지금 실행하면 어떻게 배치될지를 저장 없이. 실행 계층 전달은 하지 않으며 전부 받는다고 본다")
 public record ScheduleDryRunResponse(

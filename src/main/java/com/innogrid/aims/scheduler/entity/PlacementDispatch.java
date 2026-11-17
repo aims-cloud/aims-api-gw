@@ -36,7 +36,7 @@ public class PlacementDispatch {
      *      └─▶ TIMED_OUT    원격 모드에서 응답 시간 상한 초과 — <b>record 모드에서는 도달하지 않는다</b>
      *                       (판정하는 코드가 아직 없다. 값은 계약·CHECK 제약에 있으므로 유지)
      * </pre>
-     * Postgres 는 이 값 목록으로 CHECK 제약을 만든다 — 값을 더할 때는 DDL 스크립트도 고친다.
+     * Postgres는 이 값 목록으로 CHECK 제약을 만든다 — 값을 더할 때는 DDL 스크립트도 고친다.
      */
     public enum DispatchStatus {
         REQUESTED, ACCEPTED, RUNNING, COMPLETED, FAILED, REJECTED, UNAVAILABLE, TIMED_OUT;
@@ -51,7 +51,7 @@ public class PlacementDispatch {
             return this == COMPLETED || this == FAILED || this == REJECTED || this == UNAVAILABLE || this == TIMED_OUT;
         }
 
-        /** 콜백 전이표. 같은 상태로의 재보고는 여기서 false 이고, 서비스가 멱등(무변경 200)으로 다룬다. */
+        /** 콜백 전이표. 같은 상태로의 재보고는 여기서 false이고, 서비스가 멱등(무변경 200)으로 다룬다. */
         public boolean canReport(DispatchStatus target) {
             return switch (this) {
                 case ACCEPTED -> target == RUNNING || target == FAILED;
@@ -141,23 +141,23 @@ public class PlacementDispatch {
     }
 
     /**
-     * 운영자가 배치 예약을 취소해 이 결정을 끝낸다 — 상태는 기존 값 {@code FAILED} 로 마감하고 비고로 구별한다.
+     * 운영자가 배치 예약을 취소해 이 결정을 끝낸다 — 상태는 기존 값 {@code FAILED}로 마감하고 비고로 구별한다.
      *
-     * <p>새 상태 값을 두지 않는 이유: 상태 컬럼에 값 목록 CHECK 제약이 있고 {@code ddl-auto=update} 는 기존 제약을 고치지
-     * 않아, 새 값은 배포 서버에서 UPDATE 실패가 된다. FAILED 는 이미 끝 상태라 늦게 온 RUNNING·COMPLETED 콜백은 전이표에서
+     * <p>새 상태 값을 두지 않는 이유: 상태 컬럼에 값 목록 CHECK 제약이 있고 {@code ddl-auto=update}는 기존 제약을 고치지
+     * 않아, 새 값은 배포 서버에서 UPDATE 실패가 된다. FAILED는 이미 끝 상태라 늦게 온 RUNNING·COMPLETED 콜백은 전이표에서
      * 거부(409)되고, 늦은 FAILED 재보고는 무변경으로 끝난다 — 원하는 동작이 값 추가 없이 성립한다.</p>
      */
     public void cancel(String text) {
         this.status = DispatchStatus.FAILED;
-        // 표지를 앞에 둔다 — 기존 비고가 길어 잘려도 "예약 취소" 구별 수단은 남아야 한다(note 는 뒤에 붙여 표지가 잘릴 수 있다)
+        // 표지를 앞에 둔다 — 기존 비고가 길어 잘려도 "예약 취소" 구별 수단은 남아야 한다(note는 뒤에 붙여 표지가 잘릴 수 있다)
         String merged = (this.message == null || this.message.isBlank()) ? text : text + " / " + this.message;
         this.message = merged.length() > MESSAGE_MAX ? merged.substring(0, MESSAGE_MAX) : merged;
         this.respondedAt = OffsetDateTime.now();
     }
 
     /**
-     * 운영자가 상태 변경 API 로 워크로드를 끝 상태로 보내 이 결정을 끝낸다 — 상태는 기존 값({@code COMPLETED} 또는
-     * {@code FAILED})으로 마감하고 비고 앞에 표지를 둔다. 새 상태 값을 두지 않는 이유는 {@link #cancel} 과 같다.
+     * 운영자가 상태 변경 API로 워크로드를 끝 상태로 보내 이 결정을 끝낸다 — 상태는 기존 값({@code COMPLETED} 또는
+     * {@code FAILED})으로 마감하고 비고 앞에 표지를 둔다. 새 상태 값을 두지 않는 이유는 {@link #cancel}과 같다.
      * 끝 상태가 되면 같은 상태의 재보고는 무변경으로 끝나고 그 밖의 늦은 콜백은 전이표에서 거부(409)된다.
      */
     public void finishByOperator(DispatchStatus outcome, String text) {
@@ -168,8 +168,8 @@ public class PlacementDispatch {
     }
 
     /**
-     * 실행 계층의 콜백을 반영한다. 허용되지 않는 전이는 false. 같은 상태로의 재보고는 true 를 돌려주되 아무것도 바꾸지
-     * 않는다(멱등) — 호출자가 "바뀐 것이 없다"를 알아야 하면 {@link #getStatus()} 를 비교한다.
+     * 실행 계층의 콜백을 반영한다. 허용되지 않는 전이는 false. 같은 상태로의 재보고는 true를 돌려주되 아무것도 바꾸지
+     * 않는다(멱등) — 호출자가 "바뀐 것이 없다"를 알아야 하면 {@link #getStatus()}를 비교한다.
      */
     public boolean report(DispatchStatus target, String externalRef, String message) {
         if (target == null || !target.reportable()) return false;

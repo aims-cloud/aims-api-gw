@@ -24,16 +24,16 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 모의 메트릭 모드에서 실행 중 워크로드의 예약 — 쓰고 있는 GPU 카드는 끝 상태까지 묶이고, 늦게 시작한 워크로드의 CPU 는 시작 직후 남는다.
+ * 모의 메트릭 모드에서 실행 중 워크로드의 예약 — 쓰고 있는 GPU 카드는 끝 상태까지 묶이고, 늦게 시작한 워크로드의 CPU는 시작 직후 남는다.
  *
- * <p>카드를 쓰는 세 테스트의 대상 노드는 busan-03(카드 2장 · IPMI 가 없어 전력·온도가 0 이라 그 제약에 걸리지 않음)이다. 다른 GPU 노드 seoul-02 는
- * 전력 사양 원장이 비어 있으면 기본 정격 500W 로 잡혀 전력 여유 부족으로 빠지므로, 카드 2장 배치는 busan-03 으로 간다.
- * 카드 2장을 요구하는 워크로드를 실제로 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각(과 필요하면 시작 시각 — RUNNING 이 된
+ * <p>카드를 쓰는 세 테스트의 대상 노드는 busan-03(카드 2장 · IPMI가 없어 전력·온도가 0이라 그 제약에 걸리지 않음)이다. 다른 GPU 노드 seoul-02는
+ * 전력 사양 원장이 비어 있으면 기본 정격 500W로 잡혀 전력 여유 부족으로 빠지므로, 카드 2장 배치는 busan-03으로 간다.
+ * 카드 2장을 요구하는 워크로드를 실제로 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각(과 필요하면 시작 시각 — RUNNING이 된
  * 전달 기록의 응답 시각)을 30분 앞당겨 메트릭 지연이 지난 상태를 만든다. 기다리지 않으므로 앞당긴 시각은 경계와 20분, 방금
  * 시작한 시각은 경계와 약 10분 떨어져 시각에 흔들리지 않는다.</p>
  *
- * <p>카드가 0장으로 잡힌 busan-01 에는 카드 1장을 쓰는 실행 중 워크로드를 직접 배정해, 예약 GPU 가 총 카드보다 많은
- * 상태(GPU 수집이 끊긴 노드)를 만든다. 그 노드가 GPU 를 요구하지 않는 배치를 받는지 본다. 판 전체 평가가 공유 냉각
+ * <p>카드가 0장으로 잡힌 busan-01에는 카드 1장을 쓰는 실행 중 워크로드를 직접 배정해, 예약 GPU가 총 카드보다 많은
+ * 상태(GPU 수집이 끊긴 노드)를 만든다. 그 노드가 GPU를 요구하지 않는 배치를 받는지 본다. 판 전체 평가가 공유 냉각
  * 상태에 표시를 남기지 않게 온도 인지를 끈 정책으로 평가한다.</p>
  */
 @SpringBootTest
@@ -137,9 +137,9 @@ class RunningGpuReservationScenarioTest {
     private record Running(Workload workload, int reservedCpuBefore) {}
 
     /**
-     * 카드 2장을 요구하는 워크로드를 busan-03 에 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각을 30분 앞당긴다.
+     * 카드 2장을 요구하는 워크로드를 busan-03에 배치하고 실행 중 콜백을 보낸 뒤, 배치 시각을 30분 앞당긴다.
      * 엔티티가 배치 시각을 직접 바꿀 수 없어(배정 때 현재 시각을 넣는다) 필드를 바꿔 저장한다 — 전달 기록의 요청 시각은
-     * 그대로라 현재 결정으로 남는다. {@code startLongAgo} 면 시작 시각(RUNNING 이 된 전달 기록의 응답 시각)도 30분
+     * 그대로라 현재 결정으로 남는다. {@code startLongAgo}면 시작 시각(RUNNING이 된 전달 기록의 응답 시각)도 30분
      * 앞당긴다. 콜백 뒤 기록을 다시 읽어 바꾼다 — 콜백 전에 읽은 사본(수락 상태)을 저장하면 상태가 되돌아간다.
      */
     private Running runningGpuWorkloadOnGpuNode(boolean startLongAgo) {
@@ -180,12 +180,12 @@ class RunningGpuReservationScenarioTest {
         return draft;
     }
 
-    /** GPU 를 요구하지 않는 저장하지 않은 초안. */
+    /** GPU를 요구하지 않는 저장하지 않은 초안. */
     private static Workload cpuDraft() {
         return new Workload(PREFIX + "d", 1, 1024);
     }
 
-    /** 저장하지 않은 정책 — 공유 DB 에 다른 테스트가 남긴 정책이 판정에 끼지 않는다. */
+    /** 저장하지 않은 정책 — 공유 DB에 다른 테스트가 남긴 정책이 판정에 끼지 않는다. */
     private static SchedulingPolicy policy() {
         return new SchedulingPolicy(PREFIX + "p", "d");
     }

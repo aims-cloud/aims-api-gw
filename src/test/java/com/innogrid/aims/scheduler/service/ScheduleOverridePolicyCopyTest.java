@@ -19,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄이 온도 한계를 덧씌울 때 만드는 정책 사본이 <b>판단 필드를 하나도 잃지 않는가</b>.
  *
- * <p>사본에 {@code affinityEnabled} 가 복사되지 않아, 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가
+ * <p>사본에 {@code affinityEnabled}가 복사되지 않아, 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가
  * 꺼진 채 실행되던 결함을 고정한다. 정책의 다른 필드가 그대로 옮겨지는 것도 함께 확인한다. 사본은
- * {@code SchedulingPolicy.detachedCopy()} 가 만들므로 선언된 필드 전량을 반사로 대조하는 테스트를 하나 둔다.</p>
+ * {@code SchedulingPolicy.detachedCopy()}가 만들므로 선언된 필드 전량을 반사로 대조하는 테스트를 하나 둔다.</p>
  */
 @SpringBootTest
 class ScheduleOverridePolicyCopyTest {
@@ -88,7 +88,7 @@ class ScheduleOverridePolicyCopyTest {
 
         Map<String, Object> expected = fields(policy);
         Map<String, Object> actual = fields(copy);
-        // id 와 createdAt 은 영속 계층의 몫이고, 온도 한계는 스케줄 값으로 덮어쓴 것이 맞다
+        // id와 createdAt은 영속 계층의 몫이고, 온도 한계는 스케줄 값으로 덮어쓴 것이 맞다
         for (String excluded : new String[]{"id", "createdAt", "maxTemperatureCelsius"}) {
             expected.remove(excluded);
             actual.remove(excluded);

@@ -21,9 +21,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 후보 발견 — 세 질의가 각각 실패할 수 있고, 실패한 질의만 {@code unavailable} 에 남으며 나머지 결과는 그대로 나온다.
- * 수집기용 발견({@code discoverGpuCounts}·{@code discoverIpmiInstances})은 실패를 빈 집합으로 삼키는데, 후보 API 는 그러면
- * "없다" 와 "못 받았다" 가 섞이므로 따로 구분한다. 시리즈 수를 못 읽는 행은 그 행만 건너뛴다.
+ * 후보 발견 — 세 질의가 각각 실패할 수 있고, 실패한 질의만 {@code unavailable}에 남으며 나머지 결과는 그대로 나온다.
+ * 수집기용 발견({@code discoverGpuCounts}·{@code discoverIpmiInstances})은 실패를 빈 집합으로 삼키는데, 후보 API는 그러면
+ * "없다"와 "못 받았다"가 섞이므로 따로 구분한다. 시리즈 수를 못 읽는 행은 그 행만 건너뛴다.
  */
 class ExporterInstanceResolverTest {
 

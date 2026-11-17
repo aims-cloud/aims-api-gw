@@ -8,8 +8,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * 만들어도 동작한다 — 비워 두면 리소스 종류별 활성 정책과 그 정책의 기본 엔진을 쓴다.
  *
  * <p>검증은 서비스 계층에서 한다. 저장소의 최신 DTO 관례를 따라 검증 애너테이션을 두지
- * 않았고, 그래야 오류가 400 으로 일관되게 나간다. 필수 표기는 생성(POST) 기준이고, 저장 전 미리보기 본문으로도 쓴다.
- * 편집(PUT)은 {@link ScheduleUpdateRequest} 가 받는다.</p>
+ * 않았고, 그래야 오류가 400으로 일관되게 나간다. 필수 표기는 생성(POST) 기준이고, 저장 전 미리보기 본문으로도 쓴다.
+ * 편집(PUT)은 {@link ScheduleUpdateRequest}가 받는다.</p>
  */
 @Schema(description = "스케줄 생성 요청(저장 전 미리보기 본문 겸용). 스케줄 ID·스케줄명·실행 주기가 필수")
 public record ScheduleRequest(

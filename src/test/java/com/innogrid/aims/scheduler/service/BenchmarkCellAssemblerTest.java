@@ -59,9 +59,9 @@ class BenchmarkCellAssemblerTest {
     private static final String NO_HEADROOM = "짝 지점 전부에서 노드 여유가 0 이라 조각화 비율을 낼 수 없다";
 
     /**
-     * 입력 조합 열두 가지 — 순서대로 ① 기본 · ② 짝 지점 0 · ③ 계측 노드 1 · ④ 짝 지점 0 이면서 계측 노드 1 · ⑤ 전 지점 배치 0 ·
+     * 입력 조합 열두 가지 — 순서대로 ① 기본 · ② 짝 지점 0 · ③ 계측 노드 1 · ④ 짝 지점 0이면서 계측 노드 1 · ⑤ 전 지점 배치 0 ·
      * ⑥ 온도 제약 꺼짐 · ⑦ 전력 제약 꺼짐 · ⑧ 기준 전략 없음 · ⑨ 기준 전략 자신 · ⑩ 기준과 짝 지점 없음(표본 없음) · ⑪ 기준 없음이면서 자신 ·
-     * ⑫ 데이터 MDC 를 배정하지 않은 판.
+     * ⑫ 데이터 MDC를 배정하지 않은 판.
      */
     private static final List<Combo> COMBOS = List.of(
             new Combo(3, 9, true, true, true, false, true, true),
@@ -169,14 +169,14 @@ class BenchmarkCellAssemblerTest {
         }
 
         // 제외 지점 수가 쓸 수 있는 지점 수와 다르면 짝 지점 지표도 값이 나오지 않았다는 문장으로 나간다 — 조각화 비율은 남은 짝 지점의
-        // 표본이 없다는 것이 곧 그 지점들의 노드 여유가 0 이었다는 뜻이라 그 사유로 나간다
+        // 표본이 없다는 것이 곧 그 지점들의 노드 여유가 0이었다는 뜻이라 그 사유로 나간다
         for (MetricValue v : BenchmarkCellAssembler.metricValues(Map.of(), row, 2, points, 1)) {
             if (BenchmarkRules.FRAGMENTED_HEADROOM.equals(v.key())) assertEquals(NO_HEADROOM, v.invalidReason(), v.key());
             else if (pairedOnly.contains(v.key())) assertEquals(NO_VALUE, v.invalidReason(), v.key());
         }
     }
 
-    /** 등록된 판에서는 링크 판이 전 시각 지점에서 값을 내 이 경로가 응답으로 지나가지 않는다 — 지점의 null 을 0 으로 세면 비율이 낮아 보인다. */
+    /** 등록된 판에서는 링크 판이 전 시각 지점에서 값을 내 이 경로가 응답으로 지나가지 않는다 — 지점의 null을 0으로 세면 비율이 낮아 보인다. */
     @DisplayName("원격 MDC 배치 비율은 일부 시각 지점에만 값이 없으면 남은 지점으로 값을 내고 유효하다")
     @Test
     void remote_mdc_rate_uses_the_points_that_have_a_value() {
@@ -193,7 +193,7 @@ class BenchmarkCellAssemblerTest {
         assertEquals(2, v.samples(), "값이 없는 지점은 표본에서 빠진다");
     }
 
-    /** 등록된 판의 짝 지점은 노드 여유가 남아 응답으로는 null 가지를 볼 수 없다 — 여유가 없는데 0 을 내면 "자투리가 없다"로 읽힌다. */
+    /** 등록된 판의 짝 지점은 노드 여유가 남아 응답으로는 null 가지를 볼 수 없다 — 여유가 없는데 0을 내면 "자투리가 없다"로 읽힌다. */
     @DisplayName("자원 조각화 비율은 자투리 합을 여유 합으로 나누고 여유 합이 0 이면 0 이 아니라 null 이다")
     @Test
     void fragmented_headroom_rate_divides_fragments_by_headroom() {
@@ -204,7 +204,7 @@ class BenchmarkCellAssemblerTest {
         assertNull(BenchmarkCellAssembler.fragmentedHeadroomRate(placementWithHeadroom(0.0, 0.0)), "여유가 없으면 조각화가 정의되지 않는다");
     }
 
-    /** 짝 지점이라도 노드 여유가 0 인 지점은 표본이 없다 — 그 자리를 0 으로 세면 비율이 낮아 보인다. */
+    /** 짝 지점이라도 노드 여유가 0인 지점은 표본이 없다 — 그 자리를 0으로 세면 비율이 낮아 보인다. */
     @DisplayName("자원 조각화 비율은 값이 없는 지점을 빼고 남은 지점으로 값을 내고 유효하다")
     @Test
     void fragmented_headroom_uses_the_points_that_have_a_value() {
@@ -238,7 +238,7 @@ class BenchmarkCellAssemblerTest {
         assertEquals(100.0, BenchmarkCellAssembler.corePlacementRate(placementWithCores(4, 4, 7.0), 7.0), 1e-9, "전부 배치하면 100 이다");
     }
 
-    /** 등록된 판의 표본은 늘 코어를 요구해 응답으로는 null 가지를 볼 수 없다 — 요구가 없는데 0 을 내면 "하나도 못 놓았다"로 읽힌다. */
+    /** 등록된 판의 표본은 늘 코어를 요구해 응답으로는 null 가지를 볼 수 없다 — 요구가 없는데 0을 내면 "하나도 못 놓았다"로 읽힌다. */
     @DisplayName("코어 기준 배치 성공률은 지점 표본의 요구 코어 합이 0 이면 0 이 아니라 null 이다")
     @Test
     void core_placement_rate_is_null_without_requested_cores() {
@@ -277,7 +277,7 @@ class BenchmarkCellAssemblerTest {
                 placedCores);
     }
 
-    /** 이 전략과 기준 전략이 함께 있고 계측 노드가 아홉이며 데이터 MDC 를 배정한 판의 시각 지점. */
+    /** 이 전략과 기준 전략이 함께 있고 계측 노드가 아홉이며 데이터 MDC를 배정한 판의 시각 지점. */
     private static PointOutcome point(Placement row) {
         Map<String, Placement> byStrategy = new LinkedHashMap<>();
         byStrategy.put(row.strategy().id(), row);

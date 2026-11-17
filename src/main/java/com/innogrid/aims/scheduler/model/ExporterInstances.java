@@ -10,22 +10,22 @@ import java.util.Set;
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 
 /**
- * 노드 한 대의 세 익스포터 {@code instance} 를 잇는 해석기 — 수집 1회당 한 번 만들어 노드마다 DB 를 치지 않는다.
+ * 노드 한 대의 세 익스포터 {@code instance}를 잇는 해석기 — 수집 1회당 한 번 만들어 노드마다 DB를 치지 않는다.
  *
  * <p><b>왜 필요한가.</b> 프로메테우스의 {@code instance} 라벨은 스크레이프 주소 그대로라 익스포터마다 다르다.
- * 노드 익스포터는 {@code host:9100}, DCGM 은 {@code host:9400}, IPMI 는 {@code ipmi-exporter:9290} 같은
+ * 노드 익스포터는 {@code host:9100}, DCGM은 {@code host:9400}, IPMI는 {@code ipmi-exporter:9290} 같은
  * 중앙 주소다(2026-09-21 배포 서버 실측). 수집기는 노드 익스포터의 값을 키로 GPU 개수를 찾고 전력·온도를 질의해
- * 왔으므로, 실장비에서는 <b>GPU 개수가 항상 0 이고 전력·온도는 항상 미계측</b>이었다. 모의 게이트웨이가 모든
- * 시리즈에 같은 노드 id 를 붙여 테스트가 초록불이었을 뿐이다.</p>
+ * 왔으므로, 실장비에서는 <b>GPU 개수가 항상 0이고 전력·온도는 항상 미계측</b>이었다. 모의 게이트웨이가 모든
+ * 시리즈에 같은 노드 id를 붙여 테스트가 초록불이었을 뿐이다.</p>
  *
  * <p><b>세 단계로 떨어진다.</b>
  * <ol>
- *   <li><b>원장</b> — 운영자가 {@link NodeExporterMapping} 에 적어 둔 값. 중앙 IPMI 처럼 호스트명으로는 이을 수
+ *   <li><b>원장</b> — 운영자가 {@link NodeExporterMapping}에 적어 둔 값. 중앙 IPMI처럼 호스트명으로는 이을 수
  *       없는 형태는 이 길밖에 없다.</li>
  *   <li><b>호스트명 일치</b> — 저장소에 실제로 있는 그 익스포터의 instance 가운데 포트를 뗀 호스트가 같은 것이
- *       <b>정확히 하나</b>면 그것. DCGM 이 GPU 노드 자체에서 돌아 포트만 다른 흔한 배치를 원장 없이 덮는다.
+ *       <b>정확히 하나</b>면 그것. DCGM이 GPU 노드 자체에서 돌아 포트만 다른 흔한 배치를 원장 없이 덮는다.
  *       둘 이상이면 고르지 않는다 — 틀린 노드의 값을 끌어오는 것보다 미계측이 낫다.</li>
- *   <li><b>그대로</b> — 노드 익스포터 instance 를 그대로 쓴다. 이 브랜치 이전과 같은 동작이라, 원장이 비고
+ *   <li><b>그대로</b> — 노드 익스포터 instance를 그대로 쓴다. 이 브랜치 이전과 같은 동작이라, 원장이 비고
  *       호스트도 안 맞으면 값이 한 개도 달라지지 않는다.</li>
  * </ol></p>
  */
@@ -43,8 +43,8 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
 
     /**
      * @param ledger   원장 행. 같은 노드가 둘이면(유니크 제약이 막지만) 뒤엣것
-     * @param dcgmSeen 저장소에 지금 있는 DCGM 시리즈의 instance 들
-     * @param ipmiSeen 저장소에 지금 있는 IPMI 시리즈의 instance 들
+     * @param dcgmSeen 저장소에 지금 있는 DCGM 시리즈의 instance들
+     * @param ipmiSeen 저장소에 지금 있는 IPMI 시리즈의 instance들
      */
     public static ExporterInstances of(List<NodeExporterMapping> ledger, Collection<String> dcgmSeen, Collection<String> ipmiSeen) {
         Map<String, String> dcgm = new LinkedHashMap<>();
@@ -52,7 +52,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
         if (ledger != null) {
             for (NodeExporterMapping m : ledger) {
                 if (m.getNodeId() == null) continue;
-                // 키도 다듬는다 — API 는 저장 전에 trim 하지만 스크립트·직접 INSERT 로 들어온 행은 그렇지 않을 수 있다.
+                // 키도 다듬는다 — API는 저장 전에 trim 하지만 스크립트·직접 INSERT로 들어온 행은 그렇지 않을 수 있다.
                 String node = m.getNodeId().trim();
                 if (m.getDcgmInstance() != null && !m.getDcgmInstance().isBlank()) dcgm.put(node, m.getDcgmInstance().trim());
                 if (m.getIpmiInstance() != null && !m.getIpmiInstance().isBlank()) ipmi.put(node, m.getIpmiInstance().trim());
@@ -82,7 +82,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
         return assign(nodeInstances, dcgmByNode, dcgmSeen);
     }
 
-    /** 여러 노드를 한 번에 — 노드 → IPMI instance. 충돌 규칙은 {@link #dcgmFor} 와 같다. */
+    /** 여러 노드를 한 번에 — 노드 → IPMI instance. 충돌 규칙은 {@link #dcgmFor}와 같다. */
     public Map<String, String> ipmiFor(Collection<String> nodeInstances) {
         return assign(nodeInstances, ipmiByNode, ipmiSeen);
     }
@@ -104,7 +104,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
             out.put(node, target);
             claims.merge(target, 1, Integer::sum);
         }
-        // 둘 이상이 같은 시리즈를 가리키면 전부 자기 instance 로 — 자기 시리즈가 있는 노드만 값이 남고 나머지는 미계측
+        // 둘 이상이 같은 시리즈를 가리키면 전부 자기 instance로 — 자기 시리즈가 있는 노드만 값이 남고 나머지는 미계측
         out.replaceAll((node, target) -> claims.get(target) > 1 ? node : target);
         return out;
     }
@@ -128,7 +128,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
     }
 
     /**
-     * {@code host:port} 에서 호스트. 포트가 없으면 그대로. IPv6 대괄호 표기({@code [::1]:9100})는 대괄호 안을 호스트로 본다.
+     * {@code host:port}에서 호스트. 포트가 없으면 그대로. IPv6 대괄호 표기({@code [::1]:9100})는 대괄호 안을 호스트로 본다.
      */
     static String hostOf(String instance) {
         if (instance == null) return "";
@@ -139,7 +139,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
         }
         int colon = s.lastIndexOf(':');
         if (colon < 0) return s;
-        // 콜론이 둘 이상이면 포트 없는 IPv6 로 본다
+        // 콜론이 둘 이상이면 포트 없는 IPv6로 본다
         if (s.indexOf(':') != colon) return s;
         return s.substring(0, colon);
     }

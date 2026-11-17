@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * weighted 엔진이 전력·온도를 수집하지 못한 노드를 어떻게 다루는지.
  *
- * <p>0W·0°C 를 그대로 계산하면 "여유 100%" 로 읽혀 만점이 된다. IPMI 가 없는 노드가 계측된
- * 노드보다 유리해지는 것은 근거 없는 편향이다 — {@code power} 엔진처럼 중립 0.5 를 준다.</p>
+ * <p>0W·0°C를 그대로 계산하면 "여유 100%"로 읽혀 만점이 된다. IPMI가 없는 노드가 계측된
+ * 노드보다 유리해지는 것은 근거 없는 편향이다 — {@code power} 엔진처럼 중립 0.5를 준다.</p>
  */
 class WeightedScoreUnmeasuredTest {
 
@@ -56,7 +56,7 @@ class WeightedScoreUnmeasuredTest {
     @DisplayName("IPMI가 섞인 클러스터에서 미계측 노드가 유리하지 않다")
     @Test
     void unmeasured_not_favored_mixed_ipmi() {
-        // 자원·네트워크 동일. measured 는 전력 여유 60%·온도 여유 46.7% 로 양호한 노드다.
+        // 자원·네트워크 동일. measured는 전력 여유 60%·온도 여유 46.7%로 양호한 노드다.
         NodeResource measured = node("measured", 200, 500, 40);
         NodeResource unmeasured = node("unmeasured", 0, 500, 0);
 

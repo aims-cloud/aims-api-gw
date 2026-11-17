@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
  * 워크로드 통합 가능성 진단.
  *
  * <p>노드는 8코어 · 용량 500W(유휴 150W)로 맞춘다. 2코어 워크로드를 가동 중인 노드로 옮기면
- * 동적 증가분이 87.5W 이므로 손으로 검산할 수 있다.</p>
+ * 동적 증가분이 87.5W이므로 손으로 검산할 수 있다.</p>
  */
 class ConsolidationServiceTest {
 
@@ -84,7 +84,7 @@ class ConsolidationServiceTest {
         // 반납분은 wakeupPower — 계측된 유휴 노드(P=150,u=0.02,Pmax=500)라 실측에서 역산한다:
         // (150 - 500*0.02)/(1-0.02) = 140/0.98 ≈ 142.8571 → round 142.86
         assertEquals(PowerOptimizationService.round((150 - 500 * 0.02) / 0.98), c.idlePowerWatts(), 1e-6);
-        // 8코어 중 1코어 = 0.125 → 350 × 0.125 = 43.75W (host 는 가동 중이라 idlePower 기준, 안 바뀐다)
+        // 8코어 중 1코어 = 0.125 → 350 × 0.125 = 43.75W (host는 가동 중이라 idlePower 기준, 안 바뀐다)
         assertEquals(43.75, c.relocationCostWatts(), 1e-4);
         // 142.857142857... - 43.75 = 99.107142857... → round 99.11
         assertEquals(PowerOptimizationService.round(140 / 0.98 - 43.75), c.netSavingWatts(), 1e-6);
@@ -135,7 +135,7 @@ class ConsolidationServiceTest {
     /**
      * 스케줄러가 아는 워크로드가 없다고 노드가 빈 것은 아니다. 수동 배치나 다른 시스템의
      * 부하는 메트릭에만 보인다. 이 검사를 빠뜨리면 가동 중인 노드를 반납하라고 권고한다 —
-     * 배포 VM 이 정확히 이 상태다(워크로드 0건, CPU 12%).
+     * 배포 VM이 정확히 이 상태다(워크로드 0건, CPU 12%).
      */
     @DisplayName("워크로드가 없어도 부하가 있으면 반납하지 않는다")
     @Test
@@ -152,7 +152,7 @@ class ConsolidationServiceTest {
     @DisplayName("워크로드를 다 옮겨도 부하가 남으면 반납하지 않는다")
     @Test
     void load_left_after_migration_not_released() {
-        // CPU 40% 인데 옮기는 워크로드는 1코어(12.5%p) 뿐 → 27.5% 가 남는다
+        // CPU 40%인데 옮기는 워크로드는 1코어(12.5%p)뿐 → 27.5%가 남는다
         NodeResource node = node("partly-managed", 40, 30, 250);
         NodeResource host = node("host", 20, 20, 210);
         given(List.of(node, host), List.of(workload(1L, "w1", 1)));
@@ -165,7 +165,7 @@ class ConsolidationServiceTest {
 
     /**
      * 비율의 분모는 idlePower(가정값) 그대로 둔다 — wakeupPower 역산값을 분모에 넣으면
-     * (P - Pmax*u)/(1-u) 를 P 로 나눈 셈이 되어 1/(1-u) 항등식이 되고, 노드마다 값이 갈리던
+     * (P - Pmax*u)/(1-u)를 P로 나눈 셈이 되어 1/(1-u) 항등식이 되고, 노드마다 값이 갈리던
      * 성질이 사라진다.
      */
     @DisplayName("전력 비율의 분모는 가정한 유휴전력이다")
@@ -182,7 +182,7 @@ class ConsolidationServiceTest {
 
     // ── 상한 ──────────────────────────────────────────────────
 
-    /** 60건 중 50건만 옮겨보고 "반납 가능" 이라 하면 거짓이다. */
+    /** 60건 중 50건만 옮겨보고 "반납 가능"이라 하면 거짓이다. */
     @DisplayName("워크로드가 상한을 넘으면 평가하지 않는다")
     @Test
     void too_many_workloads_not_evaluated() {
@@ -246,7 +246,7 @@ class ConsolidationServiceTest {
         verify(workloadRepository, never()).save(any());
     }
 
-    /** S2 — NodeResource 는 가변이다. 조회용 스냅샷에 예약이 남으면 응답이 오염된다. */
+    /** S2 — NodeResource는 가변이다. 조회용 스냅샷에 예약이 남으면 응답이 오염된다. */
     @DisplayName("시뮬레이션 후 조회용 노드에 예약이 남지 않는다")
     @Test
     void simulation_leaves_no_reservation() {
@@ -286,7 +286,7 @@ class ConsolidationServiceTest {
 
         ConsolidationResponse result = service.diagnose();
 
-        // a 와 b 는 조건이 같으므로 옮기는 비용도 같아야 한다.
+        // a와 b는 조건이 같으므로 옮기는 비용도 같아야 한다.
         assertEquals(find(result, "a").relocationCostWatts(),
                 find(result, "b").relocationCostWatts(), 1e-9,
                 "앞 후보가 쌓은 예약이 남아 뒤 후보의 비용이 달라졌다");
@@ -324,7 +324,7 @@ class ConsolidationServiceTest {
     @DisplayName("요청당 메트릭 수집은 한 번이다")
     @Test
     void metrics_collected_once_per_request() {
-        // 예전에는 getNodeResources() 와 createContext() 가 각각 수집해 요청당 두 번이었다.
+        // 예전에는 getNodeResources()와 createContext()가 각각 수집해 요청당 두 번이었다.
         // 두 스냅샷의 시점이 달라 1차 필터가 본 노드와 시뮬레이션 기준 노드가 어긋날 수 있었다.
         given(List.of(node("idle", 2, 10, 150), node("host", 40, 40, 250)),
                 List.of(workload(1L, "w1", 1)));
@@ -359,7 +359,7 @@ class ConsolidationServiceTest {
     @Test
     void diagnose_does_not_save_policy() {
         given(List.of(node("idle", 1, 5, 150)), List.of());
-        // 저장하는 선택도 값을 주게 해 둔다 — 진단이 그쪽을 부르면 NPE 가 아니라 아래 never 확인에서 실패한다
+        // 저장하는 선택도 값을 주게 해 둔다 — 진단이 그쪽을 부르면 NPE가 아니라 아래 never 확인에서 실패한다
         SchedulingPolicy saved = new SchedulingPolicy("saved", "saved");
         when(schedulingService.resolvePolicy(any())).thenReturn(saved);
         when(schedulingService.resolvePolicyChoice(any())).thenReturn(new PolicyChoice(saved, PolicyChoice.Source.DEFAULT, true));
@@ -378,7 +378,7 @@ class ConsolidationServiceTest {
         SchedulingPolicy policy = new SchedulingPolicy("test", "test");
         when(schedulingService.choosePolicy(null)).thenReturn(new PolicyChoice(policy, PolicyChoice.Source.COMMON, true));
         when(schedulingService.getNodeResources()).thenReturn(nodes);
-        // createContext 는 호출할 때마다 새 스냅샷을 줘야 한다 — 샌드박스가 원본을 건드리지
+        // createContext는 호출할 때마다 새 스냅샷을 줘야 한다 — 샌드박스가 원본을 건드리지
         // 않는지 확인하려면 복사본이어야 한다.
         when(schedulingService.createContext(any())).thenAnswer(inv ->
                 PlacementContext.of(copy(nodes), policy));
@@ -411,9 +411,9 @@ class ConsolidationServiceTest {
         when(w.getRequiredMemoryMb()).thenReturn(512);
         when(w.getRequiredGpu()).thenReturn(0);
         when(w.getStatus()).thenReturn(Workload.WorkloadStatus.RUNNING);
-        // Mockito 는 Double 반환 메서드에 null 이 아니라 0.0 을 돌려준다. 그대로 두면
-        // "0℃ 보다 뜨거운 노드 금지" · "0W 초과 금지" 가 되어 모든 노드가 제외된다.
-        // 실제 엔티티는 이 두 값이 null 이므로 명시적으로 맞춰 준다.
+        // Mockito는 Double 반환 메서드에 null이 아니라 0.0을 돌려준다. 그대로 두면
+        // "0℃ 보다 뜨거운 노드 금지" · "0W 초과 금지"가 되어 모든 노드가 제외된다.
+        // 실제 엔티티는 이 두 값이 null이므로 명시적으로 맞춰 준다.
         when(w.getMaxTemperatureCelsius()).thenReturn(null);
         when(w.getMaxPowerBudgetWatts()).thenReturn(null);
         return w;

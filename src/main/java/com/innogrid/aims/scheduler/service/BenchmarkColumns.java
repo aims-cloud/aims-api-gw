@@ -32,7 +32,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
  * 전략마다 볼 정책 사본과 이 실행이 본 엔진 설정 스냅샷을 만든다.
  *
  * <p>스프링 빈이 아니다. 서비스가 생성자에서 한 번 만들고, 목록은 <b>부를 때마다</b> 다시 조립한다. 생성자는 참조를
- * 저장하고 대조군 순서만 복사한다 — 구현이 없는 대조군 id 는 생성이 아니라 첫 계산에서 실패해야 하고(서비스 생성 뒤 비교 호출에서 실패를 확인하는
+ * 저장하고 대조군 순서만 복사한다 — 구현이 없는 대조군 id는 생성이 아니라 첫 계산에서 실패해야 하고(서비스 생성 뒤 비교 호출에서 실패를 확인하는
  * 테스트), 설정(SchedulerProperties)은 생성 뒤에 바뀔 수 있어 복사해 두지 않고 부를 때마다 읽는다.</p>
  */
 final class BenchmarkColumns {
@@ -44,7 +44,7 @@ final class BenchmarkColumns {
     /** 전력 엔진 변종 열이 운영과 같은 온도 모델을 쓰도록 넘긴다. */
     private final ThermalModel thermalModel;
 
-    /** 이 실행이 비교에 넣는 대조군 순서. 운영은 항상 {@link #BASELINE_ORDER} 다. */
+    /** 이 실행이 비교에 넣는 대조군 순서. 운영은 항상 {@link #BASELINE_ORDER}다. */
     private final List<String> baselineOrder;
 
     BenchmarkColumns(EngineRegistry engineRegistry, SchedulerProperties properties, PowerModel powerModel,
@@ -59,16 +59,16 @@ final class BenchmarkColumns {
     /**
      * 대조군의 순서. 응답 열 순서가 실행마다 바뀌면 표를 견줄 수 없다.
      *
-     * <p>{@link #strategies()} 가 이 목록과 구현 맵의 <b>키 집합이 같은지</b> 검사한다 — 목록에만 있으면 null 이
-     * 담겨 한참 뒤 NPE 로 죽고, 맵에만 있으면 열 하나가 <b>조용히</b> 사라진 채 응답은 정상이다. 둘 다 여기서
+     * <p>{@link #strategies()}가 이 목록과 구현 맵의 <b>키 집합이 같은지</b> 검사한다 — 목록에만 있으면 null이
+     * 담겨 한참 뒤 NPE로 죽고, 맵에만 있으면 열 하나가 <b>조용히</b> 사라진 채 응답은 정상이다. 둘 다 여기서
      * 크게 실패하게 한다. 테스트가 같은 패키지에서 이 목록을 읽는다.</p>
      */
     static final List<String> BASELINE_ORDER =
             List.of("ffd-size", "ffd-priority-size", "pabfd", "bfd", "coolest-first", "random");
 
     /**
-     * 엔진 쪽 변종 열의 순서 — 대조군의 {@link #BASELINE_ORDER} 와 같은 역할. 운영 엔진 전량(레지스트리 정렬) 뒤, 대조군 앞에
-     * 이 순서로 선다. {@link #engineVariants()} 가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
+     * 엔진 쪽 변종 열의 순서 — 대조군의 {@link #BASELINE_ORDER}와 같은 역할. 운영 엔진 전량(레지스트리 정렬) 뒤, 대조군 앞에
+     * 이 순서로 선다. {@link #engineVariants()}가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
      * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
      */
     static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
@@ -78,21 +78,21 @@ final class BenchmarkColumns {
             BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN, BenchmarkRules.SCHEDULE_ORDER_SIZE_COLUMN,
             BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
 
-    /** 온도 상한 열이 정책 사본에서 바꾸는 노브 이름 — 응답의 {@code engineConfigOverride} 와 설정 다이제스트에 같은 이름으로 실린다. */
+    /** 온도 상한 열이 정책 사본에서 바꾸는 노브 이름 — 응답의 {@code engineConfigOverride}와 설정 다이제스트에 같은 이름으로 실린다. */
     static final String TEMPERATURE_LIMIT_KNOB = "maxTemperatureCelsius";
 
     /** 무작위 전략의 식별자. 이것만 시드를 여러 개 돌린다. */
     static final String RANDOM_ID = "random";
 
     /**
-     * 엔진 쪽 변종 열 하나 — 전략과, 그 열만 다르게 준 노브(이름 → 값). 노브는 응답의 {@code engineConfigOverride} 와 설정
-     * 다이제스트의 {@code overrides=} 세그먼트에 같은 값으로 실린다. {@code believedCostModel} 은 "엔진이 믿은 비용" 을 재는
+     * 엔진 쪽 변종 열 하나 — 전략과, 그 열만 다르게 준 노브(이름 → 값). 노브는 응답의 {@code engineConfigOverride}와 설정
+     * 다이제스트의 {@code overrides=} 세그먼트에 같은 값으로 실린다. {@code believedCostModel}은 "엔진이 믿은 비용"을 재는
      * 전력 모델 — 노브가 전력 모델 형태를 바꾸는 열은 자기 모델로 재야 그 열이 믿은 값이 된다.
      */
     record EngineVariant(PlacementStrategy strategy, Map<String, String> override, PowerModel believedCostModel) {}
 
     /**
-     * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 전력식을 공유하는 ΔP 단독 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0 이 아니라
+     * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 전력식을 공유하는 ΔP 단독 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0이 아니라
      * 값이 없다. 테스트 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
      */
     static final String PABFD_ID = "pabfd";
@@ -122,9 +122,9 @@ final class BenchmarkColumns {
         baselines.put("coolest-first", BaselinePlacers.coolestFirst());
         baselines.put(RANDOM_ID, BaselinePlacers.random(BenchmarkRules.RANDOM_SEEDS.get(0)));
 
-        // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id 는 여기서 크게 실패해야 한다. 목록에만 있으면
-        // null 이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200 이다. 테스트 전용 이음매로 부분 집합을
-        // 줄 수는 있으므로 검사는 "목록 ⊆ 맵" 과 "각 id 의 record id 일치" 다.
+        // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id는 여기서 크게 실패해야 한다. 목록에만 있으면
+        // null이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200이다. 테스트 전용 이음매로 부분 집합을
+        // 줄 수는 있으므로 검사는 "목록 ⊆ 맵"과 "각 id 의 record id 일치"다.
         for (String id : baselineOrder) {
             PlacementStrategy strategy = baselines.get(id);
             if (strategy == null) {
@@ -136,7 +136,7 @@ final class BenchmarkColumns {
             }
             all.add(strategy);
         }
-        // 참조 비교(==)가 아니라 equals 다 — List.copyOf 가 같은 인스턴스를 돌려주는 것은 구현 노트일 뿐이라,
+        // 참조 비교(==)가 아니라 equals다 — List.copyOf가 같은 인스턴스를 돌려주는 것은 구현 노트일 뿐이라,
         // 참조로 걸면 어느 날 이 검사가 조용히 영구히 꺼진다. 그것이 바로 이 검사가 막으려는 사고다.
         if (BASELINE_ORDER.equals(baselineOrder) && !baselines.keySet().equals(Set.copyOf(BASELINE_ORDER))) {
             throw new IllegalStateException("구현은 있는데 순서 목록에 없는 대조군이 있다 — 열이 조용히 빠진다: "
@@ -151,7 +151,7 @@ final class BenchmarkColumns {
      * 가중치를 안 봐도 제약이 막아 주는지, 제약까지 없으면 얼마나 나빠지는지를 갈라 본다. 스케줄 배치 순서 두 열은 기본 엔진에 배치 순서만
      * 운영 비교자로 바꾼 것이다 — 표본 순서로 돌리는 {@code weighted} 열과 견줘 우선순위 정렬과 크기 순 정렬의 효과를 갈라 본다.
      *
-     * <p>순서 목록과 구현 맵의 집합이 같아야 한다 — 대조군 쪽 가드와 같은 이유로, 한쪽에만 있는 id 는 여기서 크게 실패한다.</p>
+     * <p>순서 목록과 구현 맵의 집합이 같아야 한다 — 대조군 쪽 가드와 같은 이유로, 한쪽에만 있는 id는 여기서 크게 실패한다.</p>
      */
     List<EngineVariant> engineVariants() {
         SchedulingEngine weighted = engineRegistry.resolve(EngineRegistry.DEFAULT_ENGINE_ID);
@@ -162,8 +162,8 @@ final class BenchmarkColumns {
         variants.put("resource-only-ungated", new EngineVariant(new PlacementStrategy("resource-only-ungated", "자원전용(제약까지 해제)",
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED, null, weighted::schedule),
                 Map.of(), powerModel));
-        // 링크 게이트를 켠 가중 점수 — 링크 판에서 weighted 와의 차이가 netScore 경로의 효과다. 링크 없는 판에서는 워크로드에
-        // dataMdcId 가 없어 게이트가 켜지지 않으므로 weighted 와 같은 값이다(구조적 사실 — 테스트가 고정한다)
+        // 링크 게이트를 켠 가중 점수 — 링크 판에서 weighted와의 차이가 netScore 경로의 효과다. 링크 없는 판에서는 워크로드에
+        // dataMdcId가 없어 게이트가 켜지지 않으므로 weighted와 같은 값이다(구조적 사실 — 테스트가 고정한다)
         variants.put(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
                 "가중 점수(링크 게이트 on · 링크 판에서만 weighted 와 다르다 · 판정 자격 없음)",
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),
@@ -182,7 +182,7 @@ final class BenchmarkColumns {
                 "전력 인지(유휴 역산 차단 · 대체값 고정 · 독립 증거 아님)",
                 Map.of("idleFromMeasurement", "false"), p -> p.setIdleFromMeasurement(false)));
         // 스케줄 배치 순서 2열 — 기본 엔진에 스케줄 실행의 운영 비교자 객체를 그대로 물린다(복사본이 아니라 같은 객체라 운영 순서가 바뀌면
-        // 열도 따라간다). 순서는 엔진 노브가 아니라 override 가 없지만 총량 짝 조건의 기준 집합에는 넣지 않는다(BenchmarkRules.PAIRING_RULE)
+        // 열도 따라간다). 순서는 엔진 노브가 아니라 override가 없지만 총량 짝 조건의 기준 집합에는 넣지 않는다(BenchmarkRules.PAIRING_RULE)
         variants.put(BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.SCHEDULE_ORDER_AGE_COLUMN,
                 "가중 점수(스케줄 배치 순서: 우선순위 → 등록 순 · 기준 집합 밖 · 판정 자격 없음)",
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE,
@@ -214,7 +214,7 @@ final class BenchmarkColumns {
     }
 
     /**
-     * 전력 엔진 변종 열 — 기본 설정 사본에 전력 노브 하나를 바꾼 {@link PowerAwareScheduler} 를 새로 조립한다. 열 모델은 온도 모델·
+     * 전력 엔진 변종 열 — 기본 설정 사본에 전력 노브 하나를 바꾼 {@link PowerAwareScheduler}를 새로 조립한다. 열 모델은 온도 모델·
      * 네트워크 모델을 운영 것과 같은 설정으로 만들고 전력 모델만 갈아 끼운다. 스프링 컨텍스트에 등록되지 않는 객체다.
      */
     private EngineVariant powerVariant(String id, String label, Map<String, String> override,
@@ -234,7 +234,7 @@ final class BenchmarkColumns {
     }
 
     /**
-     * 이 전략이 볼 정책 — 변종 사본에 열 override 를 얹는다. 지금 정책 노브 override 는 {@code affinityEnabled} 와
+     * 이 전략이 볼 정책 — 변종 사본에 열 override를 얹는다. 지금 정책 노브 override는 {@code affinityEnabled}와
      * 온도 상한({@link #TEMPERATURE_LIMIT_KNOB}) 둘이다. 어떤 경우에도 <b>영속되지 않는 사본</b>이다.
      */
     static SchedulingPolicy policyFor(PlacementStrategy strategy, Map<String, String> override) {
@@ -262,9 +262,9 @@ final class BenchmarkColumns {
     /**
      * 이 실행이 본 엔진 설정과 정책 사본 전량.
      *
-     * <p>정책은 전략이 실제로 쓰는 {@link #policyFor(PlacementStrategy.PolicyVariant)} 로 만든다 — 스냅샷을 따로
+     * <p>정책은 전략이 실제로 쓰는 {@link #policyFor(PlacementStrategy.PolicyVariant)}로 만든다 — 스냅샷을 따로
      * 조립하면 언젠가 두 벌이 갈려 응답이 밝히는 정책과 돌린 정책이 달라진다. 다이제스트의 정규화 문자열은
-     * record 의 {@code toString} 이 아니라 <b>명시적 이름=값 목록</b>이다 — 필드 순서를 바꾸는 리팩터링에
+     * record의 {@code toString}이 아니라 <b>명시적 이름=값 목록</b>이다 — 필드 순서를 바꾸는 리팩터링에
      * 어제 낸 표와 오늘 낸 표가 "다른 설정"으로 보이면 안 된다.</p>
      */
     EngineConfigSnapshot engineConfig() {
@@ -308,7 +308,7 @@ final class BenchmarkColumns {
         canonical.add("network=" + network.latencyScaleMs() + "," + network.degradedPenalty() + ","
                 + network.linkWeight() + "," + network.unknownLinkScore());
         // 열별 override — 전략 id 오름차순, 노브는 이름 오름차순(TreeMap). 열마다 다른 노브를 쓰면서 다이제스트가 고정되면
-        // "응답이 자기 입력을 지목한다" 가 거짓이 된다
+        // "응답이 자기 입력을 지목한다"가 거짓이 된다
         List<String> overrideSegments = new ArrayList<>();
         overrides().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
             List<String> kv = new ArrayList<>();
@@ -342,7 +342,7 @@ final class BenchmarkColumns {
      * 비교의 기준 정책 — 코드에 선언된 기본값.
      *
      * <p>활성 정책을 읽지 않는다. 조회 경로가 정책이 없으면 기본 정책을 <b>새로 넣기</b> 때문에 진단
-     * 호출이 데이터를 만들게 된다. 그 사실은 응답의 {@code policyBasis} 가 밝힌다.</p>
+     * 호출이 데이터를 만들게 된다. 그 사실은 응답의 {@code policyBasis}가 밝힌다.</p>
      */
     static SchedulingPolicy baseline() {
         return new SchedulingPolicy("benchmark-base", "배치 비교용 기준 정책 (저장되지 않음)");

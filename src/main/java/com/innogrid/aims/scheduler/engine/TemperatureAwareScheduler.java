@@ -29,7 +29,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *    → 핫스팟(hot spot) 회피가 목표 (효과는 배치 후 온도 관측으로만 확인 가능)
  *
  * 3. 열관성(Thermal Inertia) 예측
- *    → 워크로드 배치 후 예상 온도 상승량 추정 (ConstraintEvaluator 가 제외 판정)
+ *    → 워크로드 배치 후 예상 온도 상승량 추정 (ConstraintEvaluator가 제외 판정)
  *    → ΔT = k × (requiredCPU / totalCPU) × T_current
  *
  * 4. 냉각 비용 최소화
@@ -46,19 +46,19 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * <p><b>우선순위 배수·선호 MDC 보너스·MDC 링크 점수는 이 엔진에 적용하지 않는다.</b> 셋은 {@code weighted}
  * 엔진에만 있고, 이 엔진의 네 가중치는 정책이 아니라 상수다. 링크는 DOWN 제외(C5)만 공유한다.</p>
  *
- * <p><b>온도를 수집하지 못한 노드(0°C)는 열 점수를 중립 0.5 로 둔다.</b> 0 을 그대로 계산하면
- * 열적 여유와 냉각이 만점이 되고 균형도 상한에 붙어, 판단 근거가 없는 노드가 <b>가중치 0.75 를
- * 통째로</b> 가져간다. IPMI 가 없는 노드가 계측된 노드보다 유리해지는 것은 근거 없는 편향이라
+ * <p><b>온도를 수집하지 못한 노드(0°C)는 열 점수를 중립 0.5로 둔다.</b> 0을 그대로 계산하면
+ * 열적 여유와 냉각이 만점이 되고 균형도 상한에 붙어, 판단 근거가 없는 노드가 <b>가중치 0.75를
+ * 통째로</b> 가져간다. IPMI가 없는 노드가 계측된 노드보다 유리해지는 것은 근거 없는 편향이라
  * {@code weighted}·{@code power} 엔진과 같은 중립값을 준다.</p>
  *
  * <p>같은 이유로 <b>클러스터 평균 온도도 계측된 노드만으로</b> 낸다({@code PlacementContext}).
- * 미계측 0°C 를 평균에 넣으면 기준선이 내려가고, 균형 점수가 {@code 1 − 0.5 × T / 평균} 이라
- * <b>평균의 두 배를 넘는 온도가 0 으로 잘리는 지점까지 함께 내려온다</b> — 정상 범위의 계측 노드가
+ * 미계측 0°C를 평균에 넣으면 기준선이 내려가고, 균형 점수가 {@code 1 − 0.5 × T / 평균}이라
+ * <b>평균의 두 배를 넘는 온도가 0으로 잘리는 지점까지 함께 내려온다</b> — 정상 범위의 계측 노드가
  * 없는 근거 때문에 감점을 받는다.</p>
  *
- * <p><b>중립 0.5 는 이 점수 분포의 중립이 아니다.</b> 미계측 노드의 열 3항 가중합은 고정 0.375 인데,
+ * <p><b>중립 0.5는 이 점수 분포의 중립이 아니다.</b> 미계측 노드의 열 3항 가중합은 고정 0.375인데,
  * 계측 노드가 그것을 넘으려면 온도가 <b>약 44.7°C 아래</b>여야 한다(임계 온도 위에서는 미계측이 이긴다).
- * 즉 이 수정은 "미계측이 만점을 받는" 명백한 편향을 없앨 뿐, 편향을 0 으로 만들지는 않는다.
+ * 즉 이 수정은 "미계측이 만점을 받는" 명백한 편향을 없앨 뿐, 편향을 0으로 만들지는 않는다.
  * 무엇을 중립으로 볼 것인가(계측 노드의 실제 평균 점수를 쓸지, 동점 시 계측을 우선할지,
  * 온도 엔진에서 미계측을 아예 후보에서 뺄지)는 배치 순위를 크게 바꾸는 <b>별건의 설계 결정</b>이다.</p>
  *
@@ -99,7 +99,7 @@ public class TemperatureAwareScheduler extends AbstractScoringEngine<Temperature
     /**
      * 호출 한 번의 누적값 — 후보 전체 평균 온도·계측 대수와, 승자가 온도를 잰 노드인지.
      * 사유의 주어는 후보 집합이 아니라 <b>승자</b>다. 집합 기준으로 분기하면 계측 노드가 뜨거워
-     * 미계측 노드가 이겼을 때 "여유:0.50 균형:0.50 냉각:0.50" 을 계측값처럼 적게 된다.
+     * 미계측 노드가 이겼을 때 "여유:0.50 균형:0.50 냉각:0.50"을 계측값처럼 적게 된다.
      */
     static final class TempRun extends Run {
         final double avgTemperature;
@@ -130,14 +130,14 @@ public class TemperatureAwareScheduler extends AbstractScoringEngine<Temperature
     protected NodeScore scoreNode(Workload workload, PlacementContext context, NodeResource node, Exclusion exclusion, TempRun run) {
         double maxTemp = context.policy().getMaxTemperatureCelsius();
 
-        // 온도를 수집하지 못한 노드(0°C)는 판단 근거가 없다. 0 을 그대로 계산하면 열적 여유·냉각이
-        // 만점, 균형도 상한이 되어 가중치 0.75 를 통째로 가져간다 — 다른 두 엔진과 같이 중립 0.5 를 준다.
+        // 온도를 수집하지 못한 노드(0°C)는 판단 근거가 없다. 0을 그대로 계산하면 열적 여유·냉각이
+        // 만점, 균형도 상한이 되어 가중치 0.75를 통째로 가져간다 — 다른 두 엔진과 같이 중립 0.5를 준다.
         // 계측 여부는 실측의 성질이라 실효 온도가 아니라 실측 온도로 판정한다(power 엔진과 같은 철자).
-        // 부등호를 써야 한다 — headroomScore 에는 상한 클램프가 없어 음수 온도가 1.0 을 넘긴다.
+        // 부등호를 써야 한다 — headroomScore에는 상한 클램프가 없어 음수 온도가 1.0을 넘긴다.
         //
-        // 임계 척도(maxTemp)의 부재를 여기에 섞지 않는다. headroomScore·coolingScore 는 ThermalModel 이
-        // maxTemperature<=0 에 이미 중립을 돌려주고, balanceScore 는 maxTemp 를 아예 쓰지 않는다 —
-        // 섞으면 임계가 0 인 정책에서 계측된 노드까지 "온도를 못 쟀다" 로 취급되어 균형 항이 죽는다.
+        // 임계 척도(maxTemp)의 부재를 여기에 섞지 않는다. headroomScore·coolingScore는 ThermalModel이
+        // maxTemperature<=0에 이미 중립을 돌려주고, balanceScore는 maxTemp를 아예 쓰지 않는다 —
+        // 섞으면 임계가 0인 정책에서 계측된 노드까지 "온도를 못 쟀다"로 취급되어 균형 항이 죽는다.
         boolean hasThermal = Measured.thermal(node);
 
         // 예약분까지 반영한 온도. 실측만 보면 다건 배치가 한 노드로 몰린다.
@@ -165,15 +165,15 @@ public class TemperatureAwareScheduler extends AbstractScoringEngine<Temperature
         totalScore = Scores.round(totalScore);
 
         Map<String, Double> details = new LinkedHashMap<>();
-        // 중립 0.5 가 "재 봤더니 0.5" 로 읽히지 않게 계측 여부를 함께 낸다(power 엔진과 같은 관례).
+        // 중립 0.5가 "재 봤더니 0.5"로 읽히지 않게 계측 여부를 함께 낸다(power 엔진과 같은 관례).
         details.put("온도계측", hasThermal ? 1.0 : 0.0);
         details.put("열적여유", Scores.round(headroomScore));
         details.put("열적균형", Scores.round(balanceScore));
         details.put("냉각점수", Scores.round(coolingScore));
         details.put("자원여유", Scores.round(resourceScore));
         putDiskCheck(details, workload, node);
-        // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null 로 둔다 — 0 을 넣으면
-        // "재 봤더니 0°C" 로 읽혀 판단 근거가 없다는 사실이 가려진다(power 엔진과 같은 관례).
+        // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null로 둔다 — 0을 넣으면
+        // "재 봤더니 0°C"로 읽혀 판단 근거가 없다는 사실이 가려진다(power 엔진과 같은 관례).
         details.put("배치후예상온도C",
                 Measured.valueOrNull(hasThermal, thermalModel.predictedTemperature(node, workload.getRequiredCpu())));
         details.put("클러스터평균온도C", Measured.valueOrNull(run.measuredCount > 0, run.avgTemperature));
@@ -189,9 +189,9 @@ public class TemperatureAwareScheduler extends AbstractScoringEngine<Temperature
     }
 
     /**
-     * 사유는 "왜 이 노드를 골랐는가" 를 설명하는 문장이므로 주어가 승자여야 한다. 승자가 미계측이면
+     * 사유는 "왜 이 노드를 골랐는가"를 설명하는 문장이므로 주어가 승자여야 한다. 승자가 미계측이면
      * 열 점수 세 개는 잰 값이 아니라 중립값이므로 <b>숫자로 늘어놓지 않는다</b> — 늘어놓으면
-     * "재 봤더니 전부 평균 수준" 과 글자 그대로 구분되지 않는다(power 엔진과 같은 관례).
+     * "재 봤더니 전부 평균 수준"과 글자 그대로 구분되지 않는다(power 엔진과 같은 관례).
      */
     @Override
     protected String reason(NodeScore best, PlacementContext context, int candidateCount, TempRun run) {
@@ -201,7 +201,7 @@ public class TemperatureAwareScheduler extends AbstractScoringEngine<Temperature
                     best.totalScore(), best.temperatureScore(), best.networkScore(),
                     best.powerScore(), best.cpuScore(), run.avgTemperature, candidateCount);
         } else if (run.measuredCount > 0) {
-            // "자원 여유로 선택" 이라고 쓰지 않는다 — 승자가 이긴 이유는 열 3항이 중립 바닥(0.375)으로
+            // "자원 여유로 선택"이라고 쓰지 않는다 — 승자가 이긴 이유는 열 3항이 중립 바닥(0.375)으로
             // 고정됐기 때문이지 자원이 더 낫기 때문이 아니다. 실제로 자원이 <b>더 적은</b> 미계측 노드가
             // 뜨거운 계측 노드를 이기는 구성이 존재한다. 사유는 일어난 일만 적는다.
             return String.format(

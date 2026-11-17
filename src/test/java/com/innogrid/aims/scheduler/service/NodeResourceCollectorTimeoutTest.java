@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
  * 수집기의 시간 상한 — 저장소가 응답을 안 줄 때 그 노드만 "응답 없음"으로 빼고 나머지로 계속 가는가, 순서는 지키는가,
  * 전체 상한·대상 목록 상한이 동작하는가, 정상 경로는 예전과 같은가.
  *
- * <p>가짜 클라이언트는 instance 이름에 {@code slow} 가 든 질의에서만 래치를 기다린다(저장소 무응답 흉내).
+ * <p>가짜 클라이언트는 instance 이름에 {@code slow}가 든 질의에서만 래치를 기다린다(저장소 무응답 흉내).
  * 상한은 짧게(노드 150ms·전체 600ms·단건 150ms) 두어 테스트가 빨리 끝나게 한다.</p>
  */
 class NodeResourceCollectorTimeoutTest {
@@ -105,7 +105,7 @@ class NodeResourceCollectorTimeoutTest {
     void overall_timeout_excludes_unfinished() {
         props.getMetrics().setNodeTimeoutMs(10_000);      // 노드 상한은 넉넉히, 전체 상한만 짧게
         props.getMetrics().setCollectTimeoutMs(300);
-        up("slow-a:9100", "slow-b:9100", "slow-c:9100", "slow-d:9100", "slow-e:9100");   // 풀 4 보다 많다
+        up("slow-a:9100", "slow-b:9100", "slow-c:9100", "slow-d:9100", "slow-e:9100");   // 풀 4보다 많다
         long started = System.nanoTime();
 
         NodeResourceCollector.Snapshot snap = collector.collect();

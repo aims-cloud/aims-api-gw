@@ -7,9 +7,9 @@ import jakarta.persistence.*;
 /**
  * 단건 배치 1회의 입력과 그 결정 — 실데이터가 들어온 뒤 그 결정을 다시 계산해 보려고 남긴다.
  *
- * <p>스케줄 실행은 {@link ScheduleRunInput} 이 입력을 남기지만, 단건 배치({@code POST /workloads/{workloadId}/schedule})는
+ * <p>스케줄 실행은 {@link ScheduleRunInput}이 입력을 남기지만, 단건 배치({@code POST /workloads/{workloadId}/schedule})는
  * 아무것도 남기지 않았다. 배치 이력({@link SchedulingHistory})도 단건 배치는 성공한 결정만 남겨, 실패한 결정은 어디에도
- * 없었다. 이 행은 배치 직전의 입력을 {@link ScheduleRunInput} 과 같은 형식의 JSON 문자열({@code payload} · 대상 워크로드
+ * 없었다. 이 행은 배치 직전의 입력을 {@link ScheduleRunInput}과 같은 형식의 JSON 문자열({@code payload} · 대상 워크로드
  * 1건)로 담고, 엔진이 낸 결정(실행 계층에 넘기기 전)을 같은 행에 둔다 — 배치 이력과 잇지 않아도 대조할 수 있게.</p>
  *
  * <p>실행 이력과 같은 기간만 남긴다(보존 정리가 {@code capturedAt} 기준으로 지운다). 외래키는 두지 않는다 — 배치 이력의

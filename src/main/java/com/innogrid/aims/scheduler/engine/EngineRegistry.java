@@ -33,7 +33,7 @@ public class EngineRegistry {
 
     /**
      * 식별자로 엔진을 찾는다. 없으면 기본 엔진을 돌려준다.
-     * 실제로 어떤 엔진이 쓰였는지는 {@link SchedulingEngine#getId()} 로 확인할 수 있다.
+     * 실제로 어떤 엔진이 쓰였는지는 {@link SchedulingEngine#getId()}로 확인할 수 있다.
      */
     public SchedulingEngine resolve(String engineId) {
         SchedulingEngine engine = engines.get(engineId);

@@ -8,8 +8,8 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkRules;
  * 비교 지표의 <b>종류</b> — 무효 사유와 지점별 값이 지표마다 어떤 조건을 따르는지를 지표 키 하나에서 찾는다.
  *
  * <p>지표 키 문자열을 곳곳에서 따로 비교하면, 지표를 더하거나 지표가 따르는 조건을 바꿀 때 한 곳을 빠뜨려도 응답은 정상으로
- * 나가고 무효 사유만 조용히 달라진다. 그래서 metricValues · invalidReason 은 이 enum 으로 종류를 찾고, 등록되지 않은 키는
- * 조용히 넘어가지 않고 실패한다. cell() 의 지표별 표본 쌓기는 이 enum 을 쓰지 않고 지표마다 따로 조건을 건다.</p>
+ * 나가고 무효 사유만 조용히 달라진다. 그래서 metricValues · invalidReason은 이 enum으로 종류를 찾고, 등록되지 않은 키는
+ * 조용히 넘어가지 않고 실패한다. cell()의 지표별 표본 쌓기는 이 enum을 쓰지 않고 지표마다 따로 조건을 건다.</p>
  *
  * <p>응답 record({@code BenchmarkMetric})와 판정 규칙({@link BenchmarkRules})은 건드리지 않는다 — 성분을 더하면 응답 바이트와
  * 규칙 축 다이제스트가 바뀐다.</p>
@@ -30,7 +30,7 @@ enum BenchmarkMetricKind {
     PLACEMENT_RATE(BenchmarkRules.PLACEMENT_RATE, BenchmarkRules.CORE_PLACEMENT_RATE),
     /** 조건 없이 내는 지표. */
     UNCONDITIONED(BenchmarkRules.ENGINE_BELIEVED_COST, BenchmarkRules.UNMEASURED_RATE, BenchmarkRules.UNMEASURED_SPREAD),
-    /** 원격 MDC 배치 비율 — 워크로드에 데이터 MDC 를 배정한 판에서만 낸다. */
+    /** 원격 MDC 배치 비율 — 워크로드에 데이터 MDC를 배정한 판에서만 낸다. */
     DATA_LOCALITY(BenchmarkRules.REMOTE_MDC_RATE),
     /** 자원 조각화 비율 — 총량 지표와 같은 짝 지점에서만 낸다. */
     PAIRED_FRAGMENTATION(BenchmarkRules.FRAGMENTED_HEADROOM),

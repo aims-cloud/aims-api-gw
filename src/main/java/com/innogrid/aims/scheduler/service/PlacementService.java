@@ -25,7 +25,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *
  * <p>메트릭 조회는 이미 끝난 상태로 컨텍스트에 담겨 오므로, 이 서비스의 트랜잭션은
  * DB 저장에만 걸린다. 외부 호출이 트랜잭션 안에 들어가지 않게 하려고 수집·조율을 맡는
- * {@link SchedulingService} 와 분리했다.</p>
+ * {@link SchedulingService}와 분리했다.</p>
  */
 @Service
 public class PlacementService {
@@ -68,16 +68,16 @@ public class PlacementService {
     /**
      * 스케줄 실행의 일부로 배치한다.
      *
-     * <p>{@code scheduleRunId} 가 있으면 <b>실패한 결정도 이력으로 남긴다.</b> 실행 상세에서
+     * <p>{@code scheduleRunId}가 있으면 <b>실패한 결정도 이력으로 남긴다.</b> 실행 상세에서
      * 어떤 워크로드가 왜 배치되지 못했는지 보여야 명세 A1(제약 조건 기반 스케줄링)의 근거가
-     * 된다. 단건 스케줄링 API 로 부를 때는 기존과 같이 성공한 결정만 남긴다.</p>
+     * 된다. 단건 스케줄링 API로 부를 때는 기존과 같이 성공한 결정만 남긴다.</p>
      *
      * <p>컨텍스트에 예약은 잡지 않는다. 스케줄 실행의 배치 루프가 이 메서드가 정상 반환한 뒤(=결정이 커밋된 뒤)
      * 예약을 잡는다 — 여기서 잡으면 이력·워크로드 저장이나 커밋이 실패해도 예약이 남아, 그 예외로 루프가 끝난 뒤
      * 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.</p>
      *
-     * <p>{@code scheduleRunId} 가 있고 저장된 워크로드면 저장 직전에 상태가 아직 대기·실패일 때만 결정한 상태로 옮긴다. 그 사이
-     * 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip} 으로 건너뜀 한 건만 남긴다. 옮겼으면 그
+     * <p>{@code scheduleRunId}가 있고 저장된 워크로드면 저장 직전에 상태가 아직 대기·실패일 때만 결정한 상태로 옮긴다. 그 사이
+     * 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip}으로 건너뜀 한 건만 남긴다. 옮겼으면 그
      * 행을 다시 읽어 재시도 회계(횟수 · 마지막 실패 시각)를 이어받은 뒤 결정을 얹는다 — 그 사이 겹친 실패 결정 · 되살리기가 바꾼
      * 회계를 덮지 않는다.</p>
      */
@@ -104,7 +104,7 @@ public class PlacementService {
                 return recordSkip(workload, context, engineId, scheduleRunId, reason);
             }
             // 잡은 행의 재시도 회계를 이어받는다 — 이 트랜잭션은 앞서 이 워크로드를 읽지 않았으므로(받은 것은 분리된 사본 · 실행
-            // 클래스에 트랜잭션이 없고 open-in-view 는 꺼져 있다) 여기서 읽는 행은 잡은 뒤의 최신 값이다.
+            // 클래스에 트랜잭션이 없고 open-in-view는 꺼져 있다) 여기서 읽는 행은 잡은 뒤의 최신 값이다.
             workloadRepository.findById(workload.getId()).ifPresent(workload::continueRetryAccountingFrom);
         }
 
@@ -112,8 +112,8 @@ public class PlacementService {
             workload.assignTo(result.selectedMdcId(), result.selectedNodeId(),
                     result.finalScore(), result.reason());
             SchedulingHistory history = toHistory(workload, context, result, engine);
-            // 성공 여부는 실행 연결과 무관하게 남긴다 — 예전엔 단건 배치 행이 NULL 로 남아 성공 필터에서 빠졌다.
-            // runId 가 없으면 연결만 비고 success 는 기록된다.
+            // 성공 여부는 실행 연결과 무관하게 남긴다 — 예전엔 단건 배치 행이 NULL로 남아 성공 필터에서 빠졌다.
+            // runId가 없으면 연결만 비고 success는 기록된다.
             history.linkToRun(scheduleRunId, true);
             historyRepository.save(history);
         } else {
@@ -173,8 +173,8 @@ public class PlacementService {
         history.setCandidateCount(context.nodes().size());
         history.setExclusionCodes(exclusionCodesOf(result));
 
-        // 승자를 nodeId 로 찍어 쓴다 — 아래 context.node(...) 와 같은 키여야 점수와 사용률이 같은 노드에서 온다.
-        // 못 찾으면(배치 실패) 0 으로 둔다. 그 행은 총점·노드 상태도 0 이라 행 전체가 일관된다.
+        // 승자를 nodeId로 찍어 쓴다 — 아래 context.node(...) 와 같은 키여야 점수와 사용률이 같은 노드에서 온다.
+        // 못 찾으면(배치 실패) 0으로 둔다. 그 행은 총점·노드 상태도 0이라 행 전체가 일관된다.
         result.candidateScores().stream()
                 .filter(score -> score.nodeId().equals(result.selectedNodeId()))
                 .findFirst()
@@ -193,11 +193,11 @@ public class PlacementService {
      * 후보 노드의 제외 사유 코드를 코드별로 센다 — {@code {"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}}.
      *
      * <p>엔진은 성공·실패 양쪽 모두 제외된 노드까지 포함한 후보 목록을 돌려주는데, 이력은 그동안 선택된 노드 한 건만 쓰고
-     * 나머지를 버렸다 — 사유는 문장 하나({@code reason})로만 남아 "어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나" 를 셀 수
+     * 나머지를 버렸다 — 사유는 문장 하나({@code reason})로만 남아 "어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나"를 셀 수
      * 없었다. 적격 후보(코드 없음)는 세지 않고, 제외가 하나도 없으면 {@code null}. 키는 코드 이름 오름차순이라 같은 결정은
      * 같은 문자열이 되고, 키가 열거형 이름·값이 정수라 이스케이프가 필요 없어 직접 조립한다. 키 토큰은
      * {@link SchedulingHistory#exclusionCodeKey} — 배치 이력 페이징의 {@code exclusionCode} 필터가 같은 토큰으로 찾는다. 값의 뜻은
-     * {@link SchedulingHistory} 의 열 설명에 있다.</p>
+     * {@link SchedulingHistory}의 열 설명에 있다.</p>
      */
     static String exclusionCodesOf(SchedulingResult result) {
         if (result == null) return null;

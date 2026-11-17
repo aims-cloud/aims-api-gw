@@ -17,14 +17,14 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 격차 판정 함수가 규칙 문장의 1~4항과 <b>같은 것</b>을 계산하는지 경계값으로 잠근다.
  *
- * <p>함수는 규칙 축의 성분이 아니라 다이제스트로는 봉인되지 않는다 — 문턱을 {@code >} 로 바꾸거나 교집합을 빼고 중앙값을 따로
+ * <p>함수는 규칙 축의 성분이 아니라 다이제스트로는 봉인되지 않는다 — 문턱을 {@code >}로 바꾸거나 교집합을 빼고 중앙값을 따로
  * 내거나 판정 불가를 실패로 접으면 여기가 먼저 빨간불이 되어야 한다. 값은 전부 손으로 만든 배열이라 판을 돌리지 않는다.</p>
  */
 class BenchmarkJudgmentFunctionTest {
 
     private static final int N = BenchmarkRules.SWEEP_POINTS;
 
-    /** 길이 12 의 배열 — null 자리를 그대로 담는다({@code List.of} 는 null 에서 NPE 라 쓰지 않는다). */
+    /** 길이 12의 배열 — null 자리를 그대로 담는다({@code List.of}는 null에서 NPE라 쓰지 않는다). */
     private static List<Double> pts(Double... v) {
         assertEquals(N, v.length, "시험 배열은 지점 수와 같은 길이여야 한다");
         return Arrays.asList(v);
@@ -76,8 +76,8 @@ class BenchmarkJudgmentFunctionTest {
     }
 
     /**
-     * 두 중앙값은 각각 4자리라 차는 0.0001 의 배수인데, 부동소수 뺄셈은 그 아래 자리에 잡음을 남긴다 — 2.0012 − 0.0012 는
-     * 1.9999999999999998 이다. 반올림 없이 견주면 정확히 문턱만큼 줄어든 실행이 미달로 접힌다.
+     * 두 중앙값은 각각 4자리라 차는 0.0001의 배수인데, 부동소수 뺄셈은 그 아래 자리에 잡음을 남긴다 — 2.0012 − 0.0012는
+     * 1.9999999999999998이다. 반올림 없이 견주면 정확히 문턱만큼 줄어든 실행이 미달로 접힌다.
      */
     @DisplayName("2항 — 비교는 4자리로 반올림한 차로 한다: 2.0012 → 0.0012 는 잡음 아래 1.9999…이지만 축소 2.0 으로 충족이다")
     @Test
@@ -151,7 +151,7 @@ class BenchmarkJudgmentFunctionTest {
     void medians_are_taken_on_the_intersection() {
         List<Double> b = ramp();               // 전체 중앙값 15.5
         List<Double> n = shifted(b, 0.0);
-        n.set(N - 1, null);                    // N 의 마지막(21.0) 결측
+        n.set(N - 1, null);                    // N의 마지막(21.0) 결측
 
         GapCellVerdict v = BenchmarkRules.judgeCell(b, n);
         assertEquals(N - 1, v.pairedCount());
@@ -245,7 +245,7 @@ class BenchmarkJudgmentFunctionTest {
         assertEquals(0, d.excludedA());
         assertEquals(1, d.excludedB());
         assertEquals(10.0, d.median(), 1e-12);
-        // 두 중앙값을 따로 내어 빼면 a 의 전체 중앙값(10.0) − b 의 전체 중앙값(0.0) 도 10.0 이지만, a 의 마지막 지점을 살리면 다르다
+        // 두 중앙값을 따로 내어 빼면 a의 전체 중앙값(10.0) − b의 전체 중앙값(0.0)도 10.0이지만, a의 마지막 지점을 살리면 다르다
         List<Double> bFull = pts(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 50.0);
         PairedDifference full = BenchmarkRules.medianOfPairedDifferences(a, bFull);
         assertEquals(10.0, full.median(), 1e-12, "지점별 차 11개가 10 이고 하나가 50 — 중앙값은 10");

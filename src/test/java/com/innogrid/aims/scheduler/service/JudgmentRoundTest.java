@@ -38,14 +38,14 @@ import com.innogrid.aims.scheduler.service.JudgmentBaselines.PhaseEntry;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 판정 절차를 <b>기준선 파일 B 대 현 실행 N</b> 으로 한 바퀴 돌린다 — 다음 판정 PR 이 그대로 쓰는 경로다.
+ * 판정 절차를 <b>기준선 파일 B 대 현 실행 N</b>으로 한 바퀴 돌린다 — 다음 판정 PR이 그대로 쓰는 경로다.
  *
- * <p>보고 초안(0~8단계 전부)은 현 실행을 만든 직후 <b>확인보다 먼저</b> {@code build/benchmark-evidence/judgment-round-report.txt} 에 쓴다.
+ * <p>보고 초안(0~8단계 전부)은 현 실행을 만든 직후 <b>확인보다 먼저</b> {@code build/benchmark-evidence/judgment-round-report.txt}에 쓴다.
  * 판정 불가·실패는 규칙이 허용한 결말이라 초안이 가장 필요한 상황이고, 그때 테스트가 먼저 던지면 초안이 사라지기 때문이다.</p>
  *
  * <p>테스트 메서드가 확인하는 것은 <b>구조</b>다: 레코드가 채워지고, 배열 길이·seed 목록이 맞고, 현 실행의 열이 비어 있지 않다는 것.
  * 결말(판정 불가/성공/실패)과 판정 가능 여부는 확인하지 않는다 — 그 값은 기준선과 엔진이 바뀌면 바뀌는 결과이고, 리터럴로 박으면
- * 판정 PR 에서 "값을 고치면 초록불" 이 된다. 결과 값에 대한 유일한 확인은 산술 항등(B 를 B 와 견주면 축소 0·실패)이다.</p>
+ * 판정 PR에서 "값을 고치면 초록불"이 된다. 결과 값에 대한 유일한 확인은 산술 항등(B를 B와 견주면 축소 0·실패)이다.</p>
  *
  * <p>같은 좌표 셀의 열 다섯이 한 호출에서 나오므로 계산은 판 다섯 장에 한 번씩이다. 서비스는 클래스에 하나 — 테스트 메서드마다
  * 새로 만들면 캐시가 공유되지 않아 다섯 판을 메서드 수만큼 다시 계산한다.</p>
@@ -90,7 +90,7 @@ class JudgmentRoundTest {
         return b.cells().get(cell).columns().get(column).points();
     }
 
-    /** 표 C 의 눈금 열 — 기본 눈금 power + 양수 눈금. s0(정격 분모)은 사다리 밖이라 들지 않는다. */
+    /** 표 C의 눈금 열 — 기본 눈금 power + 양수 눈금. s0(정격 분모)은 사다리 밖이라 들지 않는다. */
     static List<String> scaleColumns() {
         List<String> cols = new ArrayList<>(List.of("power"));
         for (double s : BenchmarkRules.SENSITIVITY_MARGINAL_SCALE_WATTS) if (s > 0) cols.add(BenchmarkRules.SENSITIVITY_COLUMN_PREFIX + (long) s);
@@ -203,14 +203,14 @@ class JudgmentRoundTest {
         List<Double> b = points(baseline, "judgment", "power");
         assertNull(minTieCountToFail(b, b), "항등은 2항이 이미 미달");
         List<Double> big = b.stream().map(v -> v == null ? null : v - 10.0).toList();
-        // 12지점 전부 −10.0 이면 중앙값 차 10.0. k 지점을 B 로 되돌리면 되돌린 값들이 위쪽 절반을 차지해 중앙값이 오른다 — 7지점(절반 초과)에서 2.0 미달
+        // 12지점 전부 −10.0이면 중앙값 차 10.0. k 지점을 B로 되돌리면 되돌린 값들이 위쪽 절반을 차지해 중앙값이 오른다 — 7지점(절반 초과)에서 2.0 미달
         assertEquals(7, minTieCountToFail(b, big), "전 지점 10%p 축소면 절반을 넘는 7지점을 돌려야 미달");
         List<Double> sparse = new ArrayList<>(b);
         for (int i = 0; i < 3; i++) sparse.set(i, null);
         assertEquals(TIE_UNJUDGEABLE, minTieCountToFail(sparse, big), "교집합 9 < 하한 10 은 판정 불가로 따로 표기");
     }
 
-    /** 표 G 분류 집계 — 판정 셀·방향 셀 자신은 제외(표 A·B 에 있다), 차 = B − N(격차는 낮을수록 좋음). */
+    /** 표 G 분류 집계 — 판정 셀·방향 셀 자신은 제외(표 A·B에 있다), 차 = B − N(격차는 낮을수록 좋음). */
     record OutsideSummary(int excluded, int worse, int better, int tied, int changedPairing, int unpaired, List<String> lines) {}
 
     static OutsideSummary classifyOutside(JudgmentBaseline b, JudgmentBaseline n) {
@@ -244,7 +244,7 @@ class JudgmentRoundTest {
         return new OutsideSummary(excluded, worse, better, tied, changedPairing, unpaired, lines);
     }
 
-    /** 표 G 분류의 갈림 — 한쪽만 값이 없으면 짝 집합 변화(악화 아님), N 이 커지면 악화, 작아지면 축소. 항등 실행에는 없는 갈래를 합성 사본으로 고정한다. */
+    /** 표 G 분류의 갈림 — 한쪽만 값이 없으면 짝 집합 변화(악화 아님), N이 커지면 악화, 작아지면 축소. 항등 실행에는 없는 갈래를 합성 사본으로 고정한다. */
     @DisplayName("표 G 분류 — 한쪽만 값이 없는 셀은 짝 집합 변화이고, N 이 크면 악화·작으면 축소다")
     @Test
     void outside_classification_distinguishes_pairing_change_from_worsening() {

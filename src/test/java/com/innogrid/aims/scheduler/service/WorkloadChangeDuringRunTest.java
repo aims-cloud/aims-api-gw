@@ -60,7 +60,7 @@ import static org.mockito.Mockito.when;
  * 디스패처  기록형(수락)
  * </pre>
  *
- * <p><b>이 클래스는 {@code @Transactional} 을 쓰지 않는다.</b> 커밋된 값을 다시 읽어 확인한다.</p>
+ * <p><b>이 클래스는 {@code @Transactional}을 쓰지 않는다.</b> 커밋된 값을 다시 읽어 확인한다.</p>
  */
 @SpringBootTest
 class WorkloadChangeDuringRunTest {
@@ -195,7 +195,7 @@ class WorkloadChangeDuringRunTest {
                 w.assignTo("mdc-02", "other-node:9100", 0.5, "다른 경로의 배치");
                 workloadRepository.saveAndFlush(w);
             });
-            afterHook[0] = workloadRepository.findById(target.getId()).orElseThrow();   // DB 에 저장된 값(시각 반올림 뒤)
+            afterHook[0] = workloadRepository.findById(target.getId()).orElseThrow();   // DB에 저장된 값(시각 반올림 뒤)
         });
 
         ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-else"), "tester");
@@ -326,7 +326,7 @@ class WorkloadChangeDuringRunTest {
     @Test
     void failed_save_leaves_no_reservation_in_after_snapshot() {
         save(PREFIX + "save-fail", 5, Workload.WorkloadPriority.NORMAL);
-        nodeThen(1, () -> { });   // CPU 1% — 5코어를 예약하면 가동 노드가 0 → 1 이 된다
+        nodeThen(1, () -> { });   // CPU 1% — 5코어를 예약하면 가동 노드가 0 → 1이 된다
         // 엔진은 성공하지만 사유가 이력 열(500자)보다 길어 이력 저장이 실패한다.
         doReturn(new SchedulingResult(true, "mdc-01", NODE, 0.9, "가".repeat(600), List.of()))
                 .when(weighted).schedule(any(Workload.class), any(PlacementContext.class));
@@ -344,9 +344,9 @@ class WorkloadChangeDuringRunTest {
     @Test
     void failed_dispatch_settle_keeps_reservation_in_after_snapshot() {
         Workload target = save(PREFIX + "settle-fail", 5, Workload.WorkloadPriority.NORMAL);
-        nodeThen(1, () -> { });   // CPU 1% — 5코어를 예약하면 가동 노드가 0 → 1 이 된다
+        nodeThen(1, () -> { });   // CPU 1% — 5코어를 예약하면 가동 노드가 0 → 1이 된다
         // 실행 계층은 받지만 응답 메시지가 전달 기록 열(500자)보다 길어 전달 기록 마감 저장이 실패한다.
-        // PlacementDispatch.accept 가 메시지를 자르지 않는 지금 동작에 기댄 실패 유발이다. 자르기를 더하면 유발 방법을 바꾼다.
+        // PlacementDispatch.accept가 메시지를 자르지 않는 지금 동작에 기댄 실패 유발이다. 자르기를 더하면 유발 방법을 바꾼다.
         when(registry.current()).thenReturn(new PlacementDispatcher() {
             @Override public String getMode() { return "test"; }
             @Override public Outcome dispatch(Request request) { return Outcome.accepted(null, "가".repeat(600)); }
@@ -535,7 +535,7 @@ class WorkloadChangeDuringRunTest {
                 w.markFailed("겹친 실패 결정");
                 workloadRepository.saveAndFlush(w);
             });
-            failedAt[0] = workloadRepository.findById(target.getId()).orElseThrow().getLastFailedAt();   // DB 에 저장된 값
+            failedAt[0] = workloadRepository.findById(target.getId()).orElseThrow().getLastFailedAt();   // DB에 저장된 값
         }, false);
 
         ScheduleRun run = executionService.runNow(schedule(PREFIX + "s-rc-ok"), "tester");
@@ -555,7 +555,7 @@ class WorkloadChangeDuringRunTest {
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────
 
-    /** 노드 수집 대역 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between} 을 커밋한다. */
+    /** 노드 수집 대역 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between}을 커밋한다. */
     private void nodeThen(double cpuPercent, Runnable between) {
         when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
         AtomicBoolean once = new AtomicBoolean(true);
@@ -567,8 +567,8 @@ class WorkloadChangeDuringRunTest {
     }
 
     /**
-     * 엔진 스파이 — 첫 호출(배치 직전에 다시 읽은 뒤 · 저장 전)에서 {@code elsewhere} 를 별도 스레드로 끝까지 커밋한 뒤 이어 간다.
-     * 이 회차의 배치 트랜잭션은 아직 워크로드 행을 잡지 않았으므로 다른 쪽이 막히지 않는다. {@code thenFail} 이면 이어 갈 때
+     * 엔진 스파이 — 첫 호출(배치 직전에 다시 읽은 뒤 · 저장 전)에서 {@code elsewhere}를 별도 스레드로 끝까지 커밋한 뒤 이어 간다.
+     * 이 회차의 배치 트랜잭션은 아직 워크로드 행을 잡지 않았으므로 다른 쪽이 막히지 않는다. {@code thenFail}이면 이어 갈 때
      * 엔진 대신 실패 결정을 돌려준다.
      */
     private void elsewhereWhilePlacing(Runnable elsewhere, boolean thenFail) {
@@ -588,9 +588,9 @@ class WorkloadChangeDuringRunTest {
     }
 
     /**
-     * 편집이 워크로드를 읽은 뒤 · 저장하기 전에 {@code elsewhere} 가 커밋하는 창 — 바깥 트랜잭션에서 워크로드를 먼저 읽어 두고
-     * (편집이 같은 트랜잭션에서 그 사본을 받는다) {@code elsewhere} 를 별도 스레드로 끝까지 커밋한 뒤 같은 트랜잭션에서 편집한다.
-     * 바깥 트랜잭션은 읽기만 했으므로 다른 쪽이 막히지 않는다. 편집이 {@link BusinessException} 을 내면 롤백하고 그 예외를
+     * 편집이 워크로드를 읽은 뒤 · 저장하기 전에 {@code elsewhere}가 커밋하는 창 — 바깥 트랜잭션에서 워크로드를 먼저 읽어 두고
+     * (편집이 같은 트랜잭션에서 그 사본을 받는다) {@code elsewhere}를 별도 스레드로 끝까지 커밋한 뒤 같은 트랜잭션에서 편집한다.
+     * 바깥 트랜잭션은 읽기만 했으므로 다른 쪽이 막히지 않는다. 편집이 {@link BusinessException}을 내면 롤백하고 그 예외를
      * 돌려준다(없으면 null · 그 밖의 예외는 그대로 던진다).
      */
     private BusinessException editAfter(Long workloadId, String json, Runnable elsewhere) {
@@ -616,7 +616,7 @@ class WorkloadChangeDuringRunTest {
     }
 
     /**
-     * 엔진 스파이 — 모든 배치 판단을 실패로 돌려주고, 첫 호출(배치 직전에 다시 읽은 뒤 · 저장 전)에서 {@code elsewhere} 를 별도
+     * 엔진 스파이 — 모든 배치 판단을 실패로 돌려주고, 첫 호출(배치 직전에 다시 읽은 뒤 · 저장 전)에서 {@code elsewhere}를 별도
      * 스레드로 끝까지 커밋한 뒤 이어 간다. {@code elsewhere} 안의 다른 실행 · 단건 배치도 같은 스파이를 지나 실패를 기록한다.
      */
     private void failAllPlacementsAfter(Runnable elsewhere) {

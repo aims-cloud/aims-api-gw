@@ -12,10 +12,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 가상 클러스터로 PromQL 에 답하는 구현 — 스케줄러가 실제로 보내는 질의 형태만 해석한다.
+ * 가상 클러스터로 PromQL에 답하는 구현 — 스케줄러가 실제로 보내는 질의 형태만 해석한다.
  *
  * <p>해석 규칙: 질의문에서 <b>메트릭 이름</b>과 <b>라벨 선택자</b>({@code instance="…"}, {@code job="…"})를 뽑고,
- * {@code by (instance)} 가 있으면 노드별 시리즈로 나눈다. 라벨의 instance 가 클러스터에 없으면 <b>빈 결과</b>다 —
+ * {@code by (instance)}가 있으면 노드별 시리즈로 나눈다. 라벨의 instance가 클러스터에 없으면 <b>빈 결과</b>다 —
  * 실환경에서 "메트릭 없음"이 어떻게 처리되는지(핵심은 제외, 부가는 0)를 그대로 재현하기 위해서다.
  * 해석할 수 없는 질의도 빈 결과다.</p>
  *
@@ -23,14 +23,14 @@ import java.util.regex.Pattern;
  * filesystem size/avail, IPMI 전력, IPMI 온도(avg), 네트워크 rx/tx(sum irate), DCGM GPU 수(count by instance),
  * 그리고 CPU·전력의 구간 질의.</p>
  *
- * <p><b>익스포터별 instance 형식을 실환경대로 낸다.</b> 노드 익스포터 시리즈는 {@code host:9100}, DCGM 은
- * {@code host:9400}, IPMI 는 {@code host:9290} 이다. 예전에는 모든 시리즈에 노드 id 하나를 붙여, 수집기가 노드
- * instance 로 GPU 개수·전력·온도를 찾는 결함이 테스트에서 드러나지 않았다. 실장비에서는 익스포터마다 포트가 달라
- * 그 결합이 빈손이었다. 이제 IPMI·DCGM 메트릭을 노드 instance 로 물으면 <b>빈 결과</b>다 — 실환경과 같다.</p>
+ * <p><b>익스포터별 instance 형식을 실환경대로 낸다.</b> 노드 익스포터 시리즈는 {@code host:9100}, DCGM은
+ * {@code host:9400}, IPMI는 {@code host:9290}이다. 예전에는 모든 시리즈에 노드 id 하나를 붙여, 수집기가 노드
+ * instance로 GPU 개수·전력·온도를 찾는 결함이 테스트에서 드러나지 않았다. 실장비에서는 익스포터마다 포트가 달라
+ * 그 결합이 빈손이었다. 이제 IPMI·DCGM 메트릭을 노드 instance로 물으면 <b>빈 결과</b>다 — 실환경과 같다.</p>
  *
  * <p><b>구간 집계 함수를 해석한다.</b> {@code avg_over_time(메트릭[24h])} 같은 질의는 감싼 함수를 무시하면 그 순간
  * 값을 돌려주게 되어, 테스트는 초록불인데 값이 틀린다. 실환경 저장소는 창 안의 표본을 모아 답하므로 여기서도 창을
- * 걸어 표본을 모아 답한다. 표본 간격은 실환경 스크레이프 주기와 같은 {@link #SAMPLE_STEP_SECONDS} 로 둔다.</p>
+ * 걸어 표본을 모아 답한다. 표본 간격은 실환경 스크레이프 주기와 같은 {@link #SAMPLE_STEP_SECONDS}로 둔다.</p>
  */
 public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
 
@@ -47,11 +47,11 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
             + "node_filesystem_avail_bytes|ipmi_dcmi_power_consumption_watts|ipmi_temperature_celsius|"
             + "node_network_receive_bytes_total|node_network_transmit_bytes_total|"
             + "DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_GPU_TEMP|DCGM_FI_DEV_POWER_USAGE)\\b");
-    /** 질의 맨 앞의 집계 함수 — {@code avg by(instance) (…)} 의 {@code avg}. {@code avg_over_time} 은 구간 함수라 여기 걸리지 않는다. */
+    /** 질의 맨 앞의 집계 함수 — {@code avg by(instance) (…)}의 {@code avg}. {@code avg_over_time}은 구간 함수라 여기 걸리지 않는다. */
     private static final Pattern LEADING_AGG = Pattern.compile("^\\s*(avg|max|min|sum|count)\\s*(by\\s*\\([^)]*\\))?\\s*\\(");
     private static final Pattern BY_INSTANCE = Pattern.compile("by\\s*\\(\\s*instance\\s*\\)");
 
-    /** 구간 집계 함수와 창 — {@code avg_over_time(... [24h])} 의 함수 이름과 창 길이를 뽑는다. */
+    /** 구간 집계 함수와 창 — {@code avg_over_time(... [24h])}의 함수 이름과 창 길이를 뽑는다. */
     private static final Pattern OVER_TIME = Pattern.compile(
             "\\b(avg|min|max|count|sum|last)_over_time\\s*\\(.*?\\[(\\d+)([smhdw])\\]", Pattern.DOTALL);
 
@@ -117,8 +117,8 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
     /**
      * 창 {@code [now - seconds, now]} 안의 표본으로 집계한다.
      *
-     * <p>메트릭이 없는 노드는 표본이 하나도 없어 {@code null} 이다 — 실환경에서 그 시리즈가 통째로 없는 것과 같다.
-     * 0 으로 채우지 않는 것이 이 게이트웨이의 규칙이고, 집계에서도 같다.</p>
+     * <p>메트릭이 없는 노드는 표본이 하나도 없어 {@code null}이다 — 실환경에서 그 시리즈가 통째로 없는 것과 같다.
+     * 0으로 채우지 않는 것이 이 게이트웨이의 규칙이고, 집계에서도 같다.</p>
      */
     private Double aggregate(String promQL, SyntheticCluster.Node node, long now, Window window) {
         double sum = 0; double min = Double.MAX_VALUE; double max = -Double.MAX_VALUE;
@@ -173,8 +173,8 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
     /**
      * 질의가 가리키는 노드들 — instance 라벨이 있으면 그 노드만, job 라벨이 다르면 없음.
      *
-     * <p>instance 는 <b>그 메트릭의 익스포터 형식</b>이어야 한다. IPMI 메트릭을 {@code host:9100} 으로 물으면
-     * 실환경에서 시리즈가 없듯 여기서도 없다. 그래서 수집기는 해석기를 거쳐 {@code host:9290} 으로 물어야 값을 얻는다.</p>
+     * <p>instance는 <b>그 메트릭의 익스포터 형식</b>이어야 한다. IPMI 메트릭을 {@code host:9100}으로 물으면
+     * 실환경에서 시리즈가 없듯 여기서도 없다. 그래서 수집기는 해석기를 거쳐 {@code host:9290}으로 물어야 값을 얻는다.</p>
      */
     private List<SyntheticCluster.Node> select(String promQL) {
         Map<String, String> labels = labels(promQL);
@@ -202,7 +202,7 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
         return null;
     }
 
-    /** {@code host:port} 의 호스트. */
+    /** {@code host:port}의 호스트. */
     private static String hostOf(String instance) {
         int colon = instance.lastIndexOf(':');
         return colon < 0 ? instance : instance.substring(0, colon);
@@ -237,9 +237,9 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
     }
 
     /**
-     * DCGM 은 <b>카드마다 시리즈</b>다. 실환경에서 {@code by(instance)} 집계는 카드 값들을 노드 하나로 접는데, 모의는 카드별
-     * 시리즈를 내보내지 않고 <b>감싼 함수를 읽어 그 자리에서 접는다</b> — 그래서 {@code avg}·{@code max}·{@code sum} 이 서로
-     * 다른 값이고, 온도에 {@code sum} 을 쓰는 실수는 모의에서도 다른 값으로 드러난다. 감싼 함수가 없으면 첫 카드 값이다
+     * DCGM은 <b>카드마다 시리즈</b>다. 실환경에서 {@code by(instance)} 집계는 카드 값들을 노드 하나로 접는데, 모의는 카드별
+     * 시리즈를 내보내지 않고 <b>감싼 함수를 읽어 그 자리에서 접는다</b> — 그래서 {@code avg}·{@code max}·{@code sum}이 서로
+     * 다른 값이고, 온도에 {@code sum}을 쓰는 실수는 모의에서도 다른 값으로 드러난다. 감싼 함수가 없으면 첫 카드 값이다
      * (스칼라 질의가 첫 시리즈만 읽는 것과 같다). GPU 없는 노드는 시리즈가 없다.
      */
     private Double dcgm(String metric, String promQL, SyntheticCluster.Node node, long t) {
@@ -293,7 +293,7 @@ public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
 
     private Map<String, Object> series(SyntheticCluster.Node node, String promQL, List<Object> value, List<List<Object>> values) {
         Map<String, String> labels = new LinkedHashMap<>();
-        // 시리즈의 instance 는 그 메트릭을 낸 익스포터의 주소다 — 노드 익스포터와 다르다.
+        // 시리즈의 instance는 그 메트릭을 낸 익스포터의 주소다 — 노드 익스포터와 다르다.
         Integer port = exporterPort(promQL);
         labels.put("instance", port == null ? node.nodeId() : hostOf(node.nodeId()) + ":" + port);
         labels.put("mdc_id", node.mdcId());

@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 배치 전략 비교 판의 노드 온도와 두 온도 상한(온도 상한 열 65℃ · 기준 정책 75℃)을 대조한다.
  *
  * <p>온도는 엔진이 실제로 보는 배치 전 스냅샷({@link PlacementBenchmarkService#nodesAt})에서 읽는다. 미계측 노드는 이 스냅샷에서
- * 0℃ 이고, 엔진의 현재 온도 검사는 상한을 <b>넘을 때만</b> 거른다. 스프링을 띄우지 않는다.</p>
+ * 0℃이고, 엔진의 현재 온도 검사는 상한을 <b>넘을 때만</b> 거른다. 스프링을 띄우지 않는다.</p>
  */
 class BenchmarkTemperatureLimitCheckTest {
 
@@ -105,7 +105,7 @@ class BenchmarkTemperatureLimitCheckTest {
     @DisplayName("온도가 상한과 정확히 같은 지점은 넘은 지점으로 세지 않고, 두 상한을 넘는 노드는 두 지점 수를 따로 세며, 행은 판 파일의 순서가 아니라 nodeId 순이다")
     @Test
     void a_temperature_equal_to_the_limit_does_not_count_and_rows_are_sorted() {
-        // 사용률을 흔들지 않는 노드 넷(swing 0) — n1 은 50 + 0.3 × 50 = 65.0, n2 는 66.0, n3 은 45 + 0.3 × 100 = 75.0, n4 는 76.0
+        // 사용률을 흔들지 않는 노드 넷(swing 0) — n1은 50 + 0.3 × 50 = 65.0, n2는 66.0, n3은 45 + 0.3 × 100 = 75.0, n4는 76.0
         SyntheticCluster cluster = clusterFrom("""
                 periodMinutes: 60
                 swing: 0
@@ -150,7 +150,7 @@ class BenchmarkTemperatureLimitCheckTest {
 
     /**
      * 표가 엔진의 판단과 같은 것을 세는지 — 지점마다 1코어 워크로드를 실제 제약 평가에 넣어 현재 온도 초과로 걸린 횟수를 센다.
-     * 사용률 상한이 먼저 거르지 않도록 정책 사본의 CPU · 메모리 상한만 100 으로 올리고, 온도 상한은 표와 같은 두 값을 쓴다.
+     * 사용률 상한이 먼저 거르지 않도록 정책 사본의 CPU · 메모리 상한만 100으로 올리고, 온도 상한은 표와 같은 두 값을 쓴다.
      */
     @DisplayName("주 결과판 · 계측 공백판 · 반증판에서 1코어 워크로드를 두 상한의 정책으로 평가하면 현재 온도 초과로 걸린 횟수가 대조표의 두 지점 수와 같다")
     @Test

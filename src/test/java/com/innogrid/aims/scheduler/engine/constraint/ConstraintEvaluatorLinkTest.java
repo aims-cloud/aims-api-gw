@@ -15,7 +15,7 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * C5 MDC 링크 — DOWN 만 제외, 나머지는 통과, 게이트가 꺼지면 아무것도 하지 않는다.
+ * C5 MDC 링크 — DOWN만 제외, 나머지는 통과, 게이트가 꺼지면 아무것도 하지 않는다.
  */
 class ConstraintEvaluatorLinkTest {
 
@@ -70,7 +70,7 @@ class ConstraintEvaluatorLinkTest {
     @Test
     void c5_listed_after_power() {
         List<ConstraintDescriptionResponse> all = ConstraintDescriptionResponse.all();
-        assertEquals(7, all.size());   // C6 MDC 전력 예산이 뒤에 붙어 C5 는 더 이상 마지막이 아니다
+        assertEquals(7, all.size());   // C6 MDC 전력 예산이 뒤에 붙어 C5는 더 이상 마지막이 아니다
         ConstraintDescriptionResponse c5 = all.get(5);
         assertEquals("C5", c5.code());
         assertTrue(c5.togglable());

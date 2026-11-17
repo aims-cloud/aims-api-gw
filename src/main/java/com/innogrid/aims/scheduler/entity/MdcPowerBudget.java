@@ -7,13 +7,13 @@ import jakarta.persistence.*;
 /**
  * MDC 전력 예산 원장 — MDC 한 곳이 쓸 수 있는 전력 총량(W).
  *
- * <p>지금까지 전력 상한은 <b>노드 한 대 기준뿐</b>이었다. 그런데 MDC 는 컨테이너·랙 단위로 들어오는
+ * <p>지금까지 전력 상한은 <b>노드 한 대 기준뿐</b>이었다. 그런데 MDC는 컨테이너·랙 단위로 들어오는
  * 수전 용량이 곧 상한이라, 노드 8대가 각자 정격 아래여도 합계가 계약 용량을 넘으면 실제로는 올릴 수 없다.
  * 이 표는 그 총량을 넣는 자리다. 노드 전력 사양 원장({@code NodePowerSpec})이 <b>한 대의 정격</b>을 다룬다면
  * 이 표는 <b>한 곳의 총량</b>을 다룬다.</p>
  *
  * <p>노드 전력 사양·MDC 링크 원장과 같은 유형이다 — 컨소시엄이 주지 않는 값이고 우리가 입력하므로
- * 저장해도 원시 메트릭을 저장하지 않는 원칙에 맞는다. MDC 식별자의 <b>존재는 검증하지 않는다</b>: 검증하려면 원장 CRUD 가
+ * 저장해도 원시 메트릭을 저장하지 않는 원칙에 맞는다. MDC 식별자의 <b>존재는 검증하지 않는다</b>: 검증하려면 원장 CRUD가
  * 메트릭 저장소를 불러야 한다. 어느 노드에도 걸리지 않는 오타 항목은 아무 판정에도 쓰이지 않아 무해하다.</p>
  */
 @Entity
@@ -22,7 +22,7 @@ import jakarta.persistence.*;
 public class MdcPowerBudget {
 
     /**
-     * 값의 출처. {@code SPEC_SHEET} 는 수전 설계·계약 용량 문서, {@code MEASURED} 는 실측 연동을 위해
+     * 값의 출처. {@code SPEC_SHEET}는 수전 설계·계약 용량 문서, {@code MEASURED}는 실측 연동을 위해
      * 값만 예약했다 — 채우는 경로는 아직 없다. 노드 전력 사양 원장과 같은 세 값이다.
      */
     public enum BudgetSource { MANUAL, SPEC_SHEET, MEASURED }
@@ -34,15 +34,15 @@ public class MdcPowerBudget {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** MDC 식별자 — Prometheus {@code mdc_id} 라벨과 같은 문자열. 라벨이 없는 노드는 {@code unknown} 으로 묶인다. */
+    /** MDC 식별자 — Prometheus {@code mdc_id} 라벨과 같은 문자열. 라벨이 없는 노드는 {@code unknown}으로 묶인다. */
     @Column(name = "mdc_id", nullable = false, length = MDC_ID_MAX)
     private String mdcId;
 
     /**
-     * 전력 예산(W). 0 보다 크고 유한해야 한다.
+     * 전력 예산(W). 0보다 크고 유한해야 한다.
      *
      * <p><b>크기 상한은 두지 않는다.</b> 노드 전력 사양 원장과 같은 판단이다 — 실데이터가 없는 지금 상한은
-     * 추측일 뿐이라 정당한 규모를 막을 수 있다. MDC 한 곳이 수십 kW 에서 수백 kW 까지 간다. 무한대만 막는다:
+     * 추측일 뿐이라 정당한 규모를 막을 수 있다. MDC 한 곳이 수십 kW에서 수백 kW까지 간다. 무한대만 막는다:
      * 남은 여유가 {@code ∞ − 합계 = ∞}, 초과 판정이 항상 통과가 되어 예산이 사실상 없는 것과 같아지고
      * JSON 직렬화도 표준을 벗어난다.</p>
      */

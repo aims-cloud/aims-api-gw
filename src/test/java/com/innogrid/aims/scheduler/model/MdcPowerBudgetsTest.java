@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import com.innogrid.aims.scheduler.entity.MdcPowerBudget;
 
-/** MDC 전력 예산 스냅샷 — 배치 1회당 한 번 읽어 후보마다 DB 를 치지 않게 하는 조회 구조. */
+/** MDC 전력 예산 스냅샷 — 배치 1회당 한 번 읽어 후보마다 DB를 치지 않게 하는 조회 구조. */
 class MdcPowerBudgetsTest {
 
     @DisplayName("원장이 비면 빈 스냅샷이고 어떤 MDC 도 예산이 없다")

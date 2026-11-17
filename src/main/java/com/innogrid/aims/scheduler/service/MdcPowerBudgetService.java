@@ -21,7 +21,7 @@ import tools.jackson.databind.JsonNode;
  * 0 이하 예산, NaN·무한대 예산, 모르는 출처. <b>예산의 크기 상한은 일부러 두지 않는다.</b> 실데이터가 없는
  * 지금 상한은 추측이라 정당한 규모를 막을 수 있고, 값이 이상하면 진단의 MDC 요약에 그대로 드러난다.</p>
  *
- * <p>MDC 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500 으로 새므로 먼저 조회해 409 를 낸다.</p>
+ * <p>MDC 식별자 중복은 DB 유니크 제약이 잡지만 그때는 500으로 새므로 먼저 조회해 409를 낸다.</p>
  */
 @Service
 public class MdcPowerBudgetService {
@@ -36,7 +36,7 @@ public class MdcPowerBudgetService {
 
     // ── 조회 ───────────────────────────────────────────────────
 
-    /** 목록. {@code mdcId} 를 주면 그 문자열을 포함하는 MDC 만(부분 일치, 대소문자 무시). */
+    /** 목록. {@code mdcId}를 주면 그 문자열을 포함하는 MDC만(부분 일치, 대소문자 무시). */
     @Transactional(readOnly = true)
     public List<MdcPowerBudget> list(String mdcId) {
         List<MdcPowerBudget> all = repository.findAllByOrderByMdcIdAsc();
@@ -89,18 +89,18 @@ public class MdcPowerBudgetService {
         return saveOrConflict(budget);
     }
 
-    /** 삭제. 없으면 404. 지우면 다음 배치부터 그 MDC 는 총량 제약을 받지 않는다. */
+    /** 삭제. 없으면 404. 지우면 다음 배치부터 그 MDC는 총량 제약을 받지 않는다. */
     @Transactional
     public void delete(Long id) {
         repository.delete(require(id));
     }
 
     /**
-     * 저장하며 <b>동시 등록 경합</b>을 409 로 바꾼다.
+     * 저장하며 <b>동시 등록 경합</b>을 409로 바꾼다.
      *
-     * <p>중복은 먼저 조회해 막지만, 같은 MDC 를 동시에 등록·수정하면 그 검사를 지나쳐 유니크 제약에 걸린다.
-     * 그대로 두면 500 으로 새므로 여기서 409 로 바꾼다(전력 사양 원장·디스패치 멱등키와 같은 처리). 제약 위반 뒤의
-     * 영속성 컨텍스트는 신뢰할 수 없어 다시 조회하지 않고, 어떤 MDC 가 걸렸는지만 알린다.</p>
+     * <p>중복은 먼저 조회해 막지만, 같은 MDC를 동시에 등록·수정하면 그 검사를 지나쳐 유니크 제약에 걸린다.
+     * 그대로 두면 500으로 새므로 여기서 409로 바꾼다(전력 사양 원장·디스패치 멱등키와 같은 처리). 제약 위반 뒤의
+     * 영속성 컨텍스트는 신뢰할 수 없어 다시 조회하지 않고, 어떤 MDC가 걸렸는지만 알린다.</p>
      */
     MdcPowerBudget saveOrConflict(MdcPowerBudget budget) {
         try {
@@ -129,11 +129,11 @@ public class MdcPowerBudgetService {
     }
 
     /**
-     * 예산 검증 — 0 보다 크고 유한해야 한다. <b>크기 상한은 없다.</b>
+     * 예산 검증 — 0보다 크고 유한해야 한다. <b>크기 상한은 없다.</b>
      *
-     * <p>무한대만 막는 이유: 남은 여유가 {@code ∞ − 합계 = ∞} 가 되어 초과 판정이 항상 통과가 되고,
+     * <p>무한대만 막는 이유: 남은 여유가 {@code ∞ − 합계 = ∞}가 되어 초과 판정이 항상 통과가 되고,
      * 그러면 예산을 등록하지 않은 것과 구분되지 않는다. 응답 직렬화도 표준을 벗어난다. 큰 유한값은
-     * 그 MDC 가 사실상 무제한이 될 뿐 계산이 깨지지 않고, 값 자체가 진단의 MDC 요약에 그대로 보인다.</p>
+     * 그 MDC가 사실상 무제한이 될 뿐 계산이 깨지지 않고, 값 자체가 진단의 MDC 요약에 그대로 보인다.</p>
      */
     private static double budget(double v) {
         if (!Double.isFinite(v) || v <= 0) {

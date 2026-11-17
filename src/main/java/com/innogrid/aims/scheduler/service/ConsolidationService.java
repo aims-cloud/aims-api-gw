@@ -26,14 +26,14 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 워크로드 통합 가능성 진단.
  *
  * <p>"이 노드의 워크로드를 다른 노드로 옮길 수 있는가"를 <b>실제로 배치를 시도해</b> 답한다.
- * 시도는 계산일 뿐이다 — {@link PlacementService#place} 를 부르지 않으므로 워크로드 상태도
+ * 시도는 계산일 뿐이다 — {@link PlacementService#place}를 부르지 않으므로 워크로드 상태도
  * 배치 이력도 바뀌지 않는다. 받을 노드는 실제 배치 컨텍스트의 평가기(운영 설정 · 걸린 냉각 대기)로 판정하되,
  * 냉각 대기를 새로 걸지 않는다({@link PlacementContext#sandbox}).</p>
  *
  * <p><b>유휴 여부를 고정 임계로 정하지 않는다.</b> "CPU 5% 미만이면 유휴" 같은 기준은 64코어의
  * 5%(3.2코어)와 8코어의 5%(0.4코어)를 같게 취급하는 자의적 절벽을 만든다. 대신 <b>순절감</b>을
  * 계산한다 — 노드를 비워 아끼는 유휴 전력에서 그 워크로드를 옮기는 비용을 뺀 값이며, 양수여야
- * 통합할 가치가 있다. 옮기는 비용은 {@code PowerModel.realMarginalPower} 로 잰다.</p>
+ * 통합할 가치가 있다. 옮기는 비용은 {@code PowerModel.realMarginalPower}로 잰다.</p>
  */
 @Service
 public class ConsolidationService {
@@ -85,7 +85,7 @@ public class ConsolidationService {
                         String.format("후보 상한 %d대를 초과했습니다", limit)));
                 continue;
             }
-            candidates.add(evaluate(node, base));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes 는 오염되지 않는다
+            candidates.add(evaluate(node, base));   // 샌드박스는 snapshot() 사본을 쓰므로 nodes는 오염되지 않는다
             evaluated++;
         }
 
@@ -114,7 +114,7 @@ public class ConsolidationService {
         List<Workload> workloads = workloadsOn(node);
         int perNodeLimit = Math.max(0, props.getMaxRelocationsPerNode());
 
-        // 상한을 넘는 노드는 판정하지 않는다. 60건 중 50건만 옮겨보고 "반납 가능" 이라 하면
+        // 상한을 넘는 노드는 판정하지 않는다. 60건 중 50건만 옮겨보고 "반납 가능"이라 하면
         // 거짓이다 — 남은 10건이 그 노드를 붙잡고 있다.
         if (workloads.size() > perNodeLimit) {
             return Candidate.skipped(node.getMdcId(), node.getNodeId(), workloads.size(),
@@ -124,8 +124,8 @@ public class ConsolidationService {
 
         // 반납분(idle)은 wakeupPower — 계측된 유휴 노드는 실측에서 역산해 통일한다(같은 화면, 같은 모델).
         // 비율(ratio)의 분모는 idlePower(가정값) 그대로 둔다 — 비율은 "가정 대비 실측"이 취지라, 분모에도
-        // 실측 역산값(wakeup)을 넣으면 유휴 노드에서 분자·분모가 같은 값이 되어 ratio ≈ 1/(1−u) 로 항등이 된다.
-        double idle = powerModel.wakeupPower(node);          // 반납분 — 아래 blocked/reclaimable 에 그대로 실린다
+        // 실측 역산값(wakeup)을 넣으면 유휴 노드에서 분자·분모가 같은 값이 되어 ratio ≈ 1/(1−u)로 항등이 된다.
+        double idle = powerModel.wakeupPower(node);          // 반납분 — 아래 blocked/reclaimable에 그대로 실린다
         double idleAssumed = powerModel.idlePower(node);     // 비율의 분모 — 가정값
         Double ratio = powerModel.isActive(node) || node.getPowerWatts() <= 0 || idleAssumed <= 0
                 ? null : PowerOptimizationService.round(node.getPowerWatts() / idleAssumed);
@@ -144,7 +144,7 @@ public class ConsolidationService {
         }
 
         // 이 노드를 뺀 나머지에만 배치를 시도한다. 컨텍스트는 여기서 새로 만든다 —
-        // NodeResource 는 가변이라(reserve) 조회용 스냅샷에 예약을 쌓으면 응답이 오염된다.
+        // NodeResource는 가변이라(reserve) 조회용 스냅샷에 예약을 쌓으면 응답이 오염된다.
         // 받을 노드는 실제 배치와 같은 평가기로 판정하되, 조회라서 냉각 대기를 새로 걸지 않는다.
         PlacementContext sandbox = sandboxWithout(node, real);
         if (sandbox.isEmpty()) {

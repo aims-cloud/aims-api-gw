@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * 배치 컨텍스트의 클러스터 전력 집계.
  *
  * <p>전력 최적화의 목표는 노드 하나의 점수가 아니라 <b>클러스터 총 전력</b>이다. 열 쪽에는
- * {@code averageTemperature()} 라는 클러스터 지표가 있었지만 전력에는 없었다.</p>
+ * {@code averageTemperature()}라는 클러스터 지표가 있었지만 전력에는 없었다.</p>
  */
 class PlacementContextPowerTest {
 
@@ -64,7 +64,7 @@ class PlacementContextPowerTest {
                 node("empty-1", 1, 150, 500),
                 node("empty-2", 0, 150, 400));
 
-        // 계측된 유휴 노드는 실측에서 역산한다 — empty-1: (150 − 500×0.01)/0.99 = 146.5, empty-2: CPU 0% 라 실측 그대로 150.
+        // 계측된 유휴 노드는 실측에서 역산한다 — empty-1: (150 − 500×0.01)/0.99 = 146.5, empty-2: CPU 0%라 실측 그대로 150.
         // 대체값 기준(500×0.3 + 400×0.3 = 270)이 아니다.
         assertEquals((150 - 500 * 0.01) / 0.99 + 150.0, ctx.reclaimableIdleWatts(ACTIVE_CPU, powerModel), 1e-9);
     }

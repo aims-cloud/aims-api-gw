@@ -18,31 +18,31 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
- * 스케줄러 API 의 요청 검증 오류를 400 으로 돌려준다.
+ * 스케줄러 API의 요청 검증 오류를 400으로 돌려준다.
  *
- * <p><b>왜 필요한가</b> — 이 프로젝트는 Spring Framework 7 이라 클래스에 {@code @Validated}
- * 를 붙이지 않아도 {@code @RequestParam} 의 {@code @Min}·{@code @Max} 가 동작한다.
- * 그런데 그때 나오는 {@link HandlerMethodValidationException} 을 처리하는 곳이 없어
- * 스프링 기본 처리로 넘어가고, 기본 처리는 {@code sendError} 로 {@code /error} 를 다시
+ * <p><b>왜 필요한가</b> — 이 프로젝트는 Spring Framework 7이라 클래스에 {@code @Validated}
+ * 를 붙이지 않아도 {@code @RequestParam}의 {@code @Min}·{@code @Max}가 동작한다.
+ * 그런데 그때 나오는 {@link HandlerMethodValidationException}을 처리하는 곳이 없어
+ * 스프링 기본 처리로 넘어가고, 기본 처리는 {@code sendError}로 {@code /error}를 다시
  * 태운다. 보안 설정이 모든 요청에 인증을 요구하는데 이 재요청에는 인증 정보가 실리지
- * 않아, 결국 클라이언트는 <b>400 이 아니라 403</b> 을 받는다.</p>
+ * 않아, 결국 클라이언트는 <b>400이 아니라 403</b>을 받는다.</p>
  *
- * <p>그래서 {@code sendError} 를 타지 않고 {@link ResponseEntity} 를 직접 만들어 돌려준다.
- * {@code page=0} 같은 잘못된 페이징 값이 확실하게 400 이 되며, 목록 응답의
- * {@code totalPages} 가 0 나눗셈으로 비정상 값이 되는 것도 함께 막힌다.</p>
+ * <p>그래서 {@code sendError}를 타지 않고 {@link ResponseEntity}를 직접 만들어 돌려준다.
+ * {@code page=0} 같은 잘못된 페이징 값이 확실하게 400이 되며, 목록 응답의
+ * {@code totalPages}가 0 나눗셈으로 비정상 값이 되는 것도 함께 막힌다.</p>
  *
- * <p><b>적용 범위를 스케줄러 패키지로 한정</b>한다. 다른 패키지의 컨트롤러는 이 advice 의
+ * <p><b>적용 범위를 스케줄러 패키지로 한정</b>한다. 다른 패키지의 컨트롤러는 이 advice의
  * 후보에서 제외되어 지금과 똑같이 동작한다. 같은 문제가 다른 도메인에도 있지만 담당
  * 범위가 아니라 손대지 않는다.</p>
  *
  * <p><b>다른 도메인에서 같은 처리가 필요하다면</b> — 전역 예외 핸들러에 처리기를 추가하되,
- * <b>여기 있는 같은 예외의 처리기를 함께 지우거나 이 advice 에 명시적 {@code @Order} 를 주어야 한다.</b>
- * 두 advice 가 같은 예외의 후보가 되면 어느 쪽이 처리할지가 빈 등록 순서에 좌우되고, 그때
+ * <b>여기 있는 같은 예외의 처리기를 함께 지우거나 이 advice에 명시적 {@code @Order}를 주어야 한다.</b>
+ * 두 advice가 같은 예외의 후보가 되면 어느 쪽이 처리할지가 빈 등록 순서에 좌우되고, 그때
  * 스케줄러 응답에서 파라미터 이름·받은 값·가능한 값이 조용히 사라진다. 아래 문단이
- * {@code BusinessException} 에 대해 말하는 것과 같은 이유다. 확인은 {@code SchedulerParameterErrorTest}
+ * {@code BusinessException}에 대해 말하는 것과 같은 이유다. 확인은 {@code SchedulerParameterErrorTest}
  * 를 그대로 돌리면 된다 — 사유 문구까지 확인하므로 사라지면 빨간불이 된다.</p>
  *
- * <p>{@code BusinessException} 은 여기서 다루지 않는다. 전역 핸들러와 후보가 겹치면
+ * <p>{@code BusinessException}은 여기서 다루지 않는다. 전역 핸들러와 후보가 겹치면
  * 어느 쪽이 처리할지가 우선순위에 좌우되어, 스케줄러만 응답 형태가 달라질 수 있다.</p>
  */
 @RestControllerAdvice(basePackages = "com.innogrid.aims.scheduler")
@@ -67,11 +67,11 @@ public class SchedulerExceptionAdvice {
     /**
      * 요청 본문을 읽지 못한 경우 — 깨진 JSON, 숫자 자리에 문자열, 빈 본문.
      *
-     * <p>파라미터 검증과 같은 함정이다. 처리기가 없으면 스프링 기본 처리가 {@code sendError} 로
-     * {@code /error} 를 다시 태우고, 그 재요청에 인증이 실리지 않아 클라이언트는 400 이 아니라
-     * 403 을 받는다. 요청 DTO 를 도입하면 이 경로를 타는 요청이 생기므로 먼저 막는다.</p>
+     * <p>파라미터 검증과 같은 함정이다. 처리기가 없으면 스프링 기본 처리가 {@code sendError}로
+     * {@code /error}를 다시 태우고, 그 재요청에 인증이 실리지 않아 클라이언트는 400이 아니라
+     * 403을 받는다. 요청 DTO를 도입하면 이 경로를 타는 요청이 생기므로 먼저 막는다.</p>
      *
-     * <p>사유에는 가장 안쪽 원인의 한 줄만 담는다. Jackson 의 전체 메시지는 클래스 이름과 위치
+     * <p>사유에는 가장 안쪽 원인의 한 줄만 담는다. Jackson의 전체 메시지는 클래스 이름과 위치
      * 정보가 길게 붙어 화면에 그대로 띄우기 어렵다.</p>
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -90,11 +90,11 @@ public class SchedulerExceptionAdvice {
      * 경로 변수·쿼리 파라미터를 선언된 타입으로 바꾸지 못한 경우 — 숫자 자리의 문자, 잘못된 날짜 형식, enum 오타.
      *
      * <p>앞의 두 핸들러와 같은 함정이다. 처리기가 없으면 {@code /error} 재요청이 인증에 막혀
-     * 클라이언트는 <b>400 이 아니라 403(본문 없음)</b> 을 받는다. 배포본에서 실측했다 —
-     * {@code /workloads/abc/history}·{@code ?from=not-a-date}·{@code ?enabled=maybe} 가 모두 403 이었다.</p>
+     * 클라이언트는 <b>400이 아니라 403(본문 없음)</b>을 받는다. 배포본에서 실측했다 —
+     * {@code /workloads/abc/history}·{@code ?from=not-a-date}·{@code ?enabled=maybe}가 모두 403이었다.</p>
      *
      * <p>사유에는 <b>어느 파라미터가 어떤 값 때문에</b> 걸렸는지를 담는다. 그것이 없으면 화면에서 고칠 수가 없다.
-     * enum 이면 받을 수 있는 값을 함께 적는다. 받은 값은 클라이언트가 보낸 것이지만 길 수 있으므로 자른다.</p>
+     * enum이면 받을 수 있는 값을 함께 적는다. 받은 값은 클라이언트가 보낸 것이지만 길 수 있으므로 자른다.</p>
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
@@ -117,7 +117,7 @@ public class SchedulerExceptionAdvice {
      * 필수 쿼리 파라미터가 아예 빠진 경우 — 지금은 스케줄 일괄 삭제의 {@code ids} 하나뿐이다.
      *
      * <p>타입 변환과 예외 계열은 다르지만 <b>사용자에게 보이는 증상은 같다</b> — 처리기가 없어 403(본문 없음)이 된다.
-     * 목록에서 아무것도 고르지 않고 삭제를 누르는 것이 화면에서 가장 흔한 오조작이라, 이 경로가 조용히 403 이면
+     * 목록에서 아무것도 고르지 않고 삭제를 누르는 것이 화면에서 가장 흔한 오조작이라, 이 경로가 조용히 403이면
      * 프런트가 세션 만료로 오인할 수 있다.</p>
      */
     @ExceptionHandler(MissingServletRequestParameterException.class)
@@ -127,15 +127,15 @@ public class SchedulerExceptionAdvice {
     }
 
     /**
-     * 데이터베이스 처리 실패 — <b>403 으로 위장되지 않게</b> 스케줄러가 직접 잡는다.
+     * 데이터베이스 처리 실패 — <b>403으로 위장되지 않게</b> 스케줄러가 직접 잡는다.
      *
      * <p>잡는 곳이 없으면 예외가 오류 처리 경로로 넘어가는데, 그 경로가 인증을 요구해
-     * 호출자에게는 <b>403</b> 으로 보인다. 파라미터를 빠뜨린 것인지 권한이 없는 것인지
+     * 호출자에게는 <b>403</b>으로 보인다. 파라미터를 빠뜨린 것인지 권한이 없는 것인지
      * 데이터베이스가 거절한 것인지 구분할 수 없어, 원인을 알려면 서버 로그를 봐야 한다.</p>
      *
-     * <p>실제로 겪은 예: 질의의 널 파라미터를 PostgreSQL 이 타입 추론하지 못해 거절했는데
-     * 응답은 403 이었다. 테스트 환경은 H2 라 같은 질의가 통과해, 배포 검증이 유일한 방어선인데
-     * 그 방어선이 보는 신호가 권한 오류처럼 생긴 것이다. 500 과 사유를 함께 주면 배포 검증에서
+     * <p>실제로 겪은 예: 질의의 널 파라미터를 PostgreSQL이 타입 추론하지 못해 거절했는데
+     * 응답은 403이었다. 테스트 환경은 H2라 같은 질의가 통과해, 배포 검증이 유일한 방어선인데
+     * 그 방어선이 보는 신호가 권한 오류처럼 생긴 것이다. 500과 사유를 함께 주면 배포 검증에서
      * 바로 데이터베이스 문제로 좁혀진다.</p>
      *
      * <p>드라이버 메시지는 첫 줄에도 제약명·테이블명 같은 내부 구조가 들어갈 수 있으므로 응답에는

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 배치 정책 API. 요청은 {@link SchedulingPolicyRequest}, 응답은 {@link SchedulingPolicyResponse}.
- * 검증·저장 규칙은 {@link SchedulingPolicyService} 에 있다.
+ * 검증·저장 규칙은 {@link SchedulingPolicyService}에 있다.
  */
 @Tag(name = "스케줄링 정책", description = "스케줄링 가중치, 임계치, 전력/온도 인지 설정")
 @RestController

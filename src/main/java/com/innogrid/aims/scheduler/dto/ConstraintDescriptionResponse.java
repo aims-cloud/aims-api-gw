@@ -17,7 +17,7 @@ public record ConstraintDescriptionResponse(
         String source,          // 임계값의 출처 (정책 필드 / 워크로드 필드 / 설정)
         boolean togglable       // 정책에서 켜고 끌 수 있는지
 ) {
-    /** 현재 구현된 제약 파이프라인. 평가 순서대로다. C0 은 제약 평가 이전, 수집 단계에서 걸러진다. */
+    /** 현재 구현된 제약 파이프라인. 평가 순서대로다. C0은 제약 평가 이전, 수집 단계에서 걸러진다. */
     public static List<ConstraintDescriptionResponse> all() {
         return List.of(
                 new ConstraintDescriptionResponse("C0", "핵심 메트릭 수집",

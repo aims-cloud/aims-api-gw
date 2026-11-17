@@ -7,14 +7,14 @@ package com.innogrid.aims.scheduler.model;
  * 평균이고 GPU 온도는 카드 값이라 섞으면 둘 다 뜻을 잃고, IPMI 전력은 섀시 전체(GPU 포함)라 GPU 전력을 더하면 이중
  * 계상이다. 그래서 어느 쪽에도 합치지 않고 나란히 둔다.</p>
  *
- * <p>{@code 0} 은 미계측이다 — 켜진 카드의 온도 0°C·전력 0W 는 물리적으로 없다. GPU 가 없는 노드는 GPU 개수가 0 이라
- * 이 값들을 볼 일이 없고, GPU 가 있는데 셋이 0 이면 DCGM 시리즈가 비었다는 뜻이다.</p>
+ * <p>{@code 0}은 미계측이다 — 켜진 카드의 온도 0°C·전력 0W는 물리적으로 없다. GPU가 없는 노드는 GPU 개수가 0이라
+ * 이 값들을 볼 일이 없고, GPU가 있는데 셋이 0이면 DCGM 시리즈가 비었다는 뜻이다.</p>
  */
 public record GpuTelemetry(double usagePercent, double temperatureCelsius, double powerWatts) {
 
     public static final GpuTelemetry EMPTY = new GpuTelemetry(0, 0, 0);
 
-    /** 유한하고 0 이상인 값만 — NaN·무한대·음수(고장 센서)는 미계측(0) 으로. 응답에 NaN 이 새면 JSON 이 깨진다. */
+    /** 유한하고 0 이상인 값만 — NaN·무한대·음수(고장 센서)는 미계측(0)으로. 응답에 NaN이 새면 JSON이 깨진다. */
     public GpuTelemetry {
         usagePercent = finite(usagePercent);
         temperatureCelsius = finite(temperatureCelsius);

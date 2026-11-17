@@ -56,8 +56,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * 기본 정책을 <b>새로 넣는</b> 부작용이 있어 진단 호출이 데이터를 만든다. 둘 다 응답만 봐서는
  * 드러나지 않는 종류의 오염이다.</p>
  *
- * <p><b>대조군은 엔진이 아니다.</b> {@link PlacementStrategy} 는 {@link SchedulingEngine} 을 구현하지
- * 않는 record 라 엔진 레지스트리가 수집할 수 없다. 대조군이 빈이 되면 엔진 식별자 검증이 통째로
+ * <p><b>대조군은 엔진이 아니다.</b> {@link PlacementStrategy}는 {@link SchedulingEngine}을 구현하지
+ * 않는 record라 엔진 레지스트리가 수집할 수 없다. 대조군이 빈이 되면 엔진 식별자 검증이 통째로
  * 열려 스케줄이 대조군으로 <b>실배치</b>하고 지우지 않는 이력에 남는다.</p>
  *
  * <p><b>전원 상태 두 판은 배치를 두 번 돌리지 않는다.</b> 전원 제어 가정은 전략의 <b>입력이 아니다</b> —
@@ -101,11 +101,11 @@ public class PlacementBenchmarkService {
     /**
      * 순수성 캐시 — 키는 {@link #CACHE_AXES} 순서의 {@code 판|분포|판 파일 다이제스트|워크로드 파일 다이제스트|엔진 설정 다이제스트|규칙 축 다이제스트}.
      *
-     * <p>응답은 {@code evaluatedAt} 을 빼면 입력의 순수 함수다(계약 §8 이 그렇게 선언하고 결정론 테스트가 지킨다). 그런데 한 번
-     * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU 를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
+     * <p>응답은 {@code evaluatedAt}을 빼면 입력의 순수 함수다(계약 §8이 그렇게 선언하고 결정론 테스트가 지킨다). 그런데 한 번
+     * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
      * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
-     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN 을 남기고 전부 비운다 — 판 10 × 분포 2 = 20 조합(설정·규칙은 프로세스
-     * 안에서 고정, seed 는 판 파일 값이라 요청 축이 아니다)이라 상한 25 에는 닿지 않으며, 닿았다면 키 축 계산이 틀렸다는 신호다.</p>
+     * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN을 남기고 전부 비운다 — 판 10 × 분포 2 = 20 조합(설정·규칙은 프로세스
+     * 안에서 고정, seed는 판 파일 값이라 요청 축이 아니다)이라 상한 25에는 닿지 않으며, 닿았다면 키 축 계산이 틀렸다는 신호다.</p>
      */
     private final Map<String, PlacementBenchmarkResponse> cache = new ConcurrentHashMap<>();
     private static final int CACHE_LIMIT = 25;
@@ -116,10 +116,10 @@ public class PlacementBenchmarkService {
     private static final String RULES_DIGEST = BenchmarkClusters.digestOf(String.join("|", BenchmarkRules.ruleAxes().values()));
 
     /**
-     * 동시 실행 1건 — 두 번째 호출은 기다리지 않고 429 로 돌려보낸다.
+     * 동시 실행 1건 — 두 번째 호출은 기다리지 않고 429로 돌려보낸다.
      *
      * <p>기다리게 하면 요청 스레드가 묶이고 호출자는 응답이 늦는 이유를 모른다. 지금 계산 중인 것과 같은 입력이면 곧 캐시에
-     * 실릴 테니 잠시 뒤 다시 부르면 되고, 다른 입력이면 순서대로 부르는 편이 CPU 를 공유하는 배포 서버에 안전하다.</p>
+     * 실릴 테니 잠시 뒤 다시 부르면 되고, 다른 입력이면 순서대로 부르는 편이 CPU를 공유하는 배포 서버에 안전하다.</p>
      */
     private final Semaphore running = new Semaphore(1);
     private static final Logger log = LoggerFactory.getLogger(PlacementBenchmarkService.class);
@@ -195,7 +195,7 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@link #CACHE_AXES} 순서로 {@code |} 로 잇는다. 축이 하나라도 빠지면 다른
+     * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@link #CACHE_AXES} 순서로 {@code |}로 잇는다. 축이 하나라도 빠지면 다른
      * 입력이 같은 표를 돌려받으므로(워크로드 파일 다이제스트가 그렇게 빠졌던 전례), 축 이름 목록은 테스트가 리터럴로 고정한다.
      */
     static String cacheKey(String... values) {
@@ -216,7 +216,7 @@ public class PlacementBenchmarkService {
     private PlacementBenchmarkResponse computeFresh(String board, String dist, SyntheticCluster cluster,
                                                     EngineConfigSnapshot config) {
         BenchmarkWorkloads workloads = BenchmarkWorkloads.load(DISTRIBUTION_FILES.get(dist));
-        // seed 마다 Board 하나 — 서로 독립 복제. legacy 판은 seed 가 하나라 길이 1 그대로다
+        // seed마다 Board 하나 — 서로 독립 복제. legacy 판은 seed가 하나라 길이 1 그대로다
         List<Board> boards = new ArrayList<>(cluster.seeds().size());
         for (long seed : cluster.seeds()) {
             boards.add(runBoard(board, cluster.withSeed(seed), workloads));   // 원본도 사본으로 — seeds 길이 비대칭을 두지 않는다
@@ -240,7 +240,7 @@ public class PlacementBenchmarkService {
         return s == null || s.isBlank();
     }
 
-    /** 판 이름이 틀린 것은 사용자 입력 오류라 400 으로 돌린다 — 500 이면 원인이 로그에만 남는다. */
+    /** 판 이름이 틀린 것은 사용자 입력 오류라 400으로 돌린다 — 500이면 원인이 로그에만 남는다. */
     private SyntheticCluster resolveBoard(String board) {
         try {
             return clusters.get(board);
@@ -293,7 +293,7 @@ public class PlacementBenchmarkService {
      * 한 주기를 고르게 훑는 시각 지점. <b>벽시계를 쓰지 않는다</b> — 절대 시각에 기대면 같은 요청이
      * 두 번 다른 숫자를 내고, 그 차이가 알고리즘 차이와 구분되지 않는다.
      *
-     * <p>{@code private} 이 아닌 이유는 같은 패키지의 테스트가 <b>같은 지점 목록</b>으로 역산을 다시 계산하기
+     * <p>{@code private}이 아닌 이유는 같은 패키지의 테스트가 <b>같은 지점 목록</b>으로 역산을 다시 계산하기
      * 때문이다. 테스트가 사본을 두면 두 목록이 갈라져도 초록불이 된다.</p>
      */
     static List<Long> sweepPoints(SyntheticCluster cluster) {
@@ -314,7 +314,7 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 노드별 코어당 열 상승 세 계수. {@link #idleGaps} 와 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
+     * 노드별 코어당 열 상승 세 계수. {@link #idleGaps}와 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
      * 격차·비율은 만들지 않는다. 그것을 만드는 순간 "생성식이 옳다"를 전제하게 되고, 단위를 바꾸면 부호가 뒤집힌다.
      */
     private List<ThermalRiseScale> thermalRiseScale(GroundTruthOracle oracle) {
@@ -325,7 +325,7 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 유휴 노드의 깨우기 비용 역산 점검표. {@link #idleGaps} 와 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
+     * 유휴 노드의 깨우기 비용 역산 점검표. {@link #idleGaps}와 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
      * 판정·비율은 만들지 않는다. 값이 대체값과 같은지는 {@code engineFallbackWatts} 열을 나란히 실어 독자가 본다.
      *
      * <p>행은 <b>판의 회계 규칙</b>으로 고른다 — 시각 12지점 내내 {@link BenchmarkRules#POWERED_ON_CPU_PERCENT}
@@ -333,7 +333,7 @@ public class PlacementBenchmarkService {
      * 노브를 돌리는 것만으로 표의 행이 달라져, 판이 엔진 설정의 함수가 된다.</p>
      *
      * <p>지점마다 <b>배치 전 스냅샷</b>을 새로 만들어 재는 이유는 엔진의 가동 판정이 예약분까지 반영한 실효
-     * CPU 를 보기 때문이다. 배치가 얹힌 노드로 재면 같은 시각의 (P, u) 쌍이 아니게 되어 역산의 전제가 깨진다.</p>
+     * CPU를 보기 때문이다. 배치가 얹힌 노드로 재면 같은 시각의 (P, u) 쌍이 아니게 되어 역산의 전제가 깨진다.</p>
      */
     private List<WakeupReconstruction> wakeupReconstruction(SyntheticCluster cluster) {
         List<Long> sweep = sweepPoints(cluster);
@@ -369,13 +369,13 @@ public class PlacementBenchmarkService {
     }
 
     /**
-     * 노드별 온도 상한 대조표. {@link #wakeupReconstruction} 과 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
+     * 노드별 온도 상한 대조표. {@link #wakeupReconstruction}과 같은 자리 — 전략 루프 밖에서 한 번, 판 전제 블록에.
      *
-     * <p>지점 수는 엔진이 보는 배치 전 스냅샷({@link #nodesAt})의 온도로 센다. 미계측 노드는 0℃ 로 실려 넘는 지점이 없고,
+     * <p>지점 수는 엔진이 보는 배치 전 스냅샷({@link #nodesAt})의 온도로 센다. 미계측 노드는 0℃로 실려 넘는 지점이 없고,
      * 상한과 같은 온도는 넘지 않은 것으로 센다(엔진의 현재 온도 검사와 같은 비교). 범위는 계측 여부와 무관하게 생성식 온도로 잰다.
      * 행은 nodeId 오름차순이다.</p>
      *
-     * <p>{@code private} 이 아닌 이유는 같은 패키지의 테스트가 임시 판을 직접 만들어 부르고, 판마다 다시 훑은 값과 견주기 때문이다.</p>
+     * <p>{@code private}이 아닌 이유는 같은 패키지의 테스트가 임시 판을 직접 만들어 부르고, 판마다 다시 훑은 값과 견주기 때문이다.</p>
      */
     static List<TemperatureLimitCheck> temperatureLimitCheck(SyntheticCluster cluster, double loweredLimit, double policyLimit) {
         List<Long> sweep = sweepPoints(cluster);
@@ -410,7 +410,7 @@ public class PlacementBenchmarkService {
         return rows;
     }
 
-    /** 온도 상한 열이 실제로 돌린 정책의 온도 상한 — 그 열의 override 를 얹은 정책 사본에서 읽는다(응답의 engineConfigOverride 와 같은 출처). */
+    /** 온도 상한 열이 실제로 돌린 정책의 온도 상한 — 그 열의 override를 얹은 정책 사본에서 읽는다(응답의 engineConfigOverride와 같은 출처). */
     private double loweredTemperatureLimit() {
         for (BenchmarkColumns.EngineVariant v : columns.engineVariants()) {
             if (BenchmarkRules.TEMPERATURE_LIMIT_COLUMN.equals(v.strategy().id())) {
@@ -420,7 +420,7 @@ public class PlacementBenchmarkService {
         throw new IllegalStateException("온도 상한 열이 없다: " + BenchmarkRules.TEMPERATURE_LIMIT_COLUMN);
     }
 
-    /** 기준 정책의 온도 상한 — 응답 {@code engineConfig.policies} 의 BASE 행과 같은 출처. */
+    /** 기준 정책의 온도 상한 — 응답 {@code engineConfig.policies}의 BASE 행과 같은 출처. */
     private static double policyTemperatureLimit() {
         return BenchmarkColumns.baseline().getMaxTemperatureCelsius();
     }

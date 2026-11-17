@@ -141,7 +141,7 @@ class RunInputReplayRuleTest {
         return new RunInputReplay.Step(workloadId, false, new SchedulingResult(true, "mdc-01", node, score, "최고 점수", List.of()));
     }
 
-    /** 상태만 다른 전달 기록 — 엔티티 생성자는 워크로드를 받아 상태를 REQUESTED 로 고정하므로 필드를 직접 채운다. */
+    /** 상태만 다른 전달 기록 — 엔티티 생성자는 워크로드를 받아 상태를 REQUESTED로 고정하므로 필드를 직접 채운다. */
     private static PlacementDispatch dispatch(Long workloadId, DispatchStatus status) throws Exception {
         Constructor<PlacementDispatch> c = PlacementDispatch.class.getDeclaredConstructor();
         c.setAccessible(true);

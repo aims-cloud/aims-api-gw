@@ -21,8 +21,8 @@ import jakarta.validation.constraints.Min;
 /**
  * 디스패치(실행 계층 연동) API — 결정을 넘긴 기록의 조회와, 실행 계층이 결과를 되돌려 주는 콜백.
  *
- * <p>콜백 {@code POST /dispatches/{id}/result} 는 실행 계층(1세부)이 부른다고 가정한다. 인증은 다른 API 와 같은 JWT 라
- * 실행 계층에는 서비스 계정이 필요하다(운영 설정). 기록형 모드에서는 시연 스크립트·운영자가 같은 API 로 진행을 알린다.</p>
+ * <p>콜백 {@code POST /dispatches/{id}/result}는 실행 계층(1세부)이 부른다고 가정한다. 인증은 다른 API와 같은 JWT라
+ * 실행 계층에는 서비스 계정이 필요하다(운영 설정). 기록형 모드에서는 시연 스크립트·운영자가 같은 API로 진행을 알린다.</p>
  */
 @Tag(name = "스케줄러 디스패치", description = "배치 결정을 실행 계층으로 넘긴 기록과 결과 콜백. 실행 계층 API 미정 — 기본은 기록형")
 @RestController

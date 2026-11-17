@@ -29,19 +29,19 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 /**
  * 서버별 전력 효율성 지표 계산·평가.
  *
- * <p>계산 자체는 {@link PowerModel} 이 이미 갖고 있다. 이 서비스가 더하는 것은
+ * <p>계산 자체는 {@link PowerModel}이 이미 갖고 있다. 이 서비스가 더하는 것은
  * <b>클러스터 단위 평가</b>다 — 등급과 순위는 다른 노드와 비교해야 나오므로 노드 하나만
  * 보는 모델 계층에서는 만들 수 없다.</p>
  *
  * <p><b>전력 메트릭이 없는 노드를 걸러내는 것이 이 서비스의 핵심 책임이다.</b>
- * {@link PowerModel#proportionality} 는 전력 용량만 보고 실측 전력이 0 인지는 보지 않아,
- * IPMI 가 없는 노드에도 그럴듯한 값을 돌려준다. 예를 들어 CPU 13%·전력 0W·용량 500W 이면
- * 비례성 0.61 이 나온다. 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로,
- * 평가 불가 노드는 파생 지표를 모두 {@code null} 로 비운다.</p>
+ * {@link PowerModel#proportionality}는 전력 용량만 보고 실측 전력이 0인지는 보지 않아,
+ * IPMI가 없는 노드에도 그럴듯한 값을 돌려준다. 예를 들어 CPU 13%·전력 0W·용량 500W이면
+ * 비례성 0.61이 나온다. 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로,
+ * 평가 불가 노드는 파생 지표를 모두 {@code null}로 비운다.</p>
  *
  * <p><b>순위는 둘이다.</b> 등급·순위·권고·요약은 PEI 원값(사용률 ÷ W) 기준이라 코어 수를 보지 않는다. 코어 수가 다른 서버를 견주도록
- * 사용 코어 환산 효율({@code usedCoresPerKw})과 그 순위({@code coreRank})를 함께 낸다. 노드 배치 스코어의 PEI 항은 판정 회차 4 에서
- * 코어 비율을 곱하게 고쳤고, 예약이 없는 같은 스냅샷에서 그 항이 상한 1.0 에 걸리지 않으면 이 값의 순서가 그것과 같다.</p>
+ * 사용 코어 환산 효율({@code usedCoresPerKw})과 그 순위({@code coreRank})를 함께 낸다. 노드 배치 스코어의 PEI 항은 판정 회차 4에서
+ * 코어 비율을 곱하게 고쳤고, 예약이 없는 같은 스냅샷에서 그 항이 상한 1.0에 걸리지 않으면 이 값의 순서가 그것과 같다.</p>
  */
 @Service
 public class PowerEfficiencyService {
@@ -144,7 +144,7 @@ public class PowerEfficiencyService {
         boolean evaluable = node.getPowerWatts() > 0;
 
         if (!evaluable) {
-            // 전력을 모르면 PEI 도 비례성도 여유율도 의미가 없다. 숫자를 남기지 않는다.
+            // 전력을 모르면 PEI도 비례성도 여유율도 의미가 없다. 숫자를 남기지 않는다.
             return new PowerEfficiencyResponse.NodeEfficiency(
                     node.getMdcId(), node.getNodeId(), false,
                     node.getCpuUsagePercent(), node.getPowerWatts(), node.getPowerCapacityWatts(),
@@ -167,9 +167,9 @@ public class PowerEfficiencyService {
 
     /**
      * 사용 코어 환산 효율(코어/kW) — CPU 사용률/100 × 코어 수 ÷ (소비 전력/1000) = 사용률 × 코어 × 10 ÷ W.
-     * PEI 원값(사용률 ÷ W)은 코어 수를 보지 않아, 같은 사용률·같은 W 면 8코어와 64코어가 같은 값을 받는다.
+     * PEI 원값(사용률 ÷ W)은 코어 수를 보지 않아, 같은 사용률·같은 W면 8코어와 64코어가 같은 값을 받는다.
      * 코어 수를 곱하면 예약이 없을 때 순서가 노드 배치 스코어의 PEI 항(코어 비율을 곱한 값)과 같아진다 — 비율의 분모(후보 평균 코어)는 호출마다 공통인 양수다.
-     * 전력이 0 이하인 노드는 호출하지 않는다. 코어 수가 0 이하이면 일의 양을 모르므로 null 이다.
+     * 전력이 0 이하인 노드는 호출하지 않는다. 코어 수가 0 이하이면 일의 양을 모르므로 null이다.
      */
     private Double usedCoresPerKw(NodeResource node) {
         if (node.getTotalCpu() <= 0) return null;
@@ -177,8 +177,8 @@ public class PowerEfficiencyService {
     }
 
     /**
-     * 정규화 PEI. 설정이 0 이하면 {@code min(1, x/0)} 이 1.0 또는 NaN(응답 반올림에서 0.0)이 되므로 모델이 대체값으로 되돌린다 —
-     * 계산은 모델 한 곳에 두고 여기서는 경고만 남긴다(대체값이 두 곳에 있으면 배치·진단 PEI 가 조용히 갈릴 수 있다).
+     * 정규화 PEI. 설정이 0 이하면 {@code min(1, x/0)}이 1.0 또는 NaN(응답 반올림에서 0.0)이 되므로 모델이 대체값으로 되돌린다 —
+     * 계산은 모델 한 곳에 두고 여기서는 경고만 남긴다(대체값이 두 곳에 있으면 배치·진단 PEI가 조용히 갈릴 수 있다).
      */
     private double normalizedPei(NodeResource node) {
         double normalizer = properties.getPower().getPeiNormalizer();
@@ -231,7 +231,7 @@ public class PowerEfficiencyService {
         }
     }
 
-    /** 상위 25% 부터 A·B·C·D. 나누어떨어지지 않으면 앞 등급이 한 자리 더 갖는다. */
+    /** 상위 25%부터 A·B·C·D. 나누어떨어지지 않으면 앞 등급이 한 자리 더 갖는다. */
     private String gradeOf(int zeroBasedRank, int total) {
         int quartile = (int) Math.floor((double) zeroBasedRank * 4 / total);
         return switch (Math.min(quartile, 3)) {
@@ -258,7 +258,7 @@ public class PowerEfficiencyService {
                         + "전력 메트릭이 있는 노드가 늘어나면 자동으로 매겨집니다.",
                 evaluable.size(), MIN_NODES_FOR_GRADE);
 
-        // 절대 기준값 — 4분위 등급은 클러스터 전체가 비효율이어도 누군가는 A 를 받으므로 최소·최대 원값을 함께 낸다
+        // 절대 기준값 — 4분위 등급은 클러스터 전체가 비효율이어도 누군가는 A를 받으므로 최소·최대 원값을 함께 낸다
         Double minPei = evaluable.isEmpty() ? null
                 : round(evaluable.stream().mapToDouble(PowerEfficiencyResponse.NodeEfficiency::peiRaw).min().orElse(0));
         Double maxPei = evaluable.isEmpty() ? null
@@ -278,12 +278,12 @@ public class PowerEfficiencyService {
      * 여러 조건에 걸리면 더 시급한 것 하나만 남긴다.
      *
      * <p><b>비례성은 권고 근거로 쓰지 않는다.</b> 비례성은 이상 곡선과의 <i>거리</i>라
-     * 덜 쓰는 노드도 낮게 나온다. CPU 90% 를 쓰면서 전력은 150W 만 쓰는 아주 효율적인
-     * 노드가 비례성 0.37 을 받아 "전력 관리 설정을 확인하라"는 경고를 받는 식이다.</p>
+     * 덜 쓰는 노드도 낮게 나온다. CPU 90%를 쓰면서 전력은 150W만 쓰는 아주 효율적인
+     * 노드가 비례성 0.37을 받아 "전력 관리 설정을 확인하라"는 경고를 받는 식이다.</p>
      *
-     * <p>그렇다고 "이상보다 많이 쓸 때만" 으로 좁히면 규칙이 아예 발동하지 않는다.
-     * 비례성 0.5 미만이면서 과다 사용이라는 것은 {@code |실측−이상| > 0.5×용량} 이고
-     * {@code 이상 ≥ 유휴 = 0.3×용량} 이므로 {@code 실측 > 0.8×용량} 을 뜻한다. 그런 노드는
+     * <p>그렇다고 "이상보다 많이 쓸 때만"으로 좁히면 규칙이 아예 발동하지 않는다.
+     * 비례성 0.5 미만이면서 과다 사용이라는 것은 {@code |실측−이상| > 0.5×용량}이고
+     * {@code 이상 ≥ 유휴 = 0.3×용량}이므로 {@code 실측 > 0.8×용량}을 뜻한다. 그런 노드는
      * 여유율이 20% 미만이라 바로 위의 여유율 규칙에 먼저 걸린다. 도달할 수 없는 분기라
      * 남겨 두지 않았다. 비례성 값 자체는 응답에 그대로 실어 판단 근거로 제공한다.</p>
      */
@@ -312,9 +312,9 @@ public class PowerEfficiencyService {
      * 노드 하나의 전력·CPU·PEI 추세.
      *
      * <p>메트릭 저장소에서 그때그때 읽는다. CPU 식은 스냅샷 수집이 쓰는 것과 <b>같은 식</b>을
-     * 써야 목록 API 와 값이 어긋나지 않는다.</p>
+     * 써야 목록 API와 값이 어긋나지 않는다.</p>
      *
-     * <p>저장소가 응답하지 않아도 예외를 올리지 않는다. IPMI 가 없는 환경에서는 빈 결과가
+     * <p>저장소가 응답하지 않아도 예외를 올리지 않는다. IPMI가 없는 환경에서는 빈 결과가
      * 정상이고, 조회 실패와 데이터 없음을 구분해 사유를 남긴다.</p>
      */
     public PowerEfficiencyTrendResponse trend(String nodeId, OffsetDateTime from,
@@ -328,13 +328,13 @@ public class PowerEfficiencyService {
         validateRange(start, end, interval);
 
         try {
-            // 전력은 IPMI 시리즈의 instance 로 묻는다 — 노드 익스포터와 다를 수 있다(원장 → 호스트명 일치 → 그대로).
-            // 이 경로는 IPMI 만 쓰므로 DCGM 발견 질의는 던지지 않는다. 노드 한 대만 보므로 다른 노드와의 시리즈 충돌은
-            // 여기서 가리지 못한다 — 원장이 같은 instance 의 중복 등록을 409 로 막고, 수집기가 충돌을 미계측으로 떨어뜨린다.
+            // 전력은 IPMI 시리즈의 instance로 묻는다 — 노드 익스포터와 다를 수 있다(원장 → 호스트명 일치 → 그대로).
+            // 이 경로는 IPMI만 쓰므로 DCGM 발견 질의는 던지지 않는다. 노드 한 대만 보므로 다른 노드와의 시리즈 충돌은
+            // 여기서 가리지 못한다 — 원장이 같은 instance의 중복 등록을 409로 막고, 수집기가 충돌을 미계측으로 떨어뜨린다.
             String ipmiInstance = exporterResolver.resolve(java.util.Set.of(), exporterResolver.discoverIpmiInstances()).ipmiOf(nodeId);
             Map<Long, Double> power = seriesOf(String.format(
                     "ipmi_dcmi_power_consumption_watts{instance=\"%s\"}", ipmiInstance), start, end, interval);
-            // 스냅샷 수집과 동일한 식. 다르면 목록 API 와 추세의 값이 맞지 않는다.
+            // 스냅샷 수집과 동일한 식. 다르면 목록 API와 추세의 값이 맞지 않는다.
             Map<Long, Double> cpu = seriesOf(String.format(
                     "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\",instance=\"%s\"}[5m])) * 100)",
                     nodeId), start, end, interval);
@@ -347,7 +347,7 @@ public class PowerEfficiencyService {
                     join(power, cpu), partialReason(power, cpu));
 
         } catch (RuntimeException e) {
-            // 조회 실패로 500 을 내면 화면이 통째로 깨진다. 사유만 담아 빈 결과로 돌려준다.
+            // 조회 실패로 500을 내면 화면이 통째로 깨진다. 사유만 담아 빈 결과로 돌려준다.
             log.warn("전력 추세 조회 실패: node={}, reason={}", nodeId, e.getMessage());
             return PowerEfficiencyTrendResponse.empty(nodeId, start, end, interval,
                     "메트릭 저장소를 조회하지 못했습니다: " + e.getMessage());
@@ -362,8 +362,8 @@ public class PowerEfficiencyService {
     /**
      * 한쪽 시계열만 들어왔을 때의 사유. 양쪽 다 있으면 {@code null}.
      *
-     * <p>배포 환경이 실제로 이 상태다 — CPU 는 수집되는데 IPMI 가 없어 전력만 빈다.
-     * 이때 사유를 달지 않으면 화면은 PEI 가 전부 비어 있는 이유를 알 길이 없다.</p>
+     * <p>배포 환경이 실제로 이 상태다 — CPU는 수집되는데 IPMI가 없어 전력만 빈다.
+     * 이때 사유를 달지 않으면 화면은 PEI가 전부 비어 있는 이유를 알 길이 없다.</p>
      */
     private String partialReason(Map<Long, Double> power, Map<Long, Double> cpu) {
         if (power.isEmpty()) {
@@ -380,8 +380,8 @@ public class PowerEfficiencyService {
     private Map<Long, Double> seriesOf(String promQL, OffsetDateTime start,
                                        OffsetDateTime end, String step) {
         // 저장소가 응답을 안 주면 요청 스레드가 무한 대기하던 경로다. 상한 안에서만 기다리고, 넘기면
-        // 보호 장치의 예외가 trend() 의 기존 처리로 올라가 "메트릭 저장소를 조회하지 못했습니다: 질의가 상한 …" 사유를
-        // 담은 빈 결과(200)가 된다 — 조회 실패에 500 을 내지 않는다는 이 클래스의 원칙 그대로다.
+        // 보호 장치의 예외가 trend()의 기존 처리로 올라가 "메트릭 저장소를 조회하지 못했습니다: 질의가 상한 …" 사유를
+        // 담은 빈 결과(200)가 된다 — 조회 실패에 500을 내지 않는다는 이 클래스의 원칙 그대로다.
         List<Map<String, Object>> results = guard.call(() -> metricsClient.queryRangeResults(
                 promQL, start.toInstant(), end.toInstant(), step), properties.getMetrics().getQueryTimeoutMs());
         Map<Long, Double> series = new LinkedHashMap<>();
@@ -403,8 +403,8 @@ public class PowerEfficiencyService {
     }
 
     /**
-     * 전력과 CPU 를 타임스탬프로 맞춘다.
-     * 한쪽만 있는 지점은 그 값만 담고 PEI 는 비운다 — 없는 값으로 나눌 수 없다.
+     * 전력과 CPU를 타임스탬프로 맞춘다.
+     * 한쪽만 있는 지점은 그 값만 담고 PEI는 비운다 — 없는 값으로 나눌 수 없다.
      */
     private List<PowerEfficiencyTrendResponse.Point> join(Map<Long, Double> power,
                                                           Map<Long, Double> cpu) {

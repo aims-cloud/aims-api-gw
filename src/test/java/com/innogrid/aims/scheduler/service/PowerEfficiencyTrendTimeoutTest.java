@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 전력 효율 추세는 수집기를 거치지 않고 저장소를 직접 부른다 — 저장소가 응답을 안 주면 이 API 가 무한 대기하던 경로다.
+ * 전력 효율 추세는 수집기를 거치지 않고 저장소를 직접 부른다 — 저장소가 응답을 안 주면 이 API가 무한 대기하던 경로다.
  * 보호 장치를 거치면 상한 안에 돌아오고, 기존 처리대로 사유를 담은 빈 결과(200)가 된다.
  */
 class PowerEfficiencyTrendTimeoutTest {

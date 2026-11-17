@@ -64,13 +64,13 @@ public class ScheduleRun {
 
     // ── 클러스터 스냅샷 ─────────────────────────────────────────
     //
-    // 전부 래퍼 타입이고 nullable 이다. 원시 타입으로 두면 "재지 않았다" 와 "0 을 쟀다" 가 구분되지 않고,
+    // 전부 래퍼 타입이고 nullable이다. 원시 타입으로 두면 "재지 않았다"와 "0 을 쟀다"가 구분되지 않고,
     // 행이 이미 있는 표에 NOT NULL 컬럼을 더하려다 스키마 갱신이 실패한다.
     //
     // 컬럼 이름을 명시하는 이유는 카멜→스네이크 변환이 마지막 글자를 보지 않아 끝이 대문자인 이름이
-    // 뭉개지기 때문이다(2026-09-02 배포에서 mdcA → mdca 로 실측). 여기서는 앞질러 막는다.
+    // 뭉개지기 때문이다(2026-09-02 배포에서 mdcA → mdca로 실측). 여기서는 앞질러 막는다.
 
-    /** 스냅샷 기록 상태. 이 PR 이전 행은 null 이다. */
+    /** 스냅샷 기록 상태. 이 PR 이전 행은 null이다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "snapshot_status", length = 20)
     private SnapshotStatus snapshotStatus;
@@ -82,7 +82,7 @@ public class ScheduleRun {
     @Column(name = "snapshot_excluded_count")
     private Integer snapshotExcludedCount;
 
-    /** 전력을 실측한 노드 수. 0 이면 아래 전력 칸들이 전부 근거 없음이라는 뜻이다. */
+    /** 전력을 실측한 노드 수. 0이면 아래 전력 칸들이 전부 근거 없음이라는 뜻이다. */
     @Column(name = "snapshot_measured_nodes")
     private Integer snapshotMeasuredNodes;
 
@@ -131,7 +131,7 @@ public class ScheduleRun {
          * 전만 찍혔다 — 후 칸은 비어 있다.
          *
          * <p>전을 적어 저장한 뒤 후를 적기 전에 프로세스가 내려간 회차다. 배포가 곧 재시작이라 실제로
-         * 생긴다. 배치가 예외로 실패한 회차는 여기 들지 않는다 — 그쪽은 후까지 적고 {@link #OK} 로 끝난다.</p>
+         * 생긴다. 배치가 예외로 실패한 회차는 여기 들지 않는다 — 그쪽은 후까지 적고 {@link #OK}로 끝난다.</p>
          */
         BEFORE_ONLY,
         /** 배치할 워크로드가 없어 재기 전에 끝났다. 클러스터는 멀쩡했고 잴 수도 있었다 — 평범한 회차다. */
@@ -142,7 +142,7 @@ public class ScheduleRun {
         FAILED
     }
 
-    /** 실행 전 스냅샷을 적는다. 후를 적기 전까지 상태는 "전만" 이다. */
+    /** 실행 전 스냅샷을 적는다. 후를 적기 전까지 상태는 "전만"이다. */
     public void recordSnapshotBefore(String knobsDigest,
                                      Integer nodeCount, Integer excludedCount, Integer measuredNodes,
                                      Double measuredPowerWatts,
@@ -269,7 +269,7 @@ public class ScheduleRun {
 
     /** 실행을 일으킨 주체. */
     public enum TriggerType {
-        AUTO,       // cron 에 따른 자동 실행
+        AUTO,       // cron에 따른 자동 실행
         MANUAL      // 사용자가 즉시 실행을 누름
     }
 

@@ -16,10 +16,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 전력 최적화 진단 HTTP 계약.
  *
  * <p>테스트 환경에는 메트릭 저장소가 없어 노드 수집이 빈 목록을 돌려준다. 그래서 여기서
- * 검증하는 것은 <b>데이터가 없을 때 API 가 올바르게 비어 있다고 답하는가</b>다. 배포 VM 도
- * IPMI 가 없어 같은 경로를 타므로, 여기서 고정한 계약이 실환경 계약이기도 하다.</p>
+ * 검증하는 것은 <b>데이터가 없을 때 API가 올바르게 비어 있다고 답하는가</b>다. 배포 VM도
+ * IPMI가 없어 같은 경로를 타므로, 여기서 고정한 계약이 실환경 계약이기도 하다.</p>
  *
- * <p>판정 값 검증은 {@code PowerOptimizationServiceTest}·{@code ConsolidationServiceTest} 가
+ * <p>판정 값 검증은 {@code PowerOptimizationServiceTest}·{@code ConsolidationServiceTest}가
  * 합성 클러스터로 한다.</p>
  */
 @SpringBootTest
@@ -60,7 +60,7 @@ class PowerOptimizationApiTest {
     }
 
     /**
-     * {@code /optimization/power} 는 두 조각짜리 경로다. {@code SchedulerController} 의
+     * {@code /optimization/power}는 두 조각짜리 경로다. {@code SchedulerController}의
      * {@code /nodes/{nodeId}} 같은 경로 변수에 잡히지 않고 제 컨트롤러로 가야 한다.
      */
     @DisplayName("최적화 경로가 다른 컨트롤러에 잡히지 않는다")

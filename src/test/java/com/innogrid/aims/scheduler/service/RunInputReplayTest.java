@@ -51,7 +51,7 @@ import static org.mockito.Mockito.when;
  * 워크로드       우선순위가 다른 GPU 종류 3건(요구 GPU 0)
  * </pre>
  *
- * <p>실행 재생 API 의 판정({@link ScheduleService#replay})과 엔진별 재계산({@link ScheduleService#replayEngines})도 여기서 서비스를 직접 불러 본다 — 실제 실행이 남긴 입력·이력·전달
+ * <p>실행 재생 API의 판정({@link ScheduleService#replay})과 엔진별 재계산({@link ScheduleService#replayEngines})도 여기서 서비스를 직접 불러 본다 — 실제 실행이 남긴 입력·이력·전달
  * 기록이 있어야 해서 이 컨텍스트를 함께 쓴다.</p>
  */
 @SpringBootTest
@@ -121,7 +121,7 @@ class RunInputReplayTest {
         Workload r1 = save("r1", 5, Workload.WorkloadPriority.HIGH);
         Workload r2 = save("r2", 5, Workload.WorkloadPriority.NORMAL);
         save("r3", 5, Workload.WorkloadPriority.LOW);
-        // r1 을 거부하면서 r2 를 다른 경로가 배치한 것처럼 바꿔 둔다 — r2 는 배치 직전 다시 읽혀 건너뛰어진다
+        // r1을 거부하면서 r2를 다른 경로가 배치한 것처럼 바꿔 둔다 — r2는 배치 직전 다시 읽혀 건너뛰어진다
         when(registry.current()).thenReturn(new PlacementDispatcher() {
             @Override public String getMode() { return "test"; }
             @Override public Outcome dispatch(Request request) {
@@ -166,7 +166,7 @@ class RunInputReplayTest {
         save("w3", 4, Workload.WorkloadPriority.LOW);
         long scheduleId = schedule("a-" + engine, engine);
         ScheduleRun run = executionService.runNow(scheduleId, "tester");
-        // 실행이 hot 에 건 대기를 지워 둔다 — 같은 상한의 대기가 이미 있으면 다시 걸어도 그대로라, 남겨 두면 재생이 운영 모델에 대기를 걸어도 아래 비교가 같다
+        // 실행이 hot에 건 대기를 지워 둔다 — 같은 상한의 대기가 이미 있으면 다시 걸어도 그대로라, 남겨 두면 재생이 운영 모델에 대기를 걸어도 아래 비교가 같다
         thermalModel.clearCritical(HOT);
         String marksBefore = String.valueOf(thermalModel.cooldownMarks());   // 안쪽 맵까지 문자열로 떠 둔다
 
@@ -415,7 +415,7 @@ class RunInputReplayTest {
 
     // ── 헬퍼 ───────────────────────────────────────────────────
 
-    /** r1 을 거부하면서 r2 를 다른 경로가 배치한 것처럼 바꾼다 — r2 는 배치 직전 다시 읽혀 건너뛰어진다. */
+    /** r1을 거부하면서 r2를 다른 경로가 배치한 것처럼 바꾼다 — r2는 배치 직전 다시 읽혀 건너뛰어진다. */
     private Workload[] rejectFirstAndMoveSecond() {
         twoTieNodes();
         Workload r1 = save("r1", 5, Workload.WorkloadPriority.HIGH);

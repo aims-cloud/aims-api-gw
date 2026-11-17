@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 실행 미리보기({@code GET /schedules/{id}/preview})의 HTTP 계약 — 키 14개와 그 순서, null 규칙, 404.
  *
- * <p>이 테스트는 트랜잭션을 걸지 않아 롤백이 없다(미리보기의 읽기 전용 트랜잭션을 그대로 탄다). 스케줄은 API 로 만들고 끝에 지운다.</p>
+ * <p>이 테스트는 트랜잭션을 걸지 않아 롤백이 없다(미리보기의 읽기 전용 트랜잭션을 그대로 탄다). 스케줄은 API로 만들고 끝에 지운다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

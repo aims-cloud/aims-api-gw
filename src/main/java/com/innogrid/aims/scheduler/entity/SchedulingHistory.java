@@ -60,14 +60,14 @@ public class SchedulingHistory {
 
     /**
      * 후보 노드의 제외 사유 코드를 코드별로 센 JSON 객체 문자열 — 예 {@code {"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}}.
-     * 키는 코드 이름 오름차순, 값은 그 코드로 빠진 후보 수. 모집단은 {@code candidateCount} 와 같다 — 수집 단계에서 빠진
+     * 키는 코드 이름 오름차순, 값은 그 코드로 빠진 후보 수. 모집단은 {@code candidateCount}와 같다 — 수집 단계에서 빠진
      * 노드는 후보가 아니라 여기에도 없고, 적격 후보는 세지 않는다. 한 노드는 먼저 걸린 제약 하나로만 세므로(C1→C6 순,
-     * 배치 응답의 {@code exclusionCode} 와 같은 규칙) 값의 합은 부적격 후보 수와 같다. 제외가 없으면 {@code null}(빈 객체
+     * 배치 응답의 {@code exclusionCode}와 같은 규칙) 값의 합은 부적격 후보 수와 같다. 제외가 없으면 {@code null}(빈 객체
      * 아님), 이 열이 생기기 전의 행도 {@code null}. 엔진이 배치 시점에 본 집계라 실행 계층이 그 뒤 배치를 되돌린 건도 그대로
      * 남는다 — 이력 응답과 실행 상세 결정 목록이 이 열을 그대로 싣는다.
      *
-     * <p>코드 하나를 열거형 열로 남기는 대안을 버리고 집계 문자열을 평문으로 둔 까닭: Hibernate 는 열거형 열을 처음 만들 때
-     * 그 시점 값 목록으로 CHECK 를 자동 생성하고 뒤에 값이 늘어도 고치지 않는다 — 제외 코드는 제약이 늘면 함께 늘어나는
+     * <p>코드 하나를 열거형 열로 남기는 대안을 버리고 집계 문자열을 평문으로 둔 까닭: Hibernate는 열거형 열을 처음 만들 때
+     * 그 시점 값 목록으로 CHECK를 자동 생성하고 뒤에 값이 늘어도 고치지 않는다 — 제외 코드는 제약이 늘면 함께 늘어나는
      * 목록이다.</p>
      */
     @Column(columnDefinition = "text")
@@ -83,7 +83,7 @@ public class SchedulingHistory {
     }
 
     /**
-     * 집계 문자열을 코드 → 후보 수로 되읽는다 — {@link #exclusionCodeKey} 와 짝이라 형식이 바뀌면 함께 바뀐다.
+     * 집계 문자열을 코드 → 후보 수로 되읽는다 — {@link #exclusionCodeKey}와 짝이라 형식이 바뀌면 함께 바뀐다.
      * {@code null}·빈 문자열은 빈 맵, 형식이 어긋나거나 값이 음수면 빈 {@link Optional}(부르는 쪽이 건너뛰고 센다). 키는 이름 오름차순.
      */
     public static Optional<SortedMap<String, Integer>> parseExclusionCodes(String codes) {
@@ -122,13 +122,13 @@ public class SchedulingHistory {
     /**
      * 이 결정을 만든 스케줄 실행({@code schedule_runs.id}).
      *
-     * <p>단건 스케줄링 API 로 만든 이력은 null 이다. 외래키를 두지 않았으므로 실행 이력을
-     * 지울 때 DB 가 알아서 정리해 주지 않는다 — 코드에서 명시적으로 null 로 만든다.
+     * <p>단건 스케줄링 API로 만든 이력은 null이다. 외래키를 두지 않았으므로 실행 이력을
+     * 지울 때 DB가 알아서 정리해 주지 않는다 — 코드에서 명시적으로 null로 만든다.
      * 배치 결정 이력 자체는 연구 근거 자료라 함께 지우지 않는다.</p>
      */
     private Long scheduleRunId;
 
-    /** 배치 성공 여부. 기존 행은 성공한 결정만 저장했으므로 null 은 성공으로 본다. */
+    /** 배치 성공 여부. 기존 행은 성공한 결정만 저장했으므로 null은 성공으로 본다. */
     private Boolean success;
 
     private OffsetDateTime createdAt;
@@ -176,7 +176,7 @@ public class SchedulingHistory {
     public Boolean getSuccess() { return success; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 
-    /** 성공 여부를 남기고, 스케줄 실행이 만든 결정이면 그 실행에 연결한다({@code scheduleRunId} 가 null 이면 연결 없이 성공 여부만). */
+    /** 성공 여부를 남기고, 스케줄 실행이 만든 결정이면 그 실행에 연결한다({@code scheduleRunId}가 null이면 연결 없이 성공 여부만). */
     public void linkToRun(Long scheduleRunId, boolean success) {
         this.scheduleRunId = scheduleRunId;
         this.success = success;

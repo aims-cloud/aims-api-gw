@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 임계값을 봐도, 열 검사의 부작용이 전략마다 다르게 쌓여도 표는 정상적인 숫자를 채운다 —
  * <b>틀린 숫자를</b>. 그래서 성질 자체를 테스트로 고정한다.</p>
  *
- * <p>스프링을 쓰지 않는다. 노드는 {@code new NodeResource(...)} 로 직접 만들고, 판정을 뒤집을
+ * <p>스프링을 쓰지 않는다. 노드는 {@code new NodeResource(...)}로 직접 만들고, 판정을 뒤집을
  * 수치는 주석에 계산 과정을 적어 둔다.</p>
  */
 class BenchmarkContextsTest {
@@ -114,7 +114,7 @@ class BenchmarkContextsTest {
     void fresh_evaluator_does_not_share_cooldown_state() {
         Workload workload = workload();
 
-        // 평가기 A 로 뜨거운 노드를 검사한다. 이 읽기 검사가 온도 모델에 임계 기록을 남긴다.
+        // 평가기 A로 뜨거운 노드를 검사한다. 이 읽기 검사가 온도 모델에 임계 기록을 남긴다.
         PlacementContext a = BenchmarkContexts.copyOf(base(), policy(), evaluator());
         String first = a.exclusionReason(workload, a.node(HOT).orElseThrow());
         assertNotNull(first);

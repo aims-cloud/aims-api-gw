@@ -114,7 +114,7 @@ class PolicyRequestValidationTest {
     @Test
     void patch_null_clears_field() throws Exception {
         // active:false — 이 테스트는 null 의미만 본다. 활성으로 만들면 종류를 공통(null)으로 바꾸는 순간 다른 테스트가
-        // 스케줄링 중 저장해 둔 활성 공통 정책(default)과 충돌해 409 가 나 실행 순서에 따라 흔들린다.
+        // 스케줄링 중 저장해 둔 활성 공통 정책(default)과 충돌해 409가 나 실행 순서에 따라 흔들린다.
         String body = create("{\"name\":\"" + name() + "\",\"resourceType\":\"gpu\",\"defaultEngine\":\"power\","
                 + "\"warningTemperatureCelsius\":60,\"cpuWeight\":0.3,\"active\":false}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

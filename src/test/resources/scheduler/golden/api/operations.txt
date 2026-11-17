@@ -8,6 +8,7 @@ GET /api/v1/scheduler/history
 GET /api/v1/scheduler/history/exclusion-summary
 GET /api/v1/scheduler/history/page
 GET /api/v1/scheduler/inventory/nova
+POST /api/v1/scheduler/inventory/nova/dry-run
 GET /api/v1/scheduler/mdc-links
 POST /api/v1/scheduler/mdc-links
 GET /api/v1/scheduler/mdc-links/matrix

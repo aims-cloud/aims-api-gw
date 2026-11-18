@@ -15,7 +15,8 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric.Role;
  *
  * <p>이 클래스가 커밋 이력에서 결과 코드보다 <b>앞에 있는 것</b>이 사전 등록의 증거다.
  * 기술적으로 이 클래스는 지표 열거와 판정 셀의 전원 가정 말고는 아무것도 참조하지 않아 어디에 놓아도 컴파일된다 — 그래서
- * <b>순서가 유일한 증거</b>이고, 계약 테스트가 이 상수들을 고정해 나중에 조용히 바뀌는 것을 막는다.</p>
+ * <b>순서가 유일한 증거</b>이고, {@code BenchmarkRulesContractTest}가 이 상수들을 확인해
+ * 나중에 조용히 바뀌는 것을 막는다.</p>
  *
  * <p><b>승자를 지명하는 필드를 응답에 두지 않는다.</b> API가 승자를 계산해 주면 그 필드만 인용되고,
  * 판 이름·전원 상태 가정·부하율에서 분리된 순간 그 판정은 거짓이 된다. 대신 셀마다
@@ -123,7 +124,7 @@ public final class BenchmarkRules {
      * {@code curveAlpha}와 같은 수라 피했다. 값 자체에 물리적 근거는 없다.</p>
      *
      * <p><b>판 파일이 진실이고 이 상수는 그 사본이다.</b> 판이 실제로 쓰는 β는 클러스터 파일의
-     * {@code powerExponent}이고, 여기 적힌 값은 결과보다 먼저 등록해 둔 사전 선언이다 — 계약 테스트가
+     * {@code powerExponent}이고, 여기 적힌 값은 결과보다 먼저 등록해 둔 사전 선언이다 — {@code BenchmarkClustersTest}가
      * 둘의 일치를 강제한다. <b>이 값은 뒤에 바뀔 수 있으며, 바뀌면 이 판으로 뜬 기준선은 무효다.</b></p>
      */
     public static final double CONVEX_POWER_EXPONENT = 1.6;
@@ -136,7 +137,10 @@ public final class BenchmarkRules {
      */
     public static final double CONCAVE_POWER_EXPONENT = 0.625;
 
-    /** 오목 판 id. 판 등록부의 같은 문자열과 계약 테스트가 대조한다. seed는 하나(legacy 위상) — β와 위상 두 축을 한 판에 걸지 않는다. */
+    /**
+     * 오목 판 id. 판 등록부의 같은 문자열과 {@code BenchmarkClustersTest}가 대조한다.
+     * seed는 하나(legacy 위상) — β와 위상 두 축을 한 판에 걸지 않는다.
+     */
     public static final String CONCAVE_BOARD = "concave";
 
     /**
@@ -169,7 +173,8 @@ public final class BenchmarkRules {
 
     /**
      * 온도 상한 열의 상한 — 결과를 보기 전부터 코드에 있던 기본 경고 온도(SchedulerProperties.Thermal의 defaultWarningCelsius)와 같은 값이다.
-     * 판 결과를 보고 고른 값이 아니다. 계약 테스트가 「기본 경고 온도와 같고 정책 기본 임계보다 낮다」를 고정한다.
+     * 판 결과를 보고 고른 값이 아니다. {@code BenchmarkRulesContractTest}가
+     * 「기본 경고 온도와 같고 정책 기본 임계보다 낮다」를 확인한다.
      */
     public static final double LOWERED_TEMPERATURE_LIMIT_CELSIUS = 65.0;
 
@@ -258,8 +263,8 @@ public final class BenchmarkRules {
      * 셀을 결과를 보고 고르면 사후 선택이 된다. 기준선 값 자체는 여기 두지 않는다 — 값은 판을 실행해야
      * 나오고, 상수에 값을 박으면 실행 순서가 커밋 순서를 강제한다.
      *
-     * <p>판 등록 쪽 상수 {@link BenchmarkClusters#CONVEX_MISRATED}와 <b>같은 문자열</b>이며, 계약 테스트가
-     * 이 값이 등록된 판 목록에 들어 있는지를 본다.</p>
+     * <p>판 등록 쪽 상수 {@link BenchmarkClusters#CONVEX_MISRATED}와 <b>같은 문자열</b>이며,
+     * {@code BenchmarkRulesContractTest}가 이 값이 등록된 판 목록에 들어 있는지를 본다.</p>
      */
     public static final String JUDGMENT_BOARD = "convex-misrated";
 
@@ -278,7 +283,8 @@ public final class BenchmarkRules {
      * 판정 셀의 워크로드 분포. 분포는 판정 결과를 바꾸는 입력이라 규칙 축 밖에 두면 보고자가 고를 수 있다.
      * 이 상수는 <b>소급 명문화</b>로, 값은 지금까지의 판정·관측이 전부 쓴 분포와 같고 앞으로의 선택 자유도만 닫는다.
      * 서비스의 기본 분포 상수와 같은 문자열이며
-     * 계약 테스트가 둘의 일치를 본다(이 클래스는 서비스를 참조하지 않는다 — 의존 방향을 지키기 위해 테스트가 대신 묶는다).
+     * {@code BenchmarkRulesContractTest}가 둘의 일치를 본다(이 클래스는 서비스를 참조하지 않는다 — 의존 방향을
+     * 지키기 위해 테스트가 대신 묶는다).
      */
     public static final String JUDGMENT_DISTRIBUTION = "heavytail";
 
@@ -312,8 +318,9 @@ public final class BenchmarkRules {
 
     /**
      * 판정 보고 0단계(출처 대조)에서 규칙 축 8값을 <b>등급별로</b> 읽는다 — 전량 일치를 요구하면 절차 문장이 한 번만 고쳐져도 0단계가
-     * 상시 발동해 무력화된다. 등급표 자체를 규칙 축(prose)에 봉인하고, 세 집합의 합이 {@link #ruleAxes()}의 키 집합과 같음을 계약 테스트가 본다 —
-     * 축이 새로 생기면 등급을 정하지 않고는 테스트가 통과하지 않는다.
+     * 상시 발동해 무력화된다. 등급표 자체를 규칙 축(prose)에 봉인하고, 세 집합의 합이 {@link #ruleAxes()}의 키 집합과
+     * 같음을 {@code BenchmarkRulesContractTest}가 본다 — 축이 새로 생기면 등급을 정하지 않고는 테스트가
+     * 통과하지 않는다.
      *
      * <ul>
      *   <li>판정 무효화 축 — 불일치면 B와 N이 다른 규칙으로 산출된 것이라 1~4항 판정 불가.</li>
@@ -337,23 +344,25 @@ public final class BenchmarkRules {
                     + "기준선을 다시 뜨지 못하므로 그 PR 안에서 지목을 바꿀 수 없다.";
 
     /**
-     * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. 계약 테스트가 축마다 다이제스트 리터럴을
-     * 두고, 증거 묶음 매니페스트가 같은 값을 싣는다. 축을 나눈 이유는 "어느 규칙이 바뀌었나"가 값 하나에 뭉개지지 않게
-     * 하기 위해서다. 응답에는 싣지 않는다(형태 불변).
+     * 판정 규칙의 <b>축별 정규 문자열</b> — 사전 등록을 기계로 봉인하기 위한 재료. {@code BenchmarkRulesContractTest}가
+     * 축마다 다이제스트 리터럴을 두고, 증거 묶음 매니페스트가 같은 값을 싣는다. 축을 나눈 이유는
+     * "어느 규칙이 바뀌었나"가 값 하나에 뭉개지지 않게 하기 위해서다. 응답에는 싣지 않는다(형태 불변).
      *
      * <p><b>축이 바뀌는 커밋의 형식.</b> 제목을 {@code rules:}로 시작하고, 본문에 축·옛 값 → 새 값·사유를 적고, 결과 코드
-     * 변경을 같은 커밋에 담지 않는다. 계약 테스트의 축 이력({@code RULE_AXIS_HISTORY})에 행을 더해야 테스트가 통과하므로
-     * 이력 누락은 기계가 막고, 커밋 순서는 리뷰가 본다.</p>
+     * 변경을 같은 커밋에 담지 않는다. {@code BenchmarkRulesContractTest}의 축 이력({@code RULE_AXIS_HISTORY})에 행을
+     * 더해야 테스트가 통과하므로 이력 누락은 기계가 막고, 커밋 순서는 리뷰가 본다.</p>
      */
     public static Map<String, String> ruleAxes() {
         java.util.LinkedHashMap<String, String> axes = new java.util.LinkedHashMap<>();
-        // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(계약 테스트 DECLARED_KEY_DIGEST)와는 목적이 달라 값이 같지 않다
+        // metrics 축은 키:방향:역할 — 키 집합만의 다이제스트(BenchmarkRulesContractTest의 DECLARED_KEY_DIGEST)와는
+        // 목적이 달라 값이 같지 않다
         axes.put("metrics", METRICS.stream().map(m -> m.key() + ":" + m.direction() + ":" + m.role()).sorted()
                 .collect(java.util.stream.Collectors.joining(",")));
         axes.put("sweep", "loadRatios=" + LOAD_RATIOS + "|sweepPoints=" + SWEEP_POINTS + "|randomSeeds=" + RANDOM_SEEDS
                 + "|memoryMbPerCore=" + MEMORY_MB_PER_CORE + "|poweredOnCpuPercent=" + POWERED_ON_CPU_PERCENT
                 + "|cooldownMinutes=" + COOLDOWN_MINUTES_FOR_BENCHMARK);
-        // 판 파일 값의 사전 등록(교차 검증) — 지수·비율·위상 방식·seed 수·혼합 상수. 판 파일이 진실이고 계약 테스트가 대조한다
+        // 판 파일 값의 사전 등록(교차 검증) — 지수·비율·위상 방식·seed 수·혼합 상수.
+        // 판 파일이 진실이고 BenchmarkClustersTest 등 판 테스트가 대조한다
         axes.put("boards", "convexExponent=" + CONVEX_POWER_EXPONENT + "|capacityMismatchRatio=" + CAPACITY_MISMATCH_RATIO
                 + "|concaveExponent=" + CONCAVE_POWER_EXPONENT + "|concaveBoard=" + CONCAVE_BOARD + "|linkBoard=" + LINK_BOARD
                 + "|phaseIndependentBoards=" + PHASE_INDEPENDENT_BOARDS + "|phaseSeedCount=" + PHASE_SEED_COUNT
@@ -623,8 +632,8 @@ public final class BenchmarkRules {
     /**
      * 지점 비교의 <b>무시 폭</b>(%p) — 4자리 눈금 두 칸. 지점값 g_i는 응답과 같은 4자리라 차는 0.0001의 배수인데, 실수에서 항등인 변경이
      * binary64 마지막 비트로 4자리 반올림 동점을 뒤집어 정확히 한 칸(0.0001)을 움직이는 것이 관측됐다(한계 전력 곡선 평가점 정정의 증거 묶음 대조에서
-     * 26칸 — 전부 순위 근거가 아닌 표시 지표였고 판정 근거 열은 바이트 동일이었다. 판정량에 같은 뒤집힘이 오는 것은 같은 기전의 외삽이라 이 폭은
-     * 관측이 아니라 예방으로 세운다).
+     * 26개 값 — 전부 순위 근거가 아닌 표시 지표였고 판정 근거 열은 바이트 동일이었다. 판정량에 같은 뒤집힘이 오는 것은
+     * 같은 기전의 외삽이라 이 폭은 관측이 아니라 예방으로 세운다).
      * 지점값 g_i는 반올림 전 전력에서 한 번만 4자리로 양자화되므로(단일 양자화가 이 폭의 전제다) 한 칸 차는 반올림 경계 하나로 설명되고
      * 두 칸부터는 그렇지 않다 — 두 칸 미만의 차는 축소도 악화도 아닌 동률로 본다. 3항(축소 지점 수)에 이 폭을, 4항(방향 셀 중앙값 차)에는
      * 그 두 배를 적용한다: 중앙값은 짝수 개 지점의 평균에 반올림이 한 번 더 겹쳐 지점 한 칸 잡음이 중앙값을 최대 두 칸 움직이므로 방향 밴드는 두 칸을
@@ -659,7 +668,7 @@ public final class BenchmarkRules {
      *
      * <p>상수 넷만 두면 "무엇을 무엇과 견주는가"가 사람의 기억에 남고, 기억은 결과를 본 뒤에 바뀐다.
      * 교집합을 먼저 잡는 것·중앙값을 같은 집합에서 내는 것·축소의 부호·불일치의 처리를 여기 적어 두고,
-     * 계약 테스트가 이 문장에서 네 조각이 사라지지 않게 지킨다.</p>
+     * {@code BenchmarkRulesContractTest}가 이 문장에서 네 조각이 사라지지 않게 지킨다.</p>
      */
     public static final String GAP_JUDGMENT_RULE =
             "격차 판정 규칙. 판정 셀은 JUDGMENT_BOARD·JUDGMENT_LOAD_RATIO·JUDGMENT_POWER_CONTROL 로 정해지며, "
@@ -954,9 +963,9 @@ public final class BenchmarkRules {
     /**
      * 응답이 스스로 밝히는 한계.
      *
-     * <p>세 조각을 반드시 담는다 — "실측이 아니", "생성식", "한 대". 계약 테스트가 이 세 조각을 강제하므로
-     * 문장을 다시 써도 이 사실들은 빠질 수 없다. 그리고 이 API가 <b>무엇을 증명하지 않는지</b>를 한 문장으로
-     * 적는다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.</p>
+     * <p>세 조각을 반드시 담는다 — "실측이 아니", "생성식", "한 대". {@code BenchmarkRulesContractTest}가 이 세 조각을
+     * 강제하므로 문장을 다시 써도 이 사실들은 빠질 수 없다. 그리고 이 API가 <b>무엇을 증명하지 않는지</b>를 한 문장으로
+     * 적는다 — 각주로 밀어 두면 인용될 때 빠진다.</p>
      */
     public static final String LIMITATION =
             "이 비교의 전력·온도 값은 실측이 아니다 — 합성 클러스터 생성식의 출력이며, 그 계수(노드별 유휴 전력·정격·"

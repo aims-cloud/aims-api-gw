@@ -38,10 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 디스패치 API 4종의 HTTP 계약 — 필드 13개, 콜백 상태 코드, 페이지 필터, 워크로드 삭제 시 정리, 인증.
+ * 디스패치 API 4종의 HTTP 동작 — 필드 13개, 콜백 상태 코드, 페이지 필터, 워크로드 삭제 시 기록 삭제, 인증.
  *
- * <p>수집기를 대역으로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API로 결정을 만든다. 기본(record) 모드라 디스패치는
- * ACCEPTED로 시작한다.</p>
+ * <p>수집기를 목 객체로 바꿔 노드 1대(16코어)를 주고 단건 스케줄링 API로 결정을 만든다. 기본(record) 모드라
+ * 디스패치는 ACCEPTED로 시작한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,7 +52,7 @@ class PlacementDispatchApiTest {
             "status", "idempotencyKey", "externalRef", "message", "requestedAt", "respondedAt", "createdBy"));
 
     private static final String BASE = "/api/v1/scheduler";
-    /** 실재 실행과 겹치지 않는 예약 대역의 실행 id — 동률 페이지 테스트 전용. */
+    /** 실재 실행과 겹치지 않는 예약 구간의 실행 id — 동률 페이지 테스트 전용. */
     private static final long RUN_Z = 9_900_880L;
 
     @Autowired MockMvc mockMvc;

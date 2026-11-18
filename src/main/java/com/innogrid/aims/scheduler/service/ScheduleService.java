@@ -54,7 +54,7 @@ import jakarta.persistence.criteria.Predicate;
 /**
  * 스케줄 CRUD와 조회.
  *
- * <p>실행 흐름은 {@link ScheduleExecutionService}가 맡는다. 실행은 외부 메트릭 조회를
+ * <p>실행 과정은 {@link ScheduleExecutionService}가 맡는다. 실행은 외부 메트릭 조회를
  * 포함해 오래 걸리므로 트랜잭션 경계를 분리해 두었다.</p>
  *
  * <p>요청 검증은 여기서 한다. 저장소 최신 DTO 관례가 검증 애너테이션을 쓰지 않기도 하고,
@@ -475,11 +475,11 @@ public class ScheduleService {
      * <pre>
      * 없음                       → 404
      * 본문 없음 · 스케줄 ID 불일치 → 400
-     * 칸 검증 실패                → 400 (생성과 같은 규칙 · 비울 수 있는 다섯 칸은 JSON 타입도 검사)
+     * 필드 검증 실패              → 400 (생성과 같은 규칙 · 비울 수 있는 다섯 필드는 JSON 타입도 검사)
      * </pre>
      *
      * <p>지정 정책·엔진·전력 상한·온도 상한·설명은 명시적 null로 비운다(정책·온도는 상속으로, 전력은 제약 없음으로 복귀).
-     * <b>모든 칸을 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 칸이 400이면 엔티티는 전혀 바뀌지 않는다.
+     * <b>모든 필드를 먼저 검증한 뒤 한꺼번에 반영한다</b> — 한 필드가 400이면 엔티티는 전혀 바뀌지 않는다.
      * 깨진 JSON이나 리소스 종류·불리언 타입 오류처럼 본문을 읽지 못한 400은 이 메서드에 오기 전에 프레임워크가 낸다.</p>
      */
     @Transactional
@@ -524,7 +524,7 @@ public class ScheduleService {
         return ScheduleResponse.from(scheduleRepository.save(schedule));
     }
 
-    /** 비울 수 있는 칸의 검증 결과 — 보냈는지와 그 값(명시적 null이면 {@code null}). */
+    /** 비울 수 있는 필드의 검증 결과 — 보냈는지와 그 값(명시적 null이면 {@code null}). */
     private record Clearable<T>(boolean sent, T value) {
         static <T> Clearable<T> keep() { return new Clearable<>(false, null); }
         static <T> Clearable<T> set(T value) { return new Clearable<>(true, value); }

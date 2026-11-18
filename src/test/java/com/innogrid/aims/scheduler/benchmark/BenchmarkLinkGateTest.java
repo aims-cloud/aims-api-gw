@@ -14,7 +14,7 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 링크 게이트가 <b>링크 판에서만</b> 켜진다는 사실을 고정한다.
+ * 링크 게이트가 <b>링크 판에서만</b> 켜진다는 사실을 확인한다.
  *
  * <p>게이트는 정책 {@code affinityEnabled} <b>와</b> 워크로드 {@code dataMdcId} 둘 다 있어야 켜진다. 워크로드 분포 파일은
  * {@code dataMdcId}를 넣지 않으므로, 링크 판의 순환 배정 없이는 어느 판에서도 링크 코드에 이르지 않는다. 나머지 판의

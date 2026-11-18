@@ -31,7 +31,7 @@ class SchedulingPolicySelectionTest {
     @Autowired private SchedulingService schedulingService;
     @Autowired private SchedulingPolicyRepository policyRepository;
     @Autowired private WorkloadRepository workloadRepository;
-    /** 수집기만 대역으로 — 모의 배치 응답의 정책 이름을 보려면 노드가 한 대 있어야 한다. */
+    /** 수집기만 목 객체로 — 모의 배치 응답의 정책 이름을 보려면 노드가 한 대 있어야 한다. */
     @MockitoBean NodeResourceCollector collector;
 
     @BeforeEach

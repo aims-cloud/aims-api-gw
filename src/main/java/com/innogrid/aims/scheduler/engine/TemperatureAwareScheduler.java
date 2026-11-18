@@ -26,7 +26,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *    → 전체 노드의 평균 온도 계산
  *    → 평균보다 낮은 노드에 보너스, 높은 노드에 패널티
  *    → balance_factor = (T_avg - T_current) / T_avg
- *    → 핫스팟(hot spot) 회피가 목표 (효과는 배치 후 온도 관측으로만 확인 가능)
+ *    → 국소 과열(hot spot) 회피가 목표 (효과는 배치 후 온도 관측으로만 확인 가능)
  *
  * 3. 열관성(Thermal Inertia) 예측
  *    → 워크로드 배치 후 예상 온도 상승량 추정 (ConstraintEvaluator가 제외 판정)

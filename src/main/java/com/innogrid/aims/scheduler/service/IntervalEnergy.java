@@ -48,7 +48,7 @@ public final class IntervalEnergy {
      *
      * @param kwh          에너지(kWh). 적분할 표본이 없었으면 null
      * @param estimatedKwh 그중 <b>실측이 아닌</b> 값에서 온 몫(kWh). 실측만이면 0.
-     *                     두 끝 중 하나라도 추정이면 그 조각을 통째로 추정으로 세므로 경계에서 조금 크게 잡힌다
+     *                     두 끝 중 하나라도 추정이면 그 조각을 통째로 추정으로 세므로 추정 구간 끝에서 조금 크게 잡힌다
      * @param fromEpoch    실제로 적분이 걸친 구간의 시작(초). 표본이 없었으면 null
      * @param toEpoch      실제로 적분이 걸친 구간의 끝(초). 표본이 없었으면 null
      * @param hours        한 노드가 덮은 시간 중 가장 긴 것(시). 구멍은 빠져 있다 —

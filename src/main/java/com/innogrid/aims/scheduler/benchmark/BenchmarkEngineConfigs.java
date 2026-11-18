@@ -9,9 +9,9 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
  * 엔진 설정 변종 — <b>기본 설정의 사본</b>에 노브 하나만 바꿔 열 하나를 만든다.
  *
  * <p>{@link SchedulerProperties}에는 복사 생성자가 없어 Power·Thermal·Network 하위 필드를 손으로 옮긴다. 필드를 하나 빠뜨리면
- * 그 열은 "노브 하나만 다른 설정"이 아니라 기본값이 섞인 다른 설정이 되므로, {@code BenchmarkEngineConfigsTest}가 세 하위 클래스의
- * getter 전량을 반사로 훑어 원본과 같은지 고정한다({@code SchedulingPolicyCopyTest}와 같은 형태). 사본은 스프링 컨텍스트에 등록되지
- * 않는다 — 판 경로 전용 객체다.</p>
+ * 그 열은 "노브 하나만 다른 설정"이 아니라 기본값이 섞인 다른 설정이 되므로, {@code BenchmarkEngineConfigsTest}가
+ * 세 하위 클래스의 getter 전량을 반사로 훑어 원본과 같은지 확인한다({@code SchedulingPolicyCopyTest}와 같은 형태).
+ * 사본은 스프링 컨텍스트에 등록되지 않는다 — 판 경로 전용 객체다.</p>
  */
 public final class BenchmarkEngineConfigs {
 

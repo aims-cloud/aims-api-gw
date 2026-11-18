@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 정책 사본 {@link SchedulingPolicy#detachedCopy()}가 <b>영속되지 않고</b> 판단 필드를 하나도 빠뜨리지 않는지 고정한다.
+ * 정책 사본 {@link SchedulingPolicy#detachedCopy()}가 <b>영속되지 않고</b> 판단 필드를 하나도 빠뜨리지 않는지 확인한다.
  *
  * <p>필드 하나가 빠지면 그 사본을 쓰는 실행에서 게이트가 <b>조용히</b> 꺼진다. 예를 들어 {@code affinityEnabled}가
  * 빠지면 온도 한계를 지정한 스케줄에서만 MDC 링크 게이트가 꺼진다. 비교 판에서

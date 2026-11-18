@@ -166,7 +166,7 @@ public class Workload {
         this.schedulingReason = reason;
         this.status = WorkloadStatus.SCHEDULED;
         this.scheduledAt = OffsetDateTime.now();
-        if (this.retryCount == null) this.retryCount = 0;   // 기존 행의 응답 계약(null → 0)은 유지하되 실패 누적은 지우지 않는다
+        if (this.retryCount == null) this.retryCount = 0;   // 응답 규칙(null → 0)은 유지하되 실패 누적은 지우지 않는다
     }
 
     /** 배치에 실패했다. 재시도 횟수를 누적해 무한 재시도를 막는다. */
@@ -270,7 +270,7 @@ public class Workload {
         /**
          * 이 상태에서 대상 상태로 넘어갈 수 있는지 판단한다.
          * 배치(PENDING→SCHEDULED)와 실패 처리는 스케줄링 엔진이 직접 수행하므로
-         * 여기서는 배치 이후의 실행 흐름만 다룬다.
+         * 여기서는 배치 이후의 실행 과정만 다룬다.
          *
          * <p>FAILED→PENDING만 예외로 허용한다. 재시도 상한에 걸려 대상에서 빠진 워크로드를
          * 운영자가 되살릴 유일한 경로다. SCHEDULED→PENDING(예약 취소)은 여기 없고 {@link Workload#release}라는

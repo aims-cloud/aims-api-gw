@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배치 비교 API의 HTTP 계약 — 응답 골격, 잘못된 값의 400 <b>본문</b>, 인증, 그리고 <b>저장 부작용 없음</b>.
+ * 배치 비교 API의 HTTP 동작 — 응답 골격, 잘못된 값의 400 <b>본문</b>, 인증, 그리고 <b>저장 부작용 없음</b>.
  *
  * <p>이 진단은 우리 엔진이 대조군에 어떻게 나오는지를 밝히는 것이라 대외 산출물로 인용될 가능성이 높다.
  * 그래서 API 계층에서 지킬 것이 둘이다. 하나는 <b>숫자가 언제 의미를 갖는지 응답이 스스로 밝히는가</b>
@@ -167,7 +167,7 @@ class PlacementBenchmarkApiTest {
         assertFalse(json.contains("\"rank\""), "순위를 계산해 주면 판 이름과 분리되어 인용된다");
     }
 
-    /** 총량 열을 비교할 수 없는 셀은 사유를 <b>같은 자리에</b> 싣는다 — 각주로 밀면 인용될 때 떨어진다. */
+    /** 총량 열을 비교할 수 없는 셀은 사유를 <b>같은 자리에</b> 싣는다 — 각주로 밀면 인용될 때 함께 옮겨지지 않는다. */
     @DisplayName("총량 비교의 짝짓기 사유가 셀에 함께 실린다")
     @Test
     void the_pairing_note_travels_inside_the_cell() throws Exception {

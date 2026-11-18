@@ -37,9 +37,9 @@ class PowerAwareScoringTest {
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
     /**
-     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 칸이 배치용 실효 PEI와 같고, 비낭비 칸은 항등,
-     * 전력점수의 이동은 {@code peiWeight × ΔPEI}다(한계 전력 동적항은 α=1에서 불변). 엔진 배선을 진단용 두 함수로 되돌리면
-     * PEI 칸이 예약 전과 같아져 여기서 멈춘다.
+     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 값이 배치용 실효 PEI와 같고,
+     * 비낭비 값은 항등, 전력점수의 이동은 {@code peiWeight × ΔPEI}다(한계 전력 동적항은 α=1에서 불변).
+     * 엔진 배선을 진단용 두 함수로 되돌리면 PEI 값이 예약 전과 같아져 여기서 멈춘다.
      */
     @DisplayName("예약이 쌓인 노드의 후보 상세 PEI 는 배치용 실효 PEI 이고 전력점수 상승분은 peiWeight × ΔPEI 다")
     @Test
@@ -114,7 +114,8 @@ class PowerAwareScoringTest {
             SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
             assertEquals(round4(thermalScoreOf(model, temp, policy())), detail(result, "n", "열점수"), 0.0, "T=" + temp);
         }
-        // 손검산 리터럴 하나(임계 75 · 경고 65): 52.5℃ → (1 − (52.5/75)²) × 1 = 0.51 — 헬퍼가 식을 재구현하므로 절대값 한 점은 리터럴로 고정한다
+        // 손검산 리터럴 하나(임계 75, 경고 65): 52.5℃ → (1 − (52.5/75)²) × 1 = 0.51
+        // 헬퍼가 식을 재구현하므로 절대값 한 점은 리터럴로 확인한다
         assertEquals(0.51, detail(scheduler.schedule(workload(1), List.of(node("n", 45, 40, 387, 52.5)), policy()), "n", "열점수"), 0.0);
     }
 
@@ -169,8 +170,8 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35가 열 항 몫이고, 전력 3항 칸과 배치 후 예상
-     * 온도 칸은 예약 전과 같은 식(이미 실효 기저)이다.
+     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35가 열 항 몫이고,
+     * 전력 3항 값과 배치 후 예상 온도 값은 예약 전과 같은 식(이미 실효 기저)이다.
      */
     @DisplayName("예약 뒤 총점 이동은 열 항·전력 항·자원 항 몫으로 분해된다")
     @Test
@@ -183,7 +184,8 @@ class PowerAwareScoringTest {
         node.reserve(1, 0, 0);
         SchedulingResult after = scheduler.schedule(workload(1), List.of(node), policy());
 
-        // 열 항 이동은 상세 칸이 아니라 실효 온도 식으로 독립 산출한다 — 상세 칸에서 읽으면 실측 복귀 변이에서도 양변이 함께 0이 된다
+        // 열 항 이동은 상세 값이 아니라 실효 온도 식으로 독립 산출한다
+        // 상세 값에서 읽으면 실측 복귀 변이에서도 양변이 함께 0이 된다
         double dThermal = thermalScoreOf(thermalModel, 53.484375, policy()) - thermalScoreOf(thermalModel, 52.5, policy());
         double dPei = powerModel.placementPei(node) - powerModel.normalizedPei(node);           // 전력 항 이동은 PEI 항 하나(비낭비 항등·α=1 한계항 불변)
         double dPower = props.getPower().getPeiWeight() * dPei;
@@ -193,7 +195,7 @@ class PowerAwareScoringTest {
         double expected = thermalShare * dThermal + powerShare * dPower + resourceShift;
         double actual = after.candidateScores().get(0).totalScore() - before.candidateScores().get(0).totalScore();
         assertTrue(dThermal < 0, "열 항 감점");
-        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 칸을 거치지 않으므로 그 외 반올림 없음 → 2e-4는 두 배 여유
+        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 값을 거치지 않으므로 그 외 반올림 없음 → 2e-4는 두 배 여유
         assertEquals(expected, actual, 2e-4, "총점 이동 = 열 항 몫 + 전력 항 몫 + 자원 항 몫");
         assertEquals(round4(powerModel.placementPei(node)), detail(after, "n", "PEI"), 0.0, "전력 PEI 칸은 자기 실효 식 그대로");
         assertEquals(round4(thermalModel.predictedTemperature(node, 1)), detail(after, "n", "배치후예상온도C"), 0.0, "예상 온도 칸은 이미 실효 기저");
@@ -384,8 +386,8 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * `networkScore` 칸에는 실측 네트워크 점수를 담는다.
-     * 0을 넣으면 "해당 없음"이 아니라 "네트워크 포화"로 읽히고, weighted 엔진이 같은 칸에
+     * `networkScore` 필드에는 실측 네트워크 점수를 담는다.
+     * 0을 넣으면 "해당 없음"이 아니라 "네트워크 포화"로 읽히고, weighted 엔진이 같은 필드에
      * 담는 값과도 의미가 어긋난다.
      */
     @DisplayName("networkScore에 실측 네트워크 점수가 담긴다")
@@ -491,7 +493,7 @@ class PowerAwareScoringTest {
 
     /**
      * 12·36코어(평균 24) · 사용률 40% · 200W이면 정정 전 PEI 0.4에 비율 0.5 · 1.5를 곱해 상세 PEI가 0.2 · 0.6이다.
-     * 비율은 PEI 항에만 곱하므로 비낭비·한계 전력 칸은 그 노드만 후보로 둔 실행과 같다.
+     * 비율은 PEI 항에만 곱하므로 비낭비·한계 전력 값은 그 노드만 후보로 둔 실행과 같다.
      */
     @DisplayName("코어 수가 섞인 후보의 상세 PEI 는 코어 비율을 곱한 값이고 비낭비·실질한계전력점수 값은 그대로다")
     @Test

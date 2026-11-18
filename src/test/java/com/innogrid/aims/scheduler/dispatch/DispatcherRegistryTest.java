@@ -9,7 +9,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 모드 선택 — 설정값으로 고르고, 모르는 값이면 기록형으로 떨어진다. */
+/** 모드 선택 — 설정값으로 고르고, 모르는 값이면 기록형을 쓴다. */
 class DispatcherRegistryTest {
 
     private static PlacementDispatcher stub(String mode) {

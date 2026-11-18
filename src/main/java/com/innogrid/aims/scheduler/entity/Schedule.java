@@ -17,13 +17,13 @@ import jakarta.persistence.*;
  * <p>시각 필드는 전부 UTC {@code OffsetDateTime}이다. cron만 한국 시간으로 해석하며
  * 그 근거는 {@link com.innogrid.aims.scheduler.service.CronSupport}에 적어 두었다.</p>
  *
- * <p><b>편집은 바뀐 칸만 UPDATE 한다({@code @DynamicUpdate}).</b> 최근 실행 네 칸(실행 상태·시작·종료·메시지)은
+ * <p><b>편집은 바뀐 필드만 UPDATE 한다({@code @DynamicUpdate}).</b> 최근 실행 네 필드(실행 상태·시작·종료·메시지)는
  * 실행 계층의 전용 UPDATE({@link com.innogrid.aims.scheduler.repository.ScheduleRepository#acquireForRun}·
  * {@link com.innogrid.aims.scheduler.repository.ScheduleRepository#recordRunResult})만 쓰고 편집은 손대지 않는데,
- * 모든 칸을 쓰는 UPDATE면 편집이 읽은 시점 값으로 그 칸을 되돌려 실행 권한이 풀리거나(편집 읽기 → 실행 시작 → 편집 저장)
- * 끝난 실행이 실행 중으로 되살아난다(실행 시작 → 편집 읽기 → 실행 종료 → 편집 저장). 이 보호는 편집이 같은 트랜잭션에서
- * 읽은 관리 엔티티에 세터로 반영하는 지금 구조를 전제한다 — 분리된 사본을 merge 하면 DB와 다른 칸이 전부 더티가 되어
- * 다시 열린다. 스키마와는 무관하다.</p>
+ * 모든 필드를 쓰는 UPDATE면 편집이 읽은 시점 값으로 그 필드를 되돌려
+ * 실행 권한이 풀리거나(편집 읽기 → 실행 시작 → 편집 저장) 끝난 실행이 실행 중으로 되살아난다(실행 시작 → 편집 읽기 →
+ * 실행 종료 → 편집 저장). 이 보호는 편집이 같은 트랜잭션에서 읽은 관리 엔티티에 세터로 반영하는 지금 구조를 전제한다 —
+ * 분리된 사본을 merge 하면 DB와 다른 필드가 전부 더티가 되어 다시 열린다. 스키마와는 무관하다.</p>
  */
 @Entity
 @DynamicUpdate

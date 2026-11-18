@@ -16,14 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 전력 엔진의 <b>관찰 가능한 계약</b>을 고정한다.
+ * 전력 엔진의 <b>관찰 가능한 동작</b>을 확인한다.
  *
  * <p>{@link PowerAwareSchedulerTest}는 "어느 노드가 뽑히는가"라는 결론만 본다. 점수식을 다시
  * 쓸 때는 결론이 같아도 순위·응답 구조가 조용히 달라질 수 있어, 그것까지 여기서 못 박는다.</p>
  *
  * <p>점수의 <b>절대값</b>은 고정하지 않는다. 수식을 개선하면 값은 당연히 달라지고, 값을 박아두면
  * 개선할 때마다 기대값을 고쳐야 해서 회귀 그물 구실을 못 한다. 대신 <b>깨지면 안 되는 성질</b>을
- * 고정한다 — 후보 수, 정렬 순서, 제외 노드 처리, 근거 항목의 존재, 점수 범위.</p>
+ * 확인한다 — 후보 수, 정렬 순서, 제외 노드 처리, 근거 항목의 존재, 점수 범위.</p>
  */
 class PowerAwareSchedulerBehaviourTest {
 
@@ -97,7 +97,7 @@ class PowerAwareSchedulerBehaviourTest {
         SchedulingPolicy policy = policy();
         policy.setMaxCpuUsagePercent(70);
 
-        // 코어를 넉넉히 줘 C1(자원 가용성)을 통과시켜야 C2(사용률 임계)에 도달한다.
+        // 코어를 넉넉히 줘 C1(자원 가용성)을 통과시켜야 C2(사용률 임계)에 이른다.
         // 8코어에 90%를 쓰면 가용이 0.8 코어뿐이라 C1이 먼저 걸린다.
         List<NodeResource> nodes = List.of(
                 bigNode("busy", 90, 40, 250, 55),   // CPU 90% > 70% → C2로 제외

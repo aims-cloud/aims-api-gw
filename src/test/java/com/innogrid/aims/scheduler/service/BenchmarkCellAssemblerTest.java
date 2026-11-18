@@ -229,7 +229,10 @@ class BenchmarkCellAssemblerTest {
         assertEquals(72.7273, BenchmarkCellAssembler.corePlacementRate(placementWithCores(2, 4, 8.0), 11.0), 1e-9);
     }
 
-    /** 작은 워크로드를 많이 놓고 큰 것은 배치하지 못한 지점 — 건수 기준(3 ÷ 4 = 75%)보다 코어 기준이 낮다. 두 방향의 편향을 함께 고정한다. */
+    /**
+     * 작은 워크로드를 많이 놓고 큰 것은 배치하지 못한 지점 — 건수 기준(3 ÷ 4 = 75%)보다 코어 기준이 낮다.
+     * 두 방향의 편향을 함께 확인한다.
+     */
     @DisplayName("코어 기준 배치 성공률은 작은 것을 많이 놓은 지점에서 건수 기준보다 낮다")
     @Test
     void core_placement_rate_counts_cores_when_small_workloads_are_placed() {

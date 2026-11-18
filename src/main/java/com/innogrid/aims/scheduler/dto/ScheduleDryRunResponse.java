@@ -66,7 +66,7 @@ public record ScheduleDryRunResponse(
 
     /**
      * 실행 상세의 결정({@link ScheduleRunDetailResponse.Decision})과 같은 이름·순서의 부분집합 — 이력 PK·엔진·정책·시각처럼
-     * 저장이 있어야 생기는 칸을 뺐다. 후보 점수 목록은 싣지 않는다(한 건을 자세히 보려면 워크로드 모의 배치).
+     * 저장이 있어야 생기는 필드를 뺐다. 후보 점수 목록은 싣지 않는다(한 건을 자세히 보려면 워크로드 모의 배치).
      */
     @Schema(description = "워크로드 한 건의 모의 결정 — 실행 상세의 결정과 같은 칸 이름")
     public record DryRunDecision(

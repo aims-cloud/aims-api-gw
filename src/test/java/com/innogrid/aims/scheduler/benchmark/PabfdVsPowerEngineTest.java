@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * PABFD와 우리 전력 엔진이 <b>실제로 다른 답을 낸다</b>는 것을 고정한다.
+ * PABFD와 우리 전력 엔진이 <b>실제로 다른 답을 낸다</b>는 것을 확인한다.
  *
  * <p>이 테스트가 없으면 "ΔP 단독 대조군과 비교했다"는 문장이 위험하다. 두 전략이 같은 노드를 고르면 표의
  * 두 열은 같은 숫자가 되고, 그걸 "우리가 대조군과 동등하다"고 읽든 "차이가 없다"고 읽든 둘 다

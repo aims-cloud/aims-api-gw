@@ -55,7 +55,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 스케줄러 응답 타입 명시의 계약 — 레코드로 바꾼 네 응답의 키 순서, 작업 10개의 응답 스키마 참조와 새 이름,
+ * 스케줄러 응답 타입 명시를 확인한다 — 레코드로 바꾼 네 응답의 키 순서, 작업 10개의 응답 스키마 참조와 새 이름,
  * 기존 Point·Candidate 스키마 본문 보존, 스케줄러 컨트롤러 응답 선언에 와일드카드·원시 타입이 없음.
  * 진단 응답의 중첩 레코드는 끝의 Response를 뺀 응답 이름을 앞에 붙인 이름으로 공개한다(단순 이름은 다른 영역이 쓸 수 있다).
  * 진단 응답 넷과 그 안에 실리는 레코드는 값이 비어도 선언한 키를 모두 순서대로 내야 한다 — 판단 근거가 없다는 사실도 정보다.

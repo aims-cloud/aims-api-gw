@@ -79,7 +79,7 @@ public class SchedulingPolicy {
      * 이라 JPA가 기존 행과 동일시할 경로가 없고, {@code createdAt}은 저장될 때 {@code PrePersist}가 채우는 값이다.
      * 필드를 하나 빠뜨리면 그 사본을 쓰는 경로에서 게이트가 조용히 꺼진다. 예를 들어 {@code affinityEnabled}가
      * 빠지면 MDC 링크 게이트가 꺼진다.
-     * 테스트 {@code SchedulingPolicyCopyTest}가 선언된 필드 전량을 반사로 훑어 고정한다.</p>
+     * 테스트 {@code SchedulingPolicyCopyTest}가 선언된 필드 전량을 반사로 훑어 확인한다.</p>
      */
     public SchedulingPolicy detachedCopy() {
         SchedulingPolicy copy = new SchedulingPolicy(getName(), getDescription());

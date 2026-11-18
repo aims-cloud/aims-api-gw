@@ -50,7 +50,7 @@ class ScheduleRunReplayApiTest {
 
     private static final String BASE = "/api/v1/scheduler/schedules";
     private static final String FIXTURE = "/scheduler/replay/run-input-format-1.json";
-    /** 픽스처의 워크로드 id — 실재 행과 겹치지 않는 예약 대역(다른 이력 테스트의 9_9xx_xxx 관례). */
+    /** 픽스처의 워크로드 id — 실재 행과 겹치지 않는 예약 구간(다른 이력 테스트의 9_9xx_xxx 관례). */
     private static final long WORKLOAD_ID = 9_930_101L;
     private static final List<String> RESPONSE_KEYS = List.of("runId", "formatVersion", "capturedAt", "engineId", "inputDigest",
             "knobsDigest", "verdict", "total", "matched", "mismatched", "skipped", "notRecorded", "missingDispatchRecords", "steps");

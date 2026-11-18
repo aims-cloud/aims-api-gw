@@ -29,8 +29,8 @@ import static org.mockito.Mockito.verify;
 /**
  * 배치 이력의 제외 사유 코드 집계 — 엔진이 돌려주는 후보별 제외 코드가 이력에 코드별 건수로 남는지.
  *
- * <p>스프링을 띄우지 않는다 — 저장소 둘은 대역으로 두고 엔진은 직접 만든다. 확인 대상은 응답이 아니라 <b>저장된 행</b>이므로
- * {@code save}에 들어간 인자를 잡아서 본다({@code PlacementHistoryScoreTest}와 같은 골격).</p>
+ * <p>스프링을 띄우지 않는다 — 저장소 둘은 목 객체로 두고 엔진은 직접 만든다. 확인 대상은 응답이 아니라
+ * <b>저장된 행</b>이므로 {@code save}에 들어간 인자를 잡아서 본다({@code PlacementHistoryScoreTest}와 같은 골격).</p>
  */
 class PlacementHistoryExclusionCodeTest {
 

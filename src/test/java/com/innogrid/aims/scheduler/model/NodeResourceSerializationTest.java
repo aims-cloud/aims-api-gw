@@ -44,7 +44,7 @@ class NodeResourceSerializationTest {
             "availableCpu", "availableMemoryMb", "availableGpu"
     ));
 
-    /** DTO에만 있는 디스크 축 3칸. 모델은 이 셋을 {@code get} 없는 이름으로 둔다. */
+    /** DTO에만 있는 디스크 축 3필드. 모델은 이 셋을 {@code get} 없는 이름으로 둔다. */
     private static final Set<String> DISK_FIELDS = new TreeSet<>(Set.of(
             "diskCapacityGb", "reservedDiskGb", "availableDiskGb"
     ));
@@ -72,7 +72,7 @@ class NodeResourceSerializationTest {
     }
 
     /**
-     * 모델의 계산용 메서드를 {@code get} 없이 지으면 직렬화되지 않는다는 관례를 고정한다.
+     * 모델의 계산용 메서드를 {@code get} 없이 지으면 직렬화되지 않는다는 관례를 확인한다.
      * {@code powerHeadroomPercent()}·{@code snapshot()}·{@code effectiveCpuUsagePercent()}가 그 예다.
      */
     @DisplayName("모델의 get 접두어 없는 계산 메서드는 직렬화되지 않는다")
@@ -89,7 +89,7 @@ class NodeResourceSerializationTest {
         assertFalse(actual.contains("reservedDiskGb"));
     }
 
-    /** 세 디스크 칸이 제 자리로 가고, 가용량은 모델 계산식(총량 × (1 − 사용률) − 예약, 0 하한)과 같다. */
+    /** 세 디스크 필드가 제 자리로 가고, 가용량은 모델 계산식(총량 × (1 − 사용률) − 예약, 0 하한)과 같다. */
     @DisplayName("디스크 총량·예약·가용이 응답의 제 칸에 실린다")
     @Test
     void disk_fields_land_in_their_own_slots() {
@@ -119,7 +119,7 @@ class NodeResourceSerializationTest {
         assertEquals(5L, r.reservedDiskGb());
     }
 
-    /** 세 GPU 칸이 각자 제 자리로 간다 — 셋 다 double이라 인자 순서가 바뀌어도 컴파일되므로 값으로 잡는다. */
+    /** 세 GPU 필드가 각자 제 자리로 간다 — 셋 다 double이라 인자 순서가 바뀌어도 컴파일되므로 값으로 잡는다. */
     @DisplayName("GPU 사용률·온도·전력이 응답의 제 칸에 실린다")
     @Test
     void gpu_fields_land_in_their_own_slots() {

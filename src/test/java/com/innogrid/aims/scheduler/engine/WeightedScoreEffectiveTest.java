@@ -34,7 +34,7 @@ class WeightedScoreEffectiveTest {
     @DisplayName("예약이 없으면 점수는 실측 계산값과 같다")
     @Test
     void no_reservation_matches_measured() {
-        // 실효=실측이므로 단건 배치의 점수는 전환 전과 동일해야 한다 (불변 계약)
+        // 실효=실측이므로 단건 배치의 점수는 실측 계산값과 같아야 한다 (불변 조건)
         NodeResource node = node("n1", 8, 16384, 30, 40, 200, 500, 55);
         SchedulingPolicy policy = policy();   // maxTemperature 75
 

@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>시드 8건은 {@code wp-} 접두어로 심고 {@code keyword}로 격리한다(다른 테스트의 워크로드와 섞이지 않게).
  * 종류가 비어 있는 행 2건은 {@code resourceType=VM}이 옛 행을 포함하는 규칙을, 이름에 {@code _}·{@code %}가 든 행은
- * LIKE 이스케이프를 고정한다.</p>
+ * LIKE 이스케이프를 확인한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

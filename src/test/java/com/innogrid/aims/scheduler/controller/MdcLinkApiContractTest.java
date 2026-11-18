@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code /scheduler/mdc-links} 6종의 HTTP 계약 — 필드 집합, 상태 코드와 사유, 매트릭스 대칭, 경로 우선, 인증.
+ * {@code /scheduler/mdc-links} 6종의 HTTP 동작 — 필드 집합, 상태 코드와 사유, 매트릭스 대칭, 경로 우선, 인증.
  *
  * <p>테스트마다 고유 접두어의 MDC 식별자를 쓰고 끝에 지운다(H2 공유 컨텍스트). 감사 필드는 {@code @WithMockUser}
  * 의 "user"가 사용자 원장에 없어 이름은 null, 계정은 "user"로 남는다.</p>

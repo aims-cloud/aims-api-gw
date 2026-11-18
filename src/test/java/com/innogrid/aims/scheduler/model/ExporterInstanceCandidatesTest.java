@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 후보 분류 — 수집기 규칙({@link ExporterInstances})의 역방향이 여섯 갈래로 떨어지는지, 충돌 당사자·원장 행이 전부 보이는지,
- * 답하지 않은 질의가 뒷받침하는 칸이 비는지.
+ * 답하지 않은 질의가 뒷받침하는 필드가 비는지.
  */
 class ExporterInstanceCandidatesTest {
 

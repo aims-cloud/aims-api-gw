@@ -113,7 +113,7 @@ class PowerOptimizationServiceTest {
     @DisplayName("절감이 큰 항목이 위로 온다")
     @Test
     void larger_saving_comes_first() {
-        // 낭비 노드는 이상 곡선(150 + 350×0.4 = 290W)을 130W 넘겨 임계 0.8 아래로 떨어진다.
+        // 낭비 노드는 이상 곡선(150 + 350×0.4 = 290W)을 130W 넘겨 임계 0.8 아래로 내려간다.
         // 350W로 두면 초과가 60W뿐이라 낭비로 잡히지 않아 항목이 하나만 나온다.
         var result = service.diagnose(List.of(
                 node("waste", 40, 420),

@@ -207,7 +207,7 @@ public class PlacementDispatchService {
             if (w.getStatus() == workloadTarget) return;
             if (w.transitionTo(workloadTarget)) {
                 if (workloadTarget == Workload.WorkloadStatus.FAILED) {
-                    // message는 실행 계층 계약에서 선택값이다. 사유가 없어도 실패 회계와 백오프 시각은 반드시 남긴다.
+                    // message는 결과 콜백에서 선택값이다. 사유가 없어도 실패 회계와 백오프 시각은 반드시 남긴다.
                     // 실행 실패가 배치 재시도 상한을 함께 쓰는 것은 의도다(반복 실패 워크로드가 영영 재배치되지 않게).
                     String reason = message == null || message.isBlank() ? "실행 실패" : "실행 실패: " + message;
                     w.markFailed(reason.length() > PlacementDispatch.MESSAGE_MAX ? reason.substring(0, PlacementDispatch.MESSAGE_MAX) : reason);
@@ -317,7 +317,7 @@ public class PlacementDispatchService {
 
     /**
      * 실행 중 워크로드마다 <b>시작 시각</b> — 현재 결정({@link #isCurrentDecision})의 기록이 RUNNING이 된 시각, 곧 실행
-     * 계층의 RUNNING 콜백을 받은 서버 시각(응답 시각 칸)이다. 예약 반영이 실행 중 워크로드의 CPU·메모리·디스크 예약을
+     * 계층의 RUNNING 콜백을 받은 서버 시각(응답 시각 필드)이다. 예약 반영이 실행 중 워크로드의 CPU·메모리·디스크 예약을
      * 언제까지 남길지 정하는 기준이다. 조회는 한 번이다.
      *
      * <p>결과에 없는 워크로드: 운영자가 상태 변경 API로 RUNNING으로 바꾸고 RUNNING 콜백은 아직 오지 않은 것(기록은 수락

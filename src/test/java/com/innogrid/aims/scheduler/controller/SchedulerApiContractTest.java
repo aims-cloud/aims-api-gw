@@ -24,14 +24,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 워크로드·배치 이력·배치 정책 API의 HTTP 계약 — 실제 컨트롤러·DB(H2)를 통과한 응답의 필드 집합.
+ * 워크로드·배치 이력·배치 정책 API의 HTTP 응답 — 실제 컨트롤러·DB(H2)를 통과한 응답의 필드 집합.
  *
  * <p>단위 테스트({@code ResponseJsonGoldenTest}·{@code ResponseDtoEquivalenceTest})는 객체 → JSON만 본다.
  * 여기서는 <b>요청 → 저장 → 응답</b> 전체 경로에서 DTO 응답이 단위 테스트와 같은 필드
  * 집합을 내는지, 그리고 저장된 값(id·createdAt)이 채워져 나오는지 확인한다.</p>
  *
  * <p>노드 조회는 테스트 환경에 메트릭 저장소가 없어 빈 배열이다. 노드 응답 필드는
- * {@code NodeResourceSerializationTest}가 고정한다.</p>
+ * {@code NodeResourceSerializationTest}가 확인한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -170,7 +170,7 @@ class SchedulerApiContractTest {
 
     /**
      * 생성 응답은 메모리의 나노초 시각, 재조회는 DB 왕복 후 마이크로초로 잘린 시각을 낸다.
-     * 이 차이는 DTO 이전에도 있던 저장소 특성이라 계약 비교에서 시각만 뺀다(둘 다 채워져 있어야 한다).
+     * 이 차이는 DTO 이전에도 있던 저장소 특성이라 응답 비교에서 시각만 뺀다(둘 다 채워져 있어야 한다).
      */
     private static void assertSameExceptTimestamps(Map<String, Object> a, Map<String, Object> b, String message) {
         assertNotNull(a.get("createdAt"));

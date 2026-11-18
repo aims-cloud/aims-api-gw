@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 
-/** 익스포터 대응 응답 — 11필드. 계약은 {@code NodeExporterMappingApiTest}가 고정한다. */
+/** 익스포터 대응 응답 — 11필드. 필드 목록은 {@code NodeExporterMappingApiTest}가 확인한다. */
 public record NodeExporterMappingResponse(
         Long id,
         String nodeId,

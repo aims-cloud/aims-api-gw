@@ -14,12 +14,13 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 
 /**
- * 세 엔진이 같이 쓰는 채점 흐름 — 빈 후보 실패 → 노드마다 제외 판정 뒤 채점 → 적격 후보 중 최고점 선택 → 총점 내림차순 정렬 →
- * 엔진별 후처리 → 실패 사유 또는 선택 사유.
+ * 세 엔진이 같이 쓰는 노드 평가 순서 — 빈 후보 실패 → 노드마다 제외 판정 뒤 평가 → 적격 후보 중 최고점 선택 →
+ * 총점 내림차순 정렬 → 엔진별 후처리 → 실패 사유 또는 선택 사유.
  *
- * <p>엔진은 채점({@link #scoreNode})과 사유 문장만 맡는다. 다음은 바꾸면 결과가 달라지므로 이 클래스가 고정한다.</p>
+ * <p>엔진은 평가({@link #scoreNode})와 사유 문장만 맡는다. 다음은 바꾸면 결과가 달라지므로 이 클래스가 고정한다.</p>
  * <ul>
- *   <li>제외 판정은 노드마다 채점 직전에 한 번 부른다 — 임계 온도를 넘은 노드에 냉각 기록을 남기는 부작용이 있어 순서와 횟수가 결과다.</li>
+ *   <li>제외 판정은 노드마다 평가 직전에 한 번 부른다 — 임계 온도를 넘은 노드에 냉각 기록을 남기는 부작용이 있어
+ *       순서와 횟수가 결과다.</li>
  *   <li>최고점은 적격 후보만, 엄격한 초과로 고른다 — 동점이면 입력 순서가 앞인 노드가 남는다. 정렬은 안정 정렬이라 동점 순서도 입력 순서다.</li>
  *   <li>호출 한 번 동안만 살아야 할 값(계측 집계·평균 온도·승자의 계측 여부)은 {@link Run}에 두고, 최고점은 {@code schedule}의
  *       지역 변수다. 엔진은 싱글턴 빈이라 인스턴스 필드에 두면 앞선 호출이 다음 결과에 섞인다. 이 클래스에는 인스턴스 필드가 없다.</li>
@@ -77,7 +78,7 @@ public abstract class AbstractScoringEngine<R extends AbstractScoringEngine.Run>
     protected abstract R newRun(Workload workload, PlacementContext context);
 
     /**
-     * 노드 하나를 채점한다. 제외 판정은 이미 끝났고 {@code exclusion}이 null이면 적격이다.
+     * 노드 하나를 평가한다. 제외 판정은 이미 끝났고 {@code exclusion}이 null이면 적격이다.
      * 반올림은 엔진이 지금 자리에서 그대로 하고, 상세 키는 지금 순서 그대로 넣는다.
      */
     protected abstract NodeScore scoreNode(Workload workload, PlacementContext context, NodeResource node,

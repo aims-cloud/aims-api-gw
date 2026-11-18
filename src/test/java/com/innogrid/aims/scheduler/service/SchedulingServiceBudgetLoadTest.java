@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
  * (워크로드·스케줄 전력 예산과 같은 관례). 대신 <b>원장이 비면 스냅샷도 비어</b> C6이 아무 노드도 막지 않는다.</p>
  *
  * <p>조립은 {@link SchedulingServiceBuilder}가 한다 — 선택 원장을 붙이지 않으면 그 기능이 꺼진다는
- * 빌더의 계약을 여기서 고정한다.</p>
+ * 빌더의 규칙을 여기서 확인한다.</p>
  */
 class SchedulingServiceBudgetLoadTest {
 

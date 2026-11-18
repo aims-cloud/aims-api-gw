@@ -86,7 +86,7 @@ public final class BaselinePlacers {
 
     // ── details 키 ────────────────────────────────────────────
 
-    /** 대조군이 전력·열·네트워크 차원을 계산하지 않았다는 표시. 세 칸의 0을 "측정값"으로 읽지 않게 한다. */
+    /** 대조군이 전력·열·네트워크 차원을 계산하지 않았다는 표시. 세 필드의 0을 "측정값"으로 읽지 않게 한다. */
     public static final String UNSCORED_DIMENSIONS = "전력열네트워크미계산";
 
     private static final String RANK = "순번";
@@ -326,7 +326,7 @@ public final class BaselinePlacers {
         }
 
         // 총점은 다른 대조군처럼 0~1로 두되, 근거는 details의 온도다 — 표에서 "왜 이 노드였나"를 온도로 되짚을 수
-        // 있어야 한다. 미계측은 온도 0이 아니라 계측 표시 0으로 구분한다(NodeScore의 열 칸은 여전히 0 + 미계산 표시).
+        // 있어야 한다. 미계측은 온도 0이 아니라 계측 표시 0으로 구분한다(NodeScore의 열 점수는 여전히 0 + 미계산 표시).
         return assemble(candidates, chosen, reason, c -> {
             NodeResource n = c.node();
             boolean m = measured(n);

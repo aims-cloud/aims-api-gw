@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HistoryPageEndpointTest {
 
     private static final String PAGE = "/api/v1/scheduler/history/page";
-    /** {@code SchedulerController.HISTORY_MAX}와 같다. {@link HistoryReturnLimitTest}가 그 값을 고정한다. */
+    /** {@code SchedulerController.HISTORY_MAX}와 같다. {@link HistoryReturnLimitTest}가 그 값을 확인한다. */
     private static final int HISTORY_RETURN_MAX = 1000;
 
     @Autowired MockMvc mockMvc;
@@ -54,10 +54,10 @@ class HistoryPageEndpointTest {
     private static final long WORKLOAD_C = 9_900_003L;
     /** 실행 필터 테스트 전용 — 실행에 묶인 행은 이 id로만 심는다. */
     private static final long WORKLOAD_D = 9_900_004L;
-    /** 제외 코드 키 경계 테스트 전용 — A·B의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
+    /** 제외 코드 키 이름 일치 테스트 전용 — A·B의 건수 확인을 건드리지 않으려고 따로 쓰는 id. */
     private static final long WORKLOAD_E = 9_900_005L;
     /**
-     * 실재 실행과 겹치지 않는 예약 대역의 실행 id — 실행 id는 1부터 자라 이 대역에 닿지 않고, FK가 없어 실행 행이
+     * 실재 실행과 겹치지 않는 예약 구간의 실행 id — 실행 id는 1부터 자라 이 구간에 닿지 않고, FK가 없어 실행 행이
      * 없어도 저장된다. 테스트마다 다른 값을 써 서로의 정리에 기대지 않는다.
      */
     private static final long RUN_X = 9_900_777L;
@@ -335,7 +335,7 @@ class HistoryPageEndpointTest {
                 .andExpect(jsonPath("$.message").value(containsString("exclusionCode")))
                 .andExpect(jsonPath("$.message").value(containsString("INSUFFICIENT_RESOURCE")));   // 가능한 값 목록을 돌려준다
         mockMvc.perform(get(PAGE).param("exclusionCode", "insufficient_resource"))
-                .andExpect(status().isBadRequest());   // 대문자 그대로 — 대소문자를 풀면 계약이 바뀐다
+                .andExpect(status().isBadRequest());   // 대문자 그대로 — 대소문자를 풀면 API가 받는 값이 바뀐다
     }
 
     @DisplayName("기존 history 는 여전히 배열이다 — 다만 전량이 아니라 반환 상한까지다")

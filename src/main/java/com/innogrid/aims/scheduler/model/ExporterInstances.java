@@ -72,7 +72,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
 
     /**
      * 여러 노드를 한 번에 — 노드 → DCGM instance. <b>같은 시리즈로 해석된 노드가 둘 이상이면 그 노드들은 전부 그대로(자기
-     * instance)로 떨어진다.</b> 한 시리즈를 두 노드에 넣으면 값이 두 번 세어져 클러스터 합계·에너지가 부푼다 — 후보가
+     * instance)로 돌아간다.</b> 한 시리즈를 두 노드에 넣으면 값이 두 번 세어져 클러스터 합계·에너지가 부푼다 — 후보가
      * 둘이면 고르지 않는다는 원칙의 같은 결이다. 중앙 IPMI 익스포터를 여러 노드에 적어 둔 원장이 바로 이 경우다.
      */
     public Map<String, String> dcgmFor(Collection<String> nodeInstances) {
@@ -86,7 +86,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
 
     /**
      * 이 노드의 그 익스포터 시리즈가 저장소에 실제로 있는가 — 원장·호스트명으로 이어졌거나, 노드 instance 그대로의
-     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 떨어진 경우만 false. 테스트용.
+     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 쓴 경우만 false. 테스트용.
      */
     public boolean resolvedDcgm(String nodeInstance) { return !dcgmOf(nodeInstance).equals(nodeInstance) || dcgmSeen.contains(nodeInstance); }
     public boolean resolvedIpmi(String nodeInstance) { return !ipmiOf(nodeInstance).equals(nodeInstance) || ipmiSeen.contains(nodeInstance); }

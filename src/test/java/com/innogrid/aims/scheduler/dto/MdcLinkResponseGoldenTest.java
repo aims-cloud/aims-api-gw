@@ -17,7 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * MDC 링크 응답의 JSON 계약(필드 15개)과 매트릭스 형태를 고정한다. 프런트가 붙기 전에 못 박는 기준선.
+ * MDC 링크 응답의 JSON 필드 15개와 매트릭스 형태를 확인한다. 프런트가 붙기 전에 못 박는 기준선.
  * 스프링이 구성한 Jackson 3 매퍼로 직렬화한다 — HTTP 응답을 만드는 것이 그 매퍼다.
  */
 @SpringBootTest

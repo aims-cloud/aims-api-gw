@@ -70,7 +70,7 @@ public record PlacementStrategy(String id, String label, Kind kind, PolicyVarian
      * 필수 항목을 생성 시점에 막는다.
      *
      * <p>{@code placer}가 {@code null}이면 배치를 돌릴 때가 되어서야 NPE가 나고, 그때는 전략
-     * 목록을 만든 자리에서 한참 떨어져 있다. 표의 한 열이 조용히 비는 것보다 만들 때 터지는 게 낫다.</p>
+     * 목록을 만든 자리에서 한참 멀다. 표의 한 열이 조용히 비는 것보다 만들 때 예외가 나는 게 낫다.</p>
      */
     public PlacementStrategy {
         if (id == null || id.isBlank()) {

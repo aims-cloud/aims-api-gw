@@ -13,7 +13,7 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 링크 점수 표 — 아래 수치를 그대로 고정한다.
+ * 링크 점수 표 — 아래 수치를 그대로 확인한다.
  *
  * <pre>
  * 지연 20ms UP                → cost 0.4          → 0.714

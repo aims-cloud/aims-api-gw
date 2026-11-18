@@ -7,7 +7,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 /**
  * 배치 결정 이력 응답 — {@code /scheduler/history}·{@code /workloads/{id}/history}.
  *
- * <p>앞 22개 필드는 {@link SchedulingHistory} 엔티티를 그대로 직렬화하던 계약과 <b>동일</b>하고, 여기에
+ * <p>앞 22개 필드는 {@link SchedulingHistory} 엔티티를 그대로 직렬화한 형태와 <b>동일</b>하고, 여기에
  * {@code exclusionCodes} 하나를 더해 23개다({@code ResponseJsonGoldenTest}가 고정). {@code exclusionCodes}는 후보 노드의
  * 제외 사유 코드를 코드별로 센 JSON 객체 문자열이고(적격 후보 미포함), 제외가 없거나 이 필드가 생기기 전의 행이면
  * {@code null}이다 — 문자열 그대로 내보낸다. 엔티티 직렬화와 응답이 같다는 불변식({@code ResponseDtoEquivalenceTest})을

@@ -83,7 +83,7 @@ public class SchedulingService {
      *
      * <p>인자 대부분이 리포지토리·서비스 타입이라 위치 인자로 조립하면 <b>순서를 바꿔 넣어도 컴파일되는 조합</b>이
      * 생긴다. 그래서 조립은 테스트
-     * 소스의 {@code SchedulingServiceBuilder} 한 곳으로 모았다.</p>
+     * 소스의 {@code SchedulingServiceBuilder}가 맡는다.</p>
      */
     @Autowired
     public SchedulingService(WorkloadRepository workloadRepository,
@@ -387,7 +387,7 @@ public class SchedulingService {
 
     /**
      * 워크로드의 실행 상태를 전이한다.
-     * 배치 이후의 흐름(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
+     * 배치 이후의 전이 순서(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
      * 상태가 종료되면 예약 회계에서 빠져 노드 자원이 풀리고, 현재 결정의 전달 기록이 열려 있으면 같은 끝 상태로
      * 마감한다({@link PlacementDispatchService#closeCurrent}).
      */

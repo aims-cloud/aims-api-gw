@@ -88,8 +88,9 @@ public class SchedulingHistoryQueryService {
     /**
      * 창·필터 안 결정의 제외 사유 코드 합계. 페이지와 같은 조건식을 쓰므로 응답의 {@code from}·{@code to}를 넘긴 같은 필터의
      * {@code exclusionCode=CODE} 총건수가 {@code codes[CODE].decisions}와 같다({@code skipped}가 0일 때). 창은 {@code from}·{@code to}를
-     * 둘 다 비우면 {@value #DEFAULT_SUMMARY_WINDOW_DAYS}일, {@code to}만 비우면 상한 없음, {@code from}만 비우면 하한 없음 — 한쪽 경계
-     * 규칙은 페이징과 같고, 페이징에는 기본 창이 없다. 합산은 Java에서 한다 — 집계 열이 TEXT라 DB 집계로
+     * 둘 다 비우면 {@value #DEFAULT_SUMMARY_WINDOW_DAYS}일, {@code to}만 비우면 상한 없음, {@code from}만 비우면
+     * 하한 없음이다. 한쪽만 비운 경우의 규칙은 페이징과 같고, 페이징에는 기본 창이 없다.
+     * 합산은 Java에서 한다 — 집계 열이 TEXT라 DB 집계로
      * 묶기 어렵고 형식이 어긋난 행은 건너뛰어 세어야 하기 때문이다. 행은 엔티티가 아니라 {@code id}·{@code exclusionCodes} 두 열만
      * 투영해 읽는다 — 창을 한쪽만 주면 모집단이 이력 전량이 될 수 있어서다. 결정 수와 집계 행은 별도 문장이라 동시에 적재되는 행이
      * 두 문장 사이에 끼면 한 건 어긋날 수 있다(READ COMMITTED, 곧 스스로 맞는다).

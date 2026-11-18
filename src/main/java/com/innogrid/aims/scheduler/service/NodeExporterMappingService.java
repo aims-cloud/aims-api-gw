@@ -19,7 +19,7 @@ import tools.jackson.databind.JsonNode;
  * 익스포터 대응 원장 — 검증·저장 규칙.
  *
  * <p>거부하는 값은 "저장하면 확실히 틀린 것"이다(다른 원장과 같은 원칙) — 빈 노드 식별자, 길이 초과, 노드 식별자와
- * 같은 값을 익스포터 칸에 넣는 것. 마지막은 뜻이 없어서다: 그대로 두면 해석기가 알아서 그대로 쓴다. instance의
+ * 같은 값을 익스포터 필드에 넣는 것. 마지막은 뜻이 없어서다: 그대로 두면 해석기가 알아서 그대로 쓴다. instance의
  * <b>존재는 검증하지 않는다</b> — 검증하려면 원장 CRUD가 저장소를 불러야 한다. 어느 시리즈에도 걸리지 않는 오타는
  * 그 노드의 GPU·전력·온도가 미계측으로 남을 뿐 다른 노드를 건드리지 않는다.</p>
  *
@@ -104,7 +104,7 @@ public class NodeExporterMappingService {
             }
         }
         apply(mapping, r);
-        // 노드 식별자를 바꿔 저장된 익스포터 칸과 같아졌으면 그 칸은 뜻이 없다 — 비워 그대로로 떨어뜨린다
+        // 노드 식별자를 바꿔 저장된 익스포터 값과 같아졌으면 그 값은 뜻이 없다 — 비워서 해석기가 그대로 쓰게 한다
         if (mapping.getNodeId().equals(mapping.getDcgmInstance())) mapping.setDcgmInstance(null);
         if (mapping.getNodeId().equals(mapping.getIpmiInstance())) mapping.setIpmiInstance(null);
         rejectSharedInstances(mapping);
@@ -152,7 +152,7 @@ public class NodeExporterMappingService {
     }
 
     /**
-     * 두 익스포터 칸은 {@link JsonNode}로 받아 "비우는 것"을 표현한다 — 필드가 {@code null}이면 키 없음(유지),
+     * 두 익스포터 필드는 {@link JsonNode}로 받아 "비우는 것"을 표현한다 — 필드가 {@code null}이면 키 없음(유지),
      * {@code isNull()}이면 명시적 null(비움 → 호스트명 일치로 대체), 아니면 값.
      */
     private void apply(NodeExporterMapping mapping, NodeExporterMappingRequest r) {
@@ -169,7 +169,7 @@ public class NodeExporterMappingService {
         }
     }
 
-    /** 익스포터 instance 칸 — null로 비울 수 있다. 노드 식별자와 같은 값은 뜻이 없어 거부한다. */
+    /** 익스포터 instance 값 — null로 비울 수 있다. 노드 식별자와 같은 값은 뜻이 없어 거부한다. */
     private static String instanceOf(JsonNode node, String label, String nodeId) {
         if (node.isNull()) return null;
         if (!node.isString()) throw badRequest(label + "은(는) 문자열이어야 합니다");

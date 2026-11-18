@@ -23,8 +23,8 @@ import tools.jackson.databind.node.ObjectNode;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 워크로드 편집(부분 갱신) 규칙 — 보낸 키만, 비울 수 있는 여섯 칸의 명시적 null, 생성과 같은 검증, 상태 409, 전부 검증한 뒤 일괄 반영,
- * 재시도 회계 불변.
+ * 워크로드 편집(부분 갱신) 규칙 — 보낸 키만, 비울 수 있는 여섯 필드의 명시적 null, 생성과 같은 검증, 상태 409,
+ * 전부 검증한 뒤 일괄 반영, 재시도 회계 불변.
  *
  * <p>요청은 JSON 문자열을 실제 매퍼로 읽어 만든다 — "키 없음"과 "명시적 null"의 구분이 HTTP와 같은 경로로 생긴다.</p>
  */
@@ -41,14 +41,14 @@ class WorkloadServiceUpdateTest {
         return objectMapper.readValue(json, WorkloadUpdateRequest.class);
     }
 
-    /** 같은 칸을 담은 생성 요청 — 필수 세 칸을 채운 뒤 사례 본문의 키로 덮는다(사례 본문이 이긴다). */
+    /** 같은 필드를 담은 생성 요청 — 필수 세 필드를 채운 뒤 사례 본문의 키로 덮는다(사례 본문이 이긴다). */
     private WorkloadRequest createBody(String json) {
         ObjectNode merged = (ObjectNode) objectMapper.readTree("{\"name\":\"c\",\"requiredCpu\":1,\"requiredMemoryMb\":1}");
         merged.setAll((ObjectNode) objectMapper.readTree(json));
         return objectMapper.treeToValue(merged, WorkloadRequest.class);
     }
 
-    /** 13칸을 모두 채운 PENDING 워크로드. */
+    /** 요청 필드 13개를 모두 채운 PENDING 워크로드. */
     private Workload full(String name) {
         return service.create(new WorkloadRequest(name, "설명", 2, 2048, 1, 10, "VM", "mdc-data", "mdc-pref",
                 300.0, 70.0, 100.0, "HIGH"));
@@ -335,7 +335,7 @@ class WorkloadServiceUpdateTest {
         assertEquals(createdAt, r.getCreatedAt());
     }
 
-    // ── 오류 · 경계 ────────────────────────────────────────────
+    // ── 오류 · 특수한 경우 ─────────────────────────────────────
 
     @DisplayName("없는 워크로드는 404 이고 본문이 없으면 400 이다")
     @Test

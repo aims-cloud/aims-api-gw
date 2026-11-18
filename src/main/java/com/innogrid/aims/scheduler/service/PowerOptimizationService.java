@@ -155,7 +155,7 @@ public class PowerOptimizationService {
 
     /**
      * 예산 원장까지 반영해 진단한다. MDC별 요약에 예산·남은 여유·초과 여부가 함께 나간다.
-     * 원장이 비어 있으면 요약은 나가되 예산 칸이 null이다 — MDC별 현황 자체는 예산과 무관하게 쓸모 있다.
+     * 원장이 비어 있으면 요약은 나가되 예산 필드가 null이다 — MDC별 현황 자체는 예산과 무관하게 쓸모 있다.
      */
     public PowerOptimizationResponse diagnose(List<NodeResource> nodes, List<ExcludedNode> excluded,
                                               MdcPowerBudgets budgets) {

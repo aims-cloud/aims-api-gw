@@ -62,14 +62,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p><b>값 층</b> — 엔진 3종을 고정 입력(노드·워크로드·정책)으로 직접 불러 결정 결과 전체(키 순서·타입·값)를
  * {@code src/test/resources/scheduler/golden/placement/<시나리오>.json}과 문자열로 비교한다. 같은 매퍼로 들여쓰기
- * 출력한 문자열을 비교하므로 키 순서가 바뀌면 실패한다(트리 비교는 순서를 보지 않아 쓰지 않는다). 엔진 채점 골격을
- * 공통화할 때 바뀌기 쉬운 지점도 고정한다 — 가중치 엔진 전용 입력(우선순위 HIGH · 선호 MDC · 데이터 MDC)을 켠 경우, 정책의
- * 전력·온도 반영을 끈 가중치 엔진, 제외 사유가 하나씩 다른 노드와 계측 방식이 다른 노드(전력은 있고 정격 0 · 미계측)를 섞은
- * 혼합 노드(엔진마다), 계측 노드가 모두 제외돼 미계측 노드가 선택될 때의 선택 사유(전력·온도 엔진).</p>
+ * 출력한 문자열을 비교하므로 키 순서가 바뀌면 실패한다(트리 비교는 순서를 보지 않아 쓰지 않는다). 엔진 평가 골격을
+ * 공통화할 때 바뀌기 쉬운 지점도 확인한다 — 가중치 엔진 전용 입력(우선순위 HIGH · 선호 MDC · 데이터 MDC)을 켠 경우,
+ * 정책의 전력·온도 반영을 끈 가중치 엔진, 제외 사유가 하나씩 다른 노드와 계측 방식이 다른 노드(전력은 있고 정격 0 ·
+ * 미계측)를 섞은 혼합 노드(엔진마다), 계측 노드가 모두 제외돼 미계측 노드가 선택될 때의 선택 사유(전력·온도 엔진).</p>
  *
  * <p><b>HTTP 층</b> — 단건 배치·모의 배치·저장 전 모의 배치 응답의 키 순서(일곱 키 · 후보 열두 키 · 엔진별 상세 키)를
- * 고정한다. 공유 H2 상태(정책·예약)가 점수를 흔들 수 있어 점수 값은 보지 않는다. 실패·노드 없음 응답의 선택 칸 null · 제외 코드 ·
- * 빈 후보 목록(상태와 무관)과 단건 배치의 성공 여부(활성 정책에 기댐)만 본다.</p>
+ * 확인한다. 공유 H2 상태(정책·예약)가 점수를 흔들 수 있어 점수 값은 보지 않는다. 실패·노드 없음 응답의 선택 필드 null ·
+ * 제외 코드 · 빈 후보 목록(상태와 무관)과 단건 배치의 성공 여부(활성 정책에 기댐)만 본다.</p>
  *
  * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 결과를 {@code build/golden-candidates/placement/}에 쓰고 실패한다
  * (소스 아래에는 쓰지 않는다 · 기준과 같으면 옛 후보는 지운다). 다시 만들 때는
@@ -377,7 +377,8 @@ class PlacementResponseGoldenTest {
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"power", "temperature"})
     void weighted_only_inputs_leave_other_engines_unchanged(String engine) {
-        // 세 노드 모두 전력·온도 제약에서 멀어 반영 끔이 제외 판정을 바꾸지 않는다 — 결과가 달라지면 가중치 엔진 전용 입력이나 반영 끔이 채점에 새어 든 것이다
+        // 세 노드 모두 전력·온도 제약에서 멀어 반영 끔이 제외 판정을 바꾸지 않는다 — 결과가 달라지면 가중치 엔진 전용
+        // 입력이나 반영 끔이 평가에 새어 든 것이다
         SchedulingResult plain = engine(engine).schedule(small(), three(), policy());
         SchedulingResult boostedRun = engine(engine).schedule(boosted(), three(), flagsOff());
         assertEquals(pretty(objectMapper.valueToTree(plain)), pretty(objectMapper.valueToTree(boostedRun)));

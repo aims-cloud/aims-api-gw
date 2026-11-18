@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * 추세는 메트릭 저장소를 그때그때 읽는다. 저장소가 없거나 데이터가 비는 상황이
- * 오류가 아니라 정상 응답이어야 하므로, 그 경로를 중심으로 고정한다.
+ * 오류가 아니라 정상 응답이어야 하므로, 그 경로를 중심으로 확인한다.
  */
 class PowerEfficiencyTrendTest {
 

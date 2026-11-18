@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
 /**
- * 스케줄 편집 지정 해제 — 비울 수 있는 다섯 칸의 명시적 null, 키 없음 유지, 타입 엄격 400, 전부 검증 뒤 일괄 반영.
+ * 스케줄 편집 지정 해제 — 비울 수 있는 다섯 필드의 명시적 null, 키 없음 유지, 타입 엄격 400, 전부 검증 뒤 일괄 반영.
  *
  * <p>요청은 JSON 문자열을 실제 매퍼로 읽어 만든다 — "키 없음"과 "명시적 null"의 구분이 HTTP와 같은 경로로 생긴다.</p>
  */
@@ -74,7 +74,7 @@ class ScheduleFieldClearTest {
         return objectMapper.readValue(json, ScheduleUpdateRequest.class);
     }
 
-    /** 다섯 칸을 모두 채운 스케줄(사용 안 함 · 자동 실행 안 함). */
+    /** 다섯 필드를 모두 채운 스케줄(사용 안 함 · 자동 실행 안 함). */
     private Long full(String key) {
         return service.create(new ScheduleRequest(key, "이름 " + key, Workload.ResourceType.VM, "0 0 2 * * ?", false, false,
                 "설명", "power", policy.getId(), 500.0, 70.0, "size")).id();

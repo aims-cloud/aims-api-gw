@@ -283,7 +283,7 @@ public class PowerEfficiencyService {
      * <p>그렇다고 "이상보다 많이 쓸 때만"으로 좁히면 규칙이 아예 발동하지 않는다.
      * 비례성 0.5 미만이면서 과다 사용이라는 것은 {@code |실측−이상| > 0.5×용량}이고
      * {@code 이상 ≥ 유휴 = 0.3×용량}이므로 {@code 실측 > 0.8×용량}을 뜻한다. 그런 노드는
-     * 여유율이 20% 미만이라 바로 위의 여유율 규칙에 먼저 걸린다. 도달할 수 없는 분기라
+     * 여유율이 20% 미만이라 바로 위의 여유율 규칙에 먼저 걸린다. 닿을 수 없는 분기라
      * 남겨 두지 않았다. 비례성 값 자체는 응답에 그대로 실어 판단 근거로 제공한다.</p>
      */
     private PowerEfficiencyResponse.NodeEfficiency withRecommendation(

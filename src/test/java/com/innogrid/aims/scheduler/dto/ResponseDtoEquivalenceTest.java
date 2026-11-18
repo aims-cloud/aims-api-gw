@@ -22,10 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * 응답 DTO 4종이 엔티티·모델을 그대로 직렬화한 것과 <b>키·값이 완전히 같은 JSON</b>을 내는지.
- * 노드만 예외가 하나 있다 — 디스크 축 3칸은 DTO가 더한 것이라, 그 셋을 뺀 나머지로 같음을 본다.
+ * 노드만 예외가 하나 있다 — 디스크 축 필드 3개는 DTO가 더한 것이라, 그 셋을 뺀 나머지로 같음을 본다.
  *
  * <p>이것이 컨트롤러를 DTO로 바꿔도 프런트가 아무 차이를 못 느낀다는 증명이다. 값이 채워진 표본과
- * 비어 있는 표본을 둘 다 본다 — null이 0으로, 0이 null로 바뀌는 것도 계약 위반이다.</p>
+ * 비어 있는 표본을 둘 다 본다 — null이 0으로, 0이 null로 바뀌는 것도 같은 JSON이 아니다.</p>
  */
 @SpringBootTest
 class ResponseDtoEquivalenceTest {
@@ -33,7 +33,7 @@ class ResponseDtoEquivalenceTest {
     @Autowired
     ObjectMapper objectMapper;
 
-    /** 디스크 축 3칸은 DTO에만 있다 — 모델은 {@code get} 없는 이름이라 직렬화되지 않는다. */
+    /** 디스크 축 필드 3개는 DTO에만 있다 — 모델은 {@code get} 없는 이름이라 직렬화되지 않는다. */
     private static final Set<String> DISK_AXIS = Set.of("diskCapacityGb", "reservedDiskGb", "availableDiskGb");
 
     @DisplayName("노드 응답은 모델 직렬화에 디스크 축을 더한 것과 같다")

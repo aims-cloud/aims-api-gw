@@ -310,7 +310,7 @@ public class PowerModel {
      * 예상 전력의 절편과 갈린다.</p>
      */
     public double realMarginalPower(NodeResource node, int requiredCpu) {
-        double base = wakeupPower(node);   // 가동·미계측 노드는 이 안에서 선언 유휴로 떨어진다 — 삼항이 필요 없다
+        double base = wakeupPower(node);   // 가동·미계측 노드는 이 안에서 선언 유휴 값을 받는다 — 삼항이 필요 없다
         double dynamic = marginalPowerOnCurve(node, requiredCpu, base);
         return isActive(node) ? dynamic : dynamic + base;
     }

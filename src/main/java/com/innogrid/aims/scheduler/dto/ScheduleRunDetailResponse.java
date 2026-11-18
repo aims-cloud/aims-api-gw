@@ -84,8 +84,9 @@ public record ScheduleRunDetailResponse(
 
     /**
      * 13필드 — 설명 누락과 스케줄 화면 DTO 9종의 합계는 {@code ScheduleSchemaContractTest}가, 13이라는 수와 순서(맨 끝)는
-     * {@code ScheduleRunDetailDecisionApiTest}가 고정한다. {@code exclusionCodes}는 배치 이력 응답의 같은 이름 필드와 같은
-     * 문자열을 그대로 싣는다 — 엔진이 배치 시점에 본 후보 제외 집계라, 실행 계층이 그 뒤 배치를 되돌린 건도 그대로 남는다.
+     * {@code ScheduleRunDetailDecisionApiTest}가 확인한다. {@code exclusionCodes}는 배치 이력 응답의 같은 이름 필드와
+     * 같은 문자열을 그대로 싣는다 — 엔진이 배치 시점에 본 후보 제외 집계라, 실행 계층이 그 뒤 배치를 되돌린 건도
+     * 그대로 남는다.
      */
     @Schema(description = "워크로드 한 건에 대한 배치 결정 — 어느 노드를 왜 골랐는지, 또는 왜 못 골랐는지")
     public record Decision(

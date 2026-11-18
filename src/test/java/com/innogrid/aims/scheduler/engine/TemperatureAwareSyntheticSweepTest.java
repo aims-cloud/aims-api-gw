@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <b>한 주기(60분) 전체</b>를 훑어 확인한다.
  *
  * <p>{@code TemperatureAwareUnmeasuredTest}는 손으로 만든 2노드 픽스처로 결함의 정확한 수치(0.5831 대 0.5500 등)를
- * 고정한다. 그 픽스처는 결함의 존재는 증명하지만 <b>실제 수집 경로</b>({@link NodeResourceCollector} +
+ * 확인한다. 그 픽스처는 결함의 존재는 증명하지만 <b>실제 수집 경로</b>({@link NodeResourceCollector} +
  * {@link SyntheticMetricsGateway})를 거치지 않는다 — {@code NodeResource}를 직접 만들어 넘기기 때문이다. 이 클래스는
  * 실제 수집 경로를 그대로 타서, 합성 클러스터가 시각에 따라 CPU·온도를 사인 곡선으로 흔드는 동안에도 미계측 가드와
  * 평균 수정이 매 순간 성립하는지를 본다.</p>
@@ -152,7 +152,7 @@ class TemperatureAwareSyntheticSweepTest {
             // 클러스터 평균은 노드별 값이 아니라 <b>실행 단위 값</b>이다 — 후보 여덟 대가 모두 같은 수를
             // 담고 있어야 한다. 대표로 첫 노드 한 대만 읽으면 이 성질을 확인하지 못한다: 채움 조건을
             // "클러스터에 계측 노드가 있는가"에서 "이 노드가 계측인가"로 바꾸는 변이는 미계측 3대의
-            // 칸만 null로 만드는데, 첫 노드가 계측이면 그 변이가 그대로 통과한다.
+            // 필드만 null로 만드는데, 첫 노드가 계측이면 그 변이가 그대로 통과한다.
             assertEquals(snapshot.nodes().size(), result.candidateScores().size(),
                     "t=" + t + " 후보 수가 스냅샷과 달라 순회가 헐거워졌다");
 
@@ -160,7 +160,7 @@ class TemperatureAwareSyntheticSweepTest {
                 Double actual = s.details().get("클러스터평균온도C");
 
                 // 계측 노드가 0대일 때만 null이어야 한다 — 이 클러스터는 계측 5대라 미계측 노드의
-                // 칸에도 값이 있어야 한다. 언박싱 전에 확인해 NPE 대신 의미 있는 실패를 남긴다.
+                // 필드에도 값이 있어야 한다. 언박싱 전에 확인해 NPE 대신 의미 있는 실패를 남긴다.
                 assertNotNull(actual, "t=" + t + " node=" + s.nodeId() + " 클러스터평균온도C 가 null이다 — "
                         + "계측 노드가 0대일 때만 null 이어야 하는데, 이 클러스터는 계측 5대이므로 "
                         + "미계측 노드의 칸에도 값이 있어야 한다");

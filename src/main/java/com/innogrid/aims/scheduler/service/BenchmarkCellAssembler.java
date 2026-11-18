@@ -181,7 +181,7 @@ final class BenchmarkCellAssembler {
 
     /**
      * 총량·온도 분포 지표를 몇 곳에서 냈는지 밝히는 문장. 셀에 실어 두면 "몇 곳의 중앙값"이라는 사실이 숫자와
-     * 같은 자리에서 읽힌다 — 각주로 밀어 두면 인용될 때 떨어져 나간다.
+     * 같은 자리에서 읽힌다. 각주로 밀어 두면 인용될 때 숫자와 함께 옮겨지지 않는다.
      */
     private static String pairingNote(int usable, int total, Map<String, Integer> mismatchExample) {
         if (usable == 0) {
@@ -360,7 +360,7 @@ final class BenchmarkCellAssembler {
             return "이 전략은 전력 제약이 꺼져 있어 항상 0 이다 — 켜진 전략과 비교하지 않는다";
         }
         // 제약을 끈 변종은 막히는 자리가 없어 성공률이 정의상 최고가 된다. 개입 횟수(위)에만 가드를 걸고
-        // 성공률에 안 걸면, 반칙으로 나빠 보이는 칸만 가리고 반칙으로 좋아 보이는 칸은 그대로 두는 셈이다.
+        // 성공률에 안 걸면, 반칙으로 나빠 보이는 셀만 가리고 반칙으로 좋아 보이는 셀은 그대로 두는 셈이다.
         // 온도·전력 게이트를 따로 본다 — 둘 중 하나만 끈 변종이 생기면 온도 플래그 하나로는 못 걸러진다.
         if (kind == BenchmarkMetricKind.PLACEMENT_RATE && !(any.temperatureGated() && any.powerGated())) {
             return "이 전략은 온도·전력 제약이 꺼져 있어 막히는 자리가 없다 — 제약을 받는 전략과 성공률을 "

@@ -244,7 +244,10 @@ class JudgmentRoundTest {
         return new OutsideSummary(excluded, worse, better, tied, changedPairing, unpaired, lines);
     }
 
-    /** 표 G 분류의 갈림 — 한쪽만 값이 없으면 짝 집합 변화(악화 아님), N이 커지면 악화, 작아지면 축소. 항등 실행에는 없는 갈래를 합성 사본으로 고정한다. */
+    /**
+     * 표 G 분류의 갈림 — 한쪽만 값이 없으면 짝 집합 변화(악화 아님), N이 커지면 악화, 작아지면 축소.
+     * 항등 실행에는 없는 갈래를 합성 사본으로 확인한다.
+     */
     @DisplayName("표 G 분류 — 한쪽만 값이 없는 셀은 짝 집합 변화이고, N 이 크면 악화·작으면 축소다")
     @Test
     void outside_classification_distinguishes_pairing_change_from_worsening() {

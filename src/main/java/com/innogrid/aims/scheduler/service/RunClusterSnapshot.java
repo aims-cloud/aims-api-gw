@@ -100,7 +100,7 @@ public class RunClusterSnapshot {
     public Fixed fixedOf(PlacementContext ctx) {
         int measured = measuredNodes(ctx);
         // 합계도 계측 술어로 거른다. 후보 전체를 더하면 정격을 모르는 노드의 전력이 분자에만 들어가,
-        // 옆 칸의 계측 노드 수로 나눈 대당 전력이 실제와 어긋난다.
+        // 계측 노드 수(measuredNodes)로 나눈 대당 전력이 실제와 어긋난다.
         double measuredWatts = ctx.nodes().stream()
                 .filter(RunClusterSnapshot::hasPower)
                 .mapToDouble(NodeResource::getPowerWatts)

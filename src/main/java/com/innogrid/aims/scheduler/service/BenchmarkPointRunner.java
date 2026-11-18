@@ -50,7 +50,7 @@ final class BenchmarkPointRunner {
 
     /**
      * 경고 온도 기본값 하나만 쓴다. <b>온도 값 계산에는 쓰지 않는다</b> — 엔진의 열관성 가정으로 지표를
-     * 재면 열 엔진이 자기 가정으로 채점받는다. 온도는 {@link GroundTruthOracle}이 생성식으로 낸다.
+     * 재면 열 엔진이 자기 가정으로 평가받는다. 온도는 {@link GroundTruthOracle}이 생성식으로 낸다.
      */
     private final ThermalModel thermalModel;
 
@@ -303,7 +303,7 @@ final class BenchmarkPointRunner {
      *
      * <p>엔진의 {@code effectiveTemperature}(= 실측 × (1 + inertiaK × 예약비율))를 쓰지 않는다. 그 식은
      * <b>엔진의 열관성 가정</b>이고 {@code inertiaK}는 엔진 튜닝 노브다 — 그것으로 재면 열 엔진이 자기
-     * 가정으로 채점받고, 노브를 돌리면 세계는 그대로인데 측정값이 움직인다. 대신 배치가 만든 CPU 분포를
+     * 가정으로 평가받고, 노브를 돌리면 세계는 그대로인데 측정값이 움직인다. 대신 배치가 만든 CPU 분포를
      * 생성식에 넣어 같은 배치를 <b>평가자의 식</b>으로 다시 계산한다. 예약분은
      * {@code effectiveCpuUsagePercent}에 이미 들어 있으므로 누락되지 않는다.</p>
      *
@@ -327,9 +327,9 @@ final class BenchmarkPointRunner {
     }
 
     /**
-     * 경고 구간에 든 <b>계측</b> 노드 수 — 온도는 생성식, 경계는 정책(엔진 노브)이다.
+     * 경고 구간에 든 <b>계측</b> 노드 수 — 온도는 생성식, 경고 온도는 정책(엔진 노브)이다.
      * 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다. 반은 생성식·반은 엔진 노브라는 사실은 지표의
-     * 라벨과 유효성 문구가 함께 밝힌다 — 경계를 바꾸면 세계가 그대로인데 숫자가 움직인다.
+     * 라벨과 유효성 문구가 함께 밝힌다 — 경고 온도를 바꾸면 세계가 그대로인데 숫자가 움직인다.
      */
     private int warnZoneNodes(PlacementContext ctx, SchedulingPolicy policy, GroundTruthOracle oracle) {
         double warning = policy.getWarningTemperatureCelsius() != null

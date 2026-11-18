@@ -103,7 +103,7 @@ class BannedClaimsSourceScanTest {
                     body = kept.toString();
                 }
                 // 인라인 태그와 HTML 태그를 지운다. 줄바꿈만 지운 본문(joinedLines)은 줄바꿈으로 갈린 짧은 조각용,
-                // 공백을 전부 지운 본문(squeezed)은 어절 경계를 넘어 오탐하므로 6자 이상 조각에만 쓴다
+                // 공백을 전부 지운 본문(squeezed)은 어절 사이를 넘어 오탐하므로 6자 이상 조각에만 쓴다
                 String untagged = body.replaceAll("\\{@\\w+\\s+", " ").replaceAll("<[^>]*>", " ");
                 String flat = untagged.replaceAll("\\s+", " ");
                 String joinedLines = untagged.replaceAll("[ \\t]*\\r?\\n[ \\t]*", "").replaceAll("[ \\t]+", " ");

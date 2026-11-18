@@ -187,7 +187,7 @@ public record PlacementBenchmarkResponse(
 
         /**
          * 전력·온도 값을 만든 생성식. 전제 블록에 두는 이유 — 한계 문구는 응답 맨 끝이라 표만 잘라 인용하면
-         * 떨어져 나가지만, 전제 블록은 숫자보다 앞에 있다. 계수(유휴 전력·정격·0.3)는 실데이터 없이 정한 값이다.
+         * 빠지지만, 전제 블록은 숫자보다 앞에 있다. 계수(유휴 전력, 정격, 0.3)는 실데이터 없이 정한 값이다.
          */
         public static final String GENERATOR_FORMULA =
                 "전력(W) = idleWatts + (capacityWatts − idleWatts) × (CPU%/100)^β · 온도(℃) = baseTemperature + 0.3 × CPU% — "

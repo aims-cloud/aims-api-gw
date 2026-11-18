@@ -55,7 +55,7 @@ public final class TrendRangeSupport {
         long seconds;
         try {
             amount = Long.parseLong(matcher.group(1));
-            // 단위 환산도 넘칠 수 있다 — 2^57 d는 곱하면 정확히 0이 되어 뒤의 나눗셈이 터지고,
+            // 단위 환산도 넘칠 수 있다 — 2^57 d는 곱하면 정확히 0이 되어 뒤의 나눗셈에서 0으로 나누기 예외가 나고,
             // 2×10^14 d는 음수로 감겨 점 수 상한이 통째로 무력화된다(배포본 실측). 둘 다 같은 400으로 막는다.
             seconds = Math.multiplyExact(amount, unit);
         } catch (NumberFormatException | ArithmeticException e) {

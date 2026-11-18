@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
  *
  * <p>스냅샷은 곁들이는 기록이지 배치의 일부가 아니다. 그런데 실행 경로 한가운데에 끼어 있어서, 계산이
  * 예외를 밖으로 내보내면 <b>잘 끝난 배치가 통째로 실패로 뒤바뀐다</b> — 워크로드는 노드를 잡았는데 이력은
- * 실패로 남아, 다음 실행이 같은 워크로드를 다시 집는다. 그래서 계산기를 던지는 대역으로 갈아끼워
+ * 실패로 남아, 다음 실행이 같은 워크로드를 다시 집는다. 그래서 계산기를 던지는 목 객체로 갈아끼워
  * 실행 결과가 흔들리지 않는지 값으로 못 박는다.</p>
  *
  * <p>계산기를 스프링 빈으로 둔 까닭이 바로 이 테스트다. 정적 유틸이었다면 던지게 만들 방법이 없다.</p>
@@ -190,7 +190,7 @@ class RunSnapshotIsolationTest {
     @Test
     void the_after_side_is_not_written_without_a_before_side() {
         givenOneNodeAndOneWorkload("rsi-guard");
-        // 전이 터지고 후는 멀쩡한 경우 — DB 커넥션이 잠깐 끊겼다 돌아온 상황이 이렇다.
+        // 전에서 예외가 나고 후는 멀쩡한 경우 — DB 커넥션이 잠깐 끊겼다 돌아온 상황이 이렇다.
         when(clusterSnapshot.fixedOf(any(PlacementContext.class)))
                 .thenThrow(new IllegalStateException("전 스냅샷 실패"));
         when(clusterSnapshot.movingOf(any(PlacementContext.class), anyDouble()))

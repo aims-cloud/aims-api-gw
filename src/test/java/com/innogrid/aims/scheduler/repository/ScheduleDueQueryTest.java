@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>러너는 기동 후 30초가 지나야 첫 폴을 하는데 테스트는 그 전에 끝나므로, 러너를 거쳐서는 조건이 잘못돼도
  * 잡지 못한다. 그래서 이 조회를 직접 부른다.</p>
  *
- * <p>특히 <b>NULL 함정</b>을 고정한다 — {@code last_run_status}는 nullable이라 파생 쿼리
+ * <p>특히 <b>NULL 함정</b>을 확인한다 — {@code last_run_status}는 nullable이라 파생 쿼리
  * {@code …LastRunStatusNot(RUNNING)}으로 쓰면 SQL이 {@code <> 'RUNNING'}이 되어
  * <b>한 번도 실행된 적 없는 스케줄이 전부 탈락</b>한다. 새로 만든 스케줄이 영영 자동 실행되지 않는 결함이다.</p>
  */

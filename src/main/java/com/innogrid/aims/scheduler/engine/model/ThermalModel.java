@@ -35,7 +35,7 @@ public class ThermalModel {
     private final SchedulerProperties.Thermal props;
     private final Clock clock;
 
-    /** 노드별 · 그 대기를 건 온도 상한별 임계 온도 도달 시각. 안쪽 맵은 불변이고 통째로 바꾼다. */
+    /** 노드별, 그 대기를 건 온도 상한별로 임계 온도에 이른 시각. 안쪽 맵은 불변이고 통째로 바꾼다. */
     private final Map<String, Map<Double, Instant>> criticalSince = new ConcurrentHashMap<>();
 
     @Autowired
@@ -66,7 +66,7 @@ public class ThermalModel {
     }
 
     /**
-     * 열적 균형 점수 (0~1). 클러스터 평균보다 낮으면 가점, 높으면 감점하는 대칭식이다 — 핫스팟을 피하는 것이
+     * 열적 균형 점수 (0~1). 클러스터 평균보다 낮으면 가점, 높으면 감점하는 대칭식이다 — 과열 지점을 피하는 것이
      * 목표이며, 실제로 피했는지는 실측 온도 관측 지표가 있어야 말할 수 있다. 지금은 비교 API의 생성식 온도
      * 지표(경고 구간 노드 수·온도 표준편차, 보조)만 있다.
      */

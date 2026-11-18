@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code GET /scheduler/optimization/power/trend} 계약 — 응답 6필드·지점 11필드, 저장소 없는 환경에서도 200 + 사유,
+ * {@code GET /scheduler/optimization/power/trend} 테스트 — 응답 6필드·지점 11필드, 저장소 없는 환경에서도 200 + 사유,
  * 구간 검증 400, 미인증 403, 기존 {@code /optimization/power} 불변, Swagger의 선택 파라미터 {@code mdcId}.
  */
 @SpringBootTest

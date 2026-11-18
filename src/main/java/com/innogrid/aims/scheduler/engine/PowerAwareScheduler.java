@@ -140,7 +140,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
         double totalScore = Scores.round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
 
         // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0을 넣으면 "포화"로
-        // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
+        // 오해되고, weighted 엔진이 같은 키에 담는 값과도 의미가 어긋난다.
         double netScore = networkModel.localTrafficScore(node);
 
         // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null로 둔다. 0이나 0.5를

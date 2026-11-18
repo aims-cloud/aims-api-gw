@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 대조군들이 <b>서로 다른 답</b>을 낸다는 것을 픽스처로 고정한다.
+ * 대조군들이 <b>서로 다른 답</b>을 낸다는 것을 픽스처로 확인한다.
  *
  * <p>대조군이 실제로 다른 규칙인지 확인하지 않으면, 표에 열을 늘어놓고 "여러 전략과 비교했다"고
  * 말하면서 실은 같은 배치를 여러 번 적은 것일 수 있다. 그래서 확인은 <b>선택된 nodeId</b>로 한다 —
@@ -94,7 +94,7 @@ class BaselinePlacerTest {
      * 선착순은 <b>본래</b> 후보 목록의 순서에 결과가 좌우된다. 그래서 저장소 응답 순서가 바뀌면
      * 배치도 바뀌고, 그러면 측정 대상이 알고리즘이 아니라 입력 순서가 된다. 그 위험이 실재함을
      * 먼저 보이고(정규화 없는 선착순은 두 순서에서 다른 답), 우리 구현이 nodeId 오름차순으로
-     * 정규화해 그것을 막는다는 것을 고정한다.
+     * 정규화해 그것을 막는다는 것을 확인한다.
      */
     @DisplayName("목록을 뒤집으면 정규화 없는 선착순은 선택이 바뀌지만 nodeId 정규화는 고정된다")
     @Test
@@ -142,7 +142,7 @@ class BaselinePlacerTest {
      * (선착순 두 변종은 노드 선택 규칙이 같고 워크로드 순서만 달라, 단건에서는 같은 노드가 나온다 —
      * 그 차이는 {@link #ffd_size_and_priority_variants_differ}가 본다.)
      *
-     * <p>무작위 시드 3은 <b>이 픽스처를 위해 고른 값</b>이다 — 첫 추첨이 남은 노드 n3에 떨어져
+     * <p>무작위 시드 3은 <b>이 픽스처를 위해 고른 값</b>이다 — 첫 추첨이 남은 노드 n3을 골라
      * 네 규칙이 네 노드로 갈리는 시드를 사전 등록 목록에서 찾았다. 무작위 규칙이 다른 세 규칙과
      * 다른 노드를 고를 <b>수 있다</b>는 것을 보이는 것이 이 테스트의 뜻이고, 어떤 시드에서나 그렇다는
      * 뜻은 아니다. 시드별 흩어짐은 {@link #declared_seeds_spread_the_first_draw}가 따로 본다.</p>
@@ -174,7 +174,7 @@ class BaselinePlacerTest {
                 pabfd.selectedNodeId(), random.selectedNodeId());
         assertEquals(4, new HashSet<>(picks).size(), "네 규칙이 모두 다른 노드를 골라야 한다: " + picks);
 
-        // 각 규칙의 점수식도 함께 고정한다 — 표의 숫자가 어디서 왔는지 되짚을 수 있어야 한다
+        // 각 규칙의 점수식도 함께 확인한다 — 표의 숫자가 어디서 왔는지 되짚을 수 있어야 한다
         assertEquals(1.0, ffd.finalScore(), 1e-9, "1/(1+0)");
         assertEquals(0.6, bfd.finalScore(), 1e-9, "1 − 3.2/8");
         assertEquals(0.825, pabfd.finalScore(), 1e-9, "1 − 52.5/300");
@@ -409,7 +409,7 @@ class BaselinePlacerTest {
                 "예약이 실측 온도를 바꾸지 않으므로 두 번째 건도 x1 이어야 한다 — x2 로 갔다면 실효 온도(엔진 모델)로 고른 것이다: " + placed);
     }
 
-    // ── 공통 계약 ────────────────────────────────────────────
+    // ── 공통 조건 ────────────────────────────────────────────
 
     /**
      * 후보 전원에 제약 파이프라인을 적용하고 전원의 점수를 싣는다. 게다가 <b>제외 사유 맵이 전략마다

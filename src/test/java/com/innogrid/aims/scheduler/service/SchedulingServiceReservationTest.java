@@ -28,13 +28,13 @@ import static org.mockito.Mockito.when;
  *
  * <p>예약은 "배치됐지만 아직 노드 사용률 메트릭에 드러나지 않은 워크로드"를 뜻한다. 실행 중인
  * 워크로드는 시간이 지나면 메트릭에 잡히므로, 그때부터는 예약에서 빼야 한 워크로드가 두 번
- * 계산되지 않는다. 그 경계가 {@code metric-lag-minutes}다.</p>
+ * 계산되지 않는다. 그 분기점이 {@code metric-lag-minutes}다.</p>
  *
  * <p>GPU 개수는 예외다. 카드 점유는 사용률 메트릭에 드러나지 않으므로, 실행 중인 워크로드의 GPU는 메트릭 지연·보존
  * 기한과 무관하게 끝 상태가 될 때까지 예약에 남는다.</p>
  *
  * <p>실행 중인 워크로드의 메트릭 지연은 시작 시각(현재 결정의 전달 기록이 RUNNING이 된 시각)부터 잰다. 그런 기록이 없으면
- * 배치 시각으로 대신하고, 보존 기한은 배치 대기에만 건다. 시작 시각을 주는 전달 서비스는 대역으로 붙인다.</p>
+ * 배치 시각으로 대신하고, 보존 기한은 배치 대기에만 건다. 시작 시각을 주는 전달 서비스는 목 객체로 붙인다.</p>
  */
 class SchedulingServiceReservationTest {
 
@@ -264,7 +264,7 @@ class SchedulingServiceReservationTest {
         return workload;
     }
 
-    /** 전달 서비스(대역)가 주는 시작 시각으로 컨텍스트를 만든 뒤 카드 4장·디스크 1000GB 노드. */
+    /** 전달 서비스(목 객체)가 주는 시작 시각으로 컨텍스트를 만든 뒤 카드 4장·디스크 1000GB 노드. */
     private NodeResource nodeWithStarts(Workload workload, Map<Long, OffsetDateTime> starts) {
         when(dispatch.runningSince(anyCollection())).thenReturn(starts);
         NodeResource node = new NodeResource("mdc-01", "node-1", 8, 16384, 4,

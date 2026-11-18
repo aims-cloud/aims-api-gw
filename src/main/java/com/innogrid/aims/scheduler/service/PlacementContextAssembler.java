@@ -1,6 +1,7 @@
 package com.innogrid.aims.scheduler.service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -11,6 +12,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
+import com.innogrid.aims.scheduler.model.ReservationJudgment;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -94,8 +96,50 @@ final class PlacementContextAssembler {
     }
 
     /**
-     * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다.
-     * 오래 남아 있는 배치 대기(SCHEDULED)가 자원을 계속 묶지 않도록 TTL을 넘긴 것은 제외한다.
+     * 이미 배치됐지만 아직 메트릭에 드러나지 않은 워크로드를 노드 예약으로 반영한다. 판정은 {@link #judge}가 한다.
+     * 노드가 하나도 없으면 예약 대상을 읽지 않는다.
+     */
+    private void applyReservations(PlacementContext context) {
+        if (context.isEmpty()) return;
+        apply(context, readReservations(OffsetDateTime.now()));
+    }
+
+    /** readReservations 결과 하나를 컨텍스트에 얹는다. 예약량은 판정의 식을 그대로 쓴다. 스냅샷에 없는 노드는 무시한다. */
+    static void apply(PlacementContext context, Reservations reading) {
+        for (Held held : reading.held()) {
+            ReservationJudgment judgment = held.judgment();
+            if (judgment != ReservationJudgment.FULL && judgment != ReservationJudgment.GPU_ONLY) continue;
+            Workload workload = held.workload();
+            context.node(workload.getAssignedNodeId()).ifPresent(n -> n.reserve(
+                    judgment.cpu(workload.getRequiredCpu()),
+                    judgment.memoryMb(workload.getRequiredMemoryMb()),
+                    judgment.gpu(workload.getRequiredGpu()),
+                    judgment.diskGb(workload.getRequiredDiskGb())));
+        }
+    }
+
+    /**
+     * 배치 대기 · 실행 중 워크로드를 한 번 읽어 {@code now} 하나로 모두 판정한다. 배치 경로의 예약 반영과 노드별 예약 내역
+     * 조회가 함께 쓴다. 규칙 값(보존 기한 · 메트릭 지연)도 이때 한 번 읽는다.
+     */
+    Reservations readReservations(OffsetDateTime now) {
+        int ttlHours = properties.getReservationTtlHours();
+        int lagMinutes = properties.getMetricLagMinutes();
+        List<Workload> held = workloadRepository.findByStatusIn(RESERVED_STATUSES);
+        Map<Long, OffsetDateTime> started = runningSince(held);
+        List<Held> judged = new ArrayList<>(held.size());
+        for (Workload workload : held) {
+            boolean running = workload.getStatus() == Workload.WorkloadStatus.RUNNING && workload.getId() != null;
+            OffsetDateTime startedAt = running ? started.get(workload.getId()) : null;
+            judged.add(new Held(workload, startedAt, judge(workload, startedAt, now, ttlHours, lagMinutes)));
+        }
+        return new Reservations(now, ttlHours, lagMinutes, List.copyOf(judged));
+    }
+
+    /**
+     * 워크로드 하나의 예약 판정. 저장소를 읽지 않는다.
+     *
+     * <p>오래 남아 있는 배치 대기(SCHEDULED)가 자원을 계속 묶지 않도록 TTL을 넘긴 것은 예약하지 않는다.</p>
      *
      * <p><b>실행 중인 워크로드는 시작한 지 메트릭 지연 시간이 지나면 예약에서 뺀다.</b> 그러지 않으면 같은
      * 워크로드가 노드 사용률 메트릭에 한 번, 예약으로 또 한 번 계산된다. 이 클래스의 예약은
@@ -108,32 +152,20 @@ final class PlacementContextAssembler {
      * <p><b>단, GPU 개수는 끝 상태가 될 때까지 예약으로 남긴다.</b> 가용 GPU는 총 개수에서 예약만 뺀 값이고 카드 점유는
      * 사용률 메트릭에 드러나지 않는다. 실행 중인 워크로드의 GPU까지 빼면 쓰고 있는 카드가 비어 보여 다음 GPU 워크로드가
      * 같은 카드에 배정된다. 그래서 시작한 지 메트릭 지연이 지난 RUNNING은 CPU·메모리·디스크만 빼고 GPU는 남긴다.</p>
+     *
+     * @param startedAt 실행 중일 때 현재 결정의 전달 기록이 RUNNING이 된 시각. 없으면 null(배치 시각으로 대신)
      */
-    private void applyReservations(PlacementContext context) {
-        if (context.isEmpty()) return;
-
-        OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime cutoff = now.minusHours(properties.getReservationTtlHours());
-        OffsetDateTime metricCutoff = now.minusMinutes(properties.getMetricLagMinutes());
-
-        List<Workload> held = workloadRepository.findByStatusIn(RESERVED_STATUSES);
-        Map<Long, OffsetDateTime> started = runningSince(held);
-        for (Workload workload : held) {
-            String nodeId = workload.getAssignedNodeId();
-            if (nodeId == null) continue;
-            if (workload.getStatus() != Workload.WorkloadStatus.RUNNING) {
-                boolean expired = workload.getScheduledAt() != null && workload.getScheduledAt().isBefore(cutoff);
-                if (!expired) context.reserve(nodeId, workload);
-                continue;
-            }
-            OffsetDateTime since = workload.getId() == null ? null : started.get(workload.getId());
-            if (since == null) since = workload.getScheduledAt();
-            if (since == null || !since.isBefore(metricCutoff)) {
-                context.reserve(nodeId, workload);
-            } else {
-                reserveGpuOnly(context, nodeId, workload);
-            }
+    static ReservationJudgment judge(Workload workload, OffsetDateTime startedAt, OffsetDateTime now,
+                                     int ttlHours, int lagMinutes) {
+        if (workload.getAssignedNodeId() == null) return ReservationJudgment.UNASSIGNED;
+        if (workload.getStatus() != Workload.WorkloadStatus.RUNNING) {
+            OffsetDateTime cutoff = now.minusHours(ttlHours);
+            boolean expired = workload.getScheduledAt() != null && workload.getScheduledAt().isBefore(cutoff);
+            return expired ? ReservationJudgment.EXPIRED : ReservationJudgment.FULL;
         }
+        OffsetDateTime since = startedAt != null ? startedAt : workload.getScheduledAt();
+        OffsetDateTime metricCutoff = now.minusMinutes(lagMinutes);
+        return since == null || !since.isBefore(metricCutoff) ? ReservationJudgment.FULL : ReservationJudgment.GPU_ONLY;
     }
 
     /** 예약 대상 가운데 실행 중인 워크로드의 시작 시각. 전달 서비스가 없거나(조립한 테스트) 실행 중이 없으면 조회하지 않는다. */
@@ -145,8 +177,11 @@ final class PlacementContextAssembler {
         return running.isEmpty() ? Map.of() : dispatchService.runningSince(running);
     }
 
-    /** 실행 중인 워크로드의 GPU 개수만 예약으로 잡는다 — CPU·메모리·디스크는 이미 사용률 메트릭에 있다. 없는 노드는 무시한다. */
-    private static void reserveGpuOnly(PlacementContext context, String nodeId, Workload workload) {
-        context.node(nodeId).ifPresent(n -> n.reserve(0, 0, workload.getRequiredGpu(), 0));
+    /** readReservations 한 번의 결과. 판정 시각 · 규칙 값 · 워크로드마다의 판정을 담는다. */
+    record Reservations(OffsetDateTime now, int ttlHours, int lagMinutes, List<Held> held) {
+    }
+
+    /** 워크로드 하나의 판정. {@code startedAt}은 실행 중일 때 전달 기록의 시작 시각이고, 그 밖에는 null이다. */
+    record Held(Workload workload, OffsetDateTime startedAt, ReservationJudgment judgment) {
     }
 }

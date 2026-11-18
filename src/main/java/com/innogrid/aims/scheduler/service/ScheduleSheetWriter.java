@@ -19,7 +19,7 @@ import com.innogrid.aims.scheduler.entity.ScheduleRun;
  * <p>모든 셀은 인라인 문자열({@code t="inlineStr"})이다. 수식 셀을 만들지 않으므로 {@code =} · {@code +} · {@code @}로
  * 시작하는 값도 글자로 남는다. XML 다섯 문자는 이스케이프하고, XML 1.0이 허용하지 않는 제어 문자는 뺀다.</p>
  *
- * <p>셀 표기는 프론트 스케줄러 화면과 같다 — 값 없음은 {@code -}, 참 · 거짓은 예 · 아니오, 처리 상태는
+ * <p>셀 표기는 프론트 스케줄러 화면과 같다 — 값 없음은 {@code -}, 참·거짓은 예·아니오, 처리 상태는
  * Completed · Running · Failed(실행 전은 Pending), 시각은 스케줄러 시간대의 {@code yyyy-MM-dd HH:mm:ss}.</p>
  */
 public final class ScheduleSheetWriter {

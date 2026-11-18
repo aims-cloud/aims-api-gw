@@ -18,7 +18,7 @@ class PowerModelTest {
     @DisplayName("PEI는 단위 전력당 활용률을 정규화한다")
     @Test
     void pei_normalizes_per_unit_power() {
-        // 50% / 200W = 0.25 %/W, 기준 0.5 %/W → 0.5
+        // 50% / 200W = 0.25%/W, 기준 0.5%/W → 0.5
         NodeResource node = node(50, 200, 500);
 
         assertEquals(0.25, model.rawPei(node), 1e-9);
@@ -28,7 +28,7 @@ class PowerModelTest {
     @DisplayName("PEI는 1을 넘지 않는다")
     @Test
     void pei_does_not_exceed_1() {
-        NodeResource node = node(90, 100, 500); // 0.9 %/W → 1.8이지만 상한 1.0
+        NodeResource node = node(90, 100, 500); // 0.9%/W → 1.8이지만 상한 1.0
 
         assertEquals(1.0, model.normalizedPei(node), 1e-9);
     }
@@ -229,7 +229,7 @@ class PowerModelTest {
     @DisplayName("배치용 PEI 도 정규화 뒤 1.0 에서 포화한다")
     @Test
     void placement_pei_saturates_at_one() {
-        NodeResource frugal = node(90, 10, 500);                     // 90/10 = 9 %/W ≫ normalizer 0.5
+        NodeResource frugal = node(90, 10, 500);                     // 90/10 = 9%/W ≫ normalizer 0.5
         assertEquals(1.0, model.placementPei(frugal), 0.0);
         frugal.reserve(1, 0, 0);
         assertEquals(1.0, model.placementPei(frugal), 0.0, "예약이 쌓여도 포화 상한은 그대로");

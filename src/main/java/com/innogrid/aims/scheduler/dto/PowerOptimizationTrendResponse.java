@@ -15,7 +15,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>전력 메트릭(IPMI)이 없는 시각은 {@code measured=false}이고 전력 지표는 null이다 — 0으로 채우지 않는다.
  * CPU 기반 지표(가동/유휴 노드 수)만 값이 있다.</p>
  *
- * <p><b>다만 일부 노드만 결손인 시각은 그 노드를 0 W로 세어 합한다.</b> 그래서 {@code totalPowerWatts}는 그 시각
+ * <p><b>다만 일부 노드만 결손인 시각은 그 노드를 0W로 세어 합한다.</b> 그래서 {@code totalPowerWatts}는 그 시각
  * 전력을 읽은 노드들의 합이고, {@code totalNodes}와 {@code evaluableNodes}가 다르면 결손이 있었다는 뜻이다.
  * 이 배열을 그대로 적분하면 결손이 "0 W를 썼다"로 읽히므로, 구간 에너지는 {@link Energy}로 따로 낸다.</p>
  *

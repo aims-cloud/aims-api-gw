@@ -86,7 +86,7 @@ public class ScheduleService {
      */
     static final int EXPORT_MAX_ROWS = 30_000;
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    /** 스케줄 목록 화면의 열 — 순서 · 이름이 화면과 같다. */
+    /** 스케줄 목록 화면의 열 — 순서·이름이 화면과 같다. */
     private static final List<String> SCHEDULE_SHEET_HEADER = List.of(
             "스케줄 ID", "스케줄명", "리소스 종류", "실행 주기", "설명", "자동 실행 여부", "사용 여부", "시작 시간", "종료 시간", "처리 상태");
     /** 실행 이력 화면의 열. */

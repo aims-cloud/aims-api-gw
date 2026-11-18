@@ -331,7 +331,7 @@ public class PowerModel {
      * 못한다. 둘 다 같은 분모의 두 구간이며, 절대 W 목적화가 이 결함의 수정이며, 생성식이 볼록한 비교판(convex·convex-misrated)에서 검정한다.</p>
      *
      * <p><b>지금은 W 눈금으로 정규화한다.</b> 분모는 노드 정격이 아니라 설정값 S
-     * ({@code aims.scheduler.power.marginal-scale-watts}, 기본 500 W)다. 같은 절대 W의 깨우기 비용은
+     * ({@code aims.scheduler.power.marginal-scale-watts}, 기본 500W)다. 같은 절대 W의 깨우기 비용은
      * 정격이 얼마든 같은 벌점을 받고, 정격이 큰 노드의 큰 깨우기 비용은 그만큼 크게 보인다.
      * {@code S ≤ 0}이면 정격 분모(구 방식)로 돌아간다 — 되돌리기는 이 값 하나다.</p>
      *

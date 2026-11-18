@@ -51,7 +51,10 @@ public class SchedulingHistoryQueryService {
 
     static final Set<String> SORTABLE = Set.of("createdAt", "finalScore", "workloadName", "success");
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
-    /** 합계에서 {@code from}·{@code to}를 둘 다 비웠을 때의 창 — 계약 3장 「합계」 행과 {@code ExclusionSummaryResponse}의 {@code from} 설명이 같은 수를 적는다. */
+    /**
+     * 합계에서 {@code from}·{@code to}를 둘 다 비웠을 때의 창 — docs/13 3장 「합계의 창과 페이징」 행과
+     * {@code ExclusionSummaryResponse}의 {@code from} 설명이 같은 수를 적는다.
+     */
     public static final int DEFAULT_SUMMARY_WINDOW_DAYS = 30;
 
     private final SchedulingHistoryRepository repository;

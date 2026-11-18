@@ -198,7 +198,8 @@ final class BenchmarkCellAssembler {
     /**
      * 총량 짝 조건의 기준 집합 — override 없는 기본 설정 열에서 스케줄 배치 순서 열을 뺀 열이다({@link BenchmarkRules#PAIRING_RULE}).
      *
-     * <p>같은 패키지의 테스트가 같은 기준 집합으로 지점별 차를 다시 센다 — 테스트가 사본을 두면 두 정의가 갈라져도 초록불이 된다.</p>
+     * <p>같은 패키지의 테스트가 같은 기준 집합으로 지점별 차를 다시 센다. 테스트가 사본을 두면 두 정의가 갈라져도
+     * 테스트가 통과한다.</p>
      */
     static List<String> baseSetIds(Collection<String> strategyIds, Set<String> overrideIds) {
         return strategyIds.stream()
@@ -417,7 +418,7 @@ final class BenchmarkCellAssembler {
     /**
      * 생성식 기준 총전력.
      *
-     * <p>{@code AVAILABLE} 판에서 통전된 노드는 <b>배치 전부터 부하가 있던 노드와 이번에 배치한 노드</b>다 —
+     * <p>{@code AVAILABLE} 판에서 통전된 노드는 <b>배치 전부터 부하가 있던 노드와 이 지점의 배치가 쓴 노드</b>다 —
      * 부하가 도는 노드를 끌 수는 없으므로 "안 쓰는 노드는 꺼져 있다"를 그 노드에까지 적용하면 없는
      * 절감을 만들어 낸다.</p>
      */

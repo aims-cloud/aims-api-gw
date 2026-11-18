@@ -143,7 +143,7 @@ public class WeightedScoreScheduler extends AbstractScoringEngine<AbstractScorin
         details.put("온도여유", Scores.round(tempScore));
         details.put("네트워크한산도", Scores.round(netScore));
         putDiskCheck(details, workload, node);
-        if (linkScore != null) {   // 게이트 on일 때만 — 게이트 off 응답의 키 집합은 예전과 같다
+        if (linkScore != null) {   // 게이트 on일 때만 — 게이트 off 응답에는 링크 키 두 개가 붙지 않는다
             details.put("링크품질", Scores.round(linkScore));
             details.put("링크등록", linkRegistered);   // 1.0 등록됨·같은 MDC, 0.0 원장에 없음(링크품질이 기본값)
         }

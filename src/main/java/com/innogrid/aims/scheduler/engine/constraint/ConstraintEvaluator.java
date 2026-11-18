@@ -94,8 +94,8 @@ public class ConstraintEvaluator {
     /**
      * 노드가 워크로드를 받을 수 없는 까닭과 문장을 함께 돌려준다.
      *
-     * <p>{@link #exclusionReason}이 돌려주던 문장에 기계가 읽는 까닭을 얹은 것이다. 검사 순서와 문장은
-     * 그대로다 — 먼저 걸린 제약 하나만 돌려주고, 그 문장은 예전과 한 글자도 다르지 않다.</p>
+     * <p>{@link #exclusionReason}이 돌려주는 문장에 기계가 읽는 까닭을 얹은 것이다. 검사 순서와 문장은
+     * {@link #exclusionReason}과 같고, 먼저 걸린 제약 하나만 돌려준다.</p>
      *
      * @return 배치 가능하면 {@code null}, 아니면 제외 한 건
      */

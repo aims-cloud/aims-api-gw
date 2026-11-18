@@ -564,7 +564,7 @@ public class ScheduleExecutionService {
      */
     private EmptyTargetOutcome emptyTargetOutcome(Schedule schedule) {
         Workload.ResourceType type = schedule.resolveResourceType();
-        // 소진이 0일 때만 대기를 센다 — 실행 경로의 조회 횟수를 예전과 같게 둔다.
+        // 소진이 0일 때만 대기를 센다. 소진이 있으면 대기 건수를 문구에 쓰지 않으므로 조회하지 않는다.
         return outcomeOf(countExhausted(type), () -> countWaiting(type));
     }
 
@@ -605,7 +605,7 @@ public class ScheduleExecutionService {
      * 대상이 0건일 때의 결과.
      *
      * <p>세 경우를 가른다. <b>소진</b>은 사람이 되살리기 전에는 이 스케줄이 아무 일도 못 하므로
-     * 실패로 적는다 — 그러지 않으면 스케줄이 영원히 초록불로 남아 화면에서 문제가 보이지 않는다.
+     * 실패로 적는다 — 그러지 않으면 스케줄이 영원히 정상으로 남아 화면에서 문제가 보이지 않는다.
      * <b>재시도 대기</b>는 시간이 지나면 저절로 풀리므로 정상이고, 얼마 뒤에 다시 시도하는지 적는다.
      * <b>할 일 없음</b>은 그냥 정상이다. 실행 상태 값 집합은 늘리지 않는다(FAILED·COMPLETED 그대로).</p>
      */
@@ -638,8 +638,8 @@ public class ScheduleExecutionService {
      * 정책은 여러 스케줄이 공유하므로 한 스케줄의 설정이 남으면 안 된다.</p>
      *
      * <p>사본은 {@link SchedulingPolicy#detachedCopy()}가 만든다 — 판단 필드 전부를 옮기는 곳은 그 메서드 하나다.
-     * 전에는 여기서 필드를 손으로 옮기다 {@code affinityEnabled}가 빠져 온도 한계를 지정한 스케줄에서만 MDC 링크
-     * 게이트가 조용히 꺼지던 결함이 있었다(2026-09-02). 테스트 {@code ScheduleOverridePolicyCopyTest}가 고정한다.</p>
+     * 여기서 필드를 손으로 옮기다 {@code affinityEnabled}가 빠지면 온도 한계를 지정한 스케줄에서만 MDC 링크
+     * 게이트가 조용히 꺼진다. {@code ScheduleOverridePolicyCopyTest}가 사본이 판단 필드를 모두 옮기는지 확인한다.</p>
      */
     SchedulingPolicy applyOverrides(SchedulingPolicy policy, Schedule schedule) {
         if (schedule.getMaxTemperatureCelsius() == null) {

@@ -38,7 +38,7 @@ public final class SyntheticCluster {
      *
      * <p>{@code capacityWatts}는 <b>생성식이 쓰는 정격</b>이고, {@code believedCapacityWatts}는
      * <b>배치 엔진에게 알려 주는 정격</b>이다. 둘을 가른 이유는 엔진이 정격을 틀리게 알고 있을 때
-     * 무엇이 흔들리는지를 보는 판이 필요해서다 — 적지 않으면 두 값이 같아 예전 판과 다르지 않다.</p>
+     * 무엇이 흔들리는지를 보는 판이 필요해서다. 적지 않으면 두 값이 같다.</p>
      */
     public record Node(String mdcId, String nodeId, int cores, long memoryMb, int gpus,
                        double cpuUsage, double memoryUsage, double diskTotalGb, double diskUsage,
@@ -139,7 +139,8 @@ public final class SyntheticCluster {
      * 돌리려면 사본이 필요하다. 등록부는 판당 인스턴스 하나를 캐시하므로 사본은 호출자가 든다.
      */
     public SyntheticCluster withSeed(long newSeed) {
-        // 사본의 seeds는 자기 seed 하나 — "seed는 seeds의 첫 항목" 불변식을 사본에서도 지킨다. 원본의 seeds 목록은 하네스가 원본에서 읽는다
+        // 사본의 seeds는 자기 seed 하나 — "seed는 seeds의 첫 항목" 불변식을 사본에서도 지킨다.
+        // 원본의 seeds 목록은 PlacementBenchmarkService가 원본에서 읽는다
         return new SyntheticCluster(name, job, periodMinutes, swing, newSeed, powerExponent, nodes, links, workloadDataMdcIds,
                 phaseMode, List.of(newSeed), workloadBandwidthMbps);
     }
@@ -358,13 +359,13 @@ public final class SyntheticCluster {
     public int periodMinutes() { return periodMinutes; }
 
     /**
-     * 전력 생성식의 지수 β. 기본 1.0(선형) — 파일에 적지 않은 클러스터는 예전 그대로다.
+     * 전력 생성식의 지수 β. 파일에 적지 않으면 기본 1.0(선형)이다.
      * 1보다 크면 저부하에서 전력이 선형보다 낮은 <b>볼록</b> 판이 되고, 1보다 작으면 오목 판이 된다.
      */
     public double powerExponent() { return powerExponent; }
     public long seed() { return seed; }
     public PhaseMode phaseMode() { return phaseMode; }
-    /** 판이 선언한 seed 전부 — 하네스가 seed마다 Board 하나씩 낸다. */
+    /** 판이 선언한 seed 전부 — {@code PlacementBenchmarkService}가 seed마다 Board 하나씩 낸다. */
     public List<Long> seeds() { return seeds; }
     public List<Node> nodes() { return nodes; }
     /** 판이 선언한 링크. 링크 판만 비어 있지 않다. */
@@ -429,8 +430,8 @@ public final class SyntheticCluster {
     /**
      * 전력 = 유휴 + (정격 − 유휴) × (CPU 사용률/100)^β. IPMI 없는 노드는 호출자가 묻지 않는다.
      *
-     * <p>β=1.0이면 <b>예전 식을 글자 그대로</b> 탄다. {@code Math.pow(x, 1.0) == x}는 참이지만
-     * 예전 식은 좌결합 {@code ((정격−유휴) × cpu) / 100}이고 일반식은 {@code (정격−유휴) × (cpu/100)^β}라
+     * <p>β=1.0이면 <b>좌결합 식을 글자 그대로</b> 탄다. {@code Math.pow(x, 1.0) == x}는 참이지만
+     * 좌결합 식 {@code ((정격−유휴) × cpu) / 100}과 일반식 {@code (정격−유휴) × (cpu/100)^β}는
      * 결합 순서가 달라 마지막 비트가 어긋난다 — 지수를 적지 않은 판·운영 모의 모드의 출력을
      * 비트까지 그대로 두려고 분기를 남긴다.</p>
      */

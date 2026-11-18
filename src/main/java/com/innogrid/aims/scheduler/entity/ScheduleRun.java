@@ -68,9 +68,9 @@ public class ScheduleRun {
     // 행이 이미 있는 표에 NOT NULL 컬럼을 더하려다 스키마 갱신이 실패한다.
     //
     // 컬럼 이름을 명시하는 이유는 카멜→스네이크 변환이 마지막 글자를 보지 않아 끝이 대문자인 이름이
-    // 뭉개지기 때문이다(2026-09-02 배포에서 mdcA → mdca로 실측). 여기서는 앞질러 막는다.
+    // 뭉개지기 때문이다(배포 환경에서 mdcA → mdca로 실측). 여기서는 앞질러 막는다.
 
-    /** 스냅샷 기록 상태. 이 PR 이전 행은 null이다. */
+    /** 스냅샷 기록 상태. 이 컬럼보다 먼저 생긴 행은 null이다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "snapshot_status", length = 20)
     private SnapshotStatus snapshotStatus;

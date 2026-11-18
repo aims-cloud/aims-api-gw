@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄러 엔티티의 <b>컬럼</b>이 배포 SQL에 있는지 본다.
  *
- * <p>기존 {@code SchedulerDdlCoverageTest}는 <b>테이블 이름 수준</b>만 대조한다(그 테스트가 스스로
- * 한계를 밝혀 뒀다). 그래서 컬럼을 더하고 DDL을 빠뜨려도 아무 테스트가 빨간불이 되지 않고,
+ * <p>{@code SchedulerDdlCoverageTest}는 <b>테이블 이름 수준</b>만 대조한다(그 테스트가 스스로
+ * 한계를 밝혀 둔다). 그 테스트만으로는 컬럼을 더하고 DDL을 빠뜨려도 실패하지 않고,
  * {@code ddl-auto=validate}인 새 DB에서 <b>기동 실패</b>로만 드러난다. 배포 VM은 {@code update}라
  * Hibernate가 자동으로 만들어 주므로 그때도 안 드러난다.</p>
  *
@@ -95,7 +95,7 @@ class SchedulerDdlColumnTest {
         return snake(type.getSimpleName());
     }
 
-    /** 이 테스트가 실제로 무언가를 보고 있는지 — 엔티티가 한 개도 없으면 위 테스트는 항상 초록불이다. */
+    /** 이 테스트가 실제로 무언가를 보고 있는지 — 엔티티가 한 개도 없으면 위 테스트는 항상 통과한다. */
     @DisplayName("대상 엔티티가 비어 있지 않다")
     @Test
     void the_entity_list_is_not_empty() throws Exception {

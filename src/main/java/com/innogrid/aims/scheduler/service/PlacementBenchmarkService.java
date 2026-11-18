@@ -101,7 +101,7 @@ public class PlacementBenchmarkService {
     /**
      * 순수성 캐시 — 키는 {@link #CACHE_AXES} 순서의 {@code 판|분포|판 파일 다이제스트|워크로드 파일 다이제스트|엔진 설정 다이제스트|규칙 축 다이제스트}.
      *
-     * <p>응답은 {@code evaluatedAt}을 빼면 입력의 순수 함수다(계약 §8이 그렇게 선언하고 결정론 테스트가 지킨다). 그런데 한 번
+     * <p>응답은 {@code evaluatedAt}을 빼면 입력의 순수 함수다(docs/13 8장, 결정론 테스트가 확인한다). 그런데 한 번
      * 호출이 판 하나에 약 2,000회 배치 시뮬레이션이고 배포 서버는 2 vCPU를 스케줄러 실행 루프와 나눠 쓴다. 같은 입력을
      * 다시 계산할 이유가 없으므로 본문을 키로 보관하고, 적중 시 <b>응답 시각만 새로 찍어</b> 돌려준다. 판 파일이나 설정이
      * 바뀌면 키가 바뀌어 자연히 빗나간다. 상한을 넘으면 WARN을 남기고 전부 비운다 — 판 10 × 분포 2 = 20 조합(설정·규칙은 프로세스
@@ -196,7 +196,7 @@ public class PlacementBenchmarkService {
 
     /**
      * 캐시 키 — 응답을 결정하는 입력 축 전부를 {@link #CACHE_AXES} 순서로 {@code |}로 잇는다. 축이 하나라도 빠지면 다른
-     * 입력이 같은 표를 돌려받으므로(워크로드 파일 다이제스트가 그렇게 빠졌던 전례), 축 이름 목록은 테스트가 리터럴로 고정한다.
+     * 입력이 같은 표를 돌려받으므로 축 이름 목록은 테스트가 리터럴로 확인한다.
      */
     static String cacheKey(String... values) {
         if (values.length != CACHE_AXES.size()) throw new IllegalStateException("캐시 축 수 불일치: " + values.length + " ≠ " + CACHE_AXES);
@@ -294,7 +294,7 @@ public class PlacementBenchmarkService {
      * 두 번 다른 숫자를 내고, 그 차이가 알고리즘 차이와 구분되지 않는다.
      *
      * <p>{@code private}이 아닌 이유는 같은 패키지의 테스트가 <b>같은 지점 목록</b>으로 역산을 다시 계산하기
-     * 때문이다. 테스트가 사본을 두면 두 목록이 갈라져도 초록불이 된다.</p>
+     * 때문이다. 테스트가 사본을 두면 두 목록이 갈라져도 테스트가 통과한다.</p>
      */
     static List<Long> sweepPoints(SyntheticCluster cluster) {
         long period = cluster.periodMinutes() * 60L;

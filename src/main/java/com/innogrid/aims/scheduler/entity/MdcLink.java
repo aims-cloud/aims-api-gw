@@ -42,7 +42,7 @@ public class MdcLink {
      * 사전순으로 작은 MDC 식별자.
      *
      * <p>컬럼 이름을 명시한다 — 스프링의 카멜→스네이크 변환은 <b>마지막 글자</b>를 검사하지 않아
-     * {@code mdcA}가 {@code mdc_a}가 아니라 {@code mdca}로 만들어진다(2026-09-02 배포에서 실측).
+     * {@code mdcA}가 {@code mdc_a}가 아니라 {@code mdca}로 만들어진다(배포 환경에서 실측).
      * DDL 스크립트와 같은 이름이 되도록 고정한다.</p>
      */
     @Column(name = "mdc_a", nullable = false, length = 50)

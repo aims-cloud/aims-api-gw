@@ -77,7 +77,7 @@ class PlacementHistoryScoreTest {
 
         SchedulingHistory saved = captureSaved();
         assertEquals("gpu", saved.getSelectedNodeId(), "이 시나리오는 GPU 가 있는 노드가 뽑혀야 성립한다");
-        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다 — 예전엔 여기가 NULL이라 성공 필터에서 빠졌다.
+        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다. NULL이면 성공 필터에서 빠진다.
         assertEquals(Boolean.TRUE, saved.getSuccess(), "단건 배치의 성공 여부가 기록되지 않았다");
         assertNull(saved.getScheduleRunId(), "실행 연결이 없는데 runId 가 채워졌다");
 

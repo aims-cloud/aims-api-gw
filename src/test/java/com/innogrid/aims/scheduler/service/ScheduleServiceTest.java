@@ -234,7 +234,7 @@ class ScheduleServiceTest {
     @DisplayName("사용 여부를 켜면 다음 실행 시각을 다시 계산한다")
     @Test
     void enabling_recomputes_next_run_time() {
-        // 예전 값을 그대로 두면 이미 지난 시각이라 켜자마자 실행된다
+        // 다음 실행 시각을 다시 계산하지 않고 그대로 두면 이미 지난 시각이라 켜자마자 실행된다
         Long id = scheduleService.create(
                 new ScheduleRequest("auto", "이름", null, "0 0 2 * * ?", true, false, null,
                         null, null, null, null)).id();

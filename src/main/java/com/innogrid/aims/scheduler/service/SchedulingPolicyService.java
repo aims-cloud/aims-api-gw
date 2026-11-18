@@ -76,7 +76,7 @@ public class SchedulingPolicyService {
         if (repository.findByName(name).isPresent()) {
             throw new BusinessException(HttpStatus.CONFLICT, "이미 있는 정책 이름입니다: " + name);
         }
-        // 예전 맵 방식이 설명을 빈 문자열로 기본 처리했다 — 그대로 둔다
+        // 설명이 없으면 빈 문자열로 둔다
         String description = request.description() == null ? "" : limit(request.description(), "설명", DESCRIPTION_MAX);
 
         SchedulingPolicy policy = new SchedulingPolicy(name, description);

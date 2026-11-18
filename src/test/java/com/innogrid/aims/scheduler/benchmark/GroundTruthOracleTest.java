@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 생성식 오라클이 <b>클러스터 파일의 생성식 그대로</b> 계산하는지 고정한다.
  *
  * <p>합성 클러스터 파일을 그대로 읽어 쓴다 — 손으로 계산할 수 있는 값들이라 기대값을 식과 함께 적어 둔다.
- * 여기가 빨간불이면 벤치마크의 주 지표가 다른 물리를 재고 있다는 뜻이다.</p>
+ * 이 테스트가 실패하면 벤치마크의 주 지표가 다른 물리를 재고 있다는 뜻이다.</p>
  *
  * <p>{@link #engine_assumption_differs_most_on_the_planted_node}·
  * {@link #four_of_eight_nodes_match_the_engine_assumption}·{@link #planted_node_is_the_cheapest_per_core}는
@@ -305,8 +305,8 @@ class GroundTruthOracleTest {
     }
 
     /**
-     * 증분이 <b>곡선 위 두 점의 차</b>라는 것을 고정한다. 예전 식은 기울기 하나였고 그것은 선형 판에서만
-     * 맞다 — 지수 판에서 조용히 틀린 값을 내는 자리라 시그니처에 현재 부하를 넣었다.
+     * 증분이 <b>곡선 위 두 점의 차</b>라는 것을 확인한다. 기울기 하나로 낸 증분은 선형 판에서만 맞고 지수 판에서는
+     * 조용히 틀린 값을 내므로, {@code marginalPowerWatts}는 현재 부하(배치 전 CPU 사용률)를 인자로 받는다.
      */
     @DisplayName("지수 판의 증분은 현재 부하에 따라 다르고 선형 판에서는 같다")
     @Test
@@ -342,7 +342,7 @@ class GroundTruthOracleTest {
 
     /**
      * 파서가 이미 막지만 오라클도 스스로 막는다 — 운영 모의 모드는 오라클을 거치지 않으므로 검증이 파서에
-     * 있어야 하고, 하네스가 파서를 거치지 않고 클러스터를 만들면 여기서 크게 실패해야 한다.
+     * 있어야 하고, 배치 비교 실행이 파서를 거치지 않고 클러스터를 만들면 여기서 크게 실패해야 한다.
      */
     @DisplayName("지수가 0 이하인 클러스터로는 오라클을 만들 수 없다")
     @Test

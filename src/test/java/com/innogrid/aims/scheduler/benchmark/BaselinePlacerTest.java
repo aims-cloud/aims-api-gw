@@ -258,7 +258,7 @@ class BaselinePlacerTest {
      * <p>{@code java.util.Random}이었다면 여기가 성립하지 않는다 — 작은 시드에서 첫
      * {@code next(31)}의 상위 비트가 거의 같아 {@code nextInt(4)}의 첫 값이 시드 1~31 전부 2다.
      * 그러면 배치 건수가 적은 판에서 "무작위 31회"가 사실상 1회가 된다. 난수원을
-     * {@link BenchmarkRules#randomFor(long)}로 받는 이유이고, 그 선택이 되돌아가면 여기가 빨간불이 된다.</p>
+     * {@link BenchmarkRules#randomFor(long)}로 받는 이유이고, 그 선택을 되돌리면 이 테스트가 실패한다.</p>
      */
     @DisplayName("다른 시드는 첫 뽑기부터 다른 노드를 고른다")
     @Test
@@ -479,12 +479,12 @@ class BaselinePlacerTest {
         }
     }
 
-    // ── 하네스 축소판 ─────────────────────────────────────────
+    // ── 배치 비교 실행 축소판 ─────────────────────────────────
 
     /**
      * 전략 하나로 워크로드 목록을 배치하고 이름 → 노드 맵을 돌려준다.
      *
-     * <p>실제 하네스가 하는 일의 축소판이다. 순서를 전략에서 가져오고, 성공한 배치마다 예약을 잡는다.</p>
+     * <p>실제 배치 비교 실행이 하는 일의 축소판이다. 순서를 전략에서 가져오고, 성공한 배치마다 예약을 잡는다.</p>
      */
     private Map<String, String> run(PlacementStrategy strategy, List<Workload> workloads,
                                     List<NodeResource> nodes) {

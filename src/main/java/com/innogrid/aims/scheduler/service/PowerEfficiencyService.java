@@ -90,7 +90,7 @@ public class PowerEfficiencyService {
         this(schedulingService, powerModel, metrics, properties, guard, null);
     }
 
-    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. */
+    /** 클라이언트를 직접 받는 형태(테스트용) — 기본 게이트웨이로 감싼다. */
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,
@@ -99,7 +99,7 @@ public class PowerEfficiencyService {
         this(schedulingService, powerModel, VictoriaMetricsGateway.of(metricsClient), properties, guard);
     }
 
-    /** 스프링 없이 조립하는 형태(기존 단위 테스트). */
+    /** 스프링 없이 조립하는 형태(단위 테스트가 쓴다). */
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,

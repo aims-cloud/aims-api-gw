@@ -53,7 +53,7 @@ public record ScheduleRequest(
                 example = "PRIORITY_THEN_SIZE", allowableValues = {"PRIORITY_THEN_AGE", "PRIORITY_THEN_SIZE"})
         String placementOrder
 ) {
-    /** 배치 순서를 지정하지 않는 형태 — 배치 순서 필드가 생기기 전의 호출자(기존 테스트)와 호환. */
+    /** 배치 순서를 지정하지 않는 형태 — 배치 순서 없이 부르는 호출자(테스트)와 호환. */
     public ScheduleRequest(String scheduleId, String name, Workload.ResourceType resourceType, String cronExpression,
                            Boolean autoRun, Boolean enabled, String description, String engine, Long policyId,
                            Double maxPowerBudgetWatts, Double maxTemperatureCelsius) {

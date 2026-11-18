@@ -112,7 +112,7 @@ public class PowerOptimizationService {
         this(schedulingService, powerModel, properties, metrics, guard, null, null);
     }
 
-    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. null이면 추세를 쓸 수 없다. */
+    /** 클라이언트를 직접 받는 형태(테스트용) — 기본 게이트웨이로 감싼다. null이면 추세를 쓸 수 없다. */
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties,
@@ -121,7 +121,7 @@ public class PowerOptimizationService {
         this(schedulingService, powerModel, properties, VictoriaMetricsGateway.of(metricsClient), guard);
     }
 
-    /** 스프링 없이 조립하는 형태(기존 단위 테스트) — 현재 시점 진단만 쓸 수 있고 추세는 저장소가 없어 호출할 수 없다. */
+    /** 스프링 없이 조립하는 형태(단위 테스트용) — 현재 시점 진단만 쓸 수 있고 추세는 저장소가 없어 호출할 수 없다. */
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties) {

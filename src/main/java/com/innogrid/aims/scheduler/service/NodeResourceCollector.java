@@ -51,7 +51,7 @@ public class NodeResourceCollector {
     private final PowerModel powerModel;
     private final MetricsQueryGuard guard;
 
-    /** 노드 전력 사양 원장. null이면(원장 없이 조립한 테스트 경로) 정격은 종전대로 설정값에서 온다. */
+    /** 노드 전력 사양 원장. null이면(원장 없이 조립한 테스트 경로) 정격은 설정값에서 온다. */
     private final NodePowerSpecRepository powerSpecRepository;
 
     /** 익스포터 instance 해석. 원장 없이 조립하면 호스트명 일치와 그대로만 쓴다. */
@@ -73,7 +73,7 @@ public class NodeResourceCollector {
                 : new ExporterInstanceResolver(metrics, guard, properties);
     }
 
-    /** 익스포터 대응 원장 없이 조립하는 형태(기존 테스트 경로) — 호스트명 일치와 그대로만 쓴다. */
+    /** 익스포터 대응 원장 없이 조립하는 형태(테스트 경로) — 호스트명 일치와 그대로만 쓴다. */
     public NodeResourceCollector(SchedulerMetricsGateway metrics,
                                  SchedulerProperties properties,
                                  PowerModel powerModel,
@@ -90,7 +90,7 @@ public class NodeResourceCollector {
         this(metrics, properties, powerModel, guard, null);
     }
 
-    /** 클라이언트를 직접 받는 형태(기존 테스트·조립 경로) — 기본 게이트웨이로 감싼다. */
+    /** 클라이언트를 직접 받는 형태(테스트·조립 경로) — 기본 게이트웨이로 감싼다. */
     public NodeResourceCollector(VictoriaMetricsClient vmClient,
                                  SchedulerProperties properties,
                                  PowerModel powerModel,
@@ -98,7 +98,7 @@ public class NodeResourceCollector {
         this(new VictoriaMetricsGateway(vmClient), properties, powerModel, guard);
     }
 
-    /** 스프링 없이 조립하는 형태(기존 단위 테스트). 보호 장치는 설정의 풀 크기로 직접 만든다. */
+    /** 스프링 없이 조립하는 형태(단위 테스트). 보호 장치는 설정의 풀 크기로 직접 만든다. */
     public NodeResourceCollector(VictoriaMetricsClient vmClient,
                                  SchedulerProperties properties,
                                  PowerModel powerModel) {
@@ -176,7 +176,7 @@ public class NodeResourceCollector {
             // 세 익스포터의 instance를 잇는 해석 — 원장 → 호스트명 일치 → 그대로. 실장비는 익스포터마다 instance가
             // 달라(노드 :9100, DCGM :9400, IPMI는 중앙 주소) 노드 instance로는 GPU·전력·온도를 찾을 수 없었다.
             ExporterInstances exporters = exporterResolver.resolve(gpuCounts.keySet(), exporterResolver.discoverIpmiInstances());
-            // 정격 전력 원장도 수집 1회당 한 번만 읽는다. 비어 있으면 정격은 종전대로 설정값에서 온다.
+            // 정격 전력 원장도 수집 1회당 한 번만 읽는다. 비어 있으면 정격은 설정값에서 온다.
             NodePowerSpecs specs = powerSpecs();
 
             List<String> instances = new ArrayList<>();

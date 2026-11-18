@@ -5,8 +5,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * 배치 정책 생성·수정 요청.
  *
- * <p>수정(PUT)은 <b>부분 수정</b>이다 — 요청에 있는 키만 반영하고 없는 키는 유지한다. 예전 맵 방식이
- * 그랬고, 화면도 그렇게 쓴다. 그래서 대부분의 필드는 boxed 타입이며 null(=키 없음)이면 건드리지 않는다.</p>
+ * <p>수정(PUT)은 <b>부분 수정</b>이다 — 요청에 있는 키만 반영하고 없는 키는 유지한다. 화면도 그렇게 쓴다.
+ * 그래서 대부분의 필드는 boxed 타입이며 null(=키 없음)이면 건드리지 않는다.</p>
  *
  * <p>세 필드는 "비우는 것"에도 의미가 있다 — {@code resourceType}에 명시적 null은 <b>공통 정책으로 전환</b>,
  * {@code defaultEngine} null은 기본 엔진(weighted)으로, {@code warningTemperatureCelsius} null은 설정 기본값으로.

@@ -49,7 +49,7 @@ import com.innogrid.aims.scheduler.metrics.SyntheticCluster;
  * ({@link BenchmarkRules#LIMITATION}과 같은 취지). 값은 반올림하지 않는다 — 반올림은 DTO 계층의 일이다.</p>
  *
  * <p>이 클래스는 스프링 빈이 아닌 <b>내부 계산기</b>다. 호출자는 항상 자기 클러스터의 노드만 넘기므로,
- * 모르는 노드나 어긋난 인자는 사용자 입력 오류가 아니라 <b>하네스의 결함</b>이다 — 조용히 0을 돌려주지 않고
+ * 모르는 노드나 어긋난 인자는 사용자 입력 오류가 아니라 <b>배치 비교 코드의 결함</b>이다 — 조용히 0을 돌려주지 않고
  * {@link IllegalStateException}으로 크게 실패한다.</p>
  */
 public final class GroundTruthOracle {
@@ -153,7 +153,7 @@ public final class GroundTruthOracle {
      *
      * <p>동적분 = {@code (capacityWatts − idleWatts) × (u₂^β − u₁^β)}, {@code u₁ = cpuBeforePercent/100},
      * {@code u₂ = u₁ + requiredCpu/cores}. <b>지수가 1이 아니면 같은 코어를 얹어도 증분이 현재 부하에 따라
-     * 다르다</b> — 곡선 위 두 점의 차이지 기울기 하나가 아니다. β=1에서는 두 항이 상쇄해 예전처럼
+     * 다르다</b> — 곡선 위 두 점의 차이지 기울기 하나가 아니다. β=1에서는 두 항이 상쇄해
      * {@code (정격−유휴) × requiredCpu/cores}가 된다. 두 사용률 모두 0~1로 자른다 — 물리적으로
      * 그 밖의 값이 없고, 자르지 않으면 정격을 넘는 전력을 만들어낸다.</p>
      *

@@ -126,7 +126,7 @@ public record PlacementBenchmarkResponse(
      * 온도 모델 노브.
      *
      * @param inertiaK                 열관성 계수. 판의 {@code thermalRiseScaleCheck}가 이 값으로 계산된다
-     * @param benchmarkCooldownMinutes 하네스가 실제로 쓴 냉각 대기(0). {@code cooldownMinutes}와 다른 것이
+     * @param benchmarkCooldownMinutes 배치 비교 실행이 실제로 쓴 냉각 대기(0). {@code cooldownMinutes}와 다른 것이
      *                                 정상이다 — 히스테리시스는 단발 비교에 넣지 않는다
      */
     public record ThermalKnobs(

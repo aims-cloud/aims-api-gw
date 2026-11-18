@@ -83,7 +83,7 @@ class BenchmarkClustersTest {
     @DisplayName("주 결과판에는 유휴 노드가 다섯 대다")
     @Test
     void main_board_has_five_idle_nodes() {
-        double activeCpu = BenchmarkRules.POWERED_ON_CPU_PERCENT;   // 하네스의 회계 문턱 — 엔진 노브가 아니다
+        double activeCpu = BenchmarkRules.POWERED_ON_CPU_PERCENT;   // 배치 비교 실행의 회계 문턱이며 엔진 노브가 아니다
         // 아래는 기준 사용률만 본다. 진폭을 더한 실효 하한은 the_powered_on_threshold_separates_idle_from_busy가 본다.
         List<Node> nodes = clusters.get(BenchmarkClusters.MAIN).nodes();
         List<Node> idle = nodes.stream().filter(n -> peakCpu(n) <= activeCpu).toList();
@@ -107,8 +107,8 @@ class BenchmarkClustersTest {
      *
      * <p>{@link BenchmarkRules#POWERED_ON_CPU_PERCENT} javadoc이 "이 문턱이 두 무리 사이에 있다"고
      * 주장하는데, 그 주장이 참인 구간은 <b>유휴 상한 &lt; 문턱 ≤ 가동 하한</b>뿐이다. 판 파일의
-     * {@code swing}을 한 칸만 키우면 가동 하한이 문턱 아래로 내려가 그 문단이 조용히 거짓이 된다 —
-     * 그때 여기가 빨간불이 되어야 한다. 주 결과판의 실제 여유는 3.0~5.0%로 <b>문턱이 상단 경계에 붙어 있다.</b></p>
+     * {@code swing}을 조금만 키워도 가동 하한이 문턱 아래로 내려가 그 문단이 조용히 거짓이 된다.
+     * 그때 이 테스트가 실패해야 한다. 주 결과판의 실제 여유는 3.0~5.0%로 <b>문턱이 구간 위쪽 끝에 붙어 있다.</b></p>
      */
     @DisplayName("통전 문턱이 유휴 상한과 가동 하한 사이에 있다 — 진폭까지 더한 실효값으로")
     @Test
@@ -425,7 +425,7 @@ class BenchmarkClustersTest {
                     + " 가 5% 를 넘는다 — 전력 제약 여유가 함께 움직여 어긋남의 효과와 갈리지 않는다");
 
             // 실측값 핀 — 이 두 숫자는 판 설명과 판 파일 머리말에 글자로 적혀 있다. 파일을 고치면
-            // 규칙은 여전히 통과하지만 적어 둔 숫자가 낡으므로, 여기서 먼저 빨간불이 되게 한다.
+            // 규칙은 여전히 통과하지만 적어 둔 숫자가 낡으므로, 여기서 먼저 실패하게 한다.
             assertEquals(0.000367, bias, 1e-5, boardId
                     + ": 유휴 층 벌점 편향이 " + fmt(bias) + " 로 바뀌었다 — 판 파일 머리말의 0.037% 가 낡았다");
             assertEquals(50.0 / 5850.0, skew, 1e-9, boardId

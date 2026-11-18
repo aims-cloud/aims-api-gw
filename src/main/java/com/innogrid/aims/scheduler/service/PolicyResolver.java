@@ -46,7 +46,7 @@ final class PolicyResolver {
             if (byType.isPresent()) return new PolicyChoice(byType.get(), PolicyChoice.Source.RESOURCE_TYPE, true);
         }
         // 목록이 비면 단건 조회로 한 번 더 본다. 실제 DB에서는 같은 답이라 활성이 없을 때만 한 번 더 도는 가벼운 질의이고,
-        // 단건 조회만 준비한 호출자(기존 단위 테스트의 대역)와의 호환을 유지한다.
+        // 단건 조회만 준비한 호출자(단위 테스트의 목 객체)와의 호환을 유지한다.
         Optional<SchedulingPolicy> common = pickOne(policyRepository.findByActiveTrueAndResourceTypeIsNullOrderByNameAsc(), "공통")
                 .or(policyRepository::findFirstByActiveTrueAndResourceTypeIsNull);
         if (common.isPresent()) return new PolicyChoice(common.get(), PolicyChoice.Source.COMMON, true);

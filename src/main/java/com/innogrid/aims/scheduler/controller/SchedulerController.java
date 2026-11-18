@@ -55,8 +55,8 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 워크로드·노드·배치 이력 API.
  *
- * <p>응답은 전부 {@code dto} 패키지의 record로 나간다. 예전에는 엔티티·모델을 그대로 직렬화해
- * {@code get} 메서드 하나를 추가하면 API 필드가 조용히 늘었다. 응답 형태의 주인은 이제 DTO이고,
+ * <p>응답은 전부 {@code dto} 패키지의 record로 나간다. 엔티티·모델을 그대로 직렬화하면
+ * {@code get} 메서드 하나를 추가할 때 API 필드가 조용히 늘기 때문이다. 응답 형태의 주인은 DTO이고,
  * 필드 계약은 {@code ResponseJsonGoldenTest}·{@code NodeResourceSerializationTest}가 고정한다.</p>
  */
 @Tag(name = "스케줄러", description = "워크로드 스케줄링 (제약조건/전력/온도 기반)")

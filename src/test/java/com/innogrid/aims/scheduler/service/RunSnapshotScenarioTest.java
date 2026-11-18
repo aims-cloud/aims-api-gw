@@ -160,7 +160,7 @@ class RunSnapshotScenarioTest {
         givenIdleNodes();
         save("w1", 8);
         // 실행 계층이 거부하면 워크로드가 되돌아가고, 실행 루프가 그 배치의 예약도 같은 맥락에서 되돌린다.
-        // 그래서 전부 무산된 실행의 후 값은 전 값과 같다(계약 문서 2장 실행 전후 클러스터 상태 설명).
+        // 그래서 전부 무산된 실행의 후 값은 전 값과 같다(docs/13 2장 실행 전후 클러스터 상태 설명).
         when(dispatcher.dispatch(any(PlacementDispatcher.Request.class)))
                 .thenReturn(PlacementDispatcher.Outcome.rejected("실행 계층이 거부"));
 

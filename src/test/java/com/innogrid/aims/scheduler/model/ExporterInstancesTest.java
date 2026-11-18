@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 익스포터 instance 해석 — 세 단계가 어느 순서로 떨어지고, 애매하면 무엇을 고르지 않는지.
  *
  * <p>배포 서버 실측(2026-09-21)을 그대로 판으로 쓴다: 노드 {@code localhost:9100}, DCGM {@code mdc1-gpu-node1:9400},
- * IPMI {@code ipmi-exporter:9290}. 이 세 값이 원장 없이 이어지지 않는다는 것이 이 브랜치의 출발점이다.</p>
+ * IPMI {@code ipmi-exporter:9290}. 이 세 값은 원장 없이 이어지지 않는다.</p>
  */
 class ExporterInstancesTest {
 

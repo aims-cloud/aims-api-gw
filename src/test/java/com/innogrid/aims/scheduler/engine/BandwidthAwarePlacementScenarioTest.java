@@ -83,7 +83,7 @@ class BandwidthAwarePlacementScenarioTest {
         assertEquals(0.421, s4.get("c").details().get("링크품질"), EPS, "c 는 97.5% 모자라다");
         assertTrue(s4.get("b").totalScore() > s4.get("c").totalScore());
 
-        // ⑤ 게이트 off — 요구가 있어도 예전 응답
+        // ⑤ 게이트 off — 요구가 있어도 링크 키가 없고 셋이 동점
         Map<String, NodeScore> s5 = run(20000.0, false);
         row(table, "⑤", "20000 (게이트 off)", s5, "동점");
         for (String mdc : List.of("a", "b", "c")) {

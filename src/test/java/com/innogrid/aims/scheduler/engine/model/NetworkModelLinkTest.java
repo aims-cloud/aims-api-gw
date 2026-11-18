@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 지연 0 손실 10% UP           → cost 0.1          → 0.909
  * DOWN                        → 0 (C5가 제외하므로 실제로는 쓰이지 않음)
  * 요구 1000 · 링크 500 · 20ms UP → cost 0.4 + 0.5 → 0.526   (부족분 50%)
- * 요구를 주지 않음 · 원장 대역폭 없음 → 부족분 항 0 (예전 비용 그대로)
+ * 요구를 주지 않음 · 원장 대역폭 없음 → 부족분 항 0
  * 같은 MDC                    → 1.0
  * 미등록 원격 · 라벨 없는 노드 · 빈 스냅샷 → unknownLinkScore (기본 0.5 = 50ms UP과 같다)
  * </pre>

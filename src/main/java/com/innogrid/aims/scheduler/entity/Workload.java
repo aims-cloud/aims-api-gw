@@ -56,7 +56,7 @@ public class Workload {
      *
      * <p>{@code dataMdcId}가 있고 정책의 친화도 게이트가 켜진 배치에서만 읽힌다 — 링크 대역폭이
      * 이 값에 못 미치면 그만큼 링크 점수를 깎는다. 제약이 아니라 점수라, 부족해도 배치는 된다.
-     * null인 기존 행은 예전과 똑같이 계산된다.</p>
+     * null이면 대역폭 부족분 항이 0이라 링크 점수를 깎지 않는다.</p>
      */
     private Double requiredBandwidthMbps;
 
@@ -144,7 +144,7 @@ public class Workload {
     public OffsetDateTime getScheduledAt() { return scheduledAt; }
 
     // Setters
-    /** 이름 변경은 편집 API만 쓴다. 배치 이력·전달 기록은 결정 당시 이름을 따로 저장하므로 바뀌지 않는다. */
+    /** 이름 변경은 편집 API만 쓴다. 배치 이력·전달 기록은 결정 시점의 이름을 따로 저장하므로 바뀌지 않는다. */
     public void setName(String name) { this.name = name; }
     public void setDescription(String description) { this.description = description; }
     public void setRequiredCpu(int requiredCpu) { this.requiredCpu = requiredCpu; }

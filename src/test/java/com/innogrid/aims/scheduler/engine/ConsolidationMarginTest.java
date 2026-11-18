@@ -33,7 +33,7 @@ class ConsolidationMarginTest {
         double expected = Math.round((a.totalScore() - i.totalScore()) * 10000.0) / 10000.0;
         assertEquals(expected, a.details().get("통합여유"), EPS);
         assertEquals(expected, i.details().get("통합여유"), EPS, "모든 후보에 같은 값");
-        // 선택은 종전과 같다 — 여유가 양수면 가동 노드, 음수면 빈 노드
+        // 선택은 여유의 부호를 따른다. 양수면 가동 노드, 음수면 빈 노드
         assertEquals(expected > 0 ? "active" : "idle", r.selectedNodeId());
     }
 

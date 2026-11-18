@@ -24,8 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 삭제 규칙 — 실행 중 워크로드 409, 참조 중 정책 409, 없는 것 404.
  *
- * <p>예전에는 셋 다 조용히 200이었다. 실행 중 워크로드를 지우면 예약 장부(=워크로드 행)가 사라져 노드가
- * 비어 보이고, 참조 중 정책을 지우면 스케줄의 다음 실행이 404로 실패했다.</p>
+ * <p>실행 중 워크로드를 지우면 예약 장부(=워크로드 행)가 사라져 노드가 비어 보이고, 참조 중 정책을 지우면
+ * 스케줄의 다음 실행이 404로 실패한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

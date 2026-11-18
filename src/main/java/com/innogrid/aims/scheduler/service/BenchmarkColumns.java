@@ -68,8 +68,8 @@ final class BenchmarkColumns {
 
     /**
      * 엔진 쪽 변종 열의 순서 — 대조군의 {@link #BASELINE_ORDER}와 같은 역할. 운영 엔진 전량(레지스트리 정렬) 뒤, 대조군 앞에
-     * 이 순서로 선다. {@link #engineVariants()}가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
-     * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
+     * 이 순서로 선다. {@link #engineVariants()}가 이 목록과 구현 맵의 집합 일치를 검사한다. 목록 없이 인라인으로
+     * 붙이면 열이 조용히 빠져도 아무것도 깨지지 않는다.
      */
     static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
             BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,

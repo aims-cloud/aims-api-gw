@@ -131,7 +131,7 @@ class ConstraintEvaluatorMdcBudgetTest {
         ctx.reserve("a", workload(2));
 
         // 두 번째 배치: a의 실효 전력이 예약분만큼 올라 합계가 예산을 넘는다.
-        // 실측(400+400)만 더했다면 여기서도 975로 계산돼 그냥 통과했을 것이다.
+        // 실측(400+400)만 더하면 여기서도 975로 계산돼 그냥 통과한다.
         String reason = evaluator.exclusionReason(workload(2), b, ctx);
         assertNotNull(reason, "예약분이 합계에 반영되지 않으면 예산이 누적되지 않는다");
         assertTrue(reason.startsWith("MDC seoul 전력 합계 예상"), reason);

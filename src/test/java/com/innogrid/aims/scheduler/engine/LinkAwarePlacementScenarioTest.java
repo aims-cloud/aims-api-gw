@@ -21,7 +21,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 링크 반영 시나리오 — 데이터 위치에 따라 배치가 어디로 가는지, 게이트를 끄면 예전과 같은지, 세 엔진이 C5를 공유하는지.
+ * 링크 반영 시나리오 — 데이터 위치에 따라 배치가 어디로 가는지, 게이트를 끄면 링크가 무시되는지,
+ * 세 엔진이 C5를 공유하는지.
  *
  * <pre>
  * 클러스터  MDC a{n-a} · b{n-b} · c{n-c} · d{n-d}  자원·부하 동일(트래픽 0)

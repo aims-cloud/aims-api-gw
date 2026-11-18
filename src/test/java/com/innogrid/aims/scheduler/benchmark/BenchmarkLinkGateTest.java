@@ -17,8 +17,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * 링크 게이트가 <b>링크 판에서만</b> 켜진다는 사실을 고정한다.
  *
  * <p>게이트는 정책 {@code affinityEnabled} <b>와</b> 워크로드 {@code dataMdcId} 둘 다 있어야 켜진다. 워크로드 분포 파일은
- * {@code dataMdcId}를 넣지 않으므로, 링크 판이 순환 배정을 하기 전까지는 어느 판에서도 링크 코드가 도달하지 않는다 — 기존 6판의
- * 기준선이 그대로인 이유다. 링크 판은 판 파일의 {@code links:} 절이 원장 노릇을 하고 데이터 MDC를 순환 배정해 그 경로를 처음으로 연다.</p>
+ * {@code dataMdcId}를 넣지 않으므로, 링크 판의 순환 배정 없이는 어느 판에서도 링크 코드에 이르지 않는다. 나머지 판의
+ * 기준선이 링크 코드의 영향을 받지 않는 이유다. 링크 판은 판 파일의 {@code links:} 절이 원장 노릇을 하고 데이터 MDC를
+ * 순환 배정해 그 경로를 연다.</p>
  */
 class BenchmarkLinkGateTest {
 

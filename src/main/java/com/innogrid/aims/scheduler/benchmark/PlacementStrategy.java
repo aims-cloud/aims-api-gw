@@ -93,7 +93,7 @@ public record PlacementStrategy(String id, String label, Kind kind, PolicyVarian
      * 운영 엔진을 감싼다 — 메서드 참조 한 줄. 레지스트리는 이 record를 수집할 수 없다.
      *
      * <p>워크로드 순서를 {@code null}(도착 순서)로 두는 이유: 운영 경로의 배치 순서는 스케줄이 고르는
-     * 값이라 엔진 자신의 성질이 아니다. 순서를 바꿔 보고 싶으면 하네스가 이 record를 다시 만들면 된다.</p>
+     * 값이라 엔진 자신의 성질이 아니다. 순서를 바꿔 보고 싶으면 배치 비교 코드가 이 record를 다시 만들면 된다.</p>
      */
     public static PlacementStrategy ofEngine(SchedulingEngine e) {
         return new PlacementStrategy(e.getId(), e.getName(), Kind.ENGINE, PolicyVariant.BASE,

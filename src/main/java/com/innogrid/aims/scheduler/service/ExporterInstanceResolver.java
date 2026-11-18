@@ -25,7 +25,7 @@ import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
  * 익스포터 instance 해석의 한 자리 — 원장을 읽고 저장소에 실제로 있는 DCGM·IPMI instance를 발견해
  * {@link ExporterInstances}를 만든다.
  *
- * <p>노드 수집기·전력 최적화 추세·노드 전력 효율 추세 세 곳이 IPMI 시리즈를 노드 익스포터 instance로 찾고 있었다.
+ * <p>노드 수집기, 전력 최적화 추세, 노드 전력 효율 추세 세 곳이 노드의 IPMI 시리즈를 찾는다.
  * 세 곳에 같은 규칙을 심으려면 규칙이 한 자리에 있어야 한다. 이 클래스는 원장과 발견 질의만 갖고, 해석 규칙은
  * {@link ExporterInstances}에 있다.</p>
  *

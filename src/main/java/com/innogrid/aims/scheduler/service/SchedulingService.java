@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
+import com.innogrid.aims.scheduler.dto.NodeReservationsResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownReleaseResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
 import com.innogrid.aims.scheduler.engine.EngineRegistry;
@@ -43,8 +44,9 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  * 짧은 트랜잭션에 맡긴다.</p>
  *
  * <p>배치 컨텍스트 조립(노드 수집 · 링크·예산 원장 · 예약 반영)은 {@link PlacementContextAssembler}에, 노드 조회(열 상태 ·
- * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader}에, 배치 정책 선택은 {@link PolicyResolver}에, 워크로드 상태 변경(일괄 재개 ·
- * 상태 전이 · 예약 취소)은 {@link WorkloadStatusChanger}에 맡긴다.</p>
+ * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader}에, 노드별 예약 내역은 {@link NodeReservationReader}에,
+ * 배치 정책 선택은 {@link PolicyResolver}에, 워크로드 상태 변경(일괄 재개 · 상태 전이 · 예약 취소)은
+ * {@link WorkloadStatusChanger}에 맡긴다.</p>
  */
 @Service
 public class SchedulingService {
@@ -65,6 +67,9 @@ public class SchedulingService {
 
     /** 노드 조회. 빈이 아니라 여기서 만든다 — 조립과 같은 평가기(냉각 대기 기록)를 쓴다. */
     private final NodeSnapshotReader nodeReader;
+
+    /** 노드별 예약 내역. 빈이 아니라 여기서 만든다 — 조립과 같은 readReservations 결과를 쓴다. */
+    private final NodeReservationReader reservationReader;
 
     /** 배치 정책 선택. 빈이 아니라 여기서 만든다. */
     private final PolicyResolver policyResolver;
@@ -107,6 +112,7 @@ public class SchedulingService {
         this.contextAssembler = new PlacementContextAssembler(nodeCollector, constraintEvaluator, workloadRepository,
                 properties, linkRepository, budgetRepository, dispatchService);
         this.nodeReader = new NodeSnapshotReader(contextAssembler, constraintEvaluator);
+        this.reservationReader = new NodeReservationReader(contextAssembler);
         this.policyResolver = new PolicyResolver(policyRepository);
         this.statusChanger = new WorkloadStatusChanger(workloadRepository, dispatchService, properties);
         this.inputRepository = inputRepository;
@@ -231,6 +237,15 @@ public class SchedulingService {
      */
     public NodeResource getNodeResource(String nodeId) {
         return nodeReader.find(nodeSnapshot(), nodeId);
+    }
+
+    /**
+     * 노드별 예약 내역 — 배치가 노드 예약으로 잡는 워크로드를 노드마다 묶어 판정과 예약량을 낸다. 메트릭을 수집하지 않는다.
+     *
+     * @param nodeId 비어 있지 않으면 그 노드만(앞뒤 공백은 뺌 · 없는 노드면 빈 목록)
+     */
+    public NodeReservationsResponse nodeReservations(String nodeId) {
+        return reservationReader.read(nodeId);
     }
 
     /**

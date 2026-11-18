@@ -35,6 +35,7 @@ DELETE /api/v1/scheduler/node-power-specs/{specId}
 GET /api/v1/scheduler/nodes
 GET /api/v1/scheduler/nodes/excluded
 GET /api/v1/scheduler/nodes/power-efficiency
+GET /api/v1/scheduler/nodes/reservations
 GET /api/v1/scheduler/nodes/{nodeId}
 GET /api/v1/scheduler/nodes/{nodeId}/power-efficiency/trend
 GET /api/v1/scheduler/optimization/consolidation

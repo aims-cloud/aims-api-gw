@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 대상 화면: 지능형 예측 진단 > 스케줄러, 지능형 예측 진단 > 전력 최적화 진단
-- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 82개
+- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 83개
 - 관련 문서: docs/10 알람 API 프론트 계약(같은 형식), docs/06 자원 탐색기 트리 설계(역할 스코프), docs/14 배치 전략 비교 방법론(8장 비교 API 의 판·지표·판정 규칙이 왜 그렇게 정해졌는지와 기준 시점의 봉인 값)
 
 **필드 하나하나의 진실은 Swagger(`/swagger-ui/index.html`, `/v3/api-docs`)입니다.** 이 문서는 필드를 전수로 옮기지 않습니다. 대신 화면을 붙일 때 Swagger 만으로는 알기 어려운 것 — 경로 묶음, 공통 규칙, 값이 비는 조건, 오류가 나는 조건, 그리고 앞으로 바뀔 예정 — 을 적습니다. 필드 목록이 필요하면 Swagger 를 보고, 이 문서와 다르면 코드가 맞습니다.
@@ -250,7 +250,7 @@
 
 ---
 
-## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (29)
+## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (30)
 
 진단 화면과 스케줄 화면이 함께 씁니다.
 
@@ -268,6 +268,7 @@
 | POST | `/workloads/dry-run` | 저장 전 모의 배치 — 생성 폼 값으로 단건 모의 배치와 같은 일곱 키(저장 없음 · 주의 15). `engine` 은 단건 배치와 같음 |
 | GET | `/nodes`, `/nodes/{nodeId}` | 노드 목록·상세(27필드 — 아래 GPU 축·디스크 축) |
 | GET | `/nodes/excluded` | 수집 실패로 후보에서 빠진 노드와 사유 |
+| GET | `/nodes/reservations` | 노드별 예약 내역 — 노드 예약으로 잡힌 배치 대기 · 실행 중 워크로드와 판정 · 예약량. `nodeId` 필터(읽기 전용 · 아래 **노드별 예약 내역**) |
 | GET | `/nodes/power-efficiency` | 노드별 전력 효율 지표(코어 수를 반영한 효율 · 순위 포함 · 아래 주의 17) |
 | GET | `/nodes/{nodeId}/power-efficiency/trend` | 효율 추세. `from`, `to`, `step` |
 | GET | `/constraints` | 제약 조건 설명(C0~C6) |
@@ -341,6 +342,21 @@
 - **C1 디스크 검사와 같은 식입니다.** 디스크를 요구한 배치는 CPU·메모리·GPU 가 충분하고 `availableDiskGb < requiredDiskGb` 인 노드를 `INSUFFICIENT_DISK`("디스크 부족 (필요 NGB, 가용 NGB / 총량 NGB)")로 뺍니다. 그 문장의 가용·총량이 `availableDiskGb`·`diskCapacityGb` 이고 필요는 워크로드의 `requiredDiskGb` 입니다. CPU 등이 먼저 모자라면 `INSUFFICIENT_RESOURCE` 로 옵니다. 응답 값은 조회 시점이라 이력에 남은 배치 시점의 수와는 다를 수 있습니다.
 - **`diskCapacityGb = 0` 은 "여유 없음"이 아니라 "모름"입니다.** 그 노드는 디스크 때문에는 빠지지 않고(다른 제약은 그대로 · 주의 11 의 `디스크검사 0.0`), `availableDiskGb`·`diskUsagePercent` 도 0 입니다. 이 세 칸을 함께 "-" 로 두십시오. `reservedDiskGb` 는 총량을 모르는 노드에도 그 노드에 배치된 워크로드의 요구량이 더해지므로 값이 있을 수 있고, 가용 계산에는 쓰이지 않으니 그대로 보이면 됩니다. 총량이 있는데 가용이 0 이면 실제로 가득 찬 노드입니다(가용 시리즈가 빠져도 이렇게 보입니다).
 - CPU·메모리·GPU 처럼 총량·예약·가용 세 칸을 각 축의 제자리에 넣었습니다. 세 키가 한곳에 모이지 않고 세 군데(`totalGpu` 뒤 · `reservedGpu` 뒤 · 맨 끝)로 흩어지므로 JSON 키 순서에 의존하는 화면은 주의하십시오. 총량은 설정된 마운트 지점 하나(기본 `/`)의 시리즈이고, 다른 마운트는 세지 않습니다.
+
+**노드별 예약 내역(`/nodes/reservations`)** — 노드 목록의 `reserved*` 가 어떤 워크로드로 이루어졌는지 보여 줍니다. 배치 대기(SCHEDULED) · 실행 중(RUNNING) 워크로드를 배치와 같은 규칙으로 판정해 노드마다 묶고, 행마다 예약량을, 노드마다 그 합을 줍니다. 저장하지 않고, 지금 화면이 부를 계획은 없습니다.
+
+| `judgment` | 조건 | 행 예약량 |
+|---|---|---|
+| `FULL` | 배치 대기는 배치 시각이 보존 기한(`reservationTtlHours` · 설정 `aims.scheduler.reservation-ttl-hours` · 기본 24시간) 안이거나 배치 시각을 모를 때, 실행 중은 시작한 지(시작 기록이 없으면 배치 시각부터) 메트릭 지연(`metricLagMinutes` · 설정 `aims.scheduler.metric-lag-minutes` · 기본 10분)이 안 지났거나 두 시각을 모두 모를 때 | CPU · 메모리 · GPU · 디스크(음수는 0) |
+| `GPU_ONLY` | 실행 중이고 시작한 지(시작 기록이 없으면 배치 시각부터) 메트릭 지연이 지남 — CPU · 메모리 · 디스크는 사용률 메트릭에 이미 있음 | GPU 개수만(요구 GPU 가 0 이면 0) |
+| `EXPIRED` | 배치 대기인데 배치 시각이 보존 기한보다 오래됨 | 없음 |
+
+- 실행 중의 시작 시각(`startedAt`)은 현재 결정의 전달 기록이 RUNNING 이 된 시각입니다. 기록이 없으면 null 이고 메트릭 지연을 배치 시각(`scheduledAt`)부터 잽니다. 보존 기한은 배치 대기에만 겁니다. 배정 노드가 없는 배치 대기 · 실행 중은 행으로 싣지 않고 `unassignedCount`(노드 필터와 무관한 전체 건수)로만 셉니다.
+- 노드 합계는 행 예약량의 합이고 노드 목록의 `reserved*` 와 같은 식입니다. 다만 노드 목록은 메트릭을 수집한 노드의 예약만 세므로, 수집되지 않은 노드나 수집에서 빠진 노드(`/nodes/excluded`)의 행은 이 조회에만 나옵니다. 이 조회는 메트릭을 수집하지 않고 워크로드와 전달 기록만 읽습니다. 모든 행을 응답의 `evaluatedAt` 하나로 판정하며, 노드 목록과 따로 부르면 판정 시각이 달라 그 사이에 기한을 넘긴 행은 다르게 나올 수 있습니다.
+- `nodeId` 를 주면 앞뒤 공백을 뺀 값과 정확히 같은 노드만 싣고, 없는 노드는 404 가 아니라 빈 배열입니다. 노드는 id 순, 행은 워크로드 id 순이며 행 수에 상한은 없습니다.
+- 같은 워크로드는 `/workloads/page`(`status` · `assignedNodeId` 필터 · 주의 12)로도 볼 수 있습니다. 이 조회는 거기에 판정 규칙(보존 기한 · 메트릭 지연 · GPU 만 남김 · 전달 기록의 시작 시각)을 적용한 결과를 더합니다.
+- `EXPIRED` 행은 자원을 묶지 않지만 상태가 SCHEDULED 로 남습니다. 예약 취소 API(`POST /workloads/{id}/release` · 주의 13)는 대기로 되돌려 이 목록에서 빼고, 다음 스케줄 실행이 다시 배치할 수 있습니다. 더 쓰지 않을 워크로드는 되돌린 뒤 삭제합니다. 실행이 끝났는데 RUNNING 으로 남은 행은 GPU 를 계속 잡으므로, 실행 계층에서 끝난 것을 확인한 뒤 상태 변경(`PATCH /workloads/{id}/status`)으로 끝냅니다.
+- ID 가 `reservations` 인 노드는 `/nodes/{nodeId}` 로 조회할 수 없습니다(`excluded` · `power-efficiency` 와 같음).
 
 **엔진별 노드 배치 스코어의 뜻(배치 결정 `candidateScores[]` · 배치 이력)** — 같은 이름의 필드에 엔진마다 다른 값이 들어갑니다
 
@@ -687,6 +703,7 @@
 | 항목 | 현재 | 이유 |
 |---|---|---|
 | 노드 목록 | 1건 | 모니터링 대상 노드가 백엔드가 도는 서버 하나뿐 |
+| 노드별 예약 내역 | 노드 1대(`localhost:9100`) · `EXPIRED` 1행 · 합계 0 | 워크로드 표의 유일한 행(id 1)이 2026-09-10 에 배치된 배치 대기라 보존 기한(24시간)이 지났다. 노드 목록의 `reserved*` 도 0 이다. 서버에는 `FULL` · `GPU_ONLY` 로 판정될 행이 없다 |
 | 디스크 총량·가용 | 값 있음(총량 95 GB) | 노드 익스포터(`localhost:9100`)가 살아 있고 마운트 `/` 시리즈가 있다. 예약은 디스크를 요구한 워크로드가 없어 0 |
 | 전력·온도 | 0 | IPMI 타깃(`ipmi-exporter:9290`) down. 살아나도 `instance` 가 노드와 다르므로 익스포터 대응 원장에 적어야 이어진다 |
 | GPU 개수·사용률·온도·전력 | 0 | DCGM 타깃(`mdc1-gpu-node1:9400`) down. 살아나도 노드 `instance`(`localhost:9100`)와 호스트명이 달라 호스트명 일치가 걸리지 않는다 — 전력·온도와 마찬가지로 익스포터 대응 원장에 적어야 넷이 함께 이어진다 |
@@ -807,6 +824,7 @@
 | #197 | 2026-11-16 | 배치 전략 비교 | **노드별 온도 상한 대조 추가** — `GET /benchmark/placement` 의 판(`boards[]`)마다 `temperatureLimitCheck` 를 더합니다(8장 「노드별 온도 상한 대조」). 노드마다 엔진이 보는 배치 전 온도가 온도 상한 열의 65℃ 와 기준 정책의 75℃ 를 넘은 시각 지점 수와 생성식 온도의 12지점 최솟값 · 최댓값을 싣습니다. | 경로 59 · 작업 80 · 요청 키 · 지표 · 셀 값 · 판 · 설정 · 규칙 축 다이제스트 · 판정 기준선 그대로 · 응답은 판마다 키 하나 추가 · Swagger 는 배치 비교 설명과 `Board` 속성 하나 · 새 스키마 `TemperatureLimitCheck` · 증거 묶음 `entriesDigest` `d6d9496b6c63` → `412a1dddcb56` · 화면 수정 없음(화면은 배치 비교를 부르지 않음) |
 | #199 | 2026-11-16 | Nova 인벤토리 | **Nova 인벤토리 조회 추가** — `GET /inventory/nova` 신설(작업 80 → 81 · 3장 「Nova 인벤토리 조회」). OpenStack Nova 의 하이퍼바이저 · VM 을 스케줄러 노드 · 워크로드 입력 모양으로 읽고, 실제로 빈 인벤토리(`EMPTY`)와 연동 실패(`NOT_CONFIGURED` · `AUTH_FAILED` · `FORBIDDEN` · `CONNECTION_FAILED` · `TIMEOUT` · `UPSTREAM_ERROR` · `MALFORMED`)를 `status` 로 나눕니다. 새 스키마 넷(`ApiResponseNovaInventoryResponse` · `NovaInventoryResponse` · `NovaInventoryNode` · `NovaInventoryServer`) | 경로 59 → 60 · 작업 80 → 81 · 기존 요청 · 응답 · DDL 그대로 · 새 설정 `aims.scheduler.inventory.timeout-ms`(기본 5000) · Swagger 는 새 경로와 새 스키마 넷 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
 | #200 | 2026-11-17 | Nova 인벤토리 | **Nova 인벤토리 모의 배치 추가** — `POST /inventory/nova/dry-run` 신설(작업 81 → 82 · 3장 「Nova 인벤토리 모의 배치」). 쓸 수 있는 하이퍼바이저를 빈 노드로 두고 그 위 VM 을 정책 상한(놓기 전 값)을 지키며 저장 없이 다시 놓아 보며, 기능 플래그 `aims.scheduler.inventory.simulation-enabled` 가 꺼져 있으면 `DISABLED` 입니다. 새 스키마 다섯(`ApiResponseNovaDryRunResponse` · `NovaDryRunResponse` · `NovaDryRunNode` · `NovaDryRunDecision` · `NovaDryRunExcluded`). `NovaInventoryNode` 의 필드 설명 넷 · 노드 설명과 `GET /inventory/nova` 설명 문구를 실제 값에 맞춤 | 경로 60 → 61 · 작업 81 → 82 · 기존 요청 · 응답 · DDL 그대로 · 새 설정 `aims.scheduler.inventory.simulation-enabled`(기본 false) · Swagger 는 새 경로 · 새 스키마 다섯 · 설명 문구 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
-| (이번) | 2026-11-17 | Nova 인벤토리 | **모의 배치 노드 사용률 추가 · flavor 탓에 빈 대상은 조회 실패** — 노드에 `simulatedCpuUsagePercent` · `simulatedMemoryUsagePercent` · `overLimit`, 요약에 `overLimitNodeCount`(`hostChangedCount` 뒤). 쓸 수 있는 호스트 위 VM 의 flavor 를 못 읽어 다시 놓을 VM 이 0 이면 `NO_VMS` 대신 `INVENTORY_FAILED`(`inventoryStatus` `OK` · `vmCount` 0 · `excluded` 유지). 엔진 설명을 「노드 배치 스코어 식과 반올림 뒤 동점 여부가 엔진마다 달라 VM 별 결정은 다를 수 있음」으로 바로잡음 · `overLimit` 은 물리 총량 0 인 자원을 넘지 않은 것으로 봄(3장 「Nova 인벤토리 모의 배치」) | 경로 61 · 작업 82 · 스키마 571 그대로 · 응답에 키 넷 추가(기존 키 · 값 그대로, flavor 경우의 `status` · `message` 만 바뀜) · Swagger 는 새 속성 넷과 설명 문구 · DDL 그대로 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
+| #202 | 2026-11-17 | Nova 인벤토리 | **모의 배치 노드 사용률 추가 · flavor 탓에 빈 대상은 조회 실패** — 노드에 `simulatedCpuUsagePercent` · `simulatedMemoryUsagePercent` · `overLimit`, 요약에 `overLimitNodeCount`(`hostChangedCount` 뒤). 쓸 수 있는 호스트 위 VM 의 flavor 를 못 읽어 다시 놓을 VM 이 0 이면 `NO_VMS` 대신 `INVENTORY_FAILED`(`inventoryStatus` `OK` · `vmCount` 0 · `excluded` 유지). 엔진 설명을 「노드 배치 스코어 식과 반올림 뒤 동점 여부가 엔진마다 달라 VM 별 결정은 다를 수 있음」으로 바로잡음 · `overLimit` 은 물리 총량 0 인 자원을 넘지 않은 것으로 봄(3장 「Nova 인벤토리 모의 배치」) | 경로 61 · 작업 82 · 스키마 571 그대로 · 응답에 키 넷 추가(기존 키 · 값 그대로, flavor 경우의 `status` · `message` 만 바뀜) · Swagger 는 새 속성 넷과 설명 문구 · DDL 그대로 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
+| (이번) | 2026-11-18 | 워크로드 · 노드 | **노드별 예약 내역 조회 추가** — `GET /nodes/reservations` 신설(작업 82 → 83 · 3장 「노드별 예약 내역」). 배치 대기 · 실행 중 워크로드를 배치와 같은 규칙으로 `FULL` · `GPU_ONLY` · `EXPIRED` 로 판정해 노드마다 묶고, 행 예약량과 노드 합계 · 판정 시각 · 규칙 값 · 배정 노드 없는 수를 줍니다. 메트릭은 수집하지 않습니다. 새 스키마 넷(`ApiResponseNodeReservationsResponse` · `NodeReservationsResponse` · `NodeReservationsNode` · `NodeReservationsHeldWorkload`) | 경로 61 → 62 · 작업 82 → 83 · 스키마 571 → 575 · 기존 요청 · 응답 · DDL 그대로 · 배치 결과 그대로(예약 판정을 메서드로 옮기기만 함) · Swagger 는 새 경로와 새 스키마 넷 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 PR 번호가 없던 변경이며, 병합된 뒤 다음 계약 변경 때 번호를 채웁니다.

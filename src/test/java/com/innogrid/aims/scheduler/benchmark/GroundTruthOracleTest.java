@@ -24,8 +24,9 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>{@link #engine_assumption_differs_most_on_the_planted_node}·
  * {@link #four_of_eight_nodes_match_the_engine_assumption}·{@link #planted_node_is_the_cheapest_per_core}는
- * <b>순환 논증이 아님을 보이는 증거</b>다. 엔진의 유휴 전력 가정
- * (정격 × 0.3)과 파일에 적힌 실제 유휴 전력이 노드마다 얼마나 다른지 고정해 둔다.</p>
+ * 엔진의 기본 유휴 전력 가정(정격 × 0.3)과 파일에 적힌 유휴 전력이 노드마다 얼마나 다른지 확인한다.
+ * 평가 기준이 엔진의 기본 가정과 다른 값을 쓴다는 것을 보일 뿐, 수치까지 독립이라는 증거는 아니다.
+ * 선형 판에서는 실측 전력과 CPU 사용률로 유휴 전력을 역산하면 선언값이 그대로 나온다({@link GroundTruthOracle}).</p>
  */
 class GroundTruthOracleTest {
 

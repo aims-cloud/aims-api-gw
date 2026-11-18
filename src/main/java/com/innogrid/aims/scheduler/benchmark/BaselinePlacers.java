@@ -292,7 +292,7 @@ public final class BaselinePlacers {
 
     /**
      * 계측 노드 먼저(계측 0 → 미계측 1), 그 안에서 실측 온도 오름차순. 선택은 strict 비교로 하므로 동률이면
-     * 앞선 후보 — 목록이 nodeId 순이라 nodeId 순 — 가 남는다.
+     * 앞선 후보가 남는다. 목록이 nodeId 순이므로 nodeId가 작은 쪽이다.
      */
     private static final Comparator<NodeResource> COOLEST_FIRST =
             Comparator.comparingInt((NodeResource n) -> measured(n) ? 0 : 1)

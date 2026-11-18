@@ -93,7 +93,7 @@ public final class GroundTruthOracle {
      * 노드 한 대의 생성식 기준 소비 전력(W). {@code cpuPercent}는 0~100. 실측이 아니다.
      *
      * <p>생성식 그대로: {@code idleWatts + (capacityWatts − idleWatts) × (cpuPercent/100)^β}. 지수 β는
-     * 판 파일이 선언하고(기본 1 — 선형), 여기서는 분기 없이 {@link Math#pow}를 쓴다 —
+     * 판 파일이 선언하고(기본 1 — 선형), 여기서는 분기 없이 {@link Math#pow}를 쓴다.
      * {@code Math.pow(x, 1.0) == x}이고 이 식은 이미 {@code a × (b/100)} 형이라 β=1에서 비트까지 같다.
      * 사용률은 물리적으로 0~100을 벗어날 수 없으므로 범위를 벗어난 값은 잘라 쓴다 —
      * 정격을 넘는 전력을 만들어내지 않는다.</p>

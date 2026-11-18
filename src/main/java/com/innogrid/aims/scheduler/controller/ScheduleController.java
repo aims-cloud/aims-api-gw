@@ -53,8 +53,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 어떻게 배치할지는 배치 정책과 엔진이 정한다.</p>
  *
  * <p><b>시각은 전부 UTC로 주고받는다.</b> 표출 변환은 프런트가 한다. 다만 실행 주기
- * (cron)는 시간대 정보를 담을 수 없어 <b>한국 시간(UTC+9) 입력으로 가정</b>해 해석한다
- * — 근거는 {@code CronSupport} 참고.</p>
+ * (cron)는 시간대 정보를 담을 수 없어 <b>한국 시간(UTC+9) 입력으로 가정</b>해 해석한다.
+ * 근거는 {@code CronSupport} 참고.</p>
  *
  * <p>포털 로그(docs/08 §10.1 묶음 5): 생성·수정·삭제는 {@code @PortalLog(AUDIT)}, 즉시 실행은 {@code ACTION}(동기),
  * 목록·상세·실행 이력은 {@code ACCESS}로 남긴다(화면 "스케줄러" · ref = SCHEDULE, 즉시 실행은 SCHEDULE_RUN).

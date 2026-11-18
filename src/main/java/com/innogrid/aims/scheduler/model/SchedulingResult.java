@@ -53,7 +53,7 @@ public record SchedulingResult(
             Map<String, Double> details
     ) {
         /**
-         * details 없이 만드는 기존 형태 — <b>적격 후보 전용</b>. 빈 맵은 <b>가변</b>으로 둔다 — 엔진 후처리가
+         * details 없이 만드는 기존 형태 — <b>적격 후보 전용</b>. 빈 맵은 <b>가변</b>으로 둔다. 엔진 후처리가
          * {@code details().put}으로 진단 키를 사후에 더하므로({@code PowerAwareScheduler}의 통합여유), 불변 맵이면 그
          * 경로에서 예외가 난다.
          *

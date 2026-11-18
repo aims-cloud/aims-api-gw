@@ -195,7 +195,7 @@ class EffectiveScoringScenarioTest {
      * 입력   n1·n2·n3 모두 CPU 질의 예외.  dryRun(weighted) + 진단
      * 예상   dryRun 사유 = "활성 노드가 없습니다 — 핵심 메트릭을 알 수 없어 제외한 노드 3대: n1:9100, n2:9100, n3:9100"
      *        진단 totalNodes=0, excludedNodes=3
-     *        — "활성 노드가 없습니다"만으로는 노드가 꺼진 것인지 저장소가 아픈 것인지 구분할 수 없었다.
+     *        "활성 노드가 없습니다"만으로는 노드가 꺼진 것인지 저장소가 아픈 것인지 구분할 수 없다.
      * </pre>
      */
     @DisplayName("시나리오5 전 노드가 제외되면 실패 사유가 원인을 말한다")

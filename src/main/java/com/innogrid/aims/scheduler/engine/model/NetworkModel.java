@@ -128,8 +128,8 @@ public class NetworkModel {
     /**
      * 데이터 MDC와 노드 MDC 사이의 링크 점수.
      *
-     * <p>세 갈래다. 같은 MDC는 {@link #SAME_MDC_LINK_SCORE}. 원장에 링크가 있으면 그 품질로 계산한다. 그 외
-     * — 원장에 없는 쌍, MDC 라벨이 없는 노드(수집기는 {@code "unknown"} 문자열을 준다), 비어 있는 스냅샷 — 는
+     * <p>세 갈래다. 같은 MDC는 {@link #SAME_MDC_LINK_SCORE}. 원장에 링크가 있으면 그 품질로 계산한다. 나머지인
+     * 원장에 없는 쌍, MDC 라벨이 없는 노드(수집기는 {@code "unknown"} 문자열을 준다), 비어 있는 스냅샷은 모두
      * {@link #unknownLinkScore()}. {@code "unknown"}은 특별 취급하지 않는 평범한 MDC 이름이다. 행렬 자체가
      * 같은 MDC와 미등록을 모두 빈 값으로 돌리므로 같은 MDC 판정은 행렬을 보기 전에 여기서 한다.</p>
      */

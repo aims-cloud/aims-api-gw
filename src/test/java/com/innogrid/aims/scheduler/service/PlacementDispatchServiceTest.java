@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
  *
  * <p>레지스트리를 목 객체로 바꿔 수락·거부·예외 디스패처를 끼운다. 워크로드는 배치 없이 {@code assignTo}로
  * 배정 상태를 만든다.
- * — 여기서 보는 것은 결정 뒤의 처리이지 엔진이 아니다.</p>
+ * 여기서 보는 것은 결정 뒤의 처리이지 엔진이 아니다.</p>
  */
 @SpringBootTest
 class PlacementDispatchServiceTest {

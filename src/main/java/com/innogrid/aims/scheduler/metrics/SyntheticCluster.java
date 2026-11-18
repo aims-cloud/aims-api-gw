@@ -447,8 +447,8 @@ public final class SyntheticCluster {
         return node.baseTemperature() + 0.3 * cpuUsage(node, epochSeconds);
     }
 
-    // ── GPU 축 — 카드별 값. 노드 CPU 곡선과 같은 파동에 카드마다 상수 위상만 얹는다(새 위상 계산을 두지 않는다 —
-    //    boards 축이 위상 구성을 봉인하므로). 그래서 카드가 여럿이면 avg·max·sum이 서로 다른 값이 된다.
+    // ── GPU 축 — 카드별 값. 노드 CPU 곡선과 같은 파동에 카드마다 상수 위상만 얹으므로 카드가 여럿이면 avg·max·sum이
+    //    서로 다른 값이 된다. boards 축이 위상 구성을 봉인하므로 새 위상 계산은 두지 않는다.
 
     /** 카드 {@code card}(0부터)의 GPU 사용률(0~100). GPU 없는 노드는 호출자가 묻지 않는다. */
     public double gpuUsage(Node node, long epochSeconds, int card) {

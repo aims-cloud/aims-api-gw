@@ -424,8 +424,8 @@ public class PlacementBenchmarkService {
     // ── 전략과 정책 ──────────────────────────────────────────
 
     /**
-     * 이 실행이 본 엔진 설정과 정책 사본 전량 — 조립은 {@link BenchmarkColumns#engineConfig()}. 패키지 공개 — 다이제스트 테스트가
-     * 판을 계산하지 않고 스냅샷만 읽는다.
+     * 이 실행이 본 엔진 설정과 정책 사본 전량 — 조립은 {@link BenchmarkColumns#engineConfig()}. 다이제스트 테스트가
+     * 판을 계산하지 않고 스냅샷만 읽도록 패키지 공개로 둔다.
      */
     EngineConfigSnapshot engineConfig() {
         return columns.engineConfig();

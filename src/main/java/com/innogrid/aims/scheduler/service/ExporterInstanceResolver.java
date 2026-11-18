@@ -117,9 +117,10 @@ public class ExporterInstanceResolver {
     }
 
     /**
-     * 노드별 GPU 축 — <b>키는 DCGM 시리즈의 instance</b>. 클러스터 전체를 세 질의로 묻되 <b>동시에 던지고 한 상한만 기다린다</b>
-     * — 순차로 기다리면 저장소가 반쯤 멈췄을 때 선행 단계가 세 상한(15초)을 삼켜 노드 수집 예산이 남지 않는다. 노드마다
-     * 묻지 않는 것은 GPU 개수와 같은 결이다. 어느 메트릭이 비었는지·상한을 넘겼는지를 함께 돌려 수집기가 까닭을 적게 한다.
+     * 노드별 GPU 축 — <b>키는 DCGM 시리즈의 instance</b>. 클러스터 전체를 세 질의로 묻되 <b>동시에 던지고 한 상한만
+     * 기다린다</b>. 순차로 기다리면 저장소가 반쯤 멈췄을 때 선행 단계가 세 상한(15초)을 삼켜 노드 수집 예산이 남지 않기
+     * 때문이다. 노드마다 묻지 않는 것은 GPU 개수와 같은 결이다. 어느 메트릭이 비었는지·상한을 넘겼는지를 함께 돌려
+     * 수집기가 까닭을 적게 한다.
      */
     public GpuTelemetryDiscovery discoverGpuTelemetry() {
         if (metrics == null) return GpuTelemetryDiscovery.NONE;

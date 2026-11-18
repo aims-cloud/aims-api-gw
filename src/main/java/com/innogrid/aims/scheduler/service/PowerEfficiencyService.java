@@ -29,19 +29,18 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 /**
  * 서버별 전력 효율성 지표 계산·평가.
  *
- * <p>계산 자체는 {@link PowerModel}이 이미 갖고 있다. 이 서비스가 더하는 것은
- * <b>클러스터 단위 평가</b>다 — 등급과 순위는 다른 노드와 비교해야 나오므로 노드 하나만
- * 보는 모델 계층에서는 만들 수 없다.</p>
+ * <p>계산 자체는 {@link PowerModel}이 갖고 있고, 이 서비스는 <b>클러스터 단위 평가</b>를 더한다. 등급과 순위는
+ * 다른 노드와 비교해야 나오므로 노드 하나만 보는 모델 계층에서는 만들 수 없다.</p>
  *
- * <p><b>전력 메트릭이 없는 노드를 걸러내는 것이 이 서비스의 핵심 책임이다.</b>
- * {@link PowerModel#proportionality}는 전력 용량만 보고 실측 전력이 0인지는 보지 않아,
- * IPMI가 없는 노드에도 그럴듯한 값을 돌려준다. 예를 들어 CPU 13%·전력 0W·용량 500W이면
- * 비례성 0.61이 나온다. 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로,
- * 평가 불가 노드는 파생 지표를 모두 {@code null}로 비운다.</p>
+ * <p><b>전력 메트릭이 없는 노드를 걸러내는 것이 이 서비스의 핵심 책임이다.</b> {@link PowerModel#proportionality}는
+ * 전력 용량만 보고 실측 전력이 0인지는 보지 않아, IPMI가 없는 노드에도 그럴듯한 값을 돌려준다(CPU 13%, 전력 0W,
+ * 용량 500W이면 비례성 0.61). 판단 근거가 없는데 숫자가 보이면 그대로 믿게 되므로, 평가 불가 노드는 파생 지표를
+ * 모두 {@code null}로 비운다.</p>
  *
- * <p><b>순위는 둘이다.</b> 등급·순위·권고·요약은 PEI 원값(사용률 ÷ W) 기준이라 코어 수를 보지 않는다. 코어 수가 다른 서버를 견주도록
- * 사용 코어 환산 효율({@code usedCoresPerKw})과 그 순위({@code coreRank})를 함께 낸다. 노드 배치 스코어의 PEI 항은 판정 회차 4에서
- * 코어 비율을 곱하게 고쳤고, 예약이 없는 같은 스냅샷에서 그 항이 상한 1.0에 걸리지 않으면 이 값의 순서가 그것과 같다.</p>
+ * <p><b>순위는 둘이다.</b> 등급·순위·권고·요약은 PEI 원값(사용률 ÷ W) 기준이라 코어 수를 보지 않는다. 코어 수가
+ * 다른 서버를 견주도록 사용 코어 환산 효율({@code usedCoresPerKw})과 그 순위({@code coreRank})를 함께 낸다.
+ * 노드 배치 스코어의 PEI 항은 코어 비율을 곱하므로, 예약이 없는 같은 스냅샷에서 그 항이 상한 1.0에 걸리지 않으면
+ * 이 값의 순서가 그것과 같다.</p>
  */
 @Service
 public class PowerEfficiencyService {
@@ -90,7 +89,7 @@ public class PowerEfficiencyService {
         this(schedulingService, powerModel, metrics, properties, guard, null);
     }
 
-    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. */
+    /** 클라이언트를 직접 받는 형태(테스트용) — 기본 게이트웨이로 감싼다. */
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,
@@ -99,7 +98,7 @@ public class PowerEfficiencyService {
         this(schedulingService, powerModel, VictoriaMetricsGateway.of(metricsClient), properties, guard);
     }
 
-    /** 스프링 없이 조립하는 형태(기존 단위 테스트). */
+    /** 스프링 없이 조립하는 형태(단위 테스트가 쓴다). */
     public PowerEfficiencyService(SchedulingService schedulingService,
                                   PowerModel powerModel,
                                   VictoriaMetricsClient metricsClient,
@@ -284,7 +283,7 @@ public class PowerEfficiencyService {
      * <p>그렇다고 "이상보다 많이 쓸 때만"으로 좁히면 규칙이 아예 발동하지 않는다.
      * 비례성 0.5 미만이면서 과다 사용이라는 것은 {@code |실측−이상| > 0.5×용량}이고
      * {@code 이상 ≥ 유휴 = 0.3×용량}이므로 {@code 실측 > 0.8×용량}을 뜻한다. 그런 노드는
-     * 여유율이 20% 미만이라 바로 위의 여유율 규칙에 먼저 걸린다. 도달할 수 없는 분기라
+     * 여유율이 20% 미만이라 바로 위의 여유율 규칙에 먼저 걸린다. 닿을 수 없는 분기라
      * 남겨 두지 않았다. 비례성 값 자체는 응답에 그대로 실어 판단 근거로 제공한다.</p>
      */
     private PowerEfficiencyResponse.NodeEfficiency withRecommendation(

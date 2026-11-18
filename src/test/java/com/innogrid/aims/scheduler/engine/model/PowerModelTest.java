@@ -18,7 +18,7 @@ class PowerModelTest {
     @DisplayName("PEI는 단위 전력당 활용률을 정규화한다")
     @Test
     void pei_normalizes_per_unit_power() {
-        // 50% / 200W = 0.25 %/W, 기준 0.5 %/W → 0.5
+        // 50% / 200W = 0.25%/W, 기준 0.5%/W → 0.5
         NodeResource node = node(50, 200, 500);
 
         assertEquals(0.25, model.rawPei(node), 1e-9);
@@ -28,7 +28,7 @@ class PowerModelTest {
     @DisplayName("PEI는 1을 넘지 않는다")
     @Test
     void pei_does_not_exceed_1() {
-        NodeResource node = node(90, 100, 500); // 0.9 %/W → 1.8이지만 상한 1.0
+        NodeResource node = node(90, 100, 500); // 0.9%/W → 1.8이지만 상한 1.0
 
         assertEquals(1.0, model.normalizedPei(node), 1e-9);
     }
@@ -123,7 +123,7 @@ class PowerModelTest {
     // ── 배치 점수용 지표 ────────────────────────────────────────
 
     /**
-     * 결함 A — 이상 곡선보다 전력을 적게 쓰는 노드를 벌하면 안 된다.
+     * 이상 곡선보다 전력을 적게 쓰는 노드를 벌하면 안 된다.
      * 진단용 proportionality와 값이 갈리는 지점이라 나란히 확인한다.
      */
     @DisplayName("비낭비는 이상 곡선을 넘어선 만큼만 감점한다")
@@ -229,7 +229,7 @@ class PowerModelTest {
     @DisplayName("배치용 PEI 도 정규화 뒤 1.0 에서 포화한다")
     @Test
     void placement_pei_saturates_at_one() {
-        NodeResource frugal = node(90, 10, 500);                     // 90/10 = 9 %/W ≫ normalizer 0.5
+        NodeResource frugal = node(90, 10, 500);                     // 90/10 = 9%/W ≫ normalizer 0.5
         assertEquals(1.0, model.placementPei(frugal), 0.0);
         frugal.reserve(1, 0, 0);
         assertEquals(1.0, model.placementPei(frugal), 0.0, "예약이 쌓여도 포화 상한은 그대로");
@@ -305,7 +305,7 @@ class PowerModelTest {
     }
 
     /**
-     * M3 — 빈 노드에 처음 얹으면 그 노드의 유휴 전력이 통째로 새로 든다.
+     * 빈 노드에 처음 얹으면 그 노드의 유휴 전력이 통째로 새로 든다.
      * 이것이 전력 통합을 임의 보너스가 아닌 물리량으로 만든다.
      */
     @DisplayName("실질 한계전력은 빈 노드에 유휴전력을 더한다")
@@ -315,7 +315,7 @@ class PowerModelTest {
         assertEquals(87.5, model.realMarginalPower(node(50, 250, 500), 2), 1e-9, "가동 중");
         // node(2, 250, 500)은 유휴(2% < 5%)이고 전력이 실측(250W)이라, 유휴 역산 경로가 켜져
         // 있는 기본 모델에서는 대체값(150W)이 아니라 실측 역산값을 깨우기 비용으로 쓴다.
-        // 예전(대체값 시절)의 237.5가 아니다 — 왜 바뀌었는지는 wakeupPower 역산식 그대로.
+        // 그래서 대체값으로 계산한 237.5가 아니며, 값은 wakeupPower 역산식을 그대로 따른다.
         double reconstructedWakeup = (250.0 - 500.0 * 0.02) / (1.0 - 0.02);
         // 동적 범위의 기준선도 같은 역산 유휴다 — (500 − 244.9) × 0.25 = 63.8, 깨우기항 244.9
         assertEquals((500.0 - reconstructedWakeup) * 0.25 + reconstructedWakeup, model.realMarginalPower(node(2, 250, 500), 2), 1e-9,
@@ -382,7 +382,7 @@ class PowerModelTest {
     }
 
     /**
-     * 결함 C — 기존 한계 전력은 현재 부하를 보지 않아 같은 사양이면 모든 노드가 같은 값이었다.
+     * 기본 α에서 한계 전력은 현재 부하를 보지 않아 같은 사양이면 모든 노드가 같은 값이다.
      * 볼록 지수를 올리면 부하에 따라 갈린다.
      */
     @DisplayName("볼록 지수를 올리면 현재 부하에 반응한다")
@@ -406,7 +406,7 @@ class PowerModelTest {
 
     /**
      * 음수 사용률(계측 결함)은 0으로 자른다. α=1에서는 자르기가 없어도 차가 같아 보이지 않지만, α가 정수가 아니면 음수의 거듭제곱이
-     * NaN이 되고 정수면 부호가 뒤집힌 유한 오답이 된다 — 하한 클램프가 지키는 것은 그 경계다.
+     * NaN이 되고 정수면 부호가 뒤집힌 유한 오답이 된다 — 하한 클램프가 지키는 것은 0이라는 끝값이다.
      */
     @DisplayName("음수 사용률은 0 으로 자른다 — 볼록 지수에서 NaN 이 되지 않는다")
     @Test
@@ -453,8 +453,8 @@ class PowerModelTest {
     }
 
     /**
-     * 사용률이 100%를 넘어가지 않도록 자른다. 이 상태(가용 코어 &lt; 요구 코어)는 제약 C1이 거르므로 배치는 도달하지 않는다 —
-     * 여기서 잠그는 것은 식의 정의이고, 응답에서는 <b>부적격 후보의 표시값</b>으로만 나타난다.
+     * 사용률이 100%를 넘어가지 않도록 자른다. 이 상태(가용 코어 &lt; 요구 코어)는 제약 C1이 거르므로 배치는 이르지
+     * 않는다 — 여기서 잠그는 것은 식의 정의이고, 응답에서는 <b>부적격 후보의 표시값</b>으로만 나타난다.
      */
     @DisplayName("요구량이 남은 용량보다 커도 100퍼센트를 넘지 않는다 — 부적격 노드의 표시값")
     @Test
@@ -490,7 +490,7 @@ class PowerModelTest {
         assertEquals(150.0, model.wakeupPower(node(4, 520, 500)), 1e-9, "역산이 정격을 넘음");
     }
 
-    /** 추정이 정확히 0인 경계 — 0W 유휴는 물리적으로 없으므로 유효값이 아니라 대체값이어야 한다. */
+    /** 추정이 정확히 0인 끝값 — 0W 유휴는 물리적으로 없으므로 유효값이 아니라 대체값이어야 한다. */
     @DisplayName("역산이 정확히 0 이면 유효값이 아니라 대체값이다")
     @Test
     void a_zero_estimate_is_not_a_valid_idle_power() {
@@ -516,9 +516,9 @@ class PowerModelTest {
     }
 
     /**
-     * 상한 등호 경계 — 역산값이 정격과 정확히 같으면 여전히 유효값이어야 한다. 가드가
-     * {@code estimate > pMax}가 아니라 {@code estimate >= pMax}로 바뀌면 이 경계에서
-     * 대체값(150)으로 조용히 떨어진다.
+     * 상한 끝값 — 역산값이 정격과 정확히 같으면 여전히 유효값이어야 한다. 가드가
+     * {@code estimate > pMax}가 아니라 {@code estimate >= pMax}로 바뀌면 이 끝값에서
+     * 대체값(150)으로 조용히 바뀐다.
      */
     @DisplayName("추정이 정격과 정확히 같은 경계는 여전히 유효값이다")
     @Test

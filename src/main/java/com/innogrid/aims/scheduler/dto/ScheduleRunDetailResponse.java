@@ -8,8 +8,10 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 화면에는 아직 이 항목이 없다. 명세의 제약 조건 기반 배치 항목이 실제로 무엇을 근거로
- * 어느 노드를 골랐는지 보이려면 결정 단위 기록이 필요해서 만들었다.
+ * 실행 1회의 요약과 워크로드별 배치 결정 목록.
+ *
+ * <p>명세의 제약 조건 기반 배치 항목이 무엇을 근거로 어느 노드를 골랐는지 보이려면 결정 단위 기록이 필요하다.
+ * 화면에는 아직 이 항목이 없다.</p>
  */
 @Schema(description = "실행 1회의 요약과 워크로드별 배치 결정 목록")
 public record ScheduleRunDetailResponse(
@@ -82,8 +84,9 @@ public record ScheduleRunDetailResponse(
 
     /**
      * 13필드 — 설명 누락과 스케줄 화면 DTO 9종의 합계는 {@code ScheduleSchemaContractTest}가, 13이라는 수와 순서(맨 끝)는
-     * {@code ScheduleRunDetailDecisionApiTest}가 고정한다. {@code exclusionCodes}는 배치 이력 응답의 같은 이름 필드와 같은
-     * 문자열을 그대로 싣는다 — 엔진이 배치 시점에 본 후보 제외 집계라, 실행 계층이 그 뒤 배치를 되돌린 건도 그대로 남는다.
+     * {@code ScheduleRunDetailDecisionApiTest}가 확인한다. {@code exclusionCodes}는 배치 이력 응답의 같은 이름 필드와
+     * 같은 문자열을 그대로 싣는다 — 엔진이 배치 시점에 본 후보 제외 집계라, 실행 계층이 그 뒤 배치를 되돌린 건도
+     * 그대로 남는다.
      */
     @Schema(description = "워크로드 한 건에 대한 배치 결정 — 어느 노드를 왜 골랐는지, 또는 왜 못 골랐는지")
     public record Decision(

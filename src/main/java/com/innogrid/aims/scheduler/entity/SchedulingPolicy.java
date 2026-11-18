@@ -77,8 +77,9 @@ public class SchedulingPolicy {
      * <p>판단 필드 전부(이름·설명·종류·기본 엔진·경고 온도·가중치 5·임계 4·스위치 3·활성 여부)를 옮기고
      * {@code id}와 {@code createdAt}은 옮기지 않는다 — {@code id} 세터가 없어 사본의 {@code id}는 항상 {@code null}
      * 이라 JPA가 기존 행과 동일시할 경로가 없고, {@code createdAt}은 저장될 때 {@code PrePersist}가 채우는 값이다.
-     * 필드를 하나 빠뜨리면 그 사본을 쓰는 경로에서 게이트가 조용히 꺼진다(2026-09-02 {@code affinityEnabled} 누락 결함).
-     * 테스트 {@code SchedulingPolicyCopyTest}가 선언된 필드 전량을 반사로 훑어 고정한다.</p>
+     * 필드를 하나 빠뜨리면 그 사본을 쓰는 경로에서 게이트가 조용히 꺼진다. 예를 들어 {@code affinityEnabled}가
+     * 빠지면 MDC 링크 게이트가 꺼진다.
+     * 테스트 {@code SchedulingPolicyCopyTest}가 선언된 필드 전량을 반사로 훑어 확인한다.</p>
      */
     public SchedulingPolicy detachedCopy() {
         SchedulingPolicy copy = new SchedulingPolicy(getName(), getDescription());

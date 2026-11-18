@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 import com.innogrid.aims.scheduler.entity.PlacementDispatch;
 
-/** 디스패치 기록 응답 — 13필드. 계약은 {@code PlacementDispatchApiTest}가 고정한다. */
+/** 디스패치 기록 응답 — 13필드. 필드 목록은 {@code PlacementDispatchApiTest}가 확인한다. */
 public record PlacementDispatchResponse(
         Long id,
         Long workloadId,

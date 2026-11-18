@@ -81,10 +81,9 @@ public class SchedulingService {
     /**
      * 유일한 생성자다. 선택 원장(링크·디스패치·예산·단건 배치 입력)은 {@code null}이면 그 기능이 꺼진다.
      *
-     * <p>예전에는 "옛 인자 수" 생성자를 하나씩 남겨 7·8·9·10인자 4단이었다. 테스트가 위치 인자로 직접
-     * 조립하고 있어 인자를 늘릴 때마다 테스트가 깨졌기 때문인데, 인자 열 개가 대부분 리포지토리·서비스
-     * 타입이라 <b>순서를 바꿔 넣어도 컴파일되는 조합</b>이 생기는 것이 더 큰 위험이었다. 조립은 테스트
-     * 소스의 {@code SchedulingServiceBuilder} 한 곳으로 모았다.</p>
+     * <p>인자 대부분이 리포지토리·서비스 타입이라 위치 인자로 조립하면 <b>순서를 바꿔 넣어도 컴파일되는 조합</b>이
+     * 생긴다. 그래서 조립은 테스트
+     * 소스의 {@code SchedulingServiceBuilder}가 맡는다.</p>
      */
     @Autowired
     public SchedulingService(WorkloadRepository workloadRepository,
@@ -188,7 +187,7 @@ public class SchedulingService {
      *
      * <p>수집기가 핵심 메트릭을 알 수 없어 뺀 노드가 있으면 그 사실을 함께 적는다. "활성 노드가
      * 없습니다"만 남기면 노드가 다 꺼진 것인지 메트릭 저장소가 아픈 것인지 구분할 수 없다.
-     * 뺀 노드가 없으면 문구는 예전과 같다.</p>
+     * 뺀 노드가 없으면 "활성 노드가 없습니다"만 적는다.</p>
      */
     public static String noActiveNodesReason(PlacementContext context) {
         List<ExcludedNode> excluded = context.excludedNodes();
@@ -236,7 +235,7 @@ public class SchedulingService {
 
     /**
      * 임계 온도를 넘겨 냉각 대기 중인 노드 목록.
-     * 온도 제어(연구계획 B3)가 실제로 배치를 막고 있는지 밖에서 확인할 수단이다.
+     * 온도 제어가 실제로 배치를 막고 있는지 밖에서 확인할 수단이다.
      *
      * <p>대기 노드가 하나도 없으면 노드를 수집하지 않는다 — 수집해도 응답이 비기 때문이다. 대기 노드가
      * 있을 때는 수집한 뒤 노드마다 다시 확인하므로, 수집하는 동안 만료된 노드는 목록에서 빠진다.</p>
@@ -262,7 +261,7 @@ public class SchedulingService {
      * 배치하지 않고 제약 평가만 수행한다.
      *
      * <p>워크로드 상태와 배치 이력을 전혀 건드리지 않는다. 어떤 노드가 왜 제외됐는지
-     * 확인해 제약 조건 기반 스케줄링(연구계획 A1)의 근거를 보이는 데 쓴다.</p>
+     * 확인해 제약 조건 기반 스케줄링의 근거를 보이는 데 쓴다.</p>
      */
     public SchedulingResult dryRun(Long workloadId, String engineId) {
         Workload workload = workloadRepository.findById(workloadId)
@@ -338,15 +337,13 @@ public class SchedulingService {
 
     /**
      * 리소스 종류에 맞는 활성 정책을 고른다.
-     * 종류별 활성 → 공통 활성 → 기본 정책 순으로 찾는다.
+     * 종류별 활성 → 공통 활성 → 기본 정책 순으로 찾는다(docs/13 5장).
      *
-     * <p>활성 정책은 종류당 하나가 규칙이지만({@code SchedulingPolicyService}가 409로 지킨다) API 밖에서
-     * 들어온 데이터로 둘 이상일 수 있다. 그때는 <b>이름 사전순 첫 번째</b>를 골라 결과가 DB 순서에 흔들리지 않게
-     * 하고 WARN을 남긴다.</p>
-     *
-     * <p>공통 활성이 없으면 기본 정책을 쓴다. 이름이 {@value #DEFAULT_POLICY_NAME}인 정책이 이미 있으면(전환이나
-     * 비활성화로 꺼진 경우) 그 행을 <b>저장·재활성화하지 않고 값만</b> 쓴다 — 예전에는 같은 이름으로 다시 저장하려다
-     * 이름 유니크 제약에 걸려 배치 경로 전체가 500이 났다(2026-09-02 점검). 없을 때만 만들어 저장한다.</p>
+     * <p>활성 정책은 종류당 하나({@code SchedulingPolicyService}가 409로 지킨다)지만 API 밖에서 들어온 데이터로
+     * 둘 이상이면 <b>이름 사전순 첫 번째</b>를 골라 결과가 DB 순서에 흔들리지 않게 하고 WARN을 남긴다. 기본 정책
+     * 단계에서 이름이 {@value #DEFAULT_POLICY_NAME}인 정책이 이미 있으면 그 행을 <b>저장·재활성화하지 않고 값만</b>
+     * 쓴다. 같은 이름으로 다시 저장하면 이름 유니크 제약에 걸려 배치 경로 전체가 500이 되기 때문이다. 없을 때만
+     * 만들어 저장한다.</p>
      */
     public SchedulingPolicy resolvePolicy(Workload.ResourceType resourceType) {
         return resolvePolicyChoice(resourceType).policy();
@@ -390,7 +387,7 @@ public class SchedulingService {
 
     /**
      * 워크로드의 실행 상태를 전이한다.
-     * 배치 이후의 흐름(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
+     * 배치 이후의 전이 순서(SCHEDULED→RUNNING→COMPLETED|FAILED)만 허용하며,
      * 상태가 종료되면 예약 회계에서 빠져 노드 자원이 풀리고, 현재 결정의 전달 기록이 열려 있으면 같은 끝 상태로
      * 마감한다({@link PlacementDispatchService#closeCurrent}).
      */

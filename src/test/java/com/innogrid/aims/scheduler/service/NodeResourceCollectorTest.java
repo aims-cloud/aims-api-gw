@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
  * 수집기가 "조회 실패·시리즈 없음"과 "값 0"을 구분하는지.
  *
  * <p>배포 저장소 실증(2026-09-02): 없는 instance의 CPU 질의 → result 0건, 문법 오류 →
- * HTTP 400. 둘 다 예전 코드에서는 CPU 0%로 읽혔다. 전력은 운영에서 실제로 이 상태다.</p>
+ * HTTP 400. 둘 다 CPU 0%로 읽으면 안 된다. 전력은 운영에서 실제로 이 상태다.</p>
  */
 class NodeResourceCollectorTest {
 

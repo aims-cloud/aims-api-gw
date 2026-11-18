@@ -19,8 +19,8 @@ import com.innogrid.aims.scheduler.entity.Workload;
  *
  * <p>DB 워크로드는 쓰지 않는다. {@code PlacementContextAssembler.applyReservations}가 DB 워크로드를 예약으로
  * 얹기 때문에, DB에서 가져온 워크로드를 다시 배치 대상으로 주면 같은 워크로드가 예약으로 한 번, 배치
- * 대상으로 또 한 번 계산된다. 그래서 이 클래스가 만드는 워크로드는 저장하지 않는 <b>detached 엔티티</b>다
- * — {@code getId()}·{@code getCreatedAt()}은 늘 null이다.</p>
+ * 대상으로 또 한 번 계산된다. 그래서 이 클래스가 만드는 워크로드는 저장하지 않는 <b>detached 엔티티</b>다.
+ * {@code getId()}·{@code getCreatedAt()}은 늘 null이다.</p>
  *
  * <p>YAML 로딩은 {@code SyntheticCluster.load}와 같은 방식(snakeyaml + {@link DefaultResourceLoader}),
  * 같은 문체의 예외를 쓴다.</p>

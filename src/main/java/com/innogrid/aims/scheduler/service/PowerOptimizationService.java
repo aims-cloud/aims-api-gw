@@ -112,7 +112,7 @@ public class PowerOptimizationService {
         this(schedulingService, powerModel, properties, metrics, guard, null, null);
     }
 
-    /** 클라이언트를 직접 받는 형태(기존 테스트) — 기본 게이트웨이로 감싼다. null이면 추세를 쓸 수 없다. */
+    /** 클라이언트를 직접 받는 형태(테스트용) — 기본 게이트웨이로 감싼다. null이면 추세를 쓸 수 없다. */
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties,
@@ -121,7 +121,7 @@ public class PowerOptimizationService {
         this(schedulingService, powerModel, properties, VictoriaMetricsGateway.of(metricsClient), guard);
     }
 
-    /** 스프링 없이 조립하는 형태(기존 단위 테스트) — 현재 시점 진단만 쓸 수 있고 추세는 저장소가 없어 호출할 수 없다. */
+    /** 스프링 없이 조립하는 형태(단위 테스트용) — 현재 시점 진단만 쓸 수 있고 추세는 저장소가 없어 호출할 수 없다. */
     public PowerOptimizationService(SchedulingService schedulingService,
                                     PowerModel powerModel,
                                     SchedulerProperties properties) {
@@ -155,7 +155,7 @@ public class PowerOptimizationService {
 
     /**
      * 예산 원장까지 반영해 진단한다. MDC별 요약에 예산·남은 여유·초과 여부가 함께 나간다.
-     * 원장이 비어 있으면 요약은 나가되 예산 칸이 null이다 — MDC별 현황 자체는 예산과 무관하게 쓸모 있다.
+     * 원장이 비어 있으면 요약은 나가되 예산 필드가 null이다 — MDC별 현황 자체는 예산과 무관하게 쓸모 있다.
      */
     public PowerOptimizationResponse diagnose(List<NodeResource> nodes, List<ExcludedNode> excluded,
                                               MdcPowerBudgets budgets) {

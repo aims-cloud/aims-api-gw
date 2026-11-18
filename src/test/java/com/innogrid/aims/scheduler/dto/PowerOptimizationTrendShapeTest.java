@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * 전력 최적화 추세 응답의 <b>현행 형태 고정</b> — 구간 에너지를 더하는 작업이 기존 열을 건드리지 않았음을 보인다.
  *
- * <p>기존 계약 테스트({@code PowerOptimizationTrendApiTest})는 필드 집합을 {@code Set}으로 견준다. 집합은 순서를
+ * <p>기존 API 테스트({@code PowerOptimizationTrendApiTest})는 필드 집합을 {@code Set}으로 견준다. 집합은 순서를
  * 모르고, 열을 뒤에 덧붙여도 통과한다. 여기서는 <b>이름과 순서</b>를 리터럴로 적어 못 박는다 — 지점 배열은 화면이
  * 그대로 그리는 자리라 순서가 바뀌면 그래프가 어긋난다.</p>
  */

@@ -29,7 +29,7 @@ import static org.mockito.Mockito.*;
  * <p>그 결과 한 행 안에서 총점·사유·노드 상태는 승자 것인데 <b>차원별 점수만 다른 노드 것</b>이었다.
  * 이 표는 연구 근거라 지워지지 않으므로, 틀린 채로 쌓이면 되돌릴 수 없다.</p>
  *
- * <p>스프링을 띄우지 않는다 — 저장소 둘은 대역으로 두고 엔진은 직접 만든다. 확인 대상이 응답이 아니라
+ * <p>스프링을 띄우지 않는다 — 저장소 둘은 목 객체로 두고 엔진은 직접 만든다. 확인 대상이 응답이 아니라
  * <b>저장된 행</b>이므로 {@code save}에 들어간 인자를 잡아서 본다.</p>
  */
 class PlacementHistoryScoreTest {
@@ -77,7 +77,7 @@ class PlacementHistoryScoreTest {
 
         SchedulingHistory saved = captureSaved();
         assertEquals("gpu", saved.getSelectedNodeId(), "이 시나리오는 GPU 가 있는 노드가 뽑혀야 성립한다");
-        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다 — 예전엔 여기가 NULL이라 성공 필터에서 빠졌다.
+        // 실행에 연결되지 않은 단건 배치라도 성공 여부는 남아야 한다. NULL이면 성공 필터에서 빠진다.
         assertEquals(Boolean.TRUE, saved.getSuccess(), "단건 배치의 성공 여부가 기록되지 않았다");
         assertNull(saved.getScheduleRunId(), "실행 연결이 없는데 runId 가 채워졌다");
 

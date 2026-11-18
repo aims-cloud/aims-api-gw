@@ -16,7 +16,7 @@ import com.innogrid.aims.scheduler.entity.MdcLink;
  * <p>링크가 하나도 없으면 {@code mdcIds}와 {@code links} 모두 빈 배열이다.</p>
  *
  * @param mdcIds 사전순 MDC 식별자
- * @param links  {@code mdcIds.size()} × {@code mdcIds.size()} 대칭 행렬(칸은 nullable)
+ * @param links  {@code mdcIds.size()} × {@code mdcIds.size()} 대칭 행렬(셀은 nullable)
  */
 public record MdcLinkMatrixResponse(List<String> mdcIds, List<List<MdcLinkResponse>> links) {
 

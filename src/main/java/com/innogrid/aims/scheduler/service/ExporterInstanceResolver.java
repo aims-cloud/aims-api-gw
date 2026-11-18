@@ -25,12 +25,12 @@ import com.innogrid.aims.scheduler.repository.NodeExporterMappingRepository;
  * 익스포터 instance 해석의 한 자리 — 원장을 읽고 저장소에 실제로 있는 DCGM·IPMI instance를 발견해
  * {@link ExporterInstances}를 만든다.
  *
- * <p>노드 수집기·전력 최적화 추세·노드 전력 효율 추세 세 곳이 IPMI 시리즈를 노드 익스포터 instance로 찾고 있었다.
+ * <p>노드 수집기, 전력 최적화 추세, 노드 전력 효율 추세 세 곳이 노드의 IPMI 시리즈를 찾는다.
  * 세 곳에 같은 규칙을 심으려면 규칙이 한 자리에 있어야 한다. 이 클래스는 원장과 발견 질의만 갖고, 해석 규칙은
  * {@link ExporterInstances}에 있다.</p>
  *
  * <p>발견 질의는 {@code count by(instance) (…)} 두 개로 값은 쓰지 않고 라벨만 쓴다. 저장소가 답하지 않으면 빈
- * 집합이고, 그러면 해석은 원장과 "그대로"로만 떨어진다 — 저장소가 멈춰도 수집이 멈추지 않는다.</p>
+ * 집합이고, 그러면 해석은 원장과 "그대로"만 쓴다 — 저장소가 멈춰도 수집이 멈추지 않는다.</p>
  */
 @Service
 public class ExporterInstanceResolver {
@@ -108,7 +108,7 @@ public class ExporterInstanceResolver {
     /**
      * GPU 축 발견 결과 — 노드별 값과, 왜 비었는지.
      *
-     * @param byInstance      DCGM instance → 세 값. 그 메트릭이 없는 칸은 0
+     * @param byInstance      DCGM instance → 세 값. 그 메트릭이 없는 값은 0
      * @param emptyMetrics    저장소가 빈 결과로 답한 메트릭 이름 — 익스포터가 그 카운터를 내지 않는다
      * @param timedOutMetrics 상한 안에 답하지 않은 메트릭 이름 — 익스포터가 아니라 저장소 쪽 문제
      */
@@ -117,9 +117,10 @@ public class ExporterInstanceResolver {
     }
 
     /**
-     * 노드별 GPU 축 — <b>키는 DCGM 시리즈의 instance</b>. 클러스터 전체를 세 질의로 묻되 <b>동시에 던지고 한 상한만 기다린다</b>
-     * — 순차로 기다리면 저장소가 반쯤 멈췄을 때 선행 단계가 세 상한(15초)을 삼켜 노드 수집 예산이 남지 않는다. 노드마다
-     * 묻지 않는 것은 GPU 개수와 같은 결이다. 어느 메트릭이 비었는지·상한을 넘겼는지를 함께 돌려 수집기가 까닭을 적게 한다.
+     * 노드별 GPU 축 — <b>키는 DCGM 시리즈의 instance</b>. 클러스터 전체를 세 질의로 묻되 <b>동시에 던지고 한 상한만
+     * 기다린다</b>. 순차로 기다리면 저장소가 반쯤 멈췄을 때 선행 단계가 세 상한(15초)을 삼켜 노드 수집 예산이 남지 않기
+     * 때문이다. 노드마다 묻지 않는 것은 GPU 개수와 같은 결이다. 어느 메트릭이 비었는지·상한을 넘겼는지를 함께 돌려
+     * 수집기가 까닭을 적게 한다.
      */
     public GpuTelemetryDiscovery discoverGpuTelemetry() {
         if (metrics == null) return GpuTelemetryDiscovery.NONE;
@@ -174,9 +175,9 @@ public class ExporterInstanceResolver {
      * 익스포터 대응 화면이 고를 후보 — 세 발견 질의(DCGM·IPMI·노드)를 동시에 던져 한 상한 안에 받고
      * {@link ExporterInstanceCandidates}를 만든다.
      *
-     * <p>수집기용 {@link #discoverGpuCounts}·{@link #discoverIpmiInstances}는 저장소가 답하지 않으면 빈 집합으로 떨어진다 —
+     * <p>수집기용 {@link #discoverGpuCounts}·{@link #discoverIpmiInstances}는 저장소가 답하지 않으면 빈 집합을 낸다 —
      * 수집이 멈추지 않아야 하기 때문이다. 후보 API는 반대로 <b>"없다"와 "못 받았다"를 구분해야</b> 하므로(빈 목록을 보고
-     * 원장을 지우면 안 된다) 답하지 않은 질의를 {@code unavailable}에 이름으로 남기고, 그 질의가 뒷받침하는 칸은 모델이
+     * 원장을 지우면 안 된다) 답하지 않은 질의를 {@code unavailable}에 이름으로 남기고, 그 질의가 뒷받침하는 값은 모델이
      * 비운다. 세 질의는 {@link #discoverGpuTelemetry}와 같은 이유로 동시에 제출한다 — 차례로 기다리면 저장소가 느릴 때
      * 상한이 세 번 겹친다. 원장은 질의를 던지기 전에 한 번 읽는다.</p>
      */

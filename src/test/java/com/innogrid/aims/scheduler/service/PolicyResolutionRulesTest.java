@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 활성 정책 선택 규칙 — 둘 이상이면 이름순으로 결정적, 활성이 없으면 {@code default}를 <b>다시 저장하지 않는다</b>.
  *
- * <p>예전 {@code resolvePolicy}는 공통 활성이 없으면 {@code new SchedulingPolicy("default")}를 저장했다. 이름이 유니크라
- * 비활성 {@code default}가 이미 있으면 유니크 위반으로 배치 경로 전체가 500이었다(2026-09-02 점검).</p>
+ * <p>공통 활성이 없을 때 {@code new SchedulingPolicy("default")}를 저장하면, 이름이 유니크라 비활성 {@code default}가
+ * 이미 있는 경우 유니크 위반으로 배치 경로 전체가 500이 된다.</p>
  */
 @SpringBootTest
 @Transactional

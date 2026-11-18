@@ -19,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄이 온도 한계를 덧씌울 때 만드는 정책 사본이 <b>판단 필드를 하나도 잃지 않는가</b>.
  *
- * <p>사본에 {@code affinityEnabled}가 복사되지 않아, 온도 한계를 지정한 스케줄에서는 MDC 링크 게이트가
- * 꺼진 채 실행되던 결함을 고정한다. 정책의 다른 필드가 그대로 옮겨지는 것도 함께 확인한다. 사본은
+ * <p>사본에 {@code affinityEnabled}가 복사되지 않으면 온도 한계를 지정한 스케줄에서 MDC 링크 게이트가 꺼진 채
+ * 실행되므로 이 필드가 사본에 남는지 확인한다. 정책의 다른 필드가 그대로 옮겨지는 것도 함께 확인한다. 사본은
  * {@code SchedulingPolicy.detachedCopy()}가 만들므로 선언된 필드 전량을 반사로 대조하는 테스트를 하나 둔다.</p>
  */
 @SpringBootTest
@@ -75,7 +75,7 @@ class ScheduleOverridePolicyCopyTest {
 
     /**
      * 선언된 필드를 반사로 훑어 사본이 온도 한계 말고는 원본과 같은지 대조한다. 나중에 판단 필드가 늘어났을 때
-     * 사본이 따라오지 않으면 여기가 빨간불이 된다.
+     * 사본이 따라오지 않으면 이 테스트가 실패한다.
      */
     @DisplayName("사본은 온도 한계를 빼면 선언된 모든 필드가 원본과 같다")
     @Test

@@ -51,8 +51,8 @@ import static org.mockito.Mockito.when;
  * 스케줄 실행이 대상을 읽은 뒤 바뀐 워크로드를 배치가 어떻게 다루는가.
  *
  * <p>실행은 대상 워크로드를 시작 때 한 번 읽고(트랜잭션 밖이라 분리된 사본), 노드를 모으고 앞 워크로드를 배치·전달하는
- * 동안 그 사본을 들고 있다. 여기서는 노드 수집 대역의 첫 호출(대상 조회 뒤 · 배치 루프 앞)이나 전달 대역 안에서 편집·
- * 되살리기·삭제·다른 배치를 자기 트랜잭션으로 커밋해, 그 창을 스레드 없이 재현한다.</p>
+ * 동안 그 사본을 들고 있다. 여기서는 노드 수집 목 객체의 첫 호출(대상 조회 뒤 · 배치 루프 앞)이나 가짜 전달 구현 안에서
+ * 편집·되살리기·삭제·다른 배치를 자기 트랜잭션으로 커밋해, 그 창을 스레드 없이 재현한다.</p>
  *
  * <pre>
  * 노드      8코어 1대, CPU 10% → 가용 7.2코어 (저장 실패 테스트만 CPU 1% — 가동 노드 0에서 시작)
@@ -555,7 +555,7 @@ class WorkloadChangeDuringRunTest {
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────
 
-    /** 노드 수집 대역 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between}을 커밋한다. */
+    /** 노드 수집 목 객체 — 첫 호출(대상 조회 뒤 · 배치 루프 앞)에서 한 번만 {@code between}을 커밋한다. */
     private void nodeThen(double cpuPercent, Runnable between) {
         when(registry.current()).thenReturn(new RecordingPlacementDispatcher());
         AtomicBoolean once = new AtomicBoolean(true);

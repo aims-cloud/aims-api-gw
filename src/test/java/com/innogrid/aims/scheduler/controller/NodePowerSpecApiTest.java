@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 전력 사양 원장 API 5종의 HTTP 계약 — 11필드, 상태 코드, 필터, 인증. */
+/** 전력 사양 원장 API 5종의 HTTP 동작 — 11필드, 상태 코드, 필터, 인증. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser

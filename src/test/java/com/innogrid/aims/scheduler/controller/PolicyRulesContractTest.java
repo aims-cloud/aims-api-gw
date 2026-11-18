@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 응답 계약을 고정한다 — 요약 9필드(+2), 전환 응답 2필드, 정책 응답 20필드 불변, `/history` 배열 불변.
+ * 응답 형태를 확인한다 — 요약 9필드(+2), 전환 응답 2필드, 정책 응답 20필드 불변, `/history` 배열 불변.
  * 테스트 환경은 메트릭 저장소가 없어 노드가 0대 — 요약의 최소·최대는 null이지만 키는 있어야 한다.
  */
 @SpringBootTest

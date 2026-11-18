@@ -50,7 +50,7 @@ final class BenchmarkPointRunner {
 
     /**
      * 경고 온도 기본값 하나만 쓴다. <b>온도 값 계산에는 쓰지 않는다</b> — 엔진의 열관성 가정으로 지표를
-     * 재면 열 엔진이 자기 가정으로 채점받는다. 온도는 {@link GroundTruthOracle}이 생성식으로 낸다.
+     * 재면 열 엔진이 자기 가정으로 평가받는다. 온도는 {@link GroundTruthOracle}이 생성식으로 낸다.
      */
     private final ThermalModel thermalModel;
 
@@ -303,7 +303,7 @@ final class BenchmarkPointRunner {
      *
      * <p>엔진의 {@code effectiveTemperature}(= 실측 × (1 + inertiaK × 예약비율))를 쓰지 않는다. 그 식은
      * <b>엔진의 열관성 가정</b>이고 {@code inertiaK}는 엔진 튜닝 노브다 — 그것으로 재면 열 엔진이 자기
-     * 가정으로 채점받고, 노브를 돌리면 세계는 그대로인데 측정값이 움직인다. 대신 배치가 만든 CPU 분포를
+     * 가정으로 평가받고, 노브를 돌리면 세계는 그대로인데 측정값이 움직인다. 대신 배치가 만든 CPU 분포를
      * 생성식에 넣어 같은 배치를 <b>평가자의 식</b>으로 다시 계산한다. 예약분은
      * {@code effectiveCpuUsagePercent}에 이미 들어 있으므로 누락되지 않는다.</p>
      *
@@ -327,9 +327,9 @@ final class BenchmarkPointRunner {
     }
 
     /**
-     * 경고 구간에 든 <b>계측</b> 노드 수 — 온도는 생성식, 경계는 정책(엔진 노브)이다.
+     * 경고 구간에 든 <b>계측</b> 노드 수 — 온도는 생성식, 경고 온도는 정책(엔진 노브)이다.
      * 미계측 노드는 온도 판단 근거가 없어 셈에서 뺀다. 반은 생성식·반은 엔진 노브라는 사실은 지표의
-     * 라벨과 유효성 문구가 함께 밝힌다 — 경계를 바꾸면 세계가 그대로인데 숫자가 움직인다.
+     * 라벨과 유효성 문구가 함께 밝힌다 — 경고 온도를 바꾸면 세계가 그대로인데 숫자가 움직인다.
      */
     private int warnZoneNodes(PlacementContext ctx, SchedulingPolicy policy, GroundTruthOracle oracle) {
         double warning = policy.getWarningTemperatureCelsius() != null
@@ -345,12 +345,10 @@ final class BenchmarkPointRunner {
     /**
      * 열 때문에 후보가 막힌 횟수 — 제외 까닭 코드로 센다.
      *
-     * <p>예전에는 사유 문구에 "온도"·"냉각"이 들었는지 보았다. 문구를 한 글자만 고쳐도 이 셈이 조용히
-     * 0이 되는 자리였다. 이제 {@link ExclusionReason#isThermal()}이 온도 계열 넷을 가른다 — 세는 조건이
-     * 같아 값은 그대로다.</p>
-     *
-     * <p>패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다 — 등록된 판에서 이 지표의 중앙값은
-     * 모든 셀에서 0이고 최댓값만 대부분의 셀에서 0보다 커, 판 응답의 숫자만으로는 무엇을 세는지 가려낼 수 없다.</p>
+     * <p>사유 문구로 세면 문구를 한 글자만 고쳐도 셈이 조용히 0이 되므로, 온도 계열 넷을 가르는
+     * {@link ExclusionReason#isThermal()}로 센다. 패키지 안에서 보이게 둔 것은 테스트가 이 셈을 직접 부르기 위해서다.
+     * 등록된 판에서 이 지표의 중앙값은 모든 셀에서 0이고 최댓값만 대부분의 셀에서 0보다 커, 판 응답의 숫자만으로는
+     * 무엇을 세는지 가려낼 수 없다.</p>
      */
     static int countThermalExclusions(SchedulingResult result) {
         int count = 0;
@@ -405,7 +403,7 @@ final class BenchmarkPointRunner {
      * 클러스터 파일의 노드를 한 시각의 {@link NodeResource}로 만든다.
      *
      * <p>{@code private}이 아닌 이유는 {@link PlacementBenchmarkService#sweepPoints}와 같다 — 같은 패키지의 테스트가 이 스냅샷의
-     * 전력이 오라클의 같은 시각 값과 같은지를 본다. 테스트가 사본을 두면 두 세계가 갈라져도 초록불이 된다.</p>
+     * 전력이 오라클의 같은 시각 값과 같은지를 본다. 테스트가 사본을 두면 두 세계가 갈라져도 통과한다.</p>
      *
      * <p><b>정격 전력은 계측 여부와 무관하게 싣는다.</b> 운영에서도 정격은 원장에서 오고 IPMI와 별개다 —
      * 계측이 없는 노드는 "지금 몇 W인지"를 모르는 것이고 "몇 W까지 쓸 수 있는지"를 모르는 게 아니다.

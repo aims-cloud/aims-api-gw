@@ -49,7 +49,7 @@ public class PlacementService {
         this.diskMountPoint = properties == null ? "/" : properties.getDiskMountPoint();
     }
 
-    /** 설정 없이 조립하는 형태(기존 테스트 경로). */
+    /** 설정 없이 조립하는 형태(테스트 경로). */
     public PlacementService(WorkloadRepository workloadRepository,
                             SchedulingHistoryRepository historyRepository,
                             EngineRegistry engineRegistry) {
@@ -66,20 +66,18 @@ public class PlacementService {
     }
 
     /**
-     * 스케줄 실행의 일부로 배치한다.
-     *
-     * <p>{@code scheduleRunId}가 있으면 <b>실패한 결정도 이력으로 남긴다.</b> 실행 상세에서
-     * 어떤 워크로드가 왜 배치되지 못했는지 보여야 명세 A1(제약 조건 기반 스케줄링)의 근거가
-     * 된다. 단건 스케줄링 API로 부를 때는 기존과 같이 성공한 결정만 남긴다.</p>
+     * 스케줄 실행의 일부로 배치한다. {@code scheduleRunId}가 있으면 <b>실패한 결정도 이력으로 남긴다.</b> 실행 상세에서
+     * 어떤 워크로드가 왜 배치되지 못했는지 보여야 제약 조건 기반 스케줄링의 근거가 된다. 단건 스케줄링 API로 부를 때는
+     * 성공한 결정만 남긴다.
      *
      * <p>컨텍스트에 예약은 잡지 않는다. 스케줄 실행의 배치 루프가 이 메서드가 정상 반환한 뒤(=결정이 커밋된 뒤)
-     * 예약을 잡는다 — 여기서 잡으면 이력·워크로드 저장이나 커밋이 실패해도 예약이 남아, 그 예외로 루프가 끝난 뒤
-     * 남기는 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.</p>
+     * 잡는다. 여기서 잡으면 이력·워크로드 저장이나 커밋이 실패해도 예약이 남아, 그 예외로 루프가 끝난 뒤 남기는
+     * 실행 후 스냅샷에 저장되지 않은 배치가 반영된다.</p>
      *
-     * <p>{@code scheduleRunId}가 있고 저장된 워크로드면 저장 직전에 상태가 아직 대기·실패일 때만 결정한 상태로 옮긴다. 그 사이
-     * 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip}으로 건너뜀 한 건만 남긴다. 옮겼으면 그
-     * 행을 다시 읽어 재시도 회계(횟수 · 마지막 실패 시각)를 이어받은 뒤 결정을 얹는다 — 그 사이 겹친 실패 결정 · 되살리기가 바꾼
-     * 회계를 덮지 않는다.</p>
+     * <p>{@code scheduleRunId}가 있고 저장된 워크로드면 저장 직전에 상태가 아직 대기·실패일 때만 결정한 상태로
+     * 옮긴다. 그 사이 겹친 다른 실행·단건 배치가 배치했거나 지웠으면 워크로드를 쓰지 않고 {@link #recordSkip}으로
+     * 건너뜀 한 건만 남긴다. 옮겼으면 그 행을 다시 읽어 재시도 회계(횟수, 마지막 실패 시각)를 이어받은 뒤 결정을
+     * 얹어, 그 사이 겹친 실패 결정이나 되살리기가 바꾼 회계를 덮지 않는다.</p>
      */
     @Transactional
     public SchedulingResult place(Workload workload, PlacementContext context, String engineId,
@@ -112,7 +110,7 @@ public class PlacementService {
             workload.assignTo(result.selectedMdcId(), result.selectedNodeId(),
                     result.finalScore(), result.reason());
             SchedulingHistory history = toHistory(workload, context, result, engine);
-            // 성공 여부는 실행 연결과 무관하게 남긴다 — 예전엔 단건 배치 행이 NULL로 남아 성공 필터에서 빠졌다.
+            // 성공 여부는 실행 연결과 무관하게 남긴다 — NULL이면 단건 배치 행이 성공 필터에서 빠진다.
             // runId가 없으면 연결만 비고 success는 기록된다.
             history.linkToRun(scheduleRunId, true);
             historyRepository.save(history);
@@ -159,8 +157,8 @@ public class PlacementService {
      *
      * <p><b>차원별 점수는 선택된 노드 것이어야 한다.</b> 엔진이 돌려주는 후보 목록은 제외된 노드까지 포함해
      * 총점순으로 정렬돼 있고(엔진 3종 공통), 승자는 제외되지 않은 노드 중에서 고른다. 그래서 점수를 깎지 않는
-     * 제약(GPU·디스크·링크 DOWN·MDC 예산)에 걸린 노드가 1위이면 목록의 첫 항목이 승자가 아니다. 예전엔 그 첫
-     * 항목을 저장해, 한 행 안에서 총점·사유·노드 상태는 승자 것인데 차원별 점수만 다른 노드 것이었다.</p>
+     * 제약(GPU·디스크·링크 DOWN·MDC 예산)에 걸린 노드가 1위이면 목록의 첫 항목이 승자가 아니다. 그 첫 항목을
+     * 저장하면 한 행 안에서 총점·사유·노드 상태는 승자 것인데 차원별 점수만 다른 노드 것이 된다.</p>
      */
     private SchedulingHistory toHistory(Workload workload, PlacementContext context,
                                         SchedulingResult result, SchedulingEngine engine) {
@@ -192,10 +190,10 @@ public class PlacementService {
     /**
      * 후보 노드의 제외 사유 코드를 코드별로 센다 — {@code {"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}}.
      *
-     * <p>엔진은 성공·실패 양쪽 모두 제외된 노드까지 포함한 후보 목록을 돌려주는데, 이력은 그동안 선택된 노드 한 건만 쓰고
-     * 나머지를 버렸다 — 사유는 문장 하나({@code reason})로만 남아 "어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나"를 셀 수
-     * 없었다. 적격 후보(코드 없음)는 세지 않고, 제외가 하나도 없으면 {@code null}. 키는 코드 이름 오름차순이라 같은 결정은
-     * 같은 문자열이 되고, 키가 열거형 이름·값이 정수라 이스케이프가 필요 없어 직접 조립한다. 키 토큰은
+     * <p>엔진은 성공·실패 양쪽 모두 제외된 노드까지 포함한 후보 목록을 돌려준다. 이력이 선택된 노드 한 건만 쓰고
+     * 나머지를 버리면 사유는 문장 하나({@code reason})로만 남아 "어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나"를
+     * 셀 수 없다. 적격 후보(코드 없음)는 세지 않고, 제외가 하나도 없으면 {@code null}. 키는 코드 이름 오름차순이라
+     * 같은 결정은 같은 문자열이 되고, 키가 열거형 이름·값이 정수라 이스케이프가 필요 없어 직접 조립한다. 키 토큰은
      * {@link SchedulingHistory#exclusionCodeKey} — 배치 이력 페이징의 {@code exclusionCode} 필터가 같은 토큰으로 찾는다. 값의 뜻은
      * {@link SchedulingHistory}의 열 설명에 있다.</p>
      */

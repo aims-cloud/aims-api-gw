@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * C1 디스크 검사 — 총량을 아는 노드에서만, 예약 누적 반영.
  *
- * <p>{@code requiredDiskGb}는 저장·검증만 되고 C1이 보지 않던 필드였다(2026-09-02 격차 분석).
+ * <p>C1은 워크로드의 {@code requiredDiskGb}가 노드의 가용 디스크를 넘으면 그 노드를 제외한다.
  * 총량을 모르는 노드(0)는 검사하지 않는다 — 모르는 값으로 배치를 막지 않는다.</p>
  */
 class ConstraintEvaluatorDiskTest {

@@ -48,7 +48,7 @@ import com.innogrid.aims.scheduler.config.SchedulerProperties;
  * 0 0 2 ? * 7L               마지막 토요일        마지막 일요일
  * 0 0 2 ? * L                토요일              파싱 오류
  * 0 15 10 ? * 6L 2002-2005   연도 지정           필드 수 오류(7필드)
- * 0 0 2 1 * MON              (Quartz 는 금지)     1일이면서 월요일 = 2027-02-01
+ * 0 0 2 1 * MON              (Quartz는 금지)      1일이면서 월요일 = 2027-02-01
  * </pre>
  *
  * <p>요일 번호 대응은 <b>Spring = Quartz − 1</b>이다(Quartz {@code 1}=일 … {@code 7}=토,

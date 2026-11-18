@@ -320,7 +320,7 @@ class ScheduleRunPreviewTest {
     @DisplayName("대상 0건 문구 세 가지는 설정값으로 조립된 전문과 같다")
     @Test
     void empty_messages_full_text() {
-        // 3장 주의 6·7이 이 전문을 인용한다 — 바꾸면 계약 문서도 함께 고칠 것
+        // docs/13 3장 주의 6·7이 이 전문을 인용한다 — 바꾸면 docs/13도 함께 고칠 것
         ScheduleExecutionService.EmptyTargetOutcome none = executionService.outcomeOf(0, () -> 0);
         ScheduleExecutionService.EmptyTargetOutcome waiting = executionService.outcomeOf(0, () -> 2);
         ScheduleExecutionService.EmptyTargetOutcome exhausted = executionService.outcomeOf(3, () -> {

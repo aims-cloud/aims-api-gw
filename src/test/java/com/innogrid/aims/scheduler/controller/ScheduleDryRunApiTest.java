@@ -38,7 +38,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 스케줄 모의 실행의 HTTP 계약 — 열일곱 키와 순서, 결정 여덟 키, 스냅샷 열두 칸, 쓰기 없음, 404·400 래퍼, 403, Swagger. */
+/**
+ * 스케줄 모의 실행 API의 HTTP 동작 — 열일곱 키와 순서, 결정 여덟 키, 스냅샷 열두 키, 쓰기 없음, 404·400 래퍼,
+ * 403, Swagger.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser

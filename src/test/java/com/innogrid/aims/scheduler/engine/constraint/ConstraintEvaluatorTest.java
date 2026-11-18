@@ -356,7 +356,7 @@ class ConstraintEvaluatorTest {
         assertNull(evaluate(new Workload("job", 1, 1024), node));
     }
 
-    /** 사용률 임계는 경계에서 통과해야 한다. 딱 맞는 값을 초과로 보면 배치가 한 건씩 줄어든다. */
+    /** 사용률이 임계와 정확히 같으면 통과해야 한다. 딱 맞는 값을 초과로 보면 배치가 한 건씩 줄어든다. */
     @DisplayName("사용률이 임계와 정확히 같으면 통과한다")
     @Test
     void utilization_at_threshold_passes() {

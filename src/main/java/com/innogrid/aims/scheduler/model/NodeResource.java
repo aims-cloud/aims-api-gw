@@ -95,7 +95,7 @@ public class NodeResource {
         return totalGpu - reservedGpu;
     }
 
-    /** 디스크 총량(GB). 0 = 모름. 이름에 {@code get}을 붙이지 않는다(응답 계약은 {@code NodeResponse}가 정한다). */
+    /** 디스크 총량(GB). 0 = 모름. 이름에 {@code get}을 붙이지 않는다(응답 형태는 {@code NodeResponse}가 정한다). */
     public long diskCapacityGb() {
         return diskCapacityGb;
     }

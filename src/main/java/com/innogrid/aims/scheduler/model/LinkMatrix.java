@@ -31,7 +31,7 @@ public final class LinkMatrix {
      * <p>인자 순서는 원장 컬럼 순서(지연 → 대역폭 → 손실 → 상태)와 같다.</p>
      *
      * @param latencyMs         왕복 지연(ms)
-     * @param bandwidthMbps     대역폭(Mbps). 모르면 null → 부족분 항이 0이라 예전과 같은 비용이다
+     * @param bandwidthMbps     대역폭(Mbps). 모르면 null → 부족분 항이 0이라 지연·손실·상태만으로 비용을 낸다
      * @param packetLossPercent 손실률(%). 모르면 null → 0으로 본다
      * @param status            UP · DEGRADED · DOWN
      */

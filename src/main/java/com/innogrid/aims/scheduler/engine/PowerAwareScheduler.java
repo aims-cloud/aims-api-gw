@@ -39,10 +39,10 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  * 않는다. 스케줄의 엔진 선택이 곧 이 항목들의 적용 여부를 결정하므로, 우선순위나 데이터 MDC를 쓰는 워크로드는
  * 엔진을 바꾸면 그 효과가 사라진다는 점을 운영 문서가 알려야 한다.</p>
  *
- * <p><b>전력 통합은 별도 항이 아니다.</b> 예전에는 "CPU가 10%를 넘으면 보너스"라는 임의 규칙을
- * 뒀지만, 실효 기여가 명목 10%가 아닌 1.5%에 그쳤고 근거도 없었다. 지금은 빈 노드에 배치할 때
- * 그 노드의 유휴 전력이 새로 든다는 사실을 {@code realMarginalPower}가 직접 계산한다 — 통합이
- * W 단위로 설명된다(동적항은 모델식, 깨우기항은 계측 노드의 실측 역산 — 총량의 실측 검증은 아니다).</p>
+ * <p><b>전력 통합은 별도 항이 아니다.</b> 빈 노드에 배치할 때 그 노드의 유휴 전력이 새로 든다는 사실을
+ * {@code realMarginalPower}가 직접 계산하므로 통합이 W 단위로 설명된다.
+ * 동적항은 모델식이고 깨우기항은 계측 노드의 실측 역산이다
+ * (총량의 실측 검증은 아니다).</p>
  *
  * <p><b>전력·온도를 수집하지 못한 노드는 중립값 0.5를 준다.</b> 0을 주면 판단 근거가 없는 노드가
  * 최악으로 평가되고, 감점을 아예 하지 않으면 오히려 유리해진다. IPMI가 없는 환경에서는 모든
@@ -74,7 +74,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
 
     /** 설정을 직접 넣어 만드는 형태. 가중치·볼록 지수를 바꿔 보는 테스트에서 쓴다. */
     PowerAwareScheduler(SchedulerProperties properties) {
-        // 네트워크 모델은 예전 기본 생성자처럼 기본 설정으로 만든다 — 넘겨받은 설정을 쓰지 않던 동작 그대로
+        // 네트워크 모델은 넘겨받은 설정을 쓰지 않고 기본 설정으로 만든다
         this(new PowerModel(properties), new ThermalModel(properties), new NetworkModel(new SchedulerProperties()), properties);
     }
 
@@ -140,7 +140,7 @@ public class PowerAwareScheduler extends AbstractScoringEngine<PowerAwareSchedul
         double totalScore = Scores.round(combine(policy, powerScore, thermalScore, cpuScore, memScore));
 
         // 네트워크는 이 엔진의 점수에 쓰지 않지만 실측값은 남긴다. 0을 넣으면 "포화"로
-        // 오해되고, weighted 엔진이 같은 칸에 담는 값과도 의미가 어긋난다.
+        // 오해되고, weighted 엔진이 같은 키에 담는 값과도 의미가 어긋난다.
         double netScore = networkModel.localTrafficScore(node);
 
         // 계측하지 못한 값에서 파생된 항목은 숫자를 채우지 않고 null로 둔다. 0이나 0.5를

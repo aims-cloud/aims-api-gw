@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 설정 사본이 Power·Thermal·Network의 <b>getter 전량</b>에서 원본과 같다 — 필드를 하나 빠뜨리면 변종 열이 "노브 하나만 다른 설정"이
- * 아니게 된다. 반사로 훑으므로 필드가 늘면 여기서 먼저 빨간불이 된다.
+ * 아니게 된다. 반사로 훑으므로 필드가 늘면 이 테스트가 먼저 실패한다.
  */
 class BenchmarkEngineConfigsTest {
 

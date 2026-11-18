@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 실행 상세 결정 목록의 응답 계약 — 결정 한 줄은 13키이고 {@code exclusionCodes}가 맨 끝에 문자열 그대로 실린다.
+ * 실행 상세 결정 목록의 응답 형식 — 결정 한 줄은 13키이고 {@code exclusionCodes}가 맨 끝에 문자열 그대로 실린다.
  * 배치 이력 페이징의 실행 필터({@code scheduleRunId})는 이 결정 목록과 모집단이 같다.
  *
  * <p>이 컨텍스트는 실 게이트웨이라 노드가 없어 즉시 실행으로는 결정이 생기지 않는다. 그래서 실행 이력과 결정 이력 행을
@@ -82,7 +82,9 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
-    /** 실행 필터가 실행 상세와 다른 모집단을 보면 두 화면의 건수가 어긋난다 — 같은 시딩으로 두 응답을 맞대어 고정한다. */
+    /**
+     * 실행 필터가 실행 상세와 다른 모집단을 보면 두 화면의 건수가 어긋난다 — 같은 시딩으로 두 응답을 맞대어 확인한다.
+     */
     @DisplayName("배치 이력의 실행 필터는 실행 상세 결정 목록과 같은 행을 같은 값으로 돌려준다")
     @Test
     void history_page_run_filter_matches_run_detail_decisions() throws Exception {
@@ -156,7 +158,7 @@ class ScheduleRunDetailDecisionApiTest {
             run.recordCounts(2, 1, 1, false);
             run.finish(ScheduleRun.RunStatus.FAILED, "시험용");
             run = runRepository.save(run);
-            // 워크로드 id는 실재 행과 겹치지 않는 예약 대역(다른 이력 테스트의 9_9xx_xxx 관례)
+            // 워크로드 id는 실재 행과 겹치지 않는 예약 구간(다른 이력 테스트의 9_9xx_xxx 관례)
             SchedulingHistory failed = new SchedulingHistory(9_930_001L, key + "-fail", null, null, 0, "모든 후보 노드가 제약 조건을 충족하지 못합니다", "weighted", "default");
             failed.setCandidateCount(1);
             failed.setExclusionCodes("{\"INSUFFICIENT_RESOURCE\":1}");
@@ -177,7 +179,7 @@ class ScheduleRunDetailDecisionApiTest {
         }
     }
 
-    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id는 예약 대역 9_930_003, 동률 테스트 전용. */
+    /** 스케줄 1 · 실행 1(대상 n · 전부 성공) · 결정 n — 워크로드 id는 예약 구간 9_930_003, 동률 테스트 전용. */
     private Seeded seedTied(int n) throws Exception {
         String key = "rdtie-" + Long.toHexString(System.nanoTime());
         JsonNode schedule = objectMapper.readTree(mockMvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)

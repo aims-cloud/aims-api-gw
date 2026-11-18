@@ -40,7 +40,8 @@ final class JudgmentBaselines {
     private JudgmentBaselines() {
     }
 
-    static final int SCHEMA_VERSION = 3;   // 2: 판정 상수에 지점 비교 무시 폭(pointIgnorePp) 칸 · 3: 판정 자격 두 판의 전 셀 power 행(outside)
+    // 2: 판정 상수에 지점 비교 무시 폭(pointIgnorePp) 필드, 3: 판정 자격 두 판의 전 셀 power 행(outside)
+    static final int SCHEMA_VERSION = 3;
 
     /** 기준선이 담는 열 — 판정 열과, 같은 셀에서 나오는 눈금·역산 변종. 열이 늘면 형식 버전을 올린다. */
     static final List<String> COLUMNS = List.of("power",

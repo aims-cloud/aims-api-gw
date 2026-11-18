@@ -29,12 +29,15 @@ public class PlacementDispatch {
      * <pre>
      * REQUESTED ─▶ ACCEPTED ─▶ RUNNING ─▶ COMPLETED
      *      │            │           └────▶ FAILED
-     *      │            └──────────────────▶ FAILED   (실행 실패 콜백 · 또는 운영자의 예약 취소 — 비고가 "예약 취소 — "로 시작)
-     *   열린 상태(REQUESTED·ACCEPTED·RUNNING) ─▶ COMPLETED·FAILED   운영자의 상태 변경 — 그 결정의 기록을 워크로드와 같은 끝 상태로 마감(비고가 "운영자 상태 변경 — "로 시작)
+     *      │            └──────────────────▶ FAILED   (실행 실패 콜백, 또는 운영자의 예약 취소.
+     *      │                                           예약 취소는 비고가 "예약 취소 — "로 시작)
+     *   열린 상태(REQUESTED·ACCEPTED·RUNNING) ─▶ COMPLETED·FAILED   운영자의 상태 변경으로 그 결정의 기록을
+     *                                                               워크로드와 같은 끝 상태로 마감
+     *                                                               (비고가 "운영자 상태 변경 — "로 시작)
      *      ├─▶ REJECTED     실행 계층이 거부 (워크로드는 FAILED + 배정 해제)
      *      ├─▶ UNAVAILABLE  실행 계층에 닿지 못함 · 또는 재시작 정리가 전달 중이던 기록을 닫음(비고가 "재시작 — "로 시작) (워크로드는 FAILED + 배정 해제)
-     *      └─▶ TIMED_OUT    원격 모드에서 응답 시간 상한 초과 — <b>record 모드에서는 도달하지 않는다</b>
-     *                       (판정하는 코드가 아직 없다. 값은 계약·CHECK 제약에 있으므로 유지)
+     *      └─▶ TIMED_OUT    원격 모드에서 응답 시간 상한 초과 — <b>record 모드에서는 이르지 않는다</b>
+     *                       (판정하는 코드가 아직 없다. 값은 docs/13 1장과 CHECK 제약에 있으므로 유지)
      * </pre>
      * Postgres는 이 값 목록으로 CHECK 제약을 만든다 — 값을 더할 때는 DDL 스크립트도 고친다.
      */

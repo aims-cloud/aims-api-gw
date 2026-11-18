@@ -38,8 +38,8 @@ import jakarta.persistence.criteria.Root;
  * <p>기존 {@code GET /history}는 배열로 돌려준다 — 응답 형태를 바꾸면 프런트가 깨지므로 그 경로는 배열 그대로 두고,
  * 페이징·필터·정렬은 새 경로에서 한다. 다만 그 배열은 <b>더 이상 전량이 아니다</b>: 이력은 삭제되지 않아 단조
  * 증가하므로 최근 건수만 돌려준다({@code SchedulerController.HISTORY_MAX}). <b>여기 총건수에는 상한이
- * 없다</b> — 그래서 배열 길이와 이 API의 {@code totalElements}는 이력이 상한을 넘으면 서로 달라진다. 규칙은 스케줄 목록과 같다 — page 1부터,
- * size 최대 100, sort는 "필드,방향".</p>
+ * 없다</b>. 그래서 이력이 상한을 넘으면 배열 길이와 이 API의 {@code totalElements}가 서로 달라진다.
+ * 규칙은 스케줄 목록과 같다 — page 1부터, size 최대 100, sort는 "필드,방향".</p>
  *
  * <p>필터는 {@link Specification}으로 null이 아닌 조건만 붙인다. JPQL의 {@code :x is null or h.x = :x}는 PostgreSQL이
  * null 파라미터의 타입을 정하지 못해 실패할 수 있고 H2에서는 통과해 배포에서만 드러난다.</p>
@@ -51,7 +51,10 @@ public class SchedulingHistoryQueryService {
 
     static final Set<String> SORTABLE = Set.of("createdAt", "finalScore", "workloadName", "success");
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
-    /** 합계에서 {@code from}·{@code to}를 둘 다 비웠을 때의 창 — 계약 3장 「합계」 행과 {@code ExclusionSummaryResponse}의 {@code from} 설명이 같은 수를 적는다. */
+    /**
+     * 합계에서 {@code from}·{@code to}를 둘 다 비웠을 때의 창 — docs/13 3장 「합계의 창과 페이징」 행과
+     * {@code ExclusionSummaryResponse}의 {@code from} 설명이 같은 수를 적는다.
+     */
     public static final int DEFAULT_SUMMARY_WINDOW_DAYS = 30;
 
     private final SchedulingHistoryRepository repository;
@@ -85,8 +88,9 @@ public class SchedulingHistoryQueryService {
     /**
      * 창·필터 안 결정의 제외 사유 코드 합계. 페이지와 같은 조건식을 쓰므로 응답의 {@code from}·{@code to}를 넘긴 같은 필터의
      * {@code exclusionCode=CODE} 총건수가 {@code codes[CODE].decisions}와 같다({@code skipped}가 0일 때). 창은 {@code from}·{@code to}를
-     * 둘 다 비우면 {@value #DEFAULT_SUMMARY_WINDOW_DAYS}일, {@code to}만 비우면 상한 없음, {@code from}만 비우면 하한 없음 — 한쪽 경계
-     * 규칙은 페이징과 같고, 페이징에는 기본 창이 없다. 합산은 Java에서 한다 — 집계 열이 TEXT라 DB 집계로
+     * 둘 다 비우면 {@value #DEFAULT_SUMMARY_WINDOW_DAYS}일, {@code to}만 비우면 상한 없음, {@code from}만 비우면
+     * 하한 없음이다. 한쪽만 비운 경우의 규칙은 페이징과 같고, 페이징에는 기본 창이 없다.
+     * 합산은 Java에서 한다 — 집계 열이 TEXT라 DB 집계로
      * 묶기 어렵고 형식이 어긋난 행은 건너뛰어 세어야 하기 때문이다. 행은 엔티티가 아니라 {@code id}·{@code exclusionCodes} 두 열만
      * 투영해 읽는다 — 창을 한쪽만 주면 모집단이 이력 전량이 될 수 있어서다. 결정 수와 집계 행은 별도 문장이라 동시에 적재되는 행이
      * 두 문장 사이에 끼면 한 건 어긋날 수 있다(READ COMMITTED, 곧 스스로 맞는다).

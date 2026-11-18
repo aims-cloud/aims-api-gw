@@ -13,7 +13,7 @@ public record ThermalCooldownResponse(
         @Schema(description = "온도 상태 NORMAL·WARNING·CRITICAL(문자열)", example = "NORMAL") String thermalState,
         @Schema(description = "남은 냉각 대기(분)", example = "10") long remainingCooldownMinutes) {
 
-    /** 상태는 예전 응답과 같게 문자열로 옮긴다. */
+    /** 상태는 문자열로 옮긴다. */
     public static ThermalCooldownResponse of(NodeResource node, long remainingCooldownMinutes) {
         return new ThermalCooldownResponse(node.getMdcId(), node.getNodeId(), node.getTemperatureCelsius(),
                 String.valueOf(node.getThermalState()), remainingCooldownMinutes);

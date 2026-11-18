@@ -264,7 +264,7 @@ public class ScheduleRunner implements SmartLifecycle {
     }
 
     /**
-     * 자동 실행 1회의 결과를 포털 로그 전이로 남긴다(docs/08 §6의 요청 없는 기록 · {@link IntegrationHealth}).
+     * 자동 실행 1회의 결과를 포털 로그 전이로 남긴다(docs/08 6장의 요청 없는 기록 · {@link IntegrationHealth}).
      *
      * <p>{@code ScheduleExecutionService.complete}는 들고 있는 엔티티에도 결과를 반영한다. 그래서 실행 이력을 돌려줬든,
      * 대상 0건으로 null이든, 실패를 마감한 뒤 예외든 엔티티 하나로 읽는다. 마무리 시각이 그대로면(실행 권한을 못 잡은 409)

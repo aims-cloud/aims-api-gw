@@ -18,25 +18,24 @@ import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
  * 익스포터 대응 화면이 고를 후보 — 저장소에 <b>지금</b> 있는 DCGM·IPMI 시리즈의 {@code instance}와, 수집기가 그것을
  * 어느 노드에 배정하는지.
  *
- * <p>배정은 수집기와 같은 규칙 {@link ExporterInstances}(원장 → 호스트명 일치 → 그대로, 둘 이상이 같은 시리즈를 가리키면
- * 전부 자기 instance로 되돌림)의 <b>역방향</b>이다 — 규칙을 여기서 다시 쓰지 않고 {@link ExporterInstances#dcgmFor}의 결과를
- * 뒤집는다. 그래서 화면이 보는 "이 instance는 어느 노드에 붙는가"와 수집기가 실제로 하는 일이 어긋날 수 없다.</p>
+ * <p>배정({@link Assignment})은 수집기와 같은 규칙 {@link ExporterInstances}의 <b>역방향</b>이다. 규칙을 여기서
+ * 다시 쓰지 않고 {@link ExporterInstances#dcgmFor}의 결과를 뒤집으므로, 화면이 보는 배정과 수집기가 실제로 하는 일이
+ * 어긋날 수 없다.</p>
  *
- * <p><b>답하지 않은 질의는 그 질의가 뒷받침하는 칸을 비운다.</b> 노드 목록을 못 받으면 배정을 계산할 수 없으니 후보의 배정은
- * {@link Assignment#UNKNOWN}이고, DCGM(IPMI) 목록을 못 받으면 원장값을 대조할 것이 없으니 그쪽 {@code ledgerOnly}는 빈
- * 목록이다 — 못 받은 것을 "저장소에 없다"로 보이게 하지 않기 위해서다.</p>
+ * <p><b>답하지 않은 질의는 그 질의가 뒷받침하는 필드를 비운다</b>(노드 목록 → 배정 {@link Assignment#UNKNOWN},
+ * DCGM·IPMI 목록 → 그쪽 {@code ledgerOnly} 빈 목록). 못 받은 것을 "저장소에 없다"로 보이게 하지 않기 위해서다.</p>
  *
- * <p>메트릭 값은 쓰지 않는다 — 발견 질의는 {@code count by(instance)}라 라벨과 시리즈 수만 있다. GPU 개수는 DCGM 쪽 시리즈
- * 수가 곧 카드 수라 함께 실린다.</p>
+ * <p>메트릭 값은 쓰지 않는다. 발견 질의는 {@code count by(instance)}라 라벨과 시리즈 수만 있고, GPU 개수는 DCGM 쪽
+ * 시리즈 수가 곧 카드 수라 함께 실린다.</p>
  *
  * @param dcgm           DCGM 시리즈 후보, instance 오름차순
  * @param ipmi           IPMI 시리즈 후보, instance 오름차순
  * @param nodeInstances  지금 수집 대상인 노드 익스포터 instance들({@code up == 1}), 오름차순
- * @param ledgerOnlyDcgm 원장에 적혀 있으나 저장소에 없는 DCGM instance — 오타이거나 익스포터가 내려간 것. DCGM 질의가 답하지
- *                       않았으면 대조할 수 없어 빈 목록
+ * @param ledgerOnlyDcgm 원장에 적혀 있으나 저장소에 없는 DCGM instance — 오타이거나 익스포터가 내려간 것. DCGM 질의가
+ *                       답하지 않았으면 대조할 수 없어 빈 목록
  * @param ledgerOnlyIpmi 같은 뜻의 IPMI
- * @param unavailable    상한 안에 답하지 않았거나 예외가 난 질의 이름({@code dcgm}·{@code ipmi}·{@code nodes}). 비어 있으면 세
- *                       질의가 모두 답했고, 그때 빈 후보 목록은 "그 익스포터 시리즈가 저장소에 없다"는 뜻이다
+ * @param unavailable    상한 안에 답하지 않았거나 예외가 난 질의 이름({@code dcgm}·{@code ipmi}·{@code nodes}). 비어
+ *                       있으면 세 질의가 모두 답했고, 그때 빈 후보 목록은 "그 익스포터 시리즈가 저장소에 없다"는 뜻이다
  */
 public record ExporterInstanceCandidates(List<Candidate> dcgm, List<Candidate> ipmi, List<String> nodeInstances,
                                          List<String> ledgerOnlyDcgm, List<String> ledgerOnlyIpmi, List<String> unavailable) {

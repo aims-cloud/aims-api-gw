@@ -44,7 +44,7 @@ class BannedClaimsSourceScanTest {
             Path.of("src", "test", "java", "com", "innogrid", "aims", "scheduler"));
     private static final Path ROOT = ROOTS.get(0);
     /** 면제 줄 수 상한 — 마커가 번지면 여기서 멈춘다. */
-    private static final int MAX_EXEMPT_LINES = 46;   // 실측 41(줄 마커 8곳 × 3 + 열거 블록 17) — 마커 두 곳이 더 생기면 여기서 멈춘다
+    private static final int MAX_EXEMPT_LINES = 46;   // 실측 38(줄 마커 7곳 × 3 + 열거 블록 17) — 마커 세 곳이 더 생기면 여기서 멈춘다
     /** 블록 전체 면제 — 금지 조각을 정의·열거하는 자리 한 곳만을 위한 형태. 면제 줄 수는 전부 상한에 든다. */
     private static final String BLOCK_MARKER = "<!-- ban-ok-block";
     private static final Pattern TEXT_BLOCK = Pattern.compile("\"\"\".*?\"\"\"", Pattern.DOTALL);
@@ -103,7 +103,7 @@ class BannedClaimsSourceScanTest {
                     body = kept.toString();
                 }
                 // 인라인 태그와 HTML 태그를 지운다. 줄바꿈만 지운 본문(joinedLines)은 줄바꿈으로 갈린 짧은 조각용,
-                // 공백을 전부 지운 본문(squeezed)은 어절 경계를 넘어 오탐하므로 6자 이상 조각에만 쓴다
+                // 공백을 전부 지운 본문(squeezed)은 어절 사이를 넘어 오탐하므로 6자 이상 조각에만 쓴다
                 String untagged = body.replaceAll("\\{@\\w+\\s+", " ").replaceAll("<[^>]*>", " ");
                 String flat = untagged.replaceAll("\\s+", " ");
                 String joinedLines = untagged.replaceAll("[ \\t]*\\r?\\n[ \\t]*", "").replaceAll("[ \\t]+", " ");

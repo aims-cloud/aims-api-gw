@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 import com.innogrid.aims.scheduler.entity.MdcPowerBudget;
 
-/** MDC 전력 예산 응답 — 11필드. 계약은 {@code MdcPowerBudgetApiTest}가 고정한다. */
+/** MDC 전력 예산 응답 — 11필드. 필드 구성은 {@code MdcPowerBudgetApiTest}가 확인한다. */
 public record MdcPowerBudgetResponse(
         Long id,
         String mdcId,

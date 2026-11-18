@@ -28,7 +28,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 저장 전 워크로드 모의 배치의 HTTP 계약 — 일곱 키와 순서, 쓰기 없음, 오류 래퍼, 403, Swagger. 트랜잭션을 걸지 않는다(쓰지 않으니 정리할 것도 없다). */
+/**
+ * 저장 전 워크로드 모의 배치의 HTTP 동작 — 일곱 키와 순서, 쓰기 없음, 오류 래퍼, 403, Swagger.
+ * 트랜잭션을 걸지 않는다(쓰지 않으니 지울 것도 없다).
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser
@@ -77,7 +80,8 @@ class WorkloadDryRunApiTest {
         mockMvc.perform(post(BASE + "/dry-run"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
         mockMvc.perform(post(BASE + "/dry-run?engine=nope").contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("워크로드 이름은(는) 필수입니다"));   // 칸 400이 엔진 400보다 먼저
+                // 필드 검증 400이 엔진 400보다 먼저
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("워크로드 이름은(는) 필수입니다"));
     }
 
     @DisplayName("빈 엔진 값은 비운 것과 같아 400 이 아니다")

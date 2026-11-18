@@ -4,11 +4,13 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 화면 폼 항목에 명세가 요구하는 확장 항목을 더한 형태다. 확장은 전부 선택이라 화면 폼만으로
- * 만들어도 동작한다 — 비워 두면 리소스 종류별 활성 정책과 그 정책의 기본 엔진을 쓴다.
+ * 스케줄 생성 요청. 저장 전 미리보기 본문으로도 쓴다.
+ *
+ * <p>화면 폼 항목에 명세가 요구하는 확장 항목을 더한 형태다. 확장은 전부 선택이라 화면 폼만으로
+ * 만들어도 동작한다. 비워 두면 리소스 종류별 활성 정책과 그 정책의 기본 엔진을 쓴다.</p>
  *
  * <p>검증은 서비스 계층에서 한다. 저장소의 최신 DTO 관례를 따라 검증 애너테이션을 두지
- * 않았고, 그래야 오류가 400으로 일관되게 나간다. 필수 표기는 생성(POST) 기준이고, 저장 전 미리보기 본문으로도 쓴다.
+ * 않았고, 그래야 오류가 400으로 일관되게 나간다. 필수 표기는 생성(POST) 기준이다.
  * 편집(PUT)은 {@link ScheduleUpdateRequest}가 받는다.</p>
  */
 @Schema(description = "스케줄 생성 요청(저장 전 미리보기 본문 겸용). 스케줄 ID·스케줄명·실행 주기가 필수")
@@ -51,7 +53,7 @@ public record ScheduleRequest(
                 example = "PRIORITY_THEN_SIZE", allowableValues = {"PRIORITY_THEN_AGE", "PRIORITY_THEN_SIZE"})
         String placementOrder
 ) {
-    /** 배치 순서를 지정하지 않는 형태 — 배치 순서 필드가 생기기 전의 호출자(기존 테스트)와 호환. */
+    /** 배치 순서를 지정하지 않는 형태 — 배치 순서 없이 부르는 호출자(테스트)와 호환. */
     public ScheduleRequest(String scheduleId, String name, Workload.ResourceType resourceType, String cronExpression,
                            Boolean autoRun, Boolean enabled, String description, String engine, Long policyId,
                            Double maxPowerBudgetWatts, Double maxTemperatureCelsius) {

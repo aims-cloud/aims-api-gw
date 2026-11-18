@@ -30,7 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code METHOD /path}로 적은 목록을 {@code src/test/resources/scheduler/golden/api/operations.txt}와 비교한다.
  * 경로 오름차순, 같은 경로 안에서는 GET·POST·PUT·PATCH·DELETE 순이라 기준 파일의 N 번째 줄이 docs/15 6장 색인의 N 번째 행과
  * 같다. operationId·태그·스키마·파라미터는 보지 않는다 — operationId는 이름이 겹칠 때 springdoc이 등록 순서에 따라 접미사를
- * 붙여 값이 흔들리고, 스키마·파라미터는 docs/13이 맡는 필드 계약이라 이 목록의 뜻(어떤 작업이 있는가)과 다르기 때문이다.</p>
+ * 붙여 값이 흔들리고, 스키마·파라미터는 docs/13이 맡는 필드 정의라 이 목록의 뜻(어떤 작업이 있는가)과
+ * 다르기 때문이다.</p>
  *
  * <p><b>운용 규칙</b> — 기준 파일이 없거나 다르면 실제 목록을 {@code build/golden-candidates/api/operations.txt}에 쓰고
  * 실패한다. 작업이 추가·삭제된 것이면 후보를 검토한 뒤 기준 파일로 복사하고, 같은 PR에서 docs/15 8장 갱신 규약을 따라

@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>여기서 깨지는 성질은 응답을 봐서는 드러나지 않는다. 노드가 오염되어도, 평가기가 운영과 다른
  * 임계값을 봐도, 열 검사의 부작용이 전략마다 다르게 쌓여도 표는 정상적인 숫자를 채운다 —
- * <b>틀린 숫자를</b>. 그래서 성질 자체를 테스트로 고정한다.</p>
+ * <b>틀린 숫자를</b>. 그래서 성질 자체를 테스트로 확인한다.</p>
  *
  * <p>스프링을 쓰지 않는다. 노드는 {@code new NodeResource(...)}로 직접 만들고, 판정을 뒤집을
  * 수치는 주석에 계산 과정을 적어 둔다.</p>
@@ -90,7 +90,7 @@ class BenchmarkContextsTest {
         assertEquals(700.0, carried.powerBudgetWatts().doubleValue(), 1e-9);
         assertEquals(3, carried.nodes().size());
 
-        // 3인자 형태는 원장을 만들어내지 않는다 — 호출자가 싣는 것이 계약이다.
+        // 3인자 형태는 원장을 만들어내지 않는다 — 원장은 호출자가 싣는다.
         PlacementContext bare = BenchmarkContexts.copyOf(base(), policy, evaluator());
         assertSame(policy, bare.policy());
         assertTrue(bare.excludedNodes().isEmpty());

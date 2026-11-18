@@ -8,8 +8,8 @@ import com.innogrid.aims.scheduler.entity.Workload;
 /**
  * 배치 정책 응답 — {@code /scheduler/policies} 4종이 공유한다.
  *
- * <p>필드 20개는 {@link SchedulingPolicy} 엔티티를 그대로 직렬화하던 계약과 <b>동일</b>하다
- * ({@code ResponseJsonGoldenTest}가 고정). 엔티티의 {@code isXxx()}는 Jackson이 {@code xxx}로
+ * <p>필드 20개는 {@link SchedulingPolicy} 엔티티를 그대로 직렬화한 결과와 <b>동일</b>하다
+ * ({@code ResponseJsonGoldenTest}가 확인). 엔티티의 {@code isXxx()}는 Jackson이 {@code xxx}로
  * 내보내므로 record의 {@code boolean xxx}와 이름이 맞는다.</p>
  *
  * <p>가중치는 비율로만 쓰인다 — 합계가 1이 아니어도 된다. 그래서 정규화하지 않고 저장값을 그대로 낸다.</p>

@@ -36,8 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 실행 재생 API와 엔진별 재계산 API의 응답 계약과 오류 — 재생 응답 14키·단계 8키, 엔진별 재계산 응답 12키·엔진 5키·단계 5키·선택
- * 3키의 순서, 404 두 가지, 409 네 가지(엔진별 재계산은 같은 검사를 거쳐 세 가지만 다시 본다).
+ * 실행 재생 API와 엔진별 재계산 API의 응답 형식과 오류 — 재생 응답 14키·단계 8키, 엔진별 재계산 응답 12키·
+ * 엔진 5키·단계 5키·선택 3키의 순서, 404 두 가지, 409 네 가지(엔진별 재계산은 같은 검사를 거쳐 세 가지만 다시 본다).
  *
  * <p>이 컨텍스트는 실 게이트웨이라 노드가 없어 즉시 실행으로는 입력이 남지 않는다. 그래서 형식 1 고정 픽스처
  * ({@code scheduler/replay/run-input-format-1.json})를 입력 행으로 심고 실행·결정 이력도 저장소에 직접 심는다. 재생 판정이
@@ -50,7 +50,7 @@ class ScheduleRunReplayApiTest {
 
     private static final String BASE = "/api/v1/scheduler/schedules";
     private static final String FIXTURE = "/scheduler/replay/run-input-format-1.json";
-    /** 픽스처의 워크로드 id — 실재 행과 겹치지 않는 예약 대역(다른 이력 테스트의 9_9xx_xxx 관례). */
+    /** 픽스처의 워크로드 id — 실재 행과 겹치지 않는 예약 구간(다른 이력 테스트의 9_9xx_xxx 관례). */
     private static final long WORKLOAD_ID = 9_930_101L;
     private static final List<String> RESPONSE_KEYS = List.of("runId", "formatVersion", "capturedAt", "engineId", "inputDigest",
             "knobsDigest", "verdict", "total", "matched", "mismatched", "skipped", "notRecorded", "missingDispatchRecords", "steps");

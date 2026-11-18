@@ -21,7 +21,7 @@ import static org.mockito.Mockito.mock;
  *
  * <p>전력을 200W로 고정하고 CPU 사용률만 바꿔, 기대값을 손으로 계산할 수 있게 픽스처를
  * 짰다(용량 500W, idleRatio 0.3, peiNormalizer 0.5). PEI는 CPU÷전력 이므로
- * 80% → 0.40, 10% → 0.05처럼 값이 바로 떨어진다.</p>
+ * 80% → 0.40, 10% → 0.05처럼 값이 바로 나온다.</p>
  */
 class PowerEfficiencyServiceTest {
 

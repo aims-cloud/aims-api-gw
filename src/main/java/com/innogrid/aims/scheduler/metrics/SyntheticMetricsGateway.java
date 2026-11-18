@@ -14,23 +14,21 @@ import java.util.regex.Pattern;
 /**
  * 가상 클러스터로 PromQL에 답하는 구현 — 스케줄러가 실제로 보내는 질의 형태만 해석한다.
  *
- * <p>해석 규칙: 질의문에서 <b>메트릭 이름</b>과 <b>라벨 선택자</b>({@code instance="…"}, {@code job="…"})를 뽑고,
- * {@code by (instance)}가 있으면 노드별 시리즈로 나눈다. 라벨의 instance가 클러스터에 없으면 <b>빈 결과</b>다 —
- * 실환경에서 "메트릭 없음"이 어떻게 처리되는지(핵심은 제외, 부가는 0)를 그대로 재현하기 위해서다.
- * 해석할 수 없는 질의도 빈 결과다.</p>
+ * <p>질의문에서 <b>메트릭 이름</b>과 <b>라벨 선택자</b>({@code instance="…"}, {@code job="…"})를 뽑고,
+ * {@code by (instance)}가 있으면 노드별 시리즈로 나눈다. 라벨의 instance가 클러스터에 없거나 해석할 수 없는
+ * 질의는 <b>빈 결과</b>다. 실환경의 "메트릭 없음" 처리(핵심은 제외, 부가는 0)를 그대로 재현하기 위해서다.</p>
  *
  * <p>스케줄러가 쓰는 질의: {@code up}, CPU 사용률(idle 역산), 코어 수, MemTotal/MemAvailable,
  * filesystem size/avail, IPMI 전력, IPMI 온도(avg), 네트워크 rx/tx(sum irate), DCGM GPU 수(count by instance),
  * DCGM GPU 사용률·온도·전력(avg·max·sum by instance), 그리고 CPU·전력의 구간 질의.</p>
  *
  * <p><b>익스포터별 instance 형식을 실환경대로 낸다.</b> 노드 익스포터 시리즈는 {@code host:9100}, DCGM은
- * {@code host:9400}, IPMI는 {@code host:9290}이다. 예전에는 모든 시리즈에 노드 id 하나를 붙여, 수집기가 노드
- * instance로 GPU 개수·전력·온도를 찾는 결함이 테스트에서 드러나지 않았다. 실장비에서는 익스포터마다 포트가 달라
- * 그 결합이 빈손이었다. 이제 IPMI·DCGM 메트릭을 노드 instance로 물으면 <b>빈 결과</b>다 — 실환경과 같다.</p>
+ * {@code host:9400}, IPMI는 {@code host:9290}이다. IPMI·DCGM 메트릭을 노드 instance로 물으면 실환경처럼
+ * <b>빈 결과</b>라, 수집기가 노드 instance로 GPU 개수·전력·온도를 찾으면 테스트에서 드러난다.</p>
  *
- * <p><b>구간 집계 함수를 해석한다.</b> {@code avg_over_time(메트릭[24h])} 같은 질의는 감싼 함수를 무시하면 그 순간
- * 값을 돌려주게 되어, 테스트는 초록불인데 값이 틀린다. 실환경 저장소는 창 안의 표본을 모아 답하므로 여기서도 창을
- * 걸어 표본을 모아 답한다. 표본 간격은 실환경 스크레이프 주기와 같은 {@link #SAMPLE_STEP_SECONDS}로 둔다.</p>
+ * <p><b>구간 집계 함수를 해석한다.</b> {@code avg_over_time(메트릭[24h])} 같은 질의에서 감싼 함수를 무시하면
+ * 순간 값이 나와 테스트는 통과하는데 값이 틀린다. 그래서 실환경 저장소처럼 창 안의 표본을
+ * {@link #SAMPLE_STEP_SECONDS} 간격으로 모아 답한다.</p>
  */
 public final class SyntheticMetricsGateway implements SchedulerMetricsGateway {
 

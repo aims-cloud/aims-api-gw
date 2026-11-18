@@ -215,7 +215,7 @@ class SyntheticModeScenarioTest {
         assertNotNull(t.energy().consumedKwh());
         // 이 클러스터는 IPMI 없는 3대의 시리즈가 통째로 없다 — 시리즈 안에 구멍이 뚫린 것이 아니다.
         // 그런 판에서는 두 계산이 수학적으로 같아야 하고, 갈리면 눈금이 어긋난 것이다.
-        // 두 계산이 실제로 달라지는 것은 시리즈 중간이 비는 경우이고, 그 자리는 IntervalEnergyTest가 값으로 고정한다.
+        // 두 계산이 실제로 달라지는 것은 시리즈 중간이 비는 경우이고, 그 자리는 IntervalEnergyTest가 값으로 확인한다.
         assertEquals(Math.round(fromPoints * 10), Math.round(t.energy().consumedKwh() * 10),
                 "구간 에너지와 지점 적분의 눈금이 어긋난다");
     }

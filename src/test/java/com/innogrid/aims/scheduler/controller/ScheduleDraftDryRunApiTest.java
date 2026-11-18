@@ -28,7 +28,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 저장 전 스케줄 모의 실행의 HTTP 계약 — 열일곱 키와 id null, 쓰기 없음, 400·403 래퍼, Swagger. 대상이 없는 종류를 써서 노드를 모으지 않는다. */
+/**
+ * 저장 전 스케줄 모의 실행의 HTTP 응답 확인 — 열일곱 키와 id null, 쓰기 없음, 400·403 래퍼, Swagger.
+ * 대상이 없는 종류를 써서 노드를 모으지 않는다.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser

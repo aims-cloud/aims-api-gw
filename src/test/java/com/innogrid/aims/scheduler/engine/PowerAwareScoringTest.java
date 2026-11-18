@@ -37,9 +37,9 @@ class PowerAwareScoringTest {
     private final PowerAwareScheduler scheduler = new PowerAwareScheduler();
 
     /**
-     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 칸이 배치용 실효 PEI와 같고, 비낭비 칸은 항등,
-     * 전력점수의 이동은 {@code peiWeight × ΔPEI}다(한계 전력 동적항은 α=1에서 불변). 엔진 배선을 진단용 두 함수로 되돌리면
-     * PEI 칸이 예약 전과 같아져 여기서 멈춘다.
+     * 예약이 쌓이면 엔진이 내는 전력 복합 점수가 움직인다 — 후보 상세의 PEI 값이 배치용 실효 PEI와 같고,
+     * 비낭비 값은 항등, 전력점수의 이동은 {@code peiWeight × ΔPEI}다(한계 전력 동적항은 α=1에서 불변).
+     * 엔진 배선을 진단용 두 함수로 되돌리면 PEI 값이 예약 전과 같아져 여기서 멈춘다.
      */
     @DisplayName("예약이 쌓인 노드의 후보 상세 PEI 는 배치용 실효 PEI 이고 전력점수 상승분은 peiWeight × ΔPEI 다")
     @Test
@@ -114,7 +114,8 @@ class PowerAwareScoringTest {
             SchedulingResult result = scheduler.schedule(workload(1), List.of(node), policy());
             assertEquals(round4(thermalScoreOf(model, temp, policy())), detail(result, "n", "열점수"), 0.0, "T=" + temp);
         }
-        // 손검산 리터럴 하나(임계 75 · 경고 65): 52.5℃ → (1 − (52.5/75)²) × 1 = 0.51 — 헬퍼가 식을 재구현하므로 절대값 한 점은 리터럴로 고정한다
+        // 손검산 리터럴 하나(임계 75, 경고 65): 52.5℃ → (1 − (52.5/75)²) × 1 = 0.51
+        // 헬퍼가 식을 재구현하므로 절대값 한 점은 리터럴로 확인한다
         assertEquals(0.51, detail(scheduler.schedule(workload(1), List.of(node("n", 45, 40, 387, 52.5)), policy()), "n", "열점수"), 0.0);
     }
 
@@ -169,8 +170,8 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35가 열 항 몫이고, 전력 3항 칸과 배치 후 예상
-     * 온도 칸은 예약 전과 같은 식(이미 실효 기저)이다.
+     * 예약 뒤 총점 이동은 열 항과 전력 PEI 항에서만 온다 — 열점수 이동 × 0.9 × 0.15/0.35가 열 항 몫이고,
+     * 전력 3항 값과 배치 후 예상 온도 값은 예약 전과 같은 식(이미 실효 기저)이다.
      */
     @DisplayName("예약 뒤 총점 이동은 열 항·전력 항·자원 항 몫으로 분해된다")
     @Test
@@ -183,7 +184,8 @@ class PowerAwareScoringTest {
         node.reserve(1, 0, 0);
         SchedulingResult after = scheduler.schedule(workload(1), List.of(node), policy());
 
-        // 열 항 이동은 상세 칸이 아니라 실효 온도 식으로 독립 산출한다 — 상세 칸에서 읽으면 실측 복귀 변이에서도 양변이 함께 0이 된다
+        // 열 항 이동은 상세 값이 아니라 실효 온도 식으로 독립 산출한다
+        // 상세 값에서 읽으면 실측 복귀 변이에서도 양변이 함께 0이 된다
         double dThermal = thermalScoreOf(thermalModel, 53.484375, policy()) - thermalScoreOf(thermalModel, 52.5, policy());
         double dPei = powerModel.placementPei(node) - powerModel.normalizedPei(node);           // 전력 항 이동은 PEI 항 하나(비낭비 항등·α=1 한계항 불변)
         double dPower = props.getPower().getPeiWeight() * dPei;
@@ -193,7 +195,7 @@ class PowerAwareScoringTest {
         double expected = thermalShare * dThermal + powerShare * dPower + resourceShift;
         double actual = after.candidateScores().get(0).totalScore() - before.candidateScores().get(0).totalScore();
         assertTrue(dThermal < 0, "열 항 감점");
-        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 칸을 거치지 않으므로 그 외 반올림 없음 → 2e-4는 두 배 여유
+        // 오차 상한: 총점 4자리 반올림 두 번(1e-4) + 상세 값을 거치지 않으므로 그 외 반올림 없음 → 2e-4는 두 배 여유
         assertEquals(expected, actual, 2e-4, "총점 이동 = 열 항 몫 + 전력 항 몫 + 자원 항 몫");
         assertEquals(round4(powerModel.placementPei(node)), detail(after, "n", "PEI"), 0.0, "전력 PEI 칸은 자기 실효 식 그대로");
         assertEquals(round4(thermalModel.predictedTemperature(node, 1)), detail(after, "n", "배치후예상온도C"), 0.0, "예상 온도 칸은 이미 실효 기저");
@@ -214,7 +216,7 @@ class PowerAwareScoringTest {
         return Math.round(v * 10000.0) / 10000.0;
     }
 
-    // ── 결함 A — 비례성이 저전력 노드를 벌하던 문제 ────────────────
+    // ── 비례성이 저전력 노드를 벌하지 않는다 ────────────────
 
     /**
      * 이상 곡선(360W)보다 적게 쓰는 200W 노드가, 넘겨 쓰는 440W 노드보다 높아야 한다.
@@ -233,10 +235,10 @@ class PowerAwareScoringTest {
         assertTrue(detail(result, "frugal", "비낭비") > detail(result, "overdraw", "비낭비"));
     }
 
-    // ── 결함 B·C·M3 — 한계 전력이 결정에 반영되고 노드를 구별한다 ──
+    // ── 한계 전력이 결정에 반영되고 노드를 구별한다 ──
 
     /**
-     * M3 — 빈 노드에 처음 얹으면 그 노드의 유휴 전력이 새로 든다.
+     * 빈 노드에 처음 얹으면 그 노드의 유휴 전력이 새로 든다.
      * 옛 수식은 둘 다 87.5W로 봐서 통합할 이유를 설명하지 못했다.
      */
     @DisplayName("빈 노드에는 유휴 기동분이 더해진다")
@@ -258,7 +260,7 @@ class PowerAwareScoringTest {
         assertEquals(0.0, detail(result, "parked", "가동중"), 1e-9);
     }
 
-    /** 결함 C — 볼록 지수를 올리면 같은 사양 노드도 현재 부하에 따라 갈린다. */
+    /** 볼록 지수를 올리면 같은 사양 노드도 현재 부하에 따라 갈린다. */
     @DisplayName("볼록 지수를 올리면 부하가 높은 노드의 한계전력이 커진다")
     @Test
     void convex_raises_marginal_power() {
@@ -276,7 +278,7 @@ class PowerAwareScoringTest {
                 "바쁜 노드에 얹으면 전력이 더 든다");
     }
 
-    // ── 결함 D — 워크로드 크기가 결정에 영향을 준다 ────────────────
+    // ── 워크로드 크기가 결정에 영향을 준다 ────────────────
 
     /** 옛 수식은 워크로드를 표시용으로만 써서 1코어든 6코어든 순위가 같았다. */
     @DisplayName("워크로드 크기가 점수를 움직인다")
@@ -290,7 +292,7 @@ class PowerAwareScoringTest {
         assertTrue(small > large, "많이 요구할수록 전력이 더 늘어 점수가 낮아야 한다: " + small + " vs " + large);
     }
 
-    // ── 결함 E — 미수집 노드를 우대하지 않는다 ────────────────────
+    // ── 미수집 노드를 우대하지 않는다 ────────────────────
 
     /**
      * 전력·온도가 0이면 판단 근거가 없다. 0 점을 주면 최악으로, 감점을 안 하면 최상으로
@@ -335,7 +337,7 @@ class PowerAwareScoringTest {
         assertTrue(result.reason().contains("반납가능"), result.reason());
     }
 
-    // ── 결함 G — 점수가 CPU에 대해 단조롭다 ──────────────────────
+    // ── 점수가 CPU에 대해 단조롭다 ──────────────────────
 
     /**
      * 옛 수식은 PEI(증가)와 CPU 여유(감소)가 맞붙어 30% 부근에서 꺾였다. 꺾이면 "왜 이 노드가
@@ -361,7 +363,7 @@ class PowerAwareScoringTest {
         assertEquals(0, flips, "증감 방향이 바뀌면 안 된다: " + series);
     }
 
-    // ── 결함 H — 정책 가중치와 필드 사용 ──────────────────────────
+    // ── 정책 가중치와 필드 사용 ──────────────────────────
 
     /** 정책의 전력:온도 비율이 실제로 반영된다. 옛 코드는 정책 가중치를 아예 보지 않았다. */
     @DisplayName("정책의 전력 온도 비율이 반영된다")
@@ -384,8 +386,8 @@ class PowerAwareScoringTest {
     }
 
     /**
-     * `networkScore` 칸에는 실측 네트워크 점수를 담는다.
-     * 0을 넣으면 "해당 없음"이 아니라 "네트워크 포화"로 읽히고, weighted 엔진이 같은 칸에
+     * `networkScore` 필드에는 실측 네트워크 점수를 담는다.
+     * 0을 넣으면 "해당 없음"이 아니라 "네트워크 포화"로 읽히고, weighted 엔진이 같은 필드에
      * 담는 값과도 의미가 어긋난다.
      */
     @DisplayName("networkScore에 실측 네트워크 점수가 담긴다")
@@ -491,7 +493,7 @@ class PowerAwareScoringTest {
 
     /**
      * 12·36코어(평균 24) · 사용률 40% · 200W이면 정정 전 PEI 0.4에 비율 0.5 · 1.5를 곱해 상세 PEI가 0.2 · 0.6이다.
-     * 비율은 PEI 항에만 곱하므로 비낭비·한계 전력 칸은 그 노드만 후보로 둔 실행과 같다.
+     * 비율은 PEI 항에만 곱하므로 비낭비·한계 전력 값은 그 노드만 후보로 둔 실행과 같다.
      */
     @DisplayName("코어 수가 섞인 후보의 상세 PEI 는 코어 비율을 곱한 값이고 비낭비·실질한계전력점수 값은 그대로다")
     @Test

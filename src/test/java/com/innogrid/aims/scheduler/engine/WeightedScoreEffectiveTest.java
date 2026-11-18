@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * weighted 엔진의 점수가 예약분(실효값)을 반영하는지.
  *
- * <p>배포 VM 실증(2026-09-02): 2코어 노드에 1코어를 예약한 뒤에도 dryRun의 cpu여유가
- * 0.8733 그대로였다. 같은 요청의 제약 검사는 "가용 CPU 0.7"로 예약을 봤다 — 제약과 점수가
- * 다른 세상을 보고 있었다. 이 클래스는 그 실증 수치를 그대로 재현해 고정한다.</p>
+ * <p>배포 VM 실증(2026-09-02) 수치를 쓴다. 2코어 노드에 1코어를 예약하면 같은 요청의 제약 검사는 "가용 CPU 0.7"로
+ * 예약을 본다. 점수가 예약을 반영하지 않으면 dryRun의 cpu여유가 0.8733 그대로라 제약과 점수가 다른 세상을 본다.
+ * 이 클래스는 그 실증 수치를 그대로 재현해 확인한다.</p>
  */
 class WeightedScoreEffectiveTest {
 
@@ -34,7 +34,7 @@ class WeightedScoreEffectiveTest {
     @DisplayName("예약이 없으면 점수는 실측 계산값과 같다")
     @Test
     void no_reservation_matches_measured() {
-        // 실효=실측이므로 단건 배치의 점수는 전환 전과 동일해야 한다 (불변 계약)
+        // 실효=실측이므로 단건 배치의 점수는 실측 계산값과 같아야 한다 (불변 조건)
         NodeResource node = node("n1", 8, 16384, 30, 40, 200, 500, 55);
         SchedulingPolicy policy = policy();   // maxTemperature 75
 

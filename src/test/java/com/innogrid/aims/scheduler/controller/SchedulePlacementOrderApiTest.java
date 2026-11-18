@@ -19,7 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 스케줄 API의 배치 순서 계약 — 생략하면 해석값 PRIORITY_THEN_AGE, 관대 파서, 모르는 값 400, 수정으로 변경, 응답 24필드.
+ * 스케줄 API의 배치 순서 동작 — 생략하면 해석값 PRIORITY_THEN_AGE, 관대 파서, 모르는 값 400, 수정으로 변경,
+ * 응답 24필드.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

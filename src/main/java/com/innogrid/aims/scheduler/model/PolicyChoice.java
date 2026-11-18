@@ -5,7 +5,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 /**
  * 배치 정책 선택의 결과 — 고른 정책과 <b>어느 단계에서</b> 골랐는지.
  *
- * <p>정책 선택 순서(계약 5장)는 ① 스케줄 지정 → ② 리소스 종류별 활성 → ③ 공통 활성 → ④ {@code default}다.
+ * <p>정책 선택 순서(docs/13 5장)는 ① 스케줄 지정 → ② 리소스 종류별 활성 → ③ 공통 활성 → ④ {@code default}다.
  * 실행 경로는 정책 객체만 쓰지만, 미리보기는 "왜 이 정책인가"를 함께 보여 줘야 하므로 출처를 남긴다.</p>
  *
  * <p>{@code persisted}는 <b>고른 원본 정책이 DB 행인지</b>를 뜻한다(스케줄 온도 한계를 덮어쓴 비영속 사본인지는 뜻하지
@@ -14,7 +14,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
  */
 public record PolicyChoice(SchedulingPolicy policy, Source source, boolean persisted) {
 
-    /** 정책을 고른 단계. 계약 5장의 ①~④ 와 같은 순서다. */
+    /** 정책을 고른 단계. docs/13 5장의 ①~④와 같은 순서다. */
     public enum Source {
         /** ① 스케줄이 지정한 정책 */
         SCHEDULE,

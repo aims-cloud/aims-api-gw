@@ -13,11 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * HTTP 계약 확인.
+ * HTTP 응답 확인.
  *
  * <p>테스트 환경에는 메트릭 저장소가 없어 노드 수집이 빈 목록을 돌려준다. 그래서 이
  * 테스트가 검증하는 것은 <b>데이터가 없을 때 API가 올바르게 비어 있다고 답하는가</b>다.
- * 배포 VM도 IPMI가 없어 같은 경로를 타므로, 여기서 고정한 계약이 실환경 계약이기도 하다.</p>
+ * 배포 VM도 IPMI가 없어 같은 경로를 타므로, 여기서 확인한 응답이 실환경 응답이기도 하다.</p>
  *
  * <p>지표·등급 값 검증은 {@code PowerEfficiencyServiceTest}가 합성 스냅샷으로 한다.</p>
  */

@@ -12,21 +12,18 @@ import com.innogrid.aims.scheduler.entity.NodeExporterMapping;
 /**
  * 노드 한 대의 세 익스포터 {@code instance}를 잇는 해석기 — 수집 1회당 한 번 만들어 노드마다 DB를 치지 않는다.
  *
- * <p><b>왜 필요한가.</b> 프로메테우스의 {@code instance} 라벨은 스크레이프 주소 그대로라 익스포터마다 다르다.
- * 노드 익스포터는 {@code host:9100}, DCGM은 {@code host:9400}, IPMI는 {@code ipmi-exporter:9290} 같은
- * 중앙 주소다(2026-09-21 배포 서버 실측). 수집기는 노드 익스포터의 값을 키로 GPU 개수를 찾고 전력·온도를 질의해
- * 왔으므로, 실장비에서는 <b>GPU 개수가 항상 0이고 전력·온도는 항상 미계측</b>이었다. 모의 게이트웨이가 모든
- * 시리즈에 같은 노드 id를 붙여 테스트가 초록불이었을 뿐이다.</p>
+ * <p>프로메테우스의 {@code instance} 라벨은 스크레이프 주소 그대로라 익스포터마다 다르다. 노드 익스포터는
+ * {@code host:9100}, DCGM은 {@code host:9400}, IPMI는 {@code ipmi-exporter:9290} 같은 중앙 주소다(2026-09-21
+ * 배포 서버 실측). 노드 익스포터 값을 키로 질의하면 실장비에서 GPU 개수는 항상 0, 전력·온도는 항상 미계측이 된다.</p>
  *
- * <p><b>세 단계로 떨어진다.</b>
+ * <p><b>세 단계로 해석한다.</b>
  * <ol>
- *   <li><b>원장</b> — 운영자가 {@link NodeExporterMapping}에 적어 둔 값. 중앙 IPMI처럼 호스트명으로는 이을 수
- *       없는 형태는 이 길밖에 없다.</li>
- *   <li><b>호스트명 일치</b> — 저장소에 실제로 있는 그 익스포터의 instance 가운데 포트를 뗀 호스트가 같은 것이
- *       <b>정확히 하나</b>면 그것. DCGM이 GPU 노드 자체에서 돌아 포트만 다른 흔한 배치를 원장 없이 덮는다.
- *       둘 이상이면 고르지 않는다 — 틀린 노드의 값을 끌어오는 것보다 미계측이 낫다.</li>
- *   <li><b>그대로</b> — 노드 익스포터 instance를 그대로 쓴다. 이 브랜치 이전과 같은 동작이라, 원장이 비고
- *       호스트도 안 맞으면 값이 한 개도 달라지지 않는다.</li>
+ *   <li><b>원장</b> — 운영자가 {@link NodeExporterMapping}에 적어 둔 값. 중앙 IPMI처럼 호스트명으로 이을 수 없는
+ *       형태는 이 길밖에 없다.</li>
+ *   <li><b>호스트명 일치</b> — 포트를 뗀 호스트가 같은 그 익스포터 instance가 저장소에 <b>정확히 하나</b>면
+ *       그것. DCGM이 GPU 노드에서 돌아 포트만 다른 배치를 원장 없이 덮는다. 둘 이상이면 고르지 않는다. 틀린
+ *       노드의 값을 끌어오는 것보다 미계측이 낫다.</li>
+ *   <li><b>그대로</b> — 노드 익스포터 instance를 그대로 쓴다.</li>
  * </ol></p>
  */
 public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, String> ipmiByNode,
@@ -75,7 +72,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
 
     /**
      * 여러 노드를 한 번에 — 노드 → DCGM instance. <b>같은 시리즈로 해석된 노드가 둘 이상이면 그 노드들은 전부 그대로(자기
-     * instance)로 떨어진다.</b> 한 시리즈를 두 노드에 넣으면 값이 두 번 세어져 클러스터 합계·에너지가 부푼다 — 후보가
+     * instance)로 돌아간다.</b> 한 시리즈를 두 노드에 넣으면 값이 두 번 세어져 클러스터 합계·에너지가 부푼다 — 후보가
      * 둘이면 고르지 않는다는 원칙의 같은 결이다. 중앙 IPMI 익스포터를 여러 노드에 적어 둔 원장이 바로 이 경우다.
      */
     public Map<String, String> dcgmFor(Collection<String> nodeInstances) {
@@ -89,7 +86,7 @@ public record ExporterInstances(Map<String, String> dcgmByNode, Map<String, Stri
 
     /**
      * 이 노드의 그 익스포터 시리즈가 저장소에 실제로 있는가 — 원장·호스트명으로 이어졌거나, 노드 instance 그대로의
-     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 떨어진 경우만 false. 테스트용.
+     * 시리즈가 있는 경우. 아무것도 못 찾아 그대로 쓴 경우만 false. 테스트용.
      */
     public boolean resolvedDcgm(String nodeInstance) { return !dcgmOf(nodeInstance).equals(nodeInstance) || dcgmSeen.contains(nodeInstance); }
     public boolean resolvedIpmi(String nodeInstance) { return !ipmiOf(nodeInstance).equals(nodeInstance) || ipmiSeen.contains(nodeInstance); }

@@ -68,8 +68,8 @@ final class BenchmarkColumns {
 
     /**
      * 엔진 쪽 변종 열의 순서 — 대조군의 {@link #BASELINE_ORDER}와 같은 역할. 운영 엔진 전량(레지스트리 정렬) 뒤, 대조군 앞에
-     * 이 순서로 선다. {@link #engineVariants()}가 이 목록과 구현 맵의 집합 일치를 검사한다 — 엔진 쪽 열은 그동안 인라인으로
-     * 붙여 열이 조용히 빠져도 아무것도 깨지지 않았다.
+     * 이 순서로 선다. {@link #engineVariants()}가 이 목록과 구현 맵의 집합 일치를 검사한다. 목록 없이 인라인으로
+     * 붙이면 열이 조용히 빠져도 아무것도 깨지지 않는다.
      */
     static final List<String> ENGINE_VARIANT_ORDER = List.of("resource-only-gated", "resource-only-ungated",
             BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
@@ -93,7 +93,7 @@ final class BenchmarkColumns {
 
     /**
      * 격차 지표의 <b>분모가 되는 대조군</b>. 엔진 전력식을 공유하는 ΔP 단독 전략이라 이 열이 기준이고, 이 열 자신의 격차는 0이 아니라
-     * 값이 없다. 테스트 전용 이음매가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
+     * 값이 없다. 테스트 전용 생성자가 대조군 부분 집합을 줄 수 있으므로 <b>이 실행에 없을 수도 있다</b>.
      */
     static final String PABFD_ID = "pabfd";
 
@@ -123,7 +123,7 @@ final class BenchmarkColumns {
         baselines.put(RANDOM_ID, BaselinePlacers.random(BenchmarkRules.RANDOM_SEEDS.get(0)));
 
         // 순서 목록과 구현 맵은 서로를 모른다 — 한쪽에만 있는 id는 여기서 크게 실패해야 한다. 목록에만 있으면
-        // null이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200이다. 테스트 전용 이음매로 부분 집합을
+        // null이 담겨 한참 뒤 NPE, 맵에만 있으면 열이 조용히 빠진 채 응답은 200이다. 테스트 전용 생성자로 부분 집합을
         // 줄 수는 있으므로 검사는 "목록 ⊆ 맵"과 "각 id의 record id 일치"다.
         for (String id : baselineOrder) {
             PlacementStrategy strategy = baselines.get(id);
@@ -147,7 +147,8 @@ final class BenchmarkColumns {
     }
 
     /**
-     * 엔진 쪽 변종 열 전부 — {@link #ENGINE_VARIANT_ORDER} 순서. 자원전용 두 변종은 기본 엔진에 정책만 갈아 끼운 것이다 —
+     * 엔진 쪽 변종 열 전부 — {@link #ENGINE_VARIANT_ORDER} 순서.
+     * 자원전용 두 변종은 기본 엔진에 정책만 갈아 끼운 것이다.
      * 가중치를 안 봐도 제약이 막아 주는지, 제약까지 없으면 얼마나 나빠지는지를 갈라 본다. 스케줄 배치 순서 두 열은 기본 엔진에 배치 순서만
      * 운영 비교자로 바꾼 것이다 — 표본 순서로 돌리는 {@code weighted} 열과 견줘 우선순위 정렬과 크기 순 정렬의 효과를 갈라 본다.
      *
@@ -163,7 +164,7 @@ final class BenchmarkColumns {
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.RESOURCE_ONLY_UNGATED, null, weighted::schedule),
                 Map.of(), powerModel));
         // 링크 게이트를 켠 가중 점수 — 링크 판에서 weighted와의 차이가 netScore 경로의 효과다. 링크 없는 판에서는 워크로드에
-        // dataMdcId가 없어 게이트가 켜지지 않으므로 weighted와 같은 값이다(구조적 사실 — 테스트가 고정한다)
+        // dataMdcId가 없어 게이트가 켜지지 않으므로 weighted와 같은 값이다(구조적 사실 — 테스트가 확인한다)
         variants.put(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN, new EngineVariant(new PlacementStrategy(BenchmarkRules.WEIGHTED_AFFINITY_COLUMN,
                 "가중 점수(링크 게이트 on · 링크 판에서만 weighted 와 다르다 · 판정 자격 없음)",
                 PlacementStrategy.Kind.ENGINE, PlacementStrategy.PolicyVariant.BASE, null, weighted::schedule),

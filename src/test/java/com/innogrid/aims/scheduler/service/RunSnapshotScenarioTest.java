@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
  *           움직이는 축: 가동 0 → 1, 회수 가능 전력 줄어듦
  * </pre>
  *
- * <p>계산기를 대역으로 바꾸지 않는다 — 실제 엔진이 실제로 예약을 쌓은 뒤의 값을 본다. 대역으로는
+ * <p>계산기를 목 객체로 바꾸지 않는다 — 실제 엔진이 실제로 예약을 쌓은 뒤의 값을 본다. 목 객체로는
  * "예약이 숫자를 움직인다"는 이 기능의 전제 자체를 확인할 수 없다.</p>
  */
 @SpringBootTest
@@ -53,7 +53,7 @@ class RunSnapshotScenarioTest {
     @MockitoBean NodeResourceCollector collector;
     @MockitoBean PlacementDispatcher dispatcher;
 
-    /** 실행 계층은 기본적으로 받아들인다. 거부 시나리오만 이 대역을 덮어쓴다. */
+    /** 실행 계층은 기본적으로 받아들인다. 거부 시나리오만 이 목 객체 설정을 덮어쓴다. */
     @BeforeEach
     void acceptByDefault() {
         when(dispatcher.getMode()).thenReturn("record");
@@ -160,7 +160,7 @@ class RunSnapshotScenarioTest {
         givenIdleNodes();
         save("w1", 8);
         // 실행 계층이 거부하면 워크로드가 되돌아가고, 실행 루프가 그 배치의 예약도 같은 맥락에서 되돌린다.
-        // 그래서 전부 무산된 실행의 후 값은 전 값과 같다(계약 문서 2장 실행 전후 클러스터 상태 설명).
+        // 그래서 전부 무산된 실행의 후 값은 전 값과 같다(docs/13 2장 실행 전후 클러스터 상태 설명).
         when(dispatcher.dispatch(any(PlacementDispatcher.Request.class)))
                 .thenReturn(PlacementDispatcher.Outcome.rejected("실행 계층이 거부"));
 

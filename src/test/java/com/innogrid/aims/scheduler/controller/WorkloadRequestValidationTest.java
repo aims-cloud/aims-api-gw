@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 워크로드 생성 요청 검증 — 예전에 500이던 것이 400과 사유가 되는가, 정상 요청은 그대로인가.
+ * 워크로드 생성 요청 검증 — 잘못된 요청이 400과 사유를 돌려주는가, 정상 요청은 그대로인가.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -64,7 +64,7 @@ class WorkloadRequestValidationTest {
     @DisplayName("숫자 문자열은 관대하게 받는다")
     @Test
     void numeric_string_accepted() throws Exception {
-        // "2"처럼 숫자 모양 문자열은 예전 맵 방식에서는 ClassCastException이었고, 이제는 정상으로 받는다
+        // "2"처럼 숫자 모양 문자열도 정상으로 받는다
         String body = create("{\"name\":\"w-str\",\"requiredCpu\":\"2\",\"requiredMemoryMb\":\"512\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.requiredCpu").value(2))

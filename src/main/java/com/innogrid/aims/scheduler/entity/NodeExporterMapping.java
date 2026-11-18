@@ -12,8 +12,8 @@ import jakarta.persistence.*;
  * 실측). 수집기는 노드 익스포터의 값을 키로 GPU 개수를 찾고 전력·온도를 질의해 왔으므로 실장비에서는 GPU 개수가
  * 항상 0이고 전력·온도가 항상 미계측이었다. 이 표는 그 세 값을 운영자가 잇는 자리다.</p>
  *
- * <p>정격 전력 원장과 같은 유형이다 — 센서가 알려 주지 않고 우리가 입력한다. 두 칸 모두 비워 둘 수 있고, 비어 있는
- * 칸은 수집기가 호스트명 일치로 대체하며, 그것도 안 되면 노드 익스포터 instance를 그대로 쓴다(이 표가 생기기 전과
+ * <p>정격 전력 원장과 같은 유형이다 — 센서가 알려 주지 않고 우리가 입력한다. 두 필드 모두 비워 둘 수 있고, 비어 있는
+ * 필드는 수집기가 호스트명 일치로 대체하며, 그것도 안 되면 노드 익스포터 instance를 그대로 쓴다(이 표가 생기기 전과
  * 같은 동작). 값의 존재는 검증하지 않는다 — 검증하려면 원장 CRUD가 저장소를 불러야 한다.</p>
  *
  * <p>열거 열이 없다. 열거 열은 처음 만들 때의 값 목록으로 CHECK가 굳어 값을 더할 때마다 스크립트가 필요하다.</p>
@@ -38,7 +38,7 @@ public class NodeExporterMapping {
     @Column(name = "dcgm_instance", length = INSTANCE_MAX)
     private String dcgmInstance;
 
-    /** 이 노드의 IPMI 시리즈 {@code instance}. 중앙 익스포터라면 호스트명이 달라 이 칸이 유일한 길이다. */
+    /** 이 노드의 IPMI 시리즈 {@code instance}. 중앙 익스포터라면 호스트명이 달라 이 필드가 유일한 길이다. */
     @Column(name = "ipmi_instance", length = INSTANCE_MAX)
     private String ipmiInstance;
 

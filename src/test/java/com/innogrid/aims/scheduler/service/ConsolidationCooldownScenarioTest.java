@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
 /**
  * 통합 권고와 배치가 같은 냉각 대기를 보는가 — 스프링이 조립한 실제 경로.
  *
- * <p>진단 → {@code createContext} → 주입된 평가기 → 같은 {@link ThermalModel} 빈으로 이어지는 배선을 고정한다.
+ * <p>진단 → {@code createContext} → 주입된 평가기 → 같은 {@link ThermalModel} 빈으로 이어지는 배선을 확인한다.
  * 온도 상한은 통합 권고가 쓰는 정책에서 읽고, 노드 온도는 그 상한에 대한 상대값으로 둔다. 공유 냉각 상태가 다른 클래스로
  * 새지 않게 앞뒤에서 이 노드들의 대기와 이 테스트가 저장한 워크로드를 지운다.</p>
  */

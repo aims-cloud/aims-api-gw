@@ -23,10 +23,10 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 실행과 겹친 스케줄 편집이 최근 실행 네 칸(실행 상태·시작·종료·메시지)을 되돌리지 않는가.
+ * 실행과 겹친 스케줄 편집이 최근 실행 네 필드(실행 상태·시작·종료·메시지)를 되돌리지 않는가.
  *
- * <p>편집은 엔티티를 읽어 바꾼 칸만 세터로 반영하고 저장한다. 엔티티가 모든 칸을 UPDATE 하면 편집이 읽은 시점의
- * 네 칸 값이 실행 계층의 전용 UPDATE({@code acquireForRun}·{@code recordRunResult})를 덮어, 실행 권한이 풀리거나
+ * <p>편집은 엔티티를 읽어 바꾼 필드만 세터로 반영하고 저장한다. 엔티티가 모든 열을 UPDATE 하면 편집이 읽은 시점의
+ * 네 필드 값이 실행 계층의 전용 UPDATE({@code acquireForRun}·{@code recordRunResult})를 덮어, 실행 권한이 풀리거나
  * 끝난 실행이 실행 중으로 되살아난다. 운영의 경합 창은 편집 트랜잭션 길이(ms)라 스레드로는 재현할 수 없으므로
  * 여기서는 트랜잭션을 겹쳐 결정적으로 만든다 — 바깥 트랜잭션(REQUIRED) 안에서 스케줄을 읽어 1차 캐시에 올리고,
  * 안쪽 별도 트랜잭션(REQUIRES_NEW)으로 실행 쪽 UPDATE를 커밋한 뒤, 같은 바깥 트랜잭션에서 편집을 부르면 편집은

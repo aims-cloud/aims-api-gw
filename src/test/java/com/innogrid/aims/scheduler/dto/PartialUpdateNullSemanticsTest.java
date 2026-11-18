@@ -13,11 +13,11 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 부분 수정(PUT)에서 "키 없음"과 "명시적 null"을 구분하는 역직렬화 형태를 고정한다.
+ * 부분 수정(PUT)에서 "키 없음"과 "명시적 null"을 구분하는 역직렬화 형태를 확인한다.
  *
  * <p>정책 수정은 "키가 있으면 반영, 없으면 유지"이고 {@code resourceType}에 명시적 null을 주면
  * 공통 정책으로 전환된다. record의 일반 필드는 두 경우가 모두 null이라 구분이 안 된다.
- * 스프링이 구성한 Jackson 3 매퍼로 두 후보를 실측한 결과(2026-09-02):</p>
+ * 스프링이 구성한 Jackson 3 매퍼로 두 후보를 실측한 결과:</p>
  * <ul>
  *   <li>{@code Optional} — 키 없음도 명시적 null도 {@code Optional.empty()}. <b>구분 불가.</b></li>
  *   <li>{@code JsonNode} — 키 없음은 {@code null}, 명시적 null은 {@code NullNode}. <b>구분 가능.</b></li>

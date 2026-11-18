@@ -6,7 +6,7 @@ import java.util.Map;
 
 import com.innogrid.aims.monitoring.VictoriaMetricsClient;
 
-/** 기존 메트릭 클라이언트에 그대로 위임하는 기본 구현 — 동작·예외·시간 상한 모두 종전과 같다. */
+/** 기존 메트릭 클라이언트에 그대로 위임하는 기본 구현 — 동작·예외·시간 상한 모두 그 클라이언트와 같다. */
 public final class VictoriaMetricsGateway implements SchedulerMetricsGateway {
 
     public static final String SOURCE = "victoria";

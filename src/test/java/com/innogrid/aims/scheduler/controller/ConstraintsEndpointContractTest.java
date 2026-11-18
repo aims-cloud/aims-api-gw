@@ -14,8 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code GET /scheduler/constraints} 계약 — C0~C6 일곱 항목, 평가 순서, C5는 정책에서 켜고 끌 수 있고 C6은 원장에만 달림.
- * 링크 기능을 더할 때 게이트와 무관하게 바뀐 유일한 응답이라 여기서 고정한다.
+ * {@code GET /scheduler/constraints} 응답 — C0~C6 일곱 항목, 평가 순서, C5는 정책에서 켜고 끌 수 있고
+ * C6은 원장에만 달림. 링크 기능을 더할 때 게이트와 무관하게 바뀐 유일한 응답이라 여기서 확인한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

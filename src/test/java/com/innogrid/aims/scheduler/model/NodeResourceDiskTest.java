@@ -13,7 +13,7 @@ class NodeResourceDiskTest {
     @DisplayName("총량과 사용률과 예약으로 가용 디스크를 계산한다")
     @Test
     void available_disk_from_usage_and_reserve() {
-        NodeResource node = node(40).withDiskCapacityGb(500);    // 사용률 40% → 300 GB 남음
+        NodeResource node = node(40).withDiskCapacityGb(500);    // 사용률 40% → 300GB 남음
 
         assertEquals(500, node.diskCapacityGb());
         assertEquals(300, node.availableDiskGb());

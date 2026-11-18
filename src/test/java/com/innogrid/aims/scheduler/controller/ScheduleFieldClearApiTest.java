@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 스케줄 편집 지정 해제의 HTTP 계약 — null 비움의 왕복, 미리보기 출처 변화, 상세 응답 그대로 PUT 무변경, 오류 래퍼, Swagger.
+ * 스케줄 편집 지정 해제의 HTTP 동작 — null 비움의 왕복, 미리보기 출처 변화, 상세 응답 그대로 PUT 무변경,
+ * 오류 래퍼, Swagger.
  *
  * <p>트랜잭션을 걸지 않는다 — 접두어 {@code clr-api-}로 만든 스케줄과 정책을 끝에 지운다.</p>
  */

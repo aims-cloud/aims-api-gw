@@ -16,10 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 비교용 정책 변종이 <b>원본을 건드리지 않고</b> 정한 가중치·게이트만 바꾸는지 고정한다.
+ * 비교용 정책 변종이 <b>원본을 건드리지 않고</b> 정한 가중치·게이트만 바꾸는지 확인한다.
  *
  * <p>변종의 출발점인 사본 자체(판단 필드를 하나도 빠뜨리지 않는가)는 {@code SchedulingPolicyCopyTest}가
- * 선언된 필드를 반사로 훑어 고정한다. 여기서는 자원 전용 변종이 무엇을 끄고 무엇을 남기는지와,
+ * 선언된 필드를 반사로 훑어 확인한다. 여기서는 자원 전용 변종이 무엇을 끄고 무엇을 남기는지와,
  * 변종을 만드는 동안 원본이 바뀌지 않는지를 본다.</p>
  */
 class BenchmarkPoliciesTest {

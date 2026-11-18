@@ -12,7 +12,7 @@ import com.innogrid.aims.scheduler.model.LinkMatrix;
  *
  * <p>비영속 {@link MdcLink}를 만들어 기존 {@link LinkMatrix#of}에 넘긴다 — 모델 API를 넓히지 않고, 정책 사본({@code BenchmarkPolicies})·
  * detached 워크로드({@code BenchmarkWorkloads})와 같은 방식이다. 저장소를 주입받지 않으므로 저장될 경로가 없다.
- * 링크 없는 판은 {@link LinkMatrix#EMPTY} — 기존 6판의 경로가 글자 그대로 남는다.</p>
+ * 링크 없는 판은 {@link LinkMatrix#EMPTY}를 돌려준다.</p>
  */
 public final class BenchmarkLinks {
 

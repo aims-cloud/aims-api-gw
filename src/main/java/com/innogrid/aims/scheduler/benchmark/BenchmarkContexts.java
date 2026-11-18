@@ -42,7 +42,8 @@ import com.innogrid.aims.scheduler.model.NodeResource;
  *       <b>미리 한 번</b> 계산해 전 전략이 같은 것을 보게 한다.</li>
  * </ol>
  *
- * <p>스프링 빈이 아니다 — 하네스가 정적으로 부른다. 상태를 갖지 않으므로 병렬 실행에도 안전하다.</p>
+ * <p>스프링 빈이 아니다 — 배치 비교 실행 코드({@code BenchmarkPointRunner})가 정적으로 부른다.
+ * 상태를 갖지 않으므로 병렬 실행에도 안전하다.</p>
  */
 public final class BenchmarkContexts {
 

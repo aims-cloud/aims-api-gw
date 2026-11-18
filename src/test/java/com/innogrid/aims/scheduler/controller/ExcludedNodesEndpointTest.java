@@ -13,12 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * {@code GET /scheduler/nodes/excluded} — 노드 목록의 배열 계약을 지키면서 제외 노드를 보여주는 별도 엔드포인트.
+ * {@code GET /scheduler/nodes/excluded} — 노드 목록의 배열 형태를 지키면서 제외 노드를 보여주는 별도 엔드포인트.
  *
  * <p>{@code /nodes/{nodeId}}와 경로가 겹치는 듯 보이지만 스프링은 리터럴 경로를 우선 매칭한다. 이 테스트가
  * 200을 받는 것 자체가 "excluded라는 노드를 찾다 404"가 아님을 증명한다. 테스트 환경은 메트릭 저장소가
  * 없어 수집 자체가 비어 있으므로 제외 목록도 빈 배열이다 — 제외 노드가 담기는지는 {@code SchedulingServiceExcludedTest}·
- * 시나리오 4가 서비스 계층에서 고정한다.</p>
+ * 시나리오 4가 서비스 계층에서 확인한다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

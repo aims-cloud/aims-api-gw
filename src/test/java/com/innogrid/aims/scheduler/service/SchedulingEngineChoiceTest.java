@@ -35,8 +35,8 @@ import static org.mockito.Mockito.when;
  * 단건 배치·모의 배치의 엔진 선택 — 요청한 엔진, 비었으면 적용 정책의 기본 엔진(등록된 것일 때만), 그것도 없으면 weighted.
  * 스케줄 실행과 같은 규칙이다(스프링 컨텍스트 없음 · 활성 정책을 DB에 만들지 않는다).
  *
- * <p>엔진은 자기 id를 사유에 싣는 대역이라, 모의 배치 결과의 사유로 어느 엔진이 돌았는지 본다. 실제 배치는 배치 서비스 대역에
- * 넘긴 엔진 id와 입력 행에 남은 엔진 id로 본다.</p>
+ * <p>엔진은 자기 id를 사유에 싣는 가짜 구현이라, 모의 배치 결과의 사유로 어느 엔진이 돌았는지 본다.
+ * 실제 배치는 배치 서비스 목 객체에 넘긴 엔진 id와 입력 행에 남은 엔진 id로 본다.</p>
  */
 class SchedulingEngineChoiceTest {
 
@@ -65,7 +65,7 @@ class SchedulingEngineChoiceTest {
                 .build();
     }
 
-    /** 자기 id를 사유에 싣는 엔진 대역. */
+    /** 자기 id를 사유에 싣는 엔진의 가짜 구현. */
     private static SchedulingEngine engine(String id) {
         return new SchedulingEngine() {
             @Override public SchedulingResult schedule(Workload w, PlacementContext context) {

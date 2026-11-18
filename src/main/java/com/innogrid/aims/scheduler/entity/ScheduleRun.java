@@ -68,9 +68,9 @@ public class ScheduleRun {
     // 행이 이미 있는 표에 NOT NULL 컬럼을 더하려다 스키마 갱신이 실패한다.
     //
     // 컬럼 이름을 명시하는 이유는 카멜→스네이크 변환이 마지막 글자를 보지 않아 끝이 대문자인 이름이
-    // 뭉개지기 때문이다(2026-09-02 배포에서 mdcA → mdca로 실측). 여기서는 앞질러 막는다.
+    // 뭉개지기 때문이다(배포 환경에서 mdcA → mdca로 실측). 여기서는 앞질러 막는다.
 
-    /** 스냅샷 기록 상태. 이 PR 이전 행은 null이다. */
+    /** 스냅샷 기록 상태. 이 컬럼보다 먼저 생긴 행은 null이다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "snapshot_status", length = 20)
     private SnapshotStatus snapshotStatus;
@@ -82,7 +82,7 @@ public class ScheduleRun {
     @Column(name = "snapshot_excluded_count")
     private Integer snapshotExcludedCount;
 
-    /** 전력을 실측한 노드 수. 0이면 아래 전력 칸들이 전부 근거 없음이라는 뜻이다. */
+    /** 전력을 실측한 노드 수. 0이면 아래 전력 필드가 전부 근거 없는 값이라는 뜻이다. */
     @Column(name = "snapshot_measured_nodes")
     private Integer snapshotMeasuredNodes;
 
@@ -113,7 +113,7 @@ public class ScheduleRun {
      *
      * <p>가동 판정 문턱·유휴 비율·유휴 역산 스위치·열관성 계수는 정책이 아니라 설정에서 온다. 값이 바뀌면
      * 그 뒤 회차는 같은 열에 <b>다른 정의</b>의 숫자를 적게 되므로, 지문이 다른 구간을 한 축으로 묶어
-     * 집계하면 안 된다는 것을 이 칸으로 알린다.</p>
+     * 집계하면 안 된다는 것을 이 필드로 알린다.</p>
      */
     @Column(name = "snapshot_knobs_digest", length = 12)
     private String snapshotKnobsDigest;
@@ -121,14 +121,14 @@ public class ScheduleRun {
     /**
      * 클러스터 스냅샷이 어디까지 기록됐는가.
      *
-     * <p>빈 칸의 <b>까닭</b>을 남기는 값이다. 재지 못한 회차를 한 값으로 뭉뚱그리면 평범한 회차와 장애
+     * <p>비어 있는 필드의 <b>까닭</b>을 남기는 값이다. 재지 못한 회차를 한 값으로 뭉뚱그리면 평범한 회차와 장애
      * 회차가 같은 표시를 달아, 어느 쪽이 쌓이고 있는지 이 표만으로 알 수 없게 된다.</p>
      */
     public enum SnapshotStatus {
         /** 전·후가 모두 찍혔다. */
         OK,
         /**
-         * 전만 찍혔다 — 후 칸은 비어 있다.
+         * 전만 찍혔다 — 후 필드는 비어 있다.
          *
          * <p>전을 적어 저장한 뒤 후를 적기 전에 프로세스가 내려간 회차다. 배포가 곧 재시작이라 실제로
          * 생긴다. 배치가 예외로 실패한 회차는 여기 들지 않는다 — 그쪽은 후까지 적고 {@link #OK}로 끝난다.</p>
@@ -177,7 +177,7 @@ public class ScheduleRun {
         this.snapshotStatus = SnapshotStatus.NO_NODES;
     }
 
-    /** 재는 도중 오류가 났다. 이미 적은 칸은 비워 실행 이력이 반쪽 값을 들지 않게 한다. */
+    /** 재는 도중 오류가 났다. 이미 적은 필드는 비워 실행 이력이 반쪽 값을 들지 않게 한다. */
     public void markSnapshotFailed() {
         this.snapshotKnobsDigest = null;
         this.snapshotNodeCount = null;

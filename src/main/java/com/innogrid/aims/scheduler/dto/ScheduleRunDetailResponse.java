@@ -8,8 +8,10 @@ import com.innogrid.aims.scheduler.entity.SchedulingHistory;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 화면에는 아직 이 항목이 없다. 명세의 제약 조건 기반 배치 항목이 실제로 무엇을 근거로
- * 어느 노드를 골랐는지 보이려면 결정 단위 기록이 필요해서 만들었다.
+ * 실행 1회의 요약과 워크로드별 배치 결정 목록.
+ *
+ * <p>명세의 제약 조건 기반 배치 항목이 무엇을 근거로 어느 노드를 골랐는지 보이려면 결정 단위 기록이 필요하다.
+ * 화면에는 아직 이 항목이 없다.</p>
  */
 @Schema(description = "실행 1회의 요약과 워크로드별 배치 결정 목록")
 public record ScheduleRunDetailResponse(

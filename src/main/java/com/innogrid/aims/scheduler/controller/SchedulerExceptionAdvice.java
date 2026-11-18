@@ -20,30 +20,22 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 /**
  * 스케줄러 API의 요청 검증 오류를 400으로 돌려준다.
  *
- * <p><b>왜 필요한가</b> — 이 프로젝트는 Spring Framework 7이라 클래스에 {@code @Validated}
- * 를 붙이지 않아도 {@code @RequestParam}의 {@code @Min}·{@code @Max}가 동작한다.
- * 그런데 그때 나오는 {@link HandlerMethodValidationException}을 처리하는 곳이 없어
- * 스프링 기본 처리로 넘어가고, 기본 처리는 {@code sendError}로 {@code /error}를 다시
- * 태운다. 보안 설정이 모든 요청에 인증을 요구하는데 이 재요청에는 인증 정보가 실리지
- * 않아, 결국 클라이언트는 <b>400이 아니라 403</b>을 받는다.</p>
+ * <p><b>왜 필요한가</b> — 이 프로젝트는 Spring Framework 7이라 클래스에 {@code @Validated}를 붙이지 않아도
+ * {@code @RequestParam}의 {@code @Min}·{@code @Max}가 동작한다. 그때 나오는 {@link HandlerMethodValidationException}을
+ * 처리하는 곳이 없으면 스프링 기본 처리가 {@code sendError}로 {@code /error}를 다시 태우는데, 보안 설정이 모든 요청에
+ * 인증을 요구하고 이 재요청에는 인증 정보가 실리지 않아 클라이언트는 <b>400이 아니라 403</b>을 받는다. 그래서
+ * {@code sendError}를 타지 않고 {@link ResponseEntity}를 직접 만들어 돌려준다. {@code page=0} 같은 잘못된 페이징
+ * 값도 400이 되어 목록 응답의 {@code totalPages}가 0 나눗셈으로 비정상 값이 되지 않는다.</p>
  *
- * <p>그래서 {@code sendError}를 타지 않고 {@link ResponseEntity}를 직접 만들어 돌려준다.
- * {@code page=0} 같은 잘못된 페이징 값이 확실하게 400이 되며, 목록 응답의
- * {@code totalPages}가 0 나눗셈으로 비정상 값이 되는 것도 함께 막힌다.</p>
- *
- * <p><b>적용 범위를 스케줄러 패키지로 한정</b>한다. 다른 패키지의 컨트롤러는 이 advice의
- * 후보에서 제외되어 지금과 똑같이 동작한다. 같은 문제가 다른 도메인에도 있지만 담당
- * 범위가 아니라 손대지 않는다.</p>
- *
- * <p><b>다른 도메인에서 같은 처리가 필요하다면</b> — 전역 예외 핸들러에 처리기를 추가하되,
+ * <p><b>적용 범위는 스케줄러 패키지로 한정</b>한다. 같은 문제가 다른 도메인에도 있지만 담당 범위가 아니라 손대지
+ * 않는다. 다른 도메인에서 같은 처리가 필요해 전역 예외 핸들러에 처리기를 추가하면
  * <b>여기 있는 같은 예외의 처리기를 함께 지우거나 이 advice에 명시적 {@code @Order}를 주어야 한다.</b>
- * 두 advice가 같은 예외의 후보가 되면 어느 쪽이 처리할지가 빈 등록 순서에 좌우되고, 그때
- * 스케줄러 응답에서 파라미터 이름·받은 값·가능한 값이 조용히 사라진다. 아래 문단이
- * {@code BusinessException}에 대해 말하는 것과 같은 이유다. 확인은 {@code SchedulerParameterErrorTest}
- * 를 그대로 돌리면 된다 — 사유 문구까지 확인하므로 사라지면 빨간불이 된다.</p>
+ * 두 advice가 같은 예외의 후보가 되면 어느 쪽이 처리할지가 빈 등록 순서에 좌우되어, 스케줄러 응답에서
+ * 파라미터 이름, 받은 값, 가능한 값이 조용히 사라진다. {@code SchedulerParameterErrorTest}가 사유 문구까지
+ * 확인하므로 그때 실패한다.</p>
  *
- * <p>{@code BusinessException}은 여기서 다루지 않는다. 전역 핸들러와 후보가 겹치면
- * 어느 쪽이 처리할지가 우선순위에 좌우되어, 스케줄러만 응답 형태가 달라질 수 있다.</p>
+ * <p>{@code BusinessException}도 같은 이유로 여기서 다루지 않는다. 전역 핸들러와 후보가 겹치면 스케줄러만 응답
+ * 형태가 달라질 수 있다.</p>
  */
 @RestControllerAdvice(basePackages = "com.innogrid.aims.scheduler")
 public class SchedulerExceptionAdvice {

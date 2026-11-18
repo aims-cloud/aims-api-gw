@@ -9,15 +9,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * 클러스터 전력 최적화 추세 — {@code GET /scheduler/optimization/power/trend}.
  *
  * <p>{@code /optimization/power}가 "현재 시점"에 계산하는 총 전력·가동/유휴 노드·회수 가능 전력·PEI를, 메트릭 저장소의
- * 구간 질의로 <b>과거 시각마다 다시 계산</b>한 것이다. 저장하지 않는다 — 원시 시계열은 Thanos에 이미 있고 우리는 조회
- * 시점에 정제한다. 배치 알고리즘을 켠 뒤 효과가 어떻게 변했는지 화면이 그릴 재료다.</p>
+ * 구간 질의로 <b>과거 시각마다 다시 계산</b>한 것이다. 원시 시계열이 Thanos에 이미 있으므로 저장하지 않고 조회 시점에
+ * 정제한다. 배치 알고리즘을 켠 뒤 효과가 어떻게 변했는지 화면이 그릴 재료다.</p>
  *
- * <p>전력 메트릭(IPMI)이 없는 시각은 {@code measured=false}이고 전력 지표는 null이다 — 0으로 채우지 않는다.
- * CPU 기반 지표(가동/유휴 노드 수)만 값이 있다.</p>
- *
- * <p><b>다만 일부 노드만 결손인 시각은 그 노드를 0W로 세어 합한다.</b> 그래서 {@code totalPowerWatts}는 그 시각
- * 전력을 읽은 노드들의 합이고, {@code totalNodes}와 {@code evaluableNodes}가 다르면 결손이 있었다는 뜻이다.
- * 이 배열을 그대로 적분하면 결손이 "0 W를 썼다"로 읽히므로, 구간 에너지는 {@link Energy}로 따로 낸다.</p>
+ * <p>전력 메트릭(IPMI)이 없는 시각은 {@code measured=false}이고, 전력 지표는 0으로 채우지 않고 null로 둔다. CPU 기반
+ * 지표(가동/유휴 노드 수)만 값이 있다. 일부 노드만 결손인 시각은 그 노드를 0W로 세어 합하므로 구간 에너지는
+ * {@link Energy}로 따로 낸다(docs/13 4장).</p>
  *
  * @param energy  구간 전체의 에너지 요약. 낼 수 없으면 null
  * @param message 결손·조회 실패 사유. 정상이면 null

@@ -12,18 +12,15 @@ import com.innogrid.aims.scheduler.benchmark.BenchmarkMetric;
 /**
  * 배치 전략 비교 — 우리 엔진과 대조군을 <b>같은 판·같은 워크로드·같은 제약</b>에서 돌린 결과.
  *
- * <p><b>승자를 지명하는 필드가 없다.</b> API가 승자를 계산해 주면 그 필드만 인용되고, 판 이름·
- * 전원 상태 가정·부하율에서 떨어진 순간 그 판정은 거짓이 된다. 대신 셀마다 {@code valid}·
- * {@code invalidReason}을 실어 <b>어떤 조건에서 그 숫자가 의미를 갖는지</b>를 함께 준다.
- * 판정은 사람이 판 이름과 함께 쓴다.</p>
+ * <p><b>승자를 지명하는 필드가 없다</b>(이유는 docs/14 1장). 대신 셀마다 {@code valid}·{@code invalidReason}을 실어
+ * <b>어떤 조건에서 그 숫자가 의미를 갖는지</b>를 함께 주고, 판정은 사람이 판 이름과 함께 쓴다.</p>
  *
- * <p><b>주 지표는 엔진이 믿은 값이 아니다.</b> {@code engineBelievedCostW}는 전력 엔진 총점의 한 항을
- * 그대로 합한 값이라 그것으로 순위를 매기면 그 목적함수를 최대화한 전략이 정의상 이긴다. 총전력의
- * 주 지표는 클러스터 파일 생성식의 <b>선언된 유휴 전력</b>으로 계산한 값이고, 엔진은 그 값을 보지 못한다.
- * 두 값의 차는 <b>엔진 가정과 생성식의 격차</b>이며 {@link Board#idleAssumptionGaps}에 노드별로 있다 —
- * 실측 서버와의 차이가 아니다. 생성식은 {@link Assumptions#GENERATOR_FORMULA}에 그대로 적혀 있다.</p>
+ * <p><b>주 지표는 엔진이 믿은 값이 아니다.</b> {@code engineBelievedCostW}로 순위를 매기면 전력 엔진의 목적함수를
+ * 최대화한 전략이 정의상 이긴다(docs/14 2장). 총전력의 주 지표는 클러스터 파일 생성식의 <b>선언된 유휴 전력</b>으로
+ * 계산하며 엔진은 그 값을 보지 못한다. 두 값의 차는 <b>엔진 가정과 생성식의 격차</b>이고 실측 서버와의 차이가 아니다.
+ * 노드별 격차는 {@link Board#idleAssumptionGaps}, 생성식은 {@link Assumptions#GENERATOR_FORMULA}에 있다.</p>
  *
- * @param evaluatedAt  계산 시각
+ * @param evaluatedAt  응답 생성 시각
  * @param assumptions  계산 전제 — 이 블록 없이 인용된 숫자는 근거가 없다
  * @param engineConfig 이 실행이 본 엔진 설정과 정책 변종 셋 — {@code policyBasis}가 "기본값으로 돌렸다"는
  *                     <b>말</b>이라면 이것은 그 말의 <b>내용</b>이다
@@ -47,20 +44,19 @@ public record PlacementBenchmarkResponse(
     /**
      * 이 실행이 본 <b>엔진 설정과 정책 사본 전량</b>.
      *
-     * <p>결과를 바꾸는 노브 열 개 남짓이 전부 환경변수로 덮이므로, 값을 싣지 않으면 두 배포에서
-     * <b>같은 모양·다른 숫자</b>의 표가 나와도 읽는 사람이 그것을 알 수 없다. 여기 실린 값이 배포 환경과
-     * 다르면 이 표의 숫자는 그 환경의 숫자가 아니다.</p>
+     * <p>결과를 바꾸는 노브가 전부 환경변수로 덮여, 값을 싣지 않으면 두 배포의 표가 숫자만 달라도 읽는 사람은
+     * 설정이 다르다는 것을 알 수 없다. 여기 실린 값이 배포 환경과 다르면 이 표의 숫자는 그 환경의 숫자가 아니다.</p>
      *
-     * <p>{@code configDigest}는 클러스터 파일 다이제스트와 <b>같은 규칙</b>(SHA-256 앞 12자)으로 낸다.
-     * 판 다이제스트가 "어느 입력 파일인가"를 지목하듯 이것이 "어느 설정인가"를 지목한다. 등록된 엔진 id
-     * 목록도 다이제스트에 들어간다 — 엔진이 추가되면 표에 열이 늘고, 그것은 다른 설정이다.</p>
+     * <p>{@code configDigest}는 판 파일 다이제스트와 <b>같은 규칙</b>(SHA-256 앞 12자)으로 "어느 설정인가"를 지목한다.
+     * 엔진이 추가되면 표에 열이 늘어 다른 설정이 되므로 등록된 엔진 id 목록도 다이제스트에 들어간다.</p>
      *
-     * @param configDigest 엔진 id 목록과 아래 세 블록을 정규화한 문자열의 SHA-256 앞 12자
+     * @param configDigest 엔진 id 목록, 아래 노브 세 블록과 정책 변종, 열별 override를 정규화한 문자열의
+     *                     SHA-256 앞 12자
      * @param engineIds    비교에 참가한 엔진 id(정렬). 레지스트리가 자동 수집하므로 실행마다 확인해야 한다
-     * @param power        전력 모델 노브. 하네스가 회계에 쓰는 문턱을 엔진 노브와 나란히 싣는다
+     * @param power        전력 모델 노브. 배치 비교 실행이 회계에 쓰는 문턱을 엔진 노브와 나란히 싣는다
      * @param thermal      온도 모델 노브
-     * @param network      네트워크(링크 점수) 노브. 링크를 선언한 판에서 결과에 반영되므로 다이제스트 성분이고, 성분은 응답에
-     *                     노출된다는 규약에 따라 여기 싣는다
+     * @param network      네트워크(링크 점수) 노브. 링크를 선언한 판에서 결과에 반영되므로 다이제스트 성분이고,
+     *                     성분은 응답에 노출된다는 규약에 따라 여기 싣는다
      * @param policies     전략이 보는 정책 변종 셋 — 저장되지 않는 사본이다
      */
     public record EngineConfigSnapshot(
@@ -92,22 +88,20 @@ public record PlacementBenchmarkResponse(
      * 전력 모델 노브.
      *
      * @param activeCpuPercent             <b>엔진</b>의 가동 판정 문턱. 엔진이 믿은 비용이 이 값을 본다
-     * @param benchmarkPoweredOnCpuPercent 하네스가 <b>회계</b>에 쓰는 문턱(사전 등록 상수). 위 값과 다르면
+     * @param benchmarkPoweredOnCpuPercent 배치 비교 실행이 <b>회계</b>에 쓰는 문턱(사전 등록 상수). 위 값과 다르면
      *                                     "엔진이 믿은 비용"과 "가동 노드 증감"이 서로 다른 문턱 위에 서 있다는
      *                                     뜻이고, 그 사실이 여기서 보여야 한다
      * @param capacityByNode               노드별 정격 원장(설정). 비어 있으면 전 노드가 {@code defaultCapacityWatts}.
-     *                                     <b>이 둘은 판 경로에서 쓰이지 않는다</b> — 수집 경로 전용이고, 비교판에서
-     *                                     엔진이 보는 정격은 판 파일이 준 값
-     *                                     ({@code boards[].idleAssumptionGaps[].engineBelievedCapacityWatts})이다.
-     *                                     설정 다이제스트에는 그대로 들어가므로 여기 함께 싣는다
-     * @param idleFromMeasurement          계측된 유휴 노드의 깨우기 비용을 실측에서 역산하는가. 모델 <b>형태</b>를 바꾸는
-     *                                     노브라 다이제스트에 들어간다 — 이 값이 다르면 표 두 장은 다른 엔진의 표다.
-     *                                     {@code idleRatio}는 진단 지표·동적 범위의 기준선으로 그대로 남고, 미계측
-     *                                     노드의 깨우기 비용 대체값이기도 하다
-     * @param marginalScaleWatts          실질 한계 전력 점수의 분모가 되는 W 눈금. 모델 <b>형태</b>를 바꾸는
-     *                                     노브라 다이제스트에 들어간다 — 깨우기 벌점을 정격으로 상대화하느냐
-     *                                     절대 W로 보느냐가 갈리므로, 값이 다르면 표 두 장은 다른 엔진의 표다.
-     *                                     0 이하면 노드 정격을 분모로 쓴다(구 방식)
+     *                                     <b>이 둘은 판 경로에서 쓰이지 않는다</b>(수집 경로 전용). 판 경로에서 엔진이
+     *                                     보는 정격은 판이 준 {@link IdleGap#engineBelievedCapacityWatts}다.
+     *                                     설정 다이제스트에는 들어가므로 싣는다
+     * @param idleFromMeasurement          계측된 유휴 노드의 깨우기 비용을 실측에서 역산하는가. 모델 <b>형태</b>를
+     *                                     바꾸는 노브라 다이제스트에 들어가며 값이 다르면 표 두 장은 다른 엔진의 표다.
+     *                                     {@code idleRatio}는 그대로 진단 지표와 동적 범위의 기준선이고, 미계측 노드의
+     *                                     깨우기 비용 대체값이다
+     * @param marginalScaleWatts          실질 한계 전력 점수의 분모가 되는 W 눈금. 깨우기 벌점을 정격으로 상대화하느냐
+     *                                     절대 W로 보느냐가 갈리므로 {@code idleFromMeasurement}처럼 다이제스트에
+     *                                     들어간다. 0 이하면 노드 정격을 분모로 쓴다
      */
     public record PowerKnobs(
             double idleRatio, double activeCpuPercent, double benchmarkPoweredOnCpuPercent,
@@ -235,19 +229,19 @@ public record PlacementBenchmarkResponse(
      * @param boardId            판 식별자
      * @param role               이 판을 만든 의도
      * @param clusterName        클러스터 파일이 밝히는 이름
-     * @param digest             파일 내용(개행 LF 정규화) 해시 앞 12자 — 응답이 자기 <b>판 파일</b>을 지목한다(워크로드 분포
-     *                           파일·판정 규칙은 이 값에 들어가지 않는다 — 계약 §8). 표시 전용, 계산에 쓰이지 않는다
+     * @param digest             응답이 지목하는 <b>판 파일</b> 내용(개행 LF 정규화)의 해시 앞 12자. 표시 전용이고
+     *                           계산에 쓰이지 않는다. 워크로드 분포 파일과 판정 규칙은 들어가지 않는다(docs/13 8장)
      * @param nodeCount          노드 수
      * @param measuredNodeCount  전력·온도가 계측되는 노드 수
      * @param powerExponent         이 판의 생성식 지수 β. 1이면 선형이고, 1보다 크면 저부하에서 전력이
      *                              선형보다 낮은 볼록 판이다. 전제 블록의 생성식이 가리키는 값이 이것이다
      * @param idleAssumptionGaps    엔진의 유휴 전력 가정과 파일 선언값의 노드별 격차
-     * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식(℃·K 두 눈금)과 생성식을 나란히.
-     *                              격차·비율·판정은 없다. 두 엔진 값이 다르다는 것이 척도 의존의 증거다
+     * @param thermalRiseScaleCheck 노드별 코어당 온도 상승 — 엔진 식과 생성식을 나란히({@link ThermalRiseScale})
      * @param wakeupReconstructionCheck 유휴 노드의 깨우기 비용 역산 — 선언값과 엔진 역산의 범위를 나란히
      * @param temperatureLimitCheck 노드별 온도 상한 대조 — 엔진이 보는 온도가 낮춘 상한과 정책 상한을 넘은 지점 수
-     * @param phaseMode             위상 방식 — {@code LEGACY}(옛 식) 또는 {@code INDEPENDENT}(seed·nodeId 혼합). 같은 판의 Board가
-     *                              여럿이면 전부 INDEPENDENT이고 서로 독립 복제다 — 지점 지수는 Board 안에서만 뜻이 있다
+     * @param phaseMode             위상 방식 — {@code LEGACY}(옛 식) 또는 {@code INDEPENDENT}(seed·nodeId 혼합).
+     *                              같은 판의 Board가 여럿이면 전부 INDEPENDENT이고 서로 독립 복제라, 지점 지수는
+     *                              Board 안에서만 뜻이 있다
      * @param phaseSeed             이 Board의 위상 seed. legacy 판은 파일의 seed 하나
      * @param cells                 부하율 × 전원 상태 가정의 격자
      */
@@ -282,20 +276,19 @@ public record PlacementBenchmarkResponse(
      *
      * <p>{@link ThermalRiseScale}이 열 쪽에서 하는 일을 전력 쪽에서 하되, <b>판정·비율 열을 만들지 않는다.</b>
      * 엔진의 역산은 선형 생성식을 유휴 전력에 대해 푼 것이라, 판이 선형이고 판이 준 정격이 생성식 정격과
-     * 같을 때만 선언값을 정확히 되돌린다. 그 조건이 깨진 판에서 값이 얼마나 벌어지는지를 <b>그 판에서</b> 보이는
-     * 자리이고, 어느 쪽이 옳은지는 이 표가 말하지 않는다. 시각 12지점을 훑은 최솟값·최댓값을 주는 이유는
-     * 역산이 그 순간의 사용률에 걸린 값이라 한 시각의 숫자로는 폭을 알 수 없기 때문이다.</p>
+     * 같을 때만 선언값을 정확히 되돌린다. 이 표는 그 조건이 깨진 판에서 값이 얼마나 벌어지는지를 보일 뿐
+     * 어느 쪽이 옳은지는 말하지 않는다. 역산은 그 순간의 사용률에 걸린 값이라 시각 12지점의 최솟값·최댓값을 준다.</p>
      *
-     * <p>행은 <b>판의 회계 규칙</b>으로 고른다 — 12지점 내내 통전 문턱 아래에 머무는 노드 전부이며,
-     * 계측 여부는 {@code measured} 열로 밝힌다. 엔진 노브로 행을 고르면 노브를 돌리는 것만으로 표가 달라진다.</p>
+     * <p>행은 <b>판의 회계 규칙</b>으로 고른다. 12지점 내내 통전 문턱 아래에 머무는 노드 전부다. 엔진 노브로 고르면
+     * 노브만 돌려도 표가 달라진다.</p>
      *
      * @param measured             전력이 계측되는 노드인가. <b>거짓이면 역산 두 값(min·max)이 대체값 그대로</b>이고
-     *                             역산이 아니다 — 미계측 노드는 역산할 분자·분모가 없다. {@code declaredIdleWatts}
-     *                             는 계측 여부와 무관하게 파일 선언값이다
-     * @param declaredIdleWatts    파일에 선언된 유휴 전력(W). 실측이 아니다
-     * @param engineFallbackWatts  엔진의 대체값(믿는 정격 × idleRatio). {@code idleAssumptionGaps[].engineAssumedIdleWatts}
-     *                             와 <b>같은 값</b>을 대조용으로 다시 싣는다 — 역산 경로를 탔는지는 엔진 안의 일이라
-     *                             하네스가 셀 수 없고, 대신 값이 대체값과 같은지를 독자가 이 자리에서 바로 본다
+     *                             역산이 아니다. 미계측 노드는 역산할 분자·분모가 없다
+     * @param declaredIdleWatts    파일에 선언된 유휴 전력(W). 계측 여부와 무관하며 실측이 아니다
+     * @param engineFallbackWatts  엔진의 대체값(믿는 정격 × idleRatio).
+     *                             {@code idleAssumptionGaps[].engineAssumedIdleWatts}와 <b>같은 값</b>을 대조용으로
+     *                             다시 싣는다. 역산 경로를 탔는지는 엔진 안의 일이라 배치 비교 실행이 셀 수 없고,
+     *                             대신 값이 대체값과 같은지를 독자가 여기서 바로 본다
      * @param engineWakeupMinWatts 12지점 역산의 최솟값(W)
      * @param engineWakeupMaxWatts 12지점 역산의 최댓값(W)
      */
@@ -450,24 +443,21 @@ public record PlacementBenchmarkResponse(
     /**
      * 지표 하나의 값 — 시각 지점들을 훑은 <b>분포</b>로 준다.
      *
-     * <p>시각을 하나로 고정하면 결정론적 전략은 숫자가 하나뿐이라 "3.2% 낮았다"에 오차 막대를
-     * 붙일 수 없다. 그래서 한 주기를 훑어 중앙값과 최소·최대를 함께 싣는다 — 지점 간 폭이
-     * 전략 간 차이보다 크면 그 차이는 주장할 수 없다는 뜻이고, 그 판단을 읽는 사람이 할 수 있다.</p>
+     * <p>시각 하나로는 결정론적 전략의 숫자가 하나뿐이라(docs/14 5장) 한 주기를 훑어 중앙값과 최소·최대를 함께
+     * 싣는다. 지점 간 폭이 전략 간 차이보다 크면 그 차이는 주장할 수 없고, 그 판단은 읽는 사람이 한다.</p>
      *
      * @param key           지표 키. {@code metrics} 선언의 key와 같다
-     * @param median        시각 지점들의 중앙값. <b>유효하지 않으면 null</b> — 순위 근거가 아닌 칸에 숫자를
-     *                      실으면 {@code valid}를 보지 않은 인용자에게는 그냥 값이다
+     * @param median        시각 지점들의 중앙값. <b>유효하지 않으면 null</b>이다. 무효인 자리에 숫자를 실으면
+     *                      {@code valid}를 보지 않은 인용자에게는 그냥 값이 된다
      * @param min           최솟값. 유효하지 않으면 null. <b>전략별 계열에서 독립으로 뽑은 값이라 전략마다 서로 다른
-     *                      시각 지점의 숫자일 수 있다</b> — 두 전략 사이의 짝 비교(예: power.min − pabfd.min)에 쓰면
-     *                      안 되고, 짝 비교는 median과 samples로만 한다
-     * @param max           최댓값. 유효하지 않으면 null. min과 같은 이유로 <b>전략 간 짝 비교에 쓰지 않는다</b> —
-     *                      두 전략의 max가 같은 시각 지점에서 나왔다는 보장이 없다
-     * @param samples       값이 나온 시각 지점 수. 무효여도 남긴다 — "지점이 없어 무효"와 "지점은 있었지만
-     *                      판정이 무효"를 구분하는 유일한 자리다
+     *                      시각 지점의 숫자일 수 있다</b>. 두 전략 사이의 짝 비교(예: power.min − pabfd.min)에는 쓰지
+     *                      않고, 짝 비교는 median과 samples로만 한다
+     * @param max           최댓값. 유효하지 않으면 null. min과 같은 이유로 <b>전략 간 짝 비교에 쓰지 않는다</b>
+     * @param samples       값이 나온 시각 지점 수. 무효여도 남겨, "지점이 없어 무효"와
+     *                      "지점은 있었지만 판정이 무효"를 구분하는 유일한 자리다
      * @param points        지점별 값. <b>인덱스 = 시각 지점</b>이고 짝이 아닌 지점은 null이며 길이는 항상
-     *                      스윕 지점 수다 — 두 실행을 지점별로 대조하기 위한 것이라 값만 모아 압축하면
-     *                      지점 정렬이 깨져 대조 자체가 성립하지 않는다. 지금은 지점별 판정이 필요한 지표만
-     *                      채우고 나머지는 null이다(같은 값을 전 지표에 실으면 응답이 배로 커진다)
+     *                      스윕 지점 수다. 두 실행을 지점별로 대조하는 값이라, 값만 모아 압축하면 대조할 수 없다.
+     *                      지점별 판정이 필요한 지표만 채우고 나머지는 null이다(전 지표에 실으면 응답이 배로 커진다)
      * @param valid         이 숫자를 순위 근거로 써도 되는가
      * @param invalidReason 쓸 수 없을 때의 사유
      */

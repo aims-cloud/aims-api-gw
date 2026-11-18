@@ -233,24 +233,19 @@ public final class GroundTruthOracle {
     /**
      * 노드마다 <b>코어 1개 예약당 온도 상승</b>을 세 식으로 나란히 낸다. 응답의 전제 블록에 싣는다.
      *
-     * <p>세 값은 세 <b>가정</b>이고, 어느 것도 실측이 아니다. 이 표는 격차·비율·판정을 내지 않는다 —
-     * "엔진이 N배 과소평가한다"는 문장은 생성식이 옳다는 전제가 필요하고, 그 전제의 근거는 코드·문서 어디에도
-     * 없다. 게다가 그 배수는 <b>단위 선택의 산물</b>이다: 같은 엔진 식을 ℃로 재면 생성식보다 작고 K로 재면
-     * 생성식보다 크다. 그래서 두 번째 열이 있다.</p>
+     * <p>세 값은 세 <b>가정</b>이고 어느 것도 실측이 아니다. 두 엔진 값은 엔진 식
+     * {@code ΔT = inertiaK × (요구코어/총코어) × T}에 같은 기준 온도를 ℃ 눈금과 K 눈금으로 넣은 값이다. 생성식 값은
+     * {@code 온도 = base + 0.3 × CPU%}에서 코어 1개가 CPU를 {@code 100/cores}%p 올려 생기는 {@code 30 / cores}다.
+     * 생성식은 온도와 무관한 가산형이라 엔진 식과 함수형이 다르다(열 정의는 {@link ThermalRiseScale}). 엔진 식은
+     * 상승분이 눈금의 원점에 비례해 물리적으로 같은 상태에서 두 값이 다르다. 온도 차(ΔT)는 원점에 무관해야 하므로
+     * 이 식은 절대 척도 위에서 정의되지 않은 모델이고, 이 사실은 생성식과 무관하게 엔진 코드만으로 성립한다.</p>
      *
-     * <ul>
-     *   <li>{@code engineRisePerCoreC} — 엔진 식 {@code ΔT = inertiaK × (요구코어/총코어) × T}에 ℃ 눈금의
-     *       {@code T = baseTemperature}를 넣은 값. 코어 1개면 {@code inertiaK × base / cores}.</li>
-     *   <li>{@code engineRisePerCoreIfKelvin} — <b>같은 식</b>에 같은 온도를 K 눈금으로 넣은 값
-     *       ({@code inertiaK × (base + 273.15) / cores}). 물리적으로 같은 상태인데 값이 다르다 —
-     *       상승분이 눈금의 원점에 비례하기 때문이다. 온도 차(ΔT)는 원점에 무관해야 하므로 이 식은
-     *       절대 척도 위에서 정의되지 않은 모델이고, 이 사실은 생성식과 무관하게 엔진 코드만으로 성립한다.</li>
-     *   <li>{@code generatorRisePerCoreC} — 생성식 {@code 온도 = base + 0.3 × CPU%}에서 코어 1개가 CPU를
-     *       {@code 100/cores}%p 올리므로 {@code 30 / cores}. 온도와 무관한 가산형이다 — 엔진 식과 함수형이 다르다.</li>
-     * </ul>
+     * <p>격차·비율·판정은 내지 않는다. "엔진이 N배 과소평가한다"는 문장은 생성식이 옳다는 전제가 필요한데 그 근거가
+     * 코드·문서 어디에도 없고, 그 배수는 <b>단위 선택의 산물</b>이다. 같은 엔진 식을 ℃로 재면 생성식보다 작고
+     * K로 재면 크다. K 눈금 값을 함께 싣는 이유다.</p>
      *
-     * <p>기준 온도는 {@code baseTemperature}(CPU 0%)로 고정한다 — 판 하나에 한 값을 실으려면 시각을 타지
-     * 않아야 하고, 세 값 모두 판 파일의 상수만으로 계산된다. 정렬은 {@link #idleAssumptionGaps(double)}와 같다.</p>
+     * <p>기준 온도는 {@code baseTemperature}(CPU 0%)로 고정한다. 판 하나에 한 값을 실으려면 시각을 타지 않아야 하고,
+     * 세 값 모두 판 파일의 상수만으로 계산된다. 정렬은 {@link #idleAssumptionGaps(double)}와 같다.</p>
      */
     public List<ThermalRiseScale> thermalRiseScaleCheck(double engineInertiaK) {
         if (!(engineInertiaK >= 0)) {

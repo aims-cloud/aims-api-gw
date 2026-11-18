@@ -13,10 +13,9 @@ import com.innogrid.aims.scheduler.model.NodeResource;
 /**
  * 네트워크 모델 — 배치 판단에 쓰는 네트워크 점수를 계산한다.
  *
- * <p>두 가지를 본다. <b>노드 자신의 트래픽 부하</b>({@link #localTrafficScore})는 예전부터 있었고,
- * <b>데이터 MDC와 노드 MDC 사이의 링크 품질</b>({@link #linkScore})은 나중에 더했다.
- * 둘을 {@link #blend}로 섞는 것은 엔진이 게이트(정책 {@code affinityEnabled} + 워크로드 {@code dataMdcId})가
- * 켜졌을 때만 한다.</p>
+ * <p>두 가지를 본다. <b>노드 자신의 트래픽 부하</b>({@link #localTrafficScore})와 <b>데이터 MDC와 노드 MDC
+ * 사이의 링크 품질</b>({@link #linkScore})이다. 둘을 {@link #blend}로 섞는 것은 엔진이 게이트(정책
+ * {@code affinityEnabled} + 워크로드 {@code dataMdcId})가 켜졌을 때만 한다.</p>
  *
  * <pre>
  * shortfall = required &gt; 0 ∧ linkBw &gt; 0 ? clamp0to1((required − linkBw) / required) : 0
@@ -25,19 +24,15 @@ import com.innogrid.aims.scheduler.model.NodeResource;
  * linkScore = 1 / (1 + cost)            같은 MDC → 1.0 · 미등록 원격 쌍 → unknownLinkScore (기본 0.5)
  * netScore  = local × (1 − linkWeight) + linkScore × linkWeight
  * </pre>
- * 예: 20ms UP → 0.714 · 20ms DEGRADED → 0.588 · 50ms 이상 UP → 0.5. DOWN은 제약(C5)이 제외하므로
+ * 예: 20ms UP → 0.714, 20ms DEGRADED → 0.588, 50ms 이상 UP → 0.5. DOWN은 제약(C5)이 제외하므로
  * 점수는 0으로 두되 실제로 쓰이지 않는다.
  *
- * <p><b>대역폭은 요구가 있을 때만 본다.</b> 원장은 대역폭을 저장해 두고도 점수에 쓰지 않았는데, 워크로드 쪽에
- * "얼마가 필요한가"가 없어 견줄 대상이 없었기 때문이다. 이제 워크로드의 요구 대역폭과 링크 대역폭을 견주어
- * <b>모자란 비율만큼</b> 비용을 더한다 — 요구를 주지 않았거나(null) 원장에 대역폭이 없으면(null) 항은 0이라
- * 예전 점수 그대로다. 제약이 아니라 점수이므로 대역폭이 모자라도 배치는 된다. 예: 요구 1000 · 링크 500 ·
- * 20ms UP → 부족분 0.5 → cost 0.9 → 0.526.</p>
+ * <p><b>대역폭은 요구가 있을 때만 본다</b>({@link #bandwidthCost}). 제약이 아니라 점수이므로 대역폭이 모자라도
+ * 배치는 된다. 예: 요구 1000, 링크 500, 20ms UP → 부족분 0.5 → cost 0.9 → 0.526.</p>
  *
- * <p><b>미등록 원격 쌍은 같은 MDC와 다르다.</b> 예전에는 둘을 똑같이 1.0으로 보았는데, 그러면 측정된 양호
- * 링크(20ms UP 0.714)가 측정되지 않은 경로에 져서 원장을 채운 MDC가 불리해졌다. 지금은 설정값(기본 0.5,
- * 50ms UP과 같은 점수)을 준다 — 등록 여부만으로 후보를 버리지는 않되(제약이 아니라 점수), 모르는 경로가
- * 아는 양호 경로를 이기지는 않게. 노드에 MDC 라벨이 없거나 원장 스냅샷이 비어 있어도 같은 값이다.</p>
+ * <p><b>미등록 원격 쌍은 같은 MDC와 다르다.</b> 둘을 똑같이 1.0으로 보면 측정된 양호 링크(20ms UP 0.714)가
+ * 측정되지 않은 경로에 져서 원장을 채운 MDC가 불리해진다. 그래서 설정값(기본 0.5, 50ms UP과 같은 점수)을
+ * 주어, 등록 여부만으로 후보를 버리지는 않되(제약이 아니라 점수) 모르는 경로가 아는 양호 경로를 이기지는 않게 한다.</p>
  */
 @Component
 public class NetworkModel {

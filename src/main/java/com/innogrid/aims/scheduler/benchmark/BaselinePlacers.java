@@ -20,9 +20,8 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
 /**
  * 대조군 배치 규칙 — 우리 엔진과 <b>비교할 상대</b>.
  *
- * <p>전부 {@link PlacementStrategy}를 돌려주고 {@code SchedulingEngine}을 구현하지 않는다.
- * 이유는 {@link PlacementStrategy} 클래스 주석에 있다(레지스트리 자동 수집 · cron 실배치).
- * 이 클래스에는 스프링 애너테이션이 하나도 없고, 인스턴스로 만들 수도 없다.</p>
+ * <p>전부 {@link PlacementStrategy}를 돌려주고 {@code SchedulingEngine}을 구현하지 않으며, 스프링 애너테이션도 없다.
+ * 이유는 {@link PlacementStrategy} 클래스 주석에 있다(레지스트리 자동 수집, cron 실배치).</p>
  *
  * <pre>
  * ffd-size           크기 내림차순, nodeId 순 첫 적격 노드        점수 1/(1+순번)
@@ -38,22 +37,19 @@ import com.innogrid.aims.scheduler.model.SchedulingResult.NodeScore;
  *   <li><b>제약 파이프라인</b>: {@code context.exclusionReason}을 후보 <b>전원</b>에 적용한다.
  *       대조군이 우리 엔진보다 나쁘게 나오는 것이 "제약을 덜 받았기 때문"이면 비교가 아니라 반칙이다.</li>
  *   <li><b>후보 전원의 {@link NodeScore}</b>: 적격 여부와 제외 사유를 그대로 싣는다. 그래야 테스트가
- *       전략 간 제외 사유 집합을 대조해 "같은 파이프라인을 통과했다"를 증명할 수 있다.</li>
+ *       전략 간 제외 사유 집합을 대조해 "같은 파이프라인을 통과했다"를 확인할 수 있다.</li>
  *   <li><b>주사 순서는 {@code nodeId} 오름차순</b>: 선착순·최적적합의 결과가 저장소 응답 순서나 파일
- *       순서에 흔들리면 그건 알고리즘이 아니라 입력 순서를 측정하는 것이다. 정렬을 각 placer 안에서
- *       한다 — 하네스가 정렬해 주기를 기대하면 언젠가 빠진다.</li>
+ *       순서에 흔들리면 알고리즘이 아니라 입력 순서를 측정하게 된다. 정렬은 비교 코드에 맡기면 언젠가
+ *       빠지므로 각 placer 안에서 한다.</li>
  * </ol>
  *
- * <p><b>{@code candidateScores}는 총점 순이 아니라 nodeId 순</b>이다. 대조군은 총점으로 고르지
- * 않으므로(pabfd는 절대 와트로 고르고 정규화 점수는 동률이 잘 난다) 총점 내림차순으로 늘어놓으면
- * 첫 줄이 선택된 노드인 것처럼 읽힌다. 주사 순서 그대로 두는 편이 오해가 없다.</p>
+ * <p><b>{@code candidateScores}는 총점 순이 아니라 nodeId 순</b>이다. 대조군은 총점으로 고르지 않으므로
+ * 총점 내림차순으로 늘어놓으면 첫 줄이 선택된 노드인 것처럼 읽힌다.</p>
  *
- * <p><b>{@code powerScore}·{@code temperatureScore}·{@code networkScore} 칸은 0이다.</b> 대조군은
- * 그 세 차원을 우리 엔진의 점수식으로 계산하지 않는다 — 최저 온도 우선도 실측 온도를 {@code details}에
- * 남길 뿐 그 칸에 우리 열 점수를 채우지 않는다. {@code NodeScore}의 칸이 원시 {@code double}이라 "모른다"를
- * 넣을 수 없으므로, 0이 "포화"나 "최악"으로 읽히지 않게 {@code details}에 {@link #UNSCORED_DIMENSIONS}
- * 표시를 함께 싣는다. {@code cpuScore}·{@code memoryScore}는 실효 여유를 그대로 담는다 — 전부가
- * 실제로 이 값에 의존한다(적격 판정이 여기서 나온다).</p>
+ * <p><b>{@code powerScore}·{@code temperatureScore}·{@code networkScore}는 0이다.</b> 대조군은 이 세 차원을
+ * 우리 엔진의 점수식으로 계산하지 않는다. {@code NodeScore}의 세 필드는 원시 {@code double}이라 "모른다"를
+ * 넣을 수 없으므로 {@code details}에 {@link #UNSCORED_DIMENSIONS} 표시를 함께 싣는다.
+ * {@code cpuScore}·{@code memoryScore}는 적격 판정의 근거인 실효 여유를 그대로 담는다.</p>
  */
 public final class BaselinePlacers {
 

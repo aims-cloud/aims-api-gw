@@ -16,57 +16,39 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * temperature 엔진이 온도를 수집하지 못한 노드(0°C)를 어떻게 다루는지.
  *
- * <p>결함은 두 겹이었다.</p>
+ * <p>미계측 노드는 두 겹의 가드로 다룬다.</p>
  *
  * <ul>
- *   <li><b>겹1 — 노드 자신의 가드.</b> 0°C를 그대로 계산에 넣으면 열적 여유·냉각이 만점(1.0),
- *   균형도 상한에 붙어 판단 근거가 없는 노드가 가중치 0.75(여유 0.30+균형 0.25+냉각 0.20)를
- *   통째로 가져간다. 이제 {@code hasThermal = temperatureCelsius > 0}일 때만 실제 점수를 내고,
- *   아니면 세 값 모두 중립 0.5로 둔다({@code weighted}·{@code power} 엔진과 같은 관례).
- *   가드에 <b>임계 척도의 부재({@code maxTemp <= 0})는 섞지 않는다</b> — 섞으면 임계가 0인 정책에서
- *   잰 값이 있는 노드까지 "못 쟀다"로 취급되어, {@code maxTemp}를 쓰지도 않는 균형 항이 함께 죽는다
- *   ({@link #zero_max_temperature_keeps_measured_nodes_measured}).
- *   자원 여유는 온도와 무관하므로 손대지 않는다.</li>
+ *   <li><b>겹1 — 노드 자신의 가드.</b> 0°C를 그대로 계산에 넣으면 열적 여유·냉각이 만점(1.0), 균형도 상한에 붙어
+ *   판단 근거가 없는 노드가 가중치 0.75(여유 0.30+균형 0.25+냉각 0.20)를 통째로 가져간다. 그래서
+ *   {@code hasThermal = temperatureCelsius > 0}일 때만 실제 점수를 내고, 아니면 세 값 모두 중립 0.5로 둔다
+ *   ({@code weighted}·{@code power} 엔진과 같은 관례). 임계 척도의 부재({@code maxTemp <= 0})는 가드에 섞지 않는다
+ *   ({@link #zero_max_temperature_keeps_measured_nodes_measured}). 자원 여유는 온도와 무관하므로 손대지 않는다.</li>
  *
- *   <li><b>겹2 — 클러스터 평균의 가드.</b> {@code PlacementContext.averageTemperature}가
- *   미계측 0°C를 표본에 넣으면 평균이 내려간다. 균형 점수가
- *   {@code 1 − 0.5 × T / 평균}이라, 평균이 내려간 만큼 계측된 노드가 잘리는 지점(평균의
- *   두 배)도 함께 내려와 <b>정상 범위의 계측 노드가 감점을 받는다</b>. 이제 평균은
- *   계측 노드({@code temperatureCelsius > 0})만으로 낸다.</li>
+ *   <li><b>겹2 — 클러스터 평균의 가드.</b> {@code PlacementContext.averageTemperature}가 미계측 0°C를 표본에 넣으면
+ *   평균이 내려간다. 균형 점수가 {@code 1 − 0.5 × T / 평균}이라 계측된 노드가 잘리는 지점(평균의 두 배)도 함께 내려와
+ *   <b>정상 범위의 계측 노드가 감점을 받는다</b>. 평균은 계측 노드({@code temperatureCelsius > 0})만으로 낸다.</li>
  * </ul>
  *
- * <p><b>겹1만 고치고 겹2를 고치지 않으면 여전히 미계측 노드가 이긴다.</b> 미계측 노드 U는
- * 가드 덕에 스스로 0.5를 받지만, 계측 노드 M의 균형 점수는 여전히 "U의 0°C가 섞인 평균"을
- * 분모로 계산된다 — 2노드(M=40°C, U=0°C)에서 그 평균은 20이 되어 M의 균형이
- * {@code 1 − 0.5×40/20 = 0}으로 잘리고, M 총점은 0.4581로 주저앉는다. 반대로 U는 겹1 가드로
- * 0.5500을 받으므로 U가 여전히 이긴다({@link #unmeasured_not_favored_mixed_ipmi} 주석 참고).
- * 두 겹을 모두 고쳐야 M의 균형이 제 기준(계측 노드만의 평균 40)으로 돌아와 0.5가 되고,
- * M 총점이 0.5831로 U의 0.5500을 앞선다.</p>
- *
- * <p>균형 항을 검증하려면 최소 2노드가 있어야 한다 — 노드가 하나뿐이면 평균이 0이 되어
- * {@code ThermalModel.balanceScore}의 기존 가드({@code averageTemperature <= 0 → 0.5})에
- * 걸려, 새 가드가 없어도 균형이 0.5로 나온다(증명력이 없다). 그래서 노드 1대 픽스처는
- * {@link #lone_unmeasured_node_total_score_pinned}·{@link #negative_temperature_treated_as_unmeasured}뿐이고
- * 나머지는 2대 이상을 쓴다. 계측 노드가 <b>1대</b>뿐이면 평균이 곧 그 노드의 온도라
- * 균형이 자명하게 0.5가 나오므로, 평균 수정을 점수에서 실제로 관측하려면 계측 2대가 필요하다
- * ({@link #average_over_two_measured_nodes_shapes_balance}).</p>
+ * <p>2노드(M=40°C, U=0°C)에서 겹1만 있으면 평균에 U의 0°C가 섞여 U가 이기고, 두 겹이 모두 있어야 M이 앞선다
+ * (수치는 {@link #unmeasured_not_favored_mixed_ipmi}의 주석). 노드가 미계측 1대뿐이면 평균이 0이 되어
+ * {@code ThermalModel.balanceScore}의 가드({@code averageTemperature <= 0 → 0.5})에 걸리고, 계측 노드가 1대뿐이면
+ * 평균이 곧 그 노드의 온도라 균형이 늘 0.5다. 그래서 노드 1대 픽스처는
+ * {@link #lone_unmeasured_node_total_score_pinned}·{@link #negative_temperature_treated_as_unmeasured}뿐이고,
+ * 평균 수정은 계측 2대를 쓰는 {@link #average_over_two_measured_nodes_shapes_balance}에서 관측한다.</p>
  *
  * <p><b>중립 0.5는 이 점수 분포의 중립이 아니다.</b> 미계측 노드의 열 3항 합은 항상
- * {@code 0.5 × (0.30+0.25+0.20) = 0.375}로 고정인데, 계측 노드가 그것을 넘으려면 — 2노드에서
- * 자기 자신이 유일한 계측 노드라 균형이 0.5인 조건에서 —
- * {@code 0.30×(75−T)/75 + 0.25×0.5 + 0.20×(1−(T/75)²) > 0.375}여야 하고, 정리하면
- * {@code T² + 112.5T − 7031.25 < 0} 즉 <b>T &lt; 44.72°C</b>다(44.0°C → 0.3802, 45.0°C → 0.3730).
- * 그러므로 "미계측 노드가 계측 노드를 이기지 않는다"는 <b>일반 성질이 아니라 계측 노드가 충분히
- * 시원할 때만 성립하는 성질</b>이다. {@link #unmeasured_not_favored_mixed_ipmi}는 임계 아래(40°C)를,
- * {@link #unmeasured_winner_reason_admits_no_metric}는 임계 위(70°C)를 고정한다. 임계를 44.72°C에
- * 두는 것이 옳은지는 가중치 배분의 문제이고 이 결함(미계측 처리)과는 별건이다.</p>
+ * {@code 0.5 × (0.30+0.25+0.20) = 0.375}로 고정이고, 균형이 0.5인 계측 노드는 {@code T² + 112.5T − 7031.25 < 0}
+ * 즉 <b>T &lt; 44.72°C</b>일 때만 그것을 넘는다(유도는 {@link #unmeasured_not_favored_mixed_ipmi}의 주석).
+ * 따라서 "미계측 노드가 계측 노드를 이기지 않는다"는 <b>계측 노드가 충분히 시원할 때만 성립한다</b>.
+ * {@link #unmeasured_not_favored_mixed_ipmi}는 임계 아래(40°C)를, {@link #unmeasured_winner_reason_admits_no_metric}는
+ * 임계 위(70°C)를 확인한다.</p>
  *
- * <p><b>선택 사유는 후보 집합이 아니라 승자를 주어로 3분기한다.</b> 승자가 계측이면 열 세 점수와
- * 평균 온도를 적고, 승자가 미계측인데 클러스터에 계측 노드가 있으면 "선택 노드는 온도 미계측"이라
- * 밝히며 자원 여유·계측 대수만 적고, 전부 미계측이면 "온도 메트릭이 없어"라고 밝힌다. 미계측 승자의
- * 사유에 {@code 여유:0.50 균형:0.50 냉각:0.50}을 늘어놓으면 "재 봤더니 전부 평균 수준"과 글자 그대로
- * 구분되지 않기 때문이다. 같은 이유로 {@code details}의 온도 파생값(배치후예상온도C·클러스터평균온도C)은
- * 값을 못 낼 때 0이 아니라 {@code null}이다 — 키는 남기고 값만 비운다.</p>
+ * <p><b>선택 사유는 후보 집합이 아니라 승자를 주어로 3분기한다.</b> 승자가 계측이면 열 세 점수와 평균 온도를 적고,
+ * 승자가 미계측인데 클러스터에 계측 노드가 있으면 "선택 노드는 온도 미계측"이라 밝히며 자원 여유와 계측 대수를 적고,
+ * 전부 미계측이면 "온도 메트릭이 없어"라고 밝힌다. 미계측 승자의 사유에 {@code 여유:0.50 균형:0.50 냉각:0.50}을
+ * 늘어놓으면 "재 봤더니 전부 평균 수준"과 글자 그대로 구분되지 않기 때문이다. 같은 이유로 {@code details}의 온도
+ * 파생값(배치후예상온도C·클러스터평균온도C)은 값을 못 낼 때 0이 아니라 {@code null}이다(키는 남기고 값만 비운다).</p>
  */
 class TemperatureAwareUnmeasuredTest {
 

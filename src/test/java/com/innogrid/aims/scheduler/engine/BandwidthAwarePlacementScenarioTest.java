@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 대역폭 부족분 시나리오 — 요구 대역폭이 배치를 어디로 보내는가, 요구가 없으면 예전과 같은가.
+ * 대역폭 부족분 시나리오 — 요구 대역폭이 배치를 어디로 보내는가, 요구가 없으면 대역폭 차이가 점수에 나타나지 않는가.
  *
  * <pre>
  * 클러스터  MDC a{n-a} · b{n-b} · c{n-c}   자원·부하 동일(트래픽 0)
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * 지연·손실·상태가 같고 <b>대역폭만 다른</b> 두 경로를 둔다. 그래서 순위가 갈리면 그것은 대역폭 때문이다.
  *
- * ① 요구 없음      → b와 c가 동점(링크 0.714) — 이 항이 생기기 전과 같다
+ * ① 요구 없음      → b와 c가 동점(링크 0.714)
  * ② 요구 500       → 둘 다 충족이라 여전히 동점
  * ③ 요구 1000      → c만 50% 모자라 0.526으로 내려가고 b(0.714)가 이긴다
  * ④ 요구 20000     → 둘 다 모자라지만 b는 50%(0.526)·c는 97.5%(0.421)라 b가 이긴다

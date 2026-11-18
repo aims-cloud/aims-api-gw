@@ -16,19 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * 노드 조회 응답의 필드 계약을 고정한다.
+ * 노드 조회 응답의 필드 목록을 확인한다.
  *
- * <p>응답 형태의 주인은 이제 {@link NodeResponse}다. 예전에는 {@code NodeResource}를 DTO 없이 그대로
- * 내보내 모델에 {@code get} 메서드를 하나 추가하면 {@code GET /api/v1/scheduler/nodes} 응답에 필드가
- * 조용히 늘었다. DTO 도입 후에는 그 위험이 사라졌지만, 계약 자체(27필드)는 프런트와의 약속이라
- * 여기서 여전히 못 박는다 — DTO에 컴포넌트를 추가하면 이 테스트가 막는다.</p>
+ * <p>응답 형태는 {@link NodeResponse}가 정한다. 필드 목록(27필드)은 프런트와의 약속이라 여기서 못 박는다.
+ * DTO에 컴포넌트를 추가하면 이 테스트가 막는다.</p>
  *
- * <p>디스크 축 3칸({@code diskCapacityGb}·{@code reservedDiskGb}·{@code availableDiskGb})은 DTO에만 있다.
- * 모델은 그 셋을 {@code get} 없는 이름으로 두므로 모델 직렬화는 여전히 24필드다 — 두 집합의 차가 정확히
- * 그 세 키인지도 고정한다.</p>
- *
- * <p>계산용 메서드를 {@code get} 없이 짓는 규율은 유지한다. 이제는 API 보호 수단이 아니라
- * "모델을 조회 응답과 혼동하지 않게 하는 관례"다. 그 전제가 지켜지는지도 함께 확인한다.</p>
+ * <p>디스크 축 3필드({@code diskCapacityGb}·{@code reservedDiskGb}·{@code availableDiskGb})는 DTO에만 있고, 모델은
+ * 그 셋을 {@code get} 없는 이름으로 두므로 모델 직렬화는 24필드다. 두 집합의 차가 정확히 그 세 키인지와, 계산용
+ * 메서드를 {@code get} 없이 짓는 관례(모델을 조회 응답과 혼동하지 않게 함)가 지켜지는지도 함께 확인한다.</p>
  *
  * <p>스프링이 구성한 {@code ObjectMapper}를 그대로 주입받아 쓴다. 이 프로젝트는 Jackson 2와 3이
  * 함께 올라와 있고 <b>HTTP 응답을 만드는 것은 Jackson 3({@code tools.jackson})</b>이다.</p>

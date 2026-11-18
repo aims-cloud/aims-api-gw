@@ -28,21 +28,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배열로 전량 반환하던 두 이력 API의 반환 상한.
+ * 배열로 돌려주는 두 이력 API({@code /history}, {@code /workloads/{id}/history})의 반환 상한.
  *
- * <p>{@code scheduling_history}는 연구 근거라 <b>지우지 않는다</b> — 즉 단조 증가한다. 그런데 두 API
- * ({@code /history}, {@code /workloads/{id}/history})는 표 전체를 배열로 돌려주고 있었다. 행이 늘면
- * 응답 하나가 표 전체가 되고, 서버는 그만큼을 한꺼번에 메모리에 올린다.</p>
+ * <p>상한을 두는 까닭은 {@code SchedulerController.HISTORY_MAX}에 있다. 응답 <b>형태</b>는 배열 그대로 두고
+ * 건수만 자르므로, 이 테스트는 <b>건수와 "어느 쪽이 남는가"</b>를 확인한다.</p>
  *
- * <p>응답 <b>형태</b>는 배열 그대로 두고(프런트 영향 없음) 건수만 자른다. 그래서 이 테스트는 형태가 아니라
- * <b>건수와 "어느 쪽이 남는가"</b>를 고정한다.</p>
+ * <p>건수만 세면 자르는 방향이 뒤집혀도(오래된 쪽을 남겨도) 통과한다. 그래서 상한보다 몇 건 많게 심되
+ * <b>마지막 몇 건은 시각이 확실히 뒤가 되도록</b> 한 건씩 저장하고, 잘린 결과에 그 몇 건이 전부 살아 있는지 본다.
+ * 그래야 "정렬한 뒤에 자른다"가 증명된다.</p>
  *
- * <p><b>왜 "어느 쪽"까지 보는가</b> — 건수만 세면 자르는 방향이 뒤집혀도(오래된 쪽을 남겨도) 그대로 통과한다.
- * 그래서 상한보다 몇 건 많게 심되 <b>마지막 몇 건은 시각이 확실히 뒤가 되도록</b> 한 건씩 저장하고, 잘린 결과에
- * 그 몇 건이 전부 살아 있는지 본다. 그래야 "정렬한 뒤에 자른다"가 증명된다.</p>
- *
- * <p>심은 것은 끝에 전부 지운다. 다른 테스트가 남긴 이력이 있어도 결과가 달라지지 않는다 —
- * 전체 이력은 이미 상한을 넘기 때문이다.</p>
+ * <p>심은 것은 끝에 전부 지운다. 전체 이력은 이미 상한을 넘으므로 다른 테스트가 남긴 이력이 있어도 결과가 같다.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

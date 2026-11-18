@@ -27,22 +27,16 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 스케줄러 엔티티가 만드는 테이블이 모두 {@code deploy/sql}에 CREATE로 남아 있는지 대조한다.
  *
- * <p><b>왜 필요한가</b> — 이 검사는 그동안 사람의 기억에만 있었고, 실제로 세 테이블
- * ({@code workloads}·{@code scheduling_policies}·{@code scheduling_history})의 CREATE가 빠져 있었다.
- * 드러나지 않은 이유는 두 가지다.</p>
+ * <p><b>왜 필요한가</b> — CREATE가 빠져도 다른 곳에서는 드러나지 않는다. 배포 VM은 환경파일이 {@code ddl-auto=update}로
+ * 덮어써 Hibernate가 테이블을 자동으로 만들고, 테스트는 H2를 {@code create}로 써서 {@code deploy/sql}을 <b>한 번도
+ * 읽지 않는다.</b> 리포 기본값은 {@code validate}라 <b>그 환경변수 한 줄이 빠진 새 DB에서는 앱 전체가 기동하지
+ * 않는다.</b></p>
  *
- * <ul>
- *   <li>배포 VM은 환경파일이 {@code ddl-auto=update}로 덮어써 Hibernate가 테이블을 자동으로 만든다.
- *       리포 기본값은 {@code validate}라, <b>그 환경변수 한 줄이 빠진 새 DB에서는 앱 전체가 기동하지 않는다.</b></li>
- *   <li>테스트는 H2를 {@code create}로 쓰므로 {@code deploy/sql}을 <b>한 번도 읽지 않는다.</b>
- *       즉 DDL 부채를 잡아 줄 자동 방어선이 0건이었다.</li>
- * </ul>
+ * <p><b>이 테스트의 한계</b> — 대조는 <b>테이블 이름 수준</b>이다. 컬럼 타입·길이·NOT NULL이 엔티티와 맞는지는 실제
+ * PostgreSQL에 붙여야 알 수 있어 H2 테스트로는 볼 수 없고, 배포 뒤 {@code information_schema}로 대조하는 절차가 그
+ * 자리를 대신한다.</p>
  *
- * <p><b>이 테스트의 한계</b>를 분명히 해 둔다 — 대조는 <b>테이블 이름 수준</b>이다. 컬럼 타입·길이·NOT NULL
- * 이 엔티티와 맞는지는 여기서 알 수 없다. 그건 실제 PostgreSQL에 붙여야 알 수 있는데 테스트가 H2라 불가능하다.
- * 배포 뒤 {@code information_schema}로 대조하는 절차가 그 자리를 대신한다.</p>
- *
- * <p>담당 범위가 스케줄러라서 <b>스케줄러 패키지의 엔티티만</b> 본다. 다른 패키지의 테이블은 대조 대상이 아니다.</p>
+ * <p>담당 범위가 스케줄러라서 <b>스케줄러 패키지의 엔티티만</b> 본다.</p>
  */
 class SchedulerDdlCoverageTest {
 

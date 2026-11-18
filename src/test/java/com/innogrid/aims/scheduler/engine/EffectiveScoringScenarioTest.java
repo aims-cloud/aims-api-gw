@@ -167,8 +167,7 @@ class EffectiveScoringScenarioTest {
      * 입력   n1 정상 · n2 CPU 질의 예외 · n3 정상.  실제 SchedulingService → PowerOptimizationService
      * 예상   cluster.totalNodes=2 (판단 가능한 노드), excludedNodes=1,
      *        excluded[0] = n2:9100 / "핵심 메트릭 판단 불가: cpu사용률 …"
-     *        — 수정 전에는 totalNodes=3에 n2가 CPU 0%의 유휴 노드로 들어갔다(g4 이전),
-     *        g4 직후에는 totalNodes=2 만 보여 1대가 조용히 사라졌다.
+     *        n2를 빼지 않으면 CPU 0%의 유휴 노드로 세고, 빼기만 하고 수와 사유를 내지 않으면 1대가 조용히 사라진다.
      * </pre>
      */
     @DisplayName("시나리오4 제외 노드는 진단 응답에 수와 사유로 드러난다")

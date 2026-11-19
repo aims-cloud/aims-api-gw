@@ -27,6 +27,7 @@ import com.innogrid.aims.scheduler.model.SchedulingResult;
  * 노드 중에서만 고른다.</p>
  *
  * <pre>
+ * C7 노드 배치 중지 (운영자가 원장에 올린 노드면 제외 — 맨 앞에서 검사)
  * C1 자원 가용성 (예약분 반영 — CPU·메모리, GPU는 요구할 때만, 디스크는 총량을 아는 노드에서만)
  * C2 사용률 임계 (CPU / 메모리)
  * C3 열 상태     (쿨다운 — 같거나 높은 상한의 대기만, 현재 온도, 워크로드 제약, 배치 후 예상 온도)
@@ -101,7 +102,10 @@ public class ConstraintEvaluator {
     public Exclusion exclusion(Workload workload, NodeResource node, PlacementContext ctx) {
         SchedulingPolicy policy = ctx.policy();
 
-        Exclusion e = checkResources(workload, node);
+        Exclusion e = checkPlacementHold(node, ctx);
+        if (e != null) return e;
+
+        e = checkResources(workload, node);
         if (e != null) return e;
 
         e = checkUsageThreshold(node, policy);
@@ -122,6 +126,22 @@ public class ConstraintEvaluator {
     /** 까닭·문장 한 쌍을 만든다 — 검사 메서드가 쓰는 짧은 이름. */
     private static Exclusion of(ExclusionReason reason, String format, Object... args) {
         return new Exclusion(reason, String.format(format, args));
+    }
+
+    // ── C7. 노드 배치 중지 ─────────────────────────────────────
+
+    /**
+     * 운영자가 배치를 중지한 노드를 제외한다(노드 배치 중지 원장).
+     *
+     * <p>C1보다 <b>앞에</b> 둔다. 뒤에 두면 자원이 모자란 중지 노드가 자원 부족으로 잡혀 운영자의 뜻이 사유에 남지 않고,
+     * 열 검사가 그 노드에 냉각 대기를 새로 걸 수도 있다. 원장이 비어 있으면 아무 노드도 막지 않는다.</p>
+     */
+    private static Exclusion checkPlacementHold(NodeResource node, PlacementContext ctx) {
+        if (!ctx.placementHolds().isHeld(node.getNodeId())) return null;
+        String reason = ctx.placementHolds().reasonOf(node.getNodeId());
+        return reason.isEmpty()
+                ? of(ExclusionReason.NODE_PLACEMENT_HOLD, "운영자 배치 중지")
+                : of(ExclusionReason.NODE_PLACEMENT_HOLD, "운영자 배치 중지 (사유: %s)", reason);
     }
 
     // ── C6. MDC 전력 예산 ──────────────────────────────────────

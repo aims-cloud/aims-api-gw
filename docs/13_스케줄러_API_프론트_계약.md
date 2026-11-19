@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 대상 화면: 지능형 예측 진단 > 스케줄러, 지능형 예측 진단 > 전력 최적화 진단
-- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 83개
+- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 88개
 - 관련 문서: docs/10 알람 API 프론트 계약(같은 형식), docs/06 자원 탐색기 트리 설계(역할 스코프), docs/14 배치 전략 비교 방법론(8장 비교 API 의 판·지표·판정 규칙이 왜 그렇게 정해졌는지와 기준 시점의 봉인 값)
 
 **필드 하나하나의 진실은 Swagger(`/swagger-ui/index.html`, `/v3/api-docs`)입니다.** 이 문서는 필드를 전수로 옮기지 않습니다. 대신 화면을 붙일 때 Swagger 만으로는 알기 어려운 것 — 경로 묶음, 공통 규칙, 값이 비는 조건, 오류가 나는 조건, 그리고 앞으로 바뀔 예정 — 을 적습니다. 필드 목록이 필요하면 Swagger 를 보고, 이 문서와 다르면 코드가 맞습니다.
@@ -175,7 +175,7 @@
 
 스케줄 실행(자동·즉시)은 배치 루프에 들어가기 직전의 입력을 서버 DB 의 `schedule_run_inputs` 표에 실행 1회당 한 행으로 남깁니다. 1세부 실데이터가 들어온 뒤 그 회차를 그대로 다시 돌려 보려는 기록이며, **저장한 원문은 API 응답에 실리지 않습니다** — 실행 목록·상세 응답은 그대로이고, 이 입력으로 다시 계산한 판정은 아래 「실행 재생」이 돌려줍니다.
 
-- 담는 것: 노드 상태(예약 반영 뒤 · 수집 순서) · 수집에서 빠진 노드 · 대상 워크로드(배치 순서) · 정책 사본(스케줄의 온도 상한 반영 뒤) · 실행 전력 상한 · MDC 예산 · 링크 원장(링크 게이트를 켠 정책만) · 냉각 대기 · 전력·열·네트워크 설정. 실행 이력의 `knobsDigest` 와 같은 지문을 함께 둡니다.
+- 담는 것: 노드 상태(예약 반영 뒤 · 수집 순서) · 수집에서 빠진 노드 · 대상 워크로드(배치 순서) · 정책 사본(스케줄의 온도 상한 반영 뒤) · 실행 전력 상한 · MDC 예산 · 링크 원장(링크 게이트를 켠 정책만) · 노드 배치 중지 목록(형식 판 2부터 · 6장) · 냉각 대기 · 전력·열·네트워크 설정. 실행 이력의 `knobsDigest` 와 같은 지문을 함께 둡니다. 판 1 로 저장한 입력은 배치 중지 목록이 없는 입력(그때는 그 원장이 없었음)으로 읽습니다.
 - 대상이 없거나 노드를 한 대도 모으지 못한 회차, 모의 실행(주의 14·15)은 남기지 않습니다. 저장이 실패해도 배치는 그대로 진행합니다.
 - 실행 이력과 같은 기간(기본 90일)만 남고, 보존 정리와 스케줄 삭제가 실행 이력을 지울 때 함께 지워집니다.
 - 단건 배치(`POST /workloads/{id}/schedule`, `dryRun=true` 가 아닐 때)도 배치 직전의 입력을 같은 형식으로 `placement_inputs` 표에 1회당 한 행 남깁니다(대상 워크로드 1건).
@@ -196,7 +196,7 @@
 - 확인할 수 없는 구간의 단계도 `outcome` 은 `MATCH`·`MISMATCH` 로 나오지만 판정에는 넣지 않습니다. 재생은 다시 계산한 결정으로 예약을 잡으므로 첫 `MISMATCH` 뒤 단계는 그 차이 때문에 함께 어긋날 수 있습니다 — 원인은 첫 `MISMATCH` 단계부터 봅니다. 실행 뒤 그 실행이 배치한 워크로드를 지우면 전달 기록이 함께 지워져 그 다음 워크로드부터 확인할 수 없습니다.
 - 실행 계층이 받지 않은 배치(전달 상태 `REJECTED`·`UNAVAILABLE`)는 실행과 같이 예약을 되돌리고, 건너뛴 워크로드는 건너뜁니다 — 둘 다 입력이 아니라 배치 이력·전달 기록에서 읽습니다.
 - **`MISMATCH` 가 곧 결함은 아닙니다.** 위 「재생의 한계」(실행 도중의 워크로드 편집 · 실행 도중 만료되거나 운영자가 푼 냉각 대기 · 같은 시각 다른 배치가 건 냉각 대기)는 재생하지 못하고, 엔진 코드가 바뀐 빌드에서는 어긋남이 의도한 신호일 수 있습니다. 노드 수집 단계(`createContext`)의 변경은 저장한 입력이 수집 뒤의 값이라 이 API 로 드러나지 않습니다.
-- 오류 — 404: 스케줄·실행이 없음 · 다른 스케줄의 실행 · 저장한 입력이 없음(입력 저장 전 실행 · 대상이나 노드가 없어 배치 전에 끝난 실행 · 저장 실패). 409: 아직 실행 중(`RUNNING`) · 지금 읽을 수 없는 형식 판(1이 아님) · 원문이 없음 · 원문이 저장한 지문(`inputDigest`)과 다름 · 원문을 지금 코드로 읽을 수 없음 · 엔진이 없거나 다시 만들 수 없는 엔진 · 저장한 설정 노브를 지금 코드에 적용할 수 없음. 500: 그 밖에 다시 조립·계산하다 예외가 남(엔진 계산 중이면 사유에 워크로드 id). 응답 크기는 대상 수에 비례하며 실행 1회 상한(기본 500건)이면 100KB 안팎입니다(추정). 옛 서버에는 이 경로가 없어 403 입니다.
+- 오류 — 404: 스케줄·실행이 없음 · 다른 스케줄의 실행 · 저장한 입력이 없음(입력 저장 전 실행 · 대상이나 노드가 없어 배치 전에 끝난 실행 · 저장 실패). 409: 아직 실행 중(`RUNNING`) · 지금 읽을 수 없는 형식 판(1 · 2 가 아님) · 원문이 없음 · 원문이 저장한 지문(`inputDigest`)과 다름 · 원문을 지금 코드로 읽을 수 없음 · 엔진이 없거나 다시 만들 수 없는 엔진 · 저장한 설정 노브를 지금 코드에 적용할 수 없음. 500: 그 밖에 다시 조립·계산하다 예외가 남(엔진 계산 중이면 사유에 워크로드 id). 응답 크기는 대상 수에 비례하며 실행 1회 상한(기본 500건)이면 100KB 안팎입니다(추정). 옛 서버에는 이 경로가 없어 403 입니다.
 
 **엔진별 재계산**
 
@@ -271,7 +271,7 @@
 | GET | `/nodes/reservations` | 노드별 예약 내역 — 노드 예약으로 잡힌 배치 대기 · 실행 중 워크로드와 판정 · 예약량. `nodeId` 필터(읽기 전용 · 아래 **노드별 예약 내역**) |
 | GET | `/nodes/power-efficiency` | 노드별 전력 효율 지표(코어 수를 반영한 효율 · 순위 포함 · 아래 주의 17) |
 | GET | `/nodes/{nodeId}/power-efficiency/trend` | 효율 추세. `from`, `to`, `step` |
-| GET | `/constraints` | 제약 조건 설명(C0~C6) |
+| GET | `/constraints` | 제약 조건 설명(C0~C7 · C7 노드 배치 중지는 C0 다음 행) |
 | GET | `/thermal/cooldowns` | 냉각 대기 중인 노드 `[{mdcId, nodeId, temperatureCelsius, thermalState, remainingCooldownMinutes}]`(1.4절 · 아래 주의 16) |
 | DELETE | `/thermal/cooldowns/{nodeId}` | 냉각 대기 해제 — 그 노드의 냉각 대기를 모든 온도 상한에서 지우고 `{nodeId, releasedLimitsCelsius, remainingCooldownMinutes}` 를 돌려줌. 살아 있는 대기가 없으면 404(아래 주의 16) |
 | GET | `/engines` | 선택 가능한 엔진 `[{id, name}]` |
@@ -388,9 +388,9 @@
 |---|---|
 | 형식 | JSON 객체 **문자열** — 예 `{"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}`. 키는 코드 이름 오름차순, 값은 그 코드로 빠진 후보 수. 서버는 객체로 내리지 않으므로 화면이 파싱합니다 |
 | 무엇을 세나 | 모집단은 `candidateCount` 와 같습니다 — 핵심 메트릭을 못 읽거나 질의가 응답하지 않아 수집 단계에서 빠진 노드(`/nodes/excluded`)는 후보가 아니라 여기에도 없습니다. 적격 후보(선택된 노드 포함)는 세지 않고, 성공한 결정에도 나머지 후보가 빠진 사유가 남습니다. 엔진이 배치 시점에 본 집계라 실행 계층이 그 뒤 배치를 되돌린 건도 그대로 남습니다(실행 후 클러스터 상태 `clusterSnapshot` 과 달리 되돌리기를 반영하지 않습니다) |
-| 한 노드에 사유가 여럿이면 | **먼저 걸린 제약 하나로만 셉니다**(자원 → 사용률 → 열 → 전력 → 링크 → MDC 예산 순, 배치 결정 응답의 `exclusionCode` 와 같은 규칙). 그래서 값의 합 = 부적격 후보 수, `candidateCount − 합` = 적격 후보 수입니다. 자원이 모자라면서 동시에 뜨거운 노드는 `INSUFFICIENT_RESOURCE` 로만 잡히므로 온도 계열 건수는 "온도가 유일한 걸림돌이었던 후보 수" 의 하한입니다 |
+| 한 노드에 사유가 여럿이면 | **먼저 걸린 제약 하나로만 셉니다**(배치 중지 → 자원 → 사용률 → 열 → 전력 → 링크 → MDC 예산 순, 배치 결정 응답의 `exclusionCode` 와 같은 규칙). 그래서 값의 합 = 부적격 후보 수, `candidateCount − 합` = 적격 후보 수입니다. 자원이 모자라면서 동시에 뜨거운 노드는 `INSUFFICIENT_RESOURCE` 로만 잡히므로 온도 계열 건수는 "온도가 유일한 걸림돌이었던 후보 수" 의 하한입니다 |
 | `null` | 제외가 하나도 없는 결정, 그리고 이 필드가 생기기 전의 옛 행. 빈 객체 `{}` 는 오지 않습니다 |
-| 코드 목록 | 배치 결정 응답의 `exclusionCode` 와 같은 14종 — `INSUFFICIENT_RESOURCE`·`INSUFFICIENT_DISK`·`CPU_USAGE_EXCEEDED`·`MEMORY_USAGE_EXCEEDED`·`COOLING_DOWN`·`TEMPERATURE_EXCEEDED`·`WORKLOAD_TEMPERATURE_EXCEEDED`·`PREDICTED_TEMPERATURE_EXCEEDED`·`POWER_HEADROOM_EXCEEDED`·`WORKLOAD_POWER_EXCEEDED`·`RUN_POWER_BUDGET_EXCEEDED`·`PREDICTED_POWER_EXCEEDED`·`MDC_LINK_DOWN`·`MDC_POWER_BUDGET_EXCEEDED`. 이름은 바뀌지 않지만 **늘 수는 있습니다** |
+| 코드 목록 | 배치 결정 응답의 `exclusionCode` 와 같은 15종 — `INSUFFICIENT_RESOURCE`·`INSUFFICIENT_DISK`·`CPU_USAGE_EXCEEDED`·`MEMORY_USAGE_EXCEEDED`·`COOLING_DOWN`·`TEMPERATURE_EXCEEDED`·`WORKLOAD_TEMPERATURE_EXCEEDED`·`PREDICTED_TEMPERATURE_EXCEEDED`·`POWER_HEADROOM_EXCEEDED`·`WORKLOAD_POWER_EXCEEDED`·`RUN_POWER_BUDGET_EXCEEDED`·`PREDICTED_POWER_EXCEEDED`·`MDC_LINK_DOWN`·`MDC_POWER_BUDGET_EXCEEDED`·`NODE_PLACEMENT_HOLD`. 이름은 바뀌지 않지만 **늘 수는 있습니다** |
 | 범위 | "어떤 사유가 몇 건" 을 세는 통계용입니다. 실행 상세(`/schedules/{id}/runs/{runId}`)의 결정 목록에도 같은 형식으로 실립니다(2장 주의 8). 두 응답이 같은 저장 값을 싣습니다. 후보별 상세(어느 노드가 어떤 사유)는 여전히 dryRun·단건 배치 응답에만 있습니다 |
 | 필터 | `/history/page?exclusionCode=CODE` 는 그 코드로 **센** 후보가 하나 이상 있는 결정만 돌려줍니다 — 한 노드는 먼저 걸린 제약 하나로만 세므로(위 행) 자원이 모자라면서 뜨겁기도 했던 노드는 `TEMPERATURE_EXCEEDED` 로 걸리지 않습니다. 총건수(`totalElements`)는 **결정 수**이지 빠진 후보 수가 아닙니다 — 후보 수는 같은 필터·창의 합계 API `codes[CODE].candidates` 로 얻습니다(행 단위로는 각 행 `exclusionCodes` 의 그 코드 값). 코드 이름은 대문자 그대로 주고(소문자·모르는 값은 400 과 가능한 값 목록), 빈 값(`exclusionCode=`)은 필터를 걸지 않은 것과 같습니다. 문자열의 키 단위로 맞추므로 `TEMPERATURE_EXCEEDED` 로 물어도 `WORKLOAD_TEMPERATURE_EXCEEDED` 만 든 행은 걸리지 않습니다. `null` 행(제외 없음 · 옛 행)은 어떤 코드에도 걸리지 않습니다. `success=true` 와 조합하면 "성공했지만 다른 후보가 빠진 결정", `success=false` 와 조합하면 "그 코드가 걸림돌 중 하나였던 실패" 입니다. 한 번에 코드 하나만 받습니다. `createdAt` 이 같은 결정은 `id` 로 한 번 더 정렬되어 페이지 경계에서 겹치거나 빠지지 않습니다(1.1절 **보조 정렬**). 이 조건은 앞이 `%` 인 부분 일치라 인덱스를 타지 못해 이력 전체를 훑으므로, 이력이 크게 쌓이면 창(`from`·`to` — `createdAt` 인덱스)이나 `workloadId`·`scheduleRunId` 와 함께 거는 편이 빠릅니다. 모든 코드의 건수를 한 번에 보려면 아래 **합계** 행의 API 를 쓰십시오 |
 | 합계 | `GET /history/exclusion-summary` 는 창·필터 안 결정의 집계를 서버가 더해 `{ from, to, decisions, withExclusions, skipped, codes }` 를 돌려줍니다. 필터는 `workloadId`·`success`·`engineName`·`scheduleRunId`·`from`·`to` 이고, 코드별로 이미 나뉘어 나오므로 `exclusionCode` 는 받지 않습니다. `codes` 는 등장한 코드만 이름 오름차순이고(없으면 빈 객체 `{}` — 위 「`null`」 항목은 이력 행 값의 규칙입니다) 값은 `{ decisions, candidates }` 입니다. **도넛·비율은 `candidates` 로 그리십시오** — 위 「한 노드에 사유가 여럿이면」 규칙대로 세어 코드끼리 겹치지 않으므로 모든 코드의 합이 창 안에서 빠진 후보 전체입니다(온도 계열은 여전히 하한). 코드별 `decisions` 는 한 결정에 코드가 여럿이면 코드마다 세므로 합이 `withExclusions` 를 넘을 수 있어 비율에 쓰면 안 됩니다. `decisions` 는 집계가 없는 결정도 세고, `withExclusions` 는 제외가 하나 이상 정상으로 읽힌 결정 수(`skipped` 는 들지 않음), `skipped` 는 집계 문자열 형식이 어긋나 건너뛴 결정 수(정상이면 0)입니다. 그래서 `decisions − withExclusions − skipped` 가 제외 없는 결정(옛 행 포함) 수입니다 |
@@ -531,7 +531,7 @@
 
 ---
 
-## 6. 운영자 입력 원장 (22)
+## 6. 운영자 입력 원장 (27)
 
 | 대상 | 경로 | 메서드 |
 |---|---|---|
@@ -539,8 +539,9 @@
 | MDC 전력 예산 | `/mdc-power-budgets` | GET `/`(`mdcId` 부분 일치 · 대소문자 무시 필터) · GET `/{budgetId}` · POST `/` · PUT `/{budgetId}` · DELETE `/{budgetId}` |
 | MDC 링크 | `/mdc-links` | GET `/`(`mdcId`·`status` 필터) · GET `/matrix` · GET `/{linkId}` · POST `/` · PUT `/{linkId}` · DELETE `/{linkId}` |
 | 익스포터 대응 | `/node-exporter-mappings` | GET `/`(`nodeId` 부분 일치 · 대소문자 무시 필터) · **GET `/candidates`** · GET `/{mappingId}` · POST `/` · PUT `/{mappingId}` · DELETE `/{mappingId}` |
+| 노드 배치 중지 | `/node-placement-holds` | GET `/`(`nodeId` 부분 일치 · 대소문자 무시 필터) · GET `/{holdId}` · POST `/` · PUT `/{holdId}`(사유만) · DELETE `/{holdId}` |
 
-센서로 알 수 없는 값(노드 정격 W, MDC 총량 W, MDC 간 지연·대역폭)과 센서가 **어디에** 있는지(노드별 DCGM·IPMI `instance`)를 운영자가 입력하는 화면입니다.
+센서로 알 수 없는 값(노드 정격 W, MDC 총량 W, MDC 간 지연·대역폭)과 센서가 **어디에** 있는지(노드별 DCGM·IPMI `instance`), 그리고 새 배치를 받지 않을 노드(노드 배치 중지)를 운영자가 입력하는 화면입니다.
 
 - **정격이 등록되지 않은 노드는 기본값 500W 로 계산합니다.** 원장이 비어 있으면 전 노드가 같은 값을 쓰므로, 화면에 "미등록" 을 구분해 보여 주는 편이 좋습니다.
 - **익스포터 대응은 노드 한 대의 GPU 개수·전력·온도가 저장소의 어느 `instance` 시리즈에 있는지 적는 원장입니다.** 프로메테우스의 `instance` 라벨은 익스포터마다 다릅니다 — 노드 익스포터 `host:9100`, DCGM `host:9400`, IPMI 는 중앙 주소(`ipmi-exporter:9290`)일 수 있습니다. 원장이 비어 있으면 수집기가 **포트를 뗀 호스트명이 같은 시리즈가 정확히 하나일 때** 그것을 쓰고, 그것도 안 되면 노드 `instance` 를 그대로 씁니다. 중앙 IPMI 처럼 호스트명이 다른 형태는 이 원장에 적는 길밖에 없습니다. `nodeId` 는 노드 목록의 `nodeId`(노드 익스포터 `instance`) 그대로이고, 노드와 같은 값은 뜻이 없어 400, 같은 노드 재등록은 409 입니다. `instance` 의 존재는 검증하지 않습니다 — 오타면 그 노드만 미계측으로 남습니다. 노드 식별자와 `instance` 는 대소문자를 가리며, 노드 식별자는 대소문자만 달라도 중복(409)입니다 — 철자가 다른 행은 쓰이지 않습니다. 값을 넣거나 지우면 **다음 수집부터** 반영되고 저장된 이력은 바뀌지 않습니다.
@@ -548,6 +549,16 @@
 - 화면에서 고를 **후보 `instance` 는 `GET /node-exporter-mappings/candidates` 가 줍니다.** 저장소에 지금 있는 DCGM·IPMI 시리즈의 `instance` 목록(`dcgm[]`·`ipmi[]` — 한 줄 7필드 `instance`·`host`·`gpuCount`(DCGM 시리즈 수 = 카드 수, IPMI 는 `null`)·`assignedNodeId`·`assignedBy`·`claimedByNodeIds`·`ledgerNodeIds`)과 지금 수집 대상인 노드 `instance` 목록(`nodeInstances`)입니다. `assignedBy` 가 수집기가 그 시리즈를 어느 노드에 붙이는지의 근거입니다 — `LEDGER`(원장 행) · `HOSTNAME`(포트를 뗀 호스트명이 같은 노드가 정확히 하나 — 이 비교만 대소문자를 무시합니다) · `SAME_AS_NODE`(노드 `instance` 그대로) · `AMBIGUOUS`(둘 이상의 노드가 같은 시리즈를 얻어 수집기가 그 노드들을 자기 `instance` 로 되돌림 — 자기 시리즈가 있는 노드만 값이 남고 나머지는 미계측, `claimedByNodeIds` 가 당사자 전부) · `UNASSIGNED`(어느 노드도 못 얻음 — **원장에 적어야 이어짐**) · `UNKNOWN`(노드 목록 질의가 답하지 않아 배정을 계산할 수 없음 — 이때는 배정을 읽지 마십시오). 화면은 `UNASSIGNED`·`AMBIGUOUS` 만 골라 보여 주면 됩니다. `ledgerNodeIds` 는 원장에서 그 `instance` 를 적은 노드 전부입니다(배정 근거가 원장이 아니어도 행은 있을 수 있음). `ledgerOnlyDcgm`·`ledgerOnlyIpmi` 는 원장에 적혔으나 저장소에 없는 값(오타·익스포터 다운)이고, **그 질의가 답했을 때만** 채워집니다 — 답하지 않았으면 대조할 것이 없어 빈 목록입니다. **`unavailable` 에 질의 이름(`dcgm`·`ipmi`·`nodes`)이 있으면 그 목록은 답을 못 받은 것이라 비었다고 읽지 마십시오** — 비어 있고 `unavailable` 도 비어 있을 때만 "그 시리즈가 저장소에 없다" 입니다. 못 받은 질의가 뒷받침하는 칸(`nodes` → 배정 `UNKNOWN`, `dcgm`·`ipmi` → 그쪽 `ledgerOnly` 빈 목록)은 서버가 비워 둡니다. 배정은 수집기(노드 목록·전력 최적화 추세)와 같은 규칙의 역방향이라 화면이 보는 배정과 수집이 어긋나지 않습니다 — 단 노드 한 대의 전력 효율 추세는 그 노드만 단독 해석하므로 `AMBIGUOUS` 여도 값이 붙을 수 있습니다. `nodeInstances` 는 노드 목록 API 의 `nodeId` 와 같은 질의(`up == 1`)에서 오므로 그대로 맞대 볼 수 있고, 수집에 실패해 노드 목록에서 빠진 노드(`/nodes/excluded`)도 여기에는 남습니다. 후보에 없는 `instance` 도 원장에 넣을 수는 있습니다(존재를 검증하지 않음) — 그 행은 다음 호출에서 `ledgerOnly` 로 보입니다. 메트릭 값(사용률·전력)은 쓰지 않고 `count by(instance)` 의 라벨과 시리즈 수만 봅니다. 저장소 질의 세 건을 동시에 던져 상한(`metrics.query-timeout-ms`, 기본 5초) 한 번을 기다리며 캐시는 없습니다 — **화면 진입·새로고침·원장 저장 직후에만 부르고 폴링하지 마십시오.**
 - MDC 링크의 상태가 `DOWN` 이면 그 MDC 로는 배치하지 않습니다. `UP`·`DEGRADED` 의 지연과 손실은 제약이 아니라 배치 점수에만 반영됩니다.
 - 정책의 `affinityEnabled` 가 켜져 있고 워크로드에 `dataMdcId` 가 있을 때만 링크가 배치에 반영됩니다. 이때 후보 노드 상세(`details`)에 `링크품질`(같은 MDC 1.0 · 등록 링크는 지연·손실 기반 · **원장에 없는 원격 MDC 는 기본 0.5**)과 `링크등록`(1.0 등록됨 또는 같은 MDC, 0.0 원장에 없음)이 붙습니다. 원장에 없는 원격 MDC 는 배치에서 빠지지 않고 점수만 낮습니다 — 링크를 등록하면 측정값으로 바뀝니다. `링크등록` 은 **원장에 행이 있는지**만 뜻하므로 `DOWN` 링크도 `1.0` 입니다. 배치 가능 여부는 `eligible` 과 제외 사유로 판단하십시오. 사유로 분기해야 하면 문장(`exclusionReason`)이 아니라 **코드(`exclusionCode`)** 를 보십시오 — 문장은 사람이 읽는 값이라 문구가 다듬어질 수 있습니다. `dataMdcId` 는 앞뒤 공백을 지운 뒤 노드의 MDC 라벨과 **정확히 일치**해야 같은 MDC 로 봅니다(대소문자 차이는 미등록 원격으로 처리, 공백만이면 지정 안 함).
+
+**노드 배치 중지(`/node-placement-holds`)** — 운영자가 점검 · 장애 의심 같은 까닭으로 새 배치를 받지 않게 할 노드를 올리는 원장입니다.
+
+- 행이 있는 노드는 **다음 배치부터** 후보에서 빠집니다. 제약 평가의 맨 앞(C7 · `/constraints` 에서 C0 다음 행)에서 검사하므로 그 노드의 제외 사유 코드는 자원 부족 등이 아니라 `NODE_PLACEMENT_HOLD` 이고, 문장은 `운영자 배치 중지` 또는 `운영자 배치 중지 (사유: …)` 입니다. 배치 후보를 모으는 경로(단건 배치 · 단건 모의 배치 · 저장 전 모의 배치 · 스케줄 실행 · 모의 실행 · 미리보기 · 통합 권고)는 이 원장을 실행마다 시작할 때 한 번 읽습니다. 그래서 실행 도중에 등록 · 해제한 행은 그 실행에 반영되지 않습니다. 통합 권고는 중지한 노드를 받을 노드로 고르지 않습니다(4장 주의 5). Nova 인벤토리 모의 배치(3장)는 읽지 않습니다.
+- 이미 배치되었거나 실행 중인 워크로드는 그대로입니다(옮기거나 예약을 풀지 않음). 노드 목록의 `reserved*` 와 노드별 예약 내역도 그대로입니다.
+- `nodeId` 는 노드 목록(`/nodes`)의 `nodeId` 와 같은 문자열이고, 앞뒤 공백을 뺀 값을 대소문자를 구분해 정확히 맞춥니다(목록의 `nodeId` 필터만 부분 일치 · 대소문자 무시). 노드가 지금 있는지는 검사하지 않습니다. 같은 노드를 다시 등록하면 **409** 이고 응답 문장이 기존 행 id 를 알려 줍니다.
+- 수정(PUT)은 **사유(`reason`)만** 고칩니다 — `reason` 키가 없으면 그대로, `null` 이면 비웁니다(최대 300자 · 문자열이 아니면 400). `nodeId` 를 지금과 다른 값으로 보내면 **400** 입니다. 노드를 바꾸려면 해제(DELETE) 뒤 새로 등록합니다. 등록 시각(`createdAt`)이 중지 시작 시각입니다.
+- 만료가 없습니다. 해제(DELETE)해야 다음 배치부터 다시 후보가 됩니다. 자산 원장의 점검 상태는 읽지 않습니다.
+- 워크로드가 갈 수 있는 노드를 모두 중지하면, 배치할 때마다 그 워크로드가 실패로 남고 재시도 횟수가 늘어납니다. 상한(기본 5회)에 닿으면 스케줄 실행 대상에서 빠지고, 중지를 풀어도 저절로 돌아오지 않습니다. 일괄 재개(`POST /workloads/resume-exhausted`)나 상태 변경(`FAILED` → `PENDING`)으로 되살립니다.
+- 응답 9필드 순서 고정 — `id`·`nodeId`·`reason`·`createdBy`·`createdByName`·`updatedBy`·`updatedByName`·`createdAt`·`updatedAt`. 원장이 비어 있으면 배치 결과는 이 원장이 생기기 전과 같습니다.
 
 ---
 
@@ -707,7 +718,7 @@
 | 디스크 총량·가용 | 값 있음(총량 95 GB) | 노드 익스포터(`localhost:9100`)가 살아 있고 마운트 `/` 시리즈가 있다. 예약은 디스크를 요구한 워크로드가 없어 0 |
 | 전력·온도 | 0 | IPMI 타깃(`ipmi-exporter:9290`) down. 살아나도 `instance` 가 노드와 다르므로 익스포터 대응 원장에 적어야 이어진다 |
 | GPU 개수·사용률·온도·전력 | 0 | DCGM 타깃(`mdc1-gpu-node1:9400`) down. 살아나도 노드 `instance`(`localhost:9100`)와 호스트명이 달라 호스트명 일치가 걸리지 않는다 — 전력·온도와 마찬가지로 익스포터 대응 원장에 적어야 넷이 함께 이어진다 |
-| 원장 4종 | 0건 | 운영자 입력 전 |
+| 원장 5종 | 0건 | 운영자 입력 전(노드 배치 중지는 배포 확인 때 한 행을 넣고 지워 0건) |
 | 익스포터 후보 | `dcgm`·`ipmi` 빈 목록 · `unavailable` 빈 목록 | DCGM·IPMI 타깃이 down 이라 저장소에 그 시리즈가 없다. `unavailable` 이 비어 있으므로 "없음" 이 옳은 답이고, `nodeInstances` 는 노드 1대(`localhost:9100`)만 |
 | 링크 원장 | 0건 | 운영자 입력 전. 그래서 배치 후보 상세에 `링크품질`·`링크등록` 키가 나오지 않는다(정책 `affinityEnabled` 도 꺼져 있음) |
 | 통합 권고 | 후보가 적음 | 노드가 1대라 옮길 곳이 없음 |
@@ -825,6 +836,7 @@
 | #199 | 2026-11-16 | Nova 인벤토리 | **Nova 인벤토리 조회 추가** — `GET /inventory/nova` 신설(작업 80 → 81 · 3장 「Nova 인벤토리 조회」). OpenStack Nova 의 하이퍼바이저 · VM 을 스케줄러 노드 · 워크로드 입력 모양으로 읽고, 실제로 빈 인벤토리(`EMPTY`)와 연동 실패(`NOT_CONFIGURED` · `AUTH_FAILED` · `FORBIDDEN` · `CONNECTION_FAILED` · `TIMEOUT` · `UPSTREAM_ERROR` · `MALFORMED`)를 `status` 로 나눕니다. 새 스키마 넷(`ApiResponseNovaInventoryResponse` · `NovaInventoryResponse` · `NovaInventoryNode` · `NovaInventoryServer`) | 경로 59 → 60 · 작업 80 → 81 · 기존 요청 · 응답 · DDL 그대로 · 새 설정 `aims.scheduler.inventory.timeout-ms`(기본 5000) · Swagger 는 새 경로와 새 스키마 넷 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
 | #200 | 2026-11-17 | Nova 인벤토리 | **Nova 인벤토리 모의 배치 추가** — `POST /inventory/nova/dry-run` 신설(작업 81 → 82 · 3장 「Nova 인벤토리 모의 배치」). 쓸 수 있는 하이퍼바이저를 빈 노드로 두고 그 위 VM 을 정책 상한(놓기 전 값)을 지키며 저장 없이 다시 놓아 보며, 기능 플래그 `aims.scheduler.inventory.simulation-enabled` 가 꺼져 있으면 `DISABLED` 입니다. 새 스키마 다섯(`ApiResponseNovaDryRunResponse` · `NovaDryRunResponse` · `NovaDryRunNode` · `NovaDryRunDecision` · `NovaDryRunExcluded`). `NovaInventoryNode` 의 필드 설명 넷 · 노드 설명과 `GET /inventory/nova` 설명 문구를 실제 값에 맞춤 | 경로 60 → 61 · 작업 81 → 82 · 기존 요청 · 응답 · DDL 그대로 · 새 설정 `aims.scheduler.inventory.simulation-enabled`(기본 false) · Swagger 는 새 경로 · 새 스키마 다섯 · 설명 문구 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
 | #202 | 2026-11-17 | Nova 인벤토리 | **모의 배치 노드 사용률 추가 · flavor 탓에 빈 대상은 조회 실패** — 노드에 `simulatedCpuUsagePercent` · `simulatedMemoryUsagePercent` · `overLimit`, 요약에 `overLimitNodeCount`(`hostChangedCount` 뒤). 쓸 수 있는 호스트 위 VM 의 flavor 를 못 읽어 다시 놓을 VM 이 0 이면 `NO_VMS` 대신 `INVENTORY_FAILED`(`inventoryStatus` `OK` · `vmCount` 0 · `excluded` 유지). 엔진 설명을 「노드 배치 스코어 식과 반올림 뒤 동점 여부가 엔진마다 달라 VM 별 결정은 다를 수 있음」으로 바로잡음 · `overLimit` 은 물리 총량 0 인 자원을 넘지 않은 것으로 봄(3장 「Nova 인벤토리 모의 배치」) | 경로 61 · 작업 82 · 스키마 571 그대로 · 응답에 키 넷 추가(기존 키 · 값 그대로, flavor 경우의 `status` · `message` 만 바뀜) · Swagger 는 새 속성 넷과 설명 문구 · DDL 그대로 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
-| (이번) | 2026-11-18 | 워크로드 · 노드 | **노드별 예약 내역 조회 추가** — `GET /nodes/reservations` 신설(작업 82 → 83 · 3장 「노드별 예약 내역」). 배치 대기 · 실행 중 워크로드를 배치와 같은 규칙으로 `FULL` · `GPU_ONLY` · `EXPIRED` 로 판정해 노드마다 묶고, 행 예약량과 노드 합계 · 판정 시각 · 규칙 값 · 배정 노드 없는 수를 줍니다. 메트릭은 수집하지 않습니다. 새 스키마 넷(`ApiResponseNodeReservationsResponse` · `NodeReservationsResponse` · `NodeReservationsNode` · `NodeReservationsHeldWorkload`) | 경로 61 → 62 · 작업 82 → 83 · 스키마 571 → 575 · 기존 요청 · 응답 · DDL 그대로 · 배치 결과 그대로(예약 판정을 메서드로 옮기기만 함) · Swagger 는 새 경로와 새 스키마 넷 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
+| #205 | 2026-11-18 | 워크로드 · 노드 | **노드별 예약 내역 조회 추가** — `GET /nodes/reservations` 신설(작업 82 → 83 · 3장 「노드별 예약 내역」). 배치 대기 · 실행 중 워크로드를 배치와 같은 규칙으로 `FULL` · `GPU_ONLY` · `EXPIRED` 로 판정해 노드마다 묶고, 행 예약량과 노드 합계 · 판정 시각 · 규칙 값 · 배정 노드 없는 수를 줍니다. 메트릭은 수집하지 않습니다. 새 스키마 넷(`ApiResponseNodeReservationsResponse` · `NodeReservationsResponse` · `NodeReservationsNode` · `NodeReservationsHeldWorkload`) | 경로 61 → 62 · 작업 82 → 83 · 스키마 571 → 575 · 기존 요청 · 응답 · DDL 그대로 · 배치 결과 그대로(예약 판정을 메서드로 옮기기만 함) · Swagger 는 새 경로와 새 스키마 넷 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
+| (이번) | 2026-11-19 | 노드 배치 중지 · 배치 결정 · 배치 이력 · 스케줄 실행 · 실행 이력 상세 · 통합 권고 · 제약 조건 설명 · 실행 재생 | **노드 배치 중지 원장 추가** — `/node-placement-holds` 신설(작업 83 → 88 · 6장 「노드 배치 중지」). 행이 있는 노드는 다음 배치부터 제약 평가의 맨 앞에서 빠지고, 제외 사유 코드에 `NODE_PLACEMENT_HOLD`(15번째) · `/constraints` 에 C7 행(C0 다음 · 7 → 8행)이 더해집니다. 실행 입력의 형식 판이 1 → 2(배치 중지 목록 `placementHolds` 추가 · 판 1 로 저장한 실행은 배치 중지 없음으로 재생 · 2장 「실행 입력 저장」 · 실행 재생 응답 `formatVersion` 설명도 판 1 · 2 로). 새 표 `node_placement_holds`(`deploy/sql/2026-11-19_node_placement_holds.sql`) · 새 스키마 넷(`ApiResponseListNodePlacementHoldResponse` · `ApiResponseNodePlacementHoldResponse` · `NodePlacementHoldRequest` · `NodePlacementHoldResponse`) | 경로 62 → 64 · 작업 83 → 88 · 스키마 575 → 579 · 기존 요청 · 응답 키 그대로 · 기존 작업의 operationId 그대로(새 작업은 `listHolds` · `createHold` · `getHold` · `updateHold` · `deleteHold`) · 원장이 비어 있으면 배치 결과 그대로 · 제외 사유 코드를 값 목록으로 싣는 곳(Swagger 열거값 · 이력 `exclusionCode` 필터의 400 문장)에 값 하나 추가 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 원장 화면이 없어 화면 수정 없음. 원장에 행이 있으면 후보 상세 · 배치 이력 · 실행 상세에 새 코드가 나오고 통합 권고에서 그 노드로 옮기는 권고가 빠짐 |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 PR 번호가 없던 변경이며, 병합된 뒤 다음 계약 변경 때 번호를 채웁니다.

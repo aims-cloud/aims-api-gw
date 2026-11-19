@@ -27,6 +27,11 @@ GET /api/v1/scheduler/node-exporter-mappings/candidates
 GET /api/v1/scheduler/node-exporter-mappings/{mappingId}
 PUT /api/v1/scheduler/node-exporter-mappings/{mappingId}
 DELETE /api/v1/scheduler/node-exporter-mappings/{mappingId}
+GET /api/v1/scheduler/node-placement-holds
+POST /api/v1/scheduler/node-placement-holds
+GET /api/v1/scheduler/node-placement-holds/{holdId}
+PUT /api/v1/scheduler/node-placement-holds/{holdId}
+DELETE /api/v1/scheduler/node-placement-holds/{holdId}
 GET /api/v1/scheduler/node-power-specs
 POST /api/v1/scheduler/node-power-specs
 GET /api/v1/scheduler/node-power-specs/{specId}

@@ -11,6 +11,7 @@ import com.innogrid.aims.scheduler.engine.constraint.ConstraintEvaluator;
 import com.innogrid.aims.scheduler.engine.model.ThermalModel;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
+import com.innogrid.aims.scheduler.repository.NodePlacementHoldRepository;
 import com.innogrid.aims.scheduler.repository.PlacementInputRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -44,6 +45,7 @@ public final class SchedulingServiceBuilder {
     private MdcLinkRepository links;
     private PlacementDispatchService dispatch;
     private MdcPowerBudgetRepository budgets;
+    private NodePlacementHoldRepository holds;
     private PlacementInputRepository placementInputs;
     private ThermalModel thermalModel;
 
@@ -70,6 +72,9 @@ public final class SchedulingServiceBuilder {
     /** MDC 전력 예산 원장을 붙인다. 붙이지 않으면 MDC 총량 제약이 걸리지 않는다. */
     public SchedulingServiceBuilder budgets(MdcPowerBudgetRepository v) { this.budgets = v; return this; }
 
+    /** 노드 배치 중지 원장을 붙인다. 붙이지 않으면 배치 중지 제약이 걸리지 않는다. */
+    public SchedulingServiceBuilder holds(NodePlacementHoldRepository v) { this.holds = v; return this; }
+
     /** 단건 배치 입력 저장을 붙인다. 붙이지 않으면 입력을 남기지 않는다. */
     public SchedulingServiceBuilder placementInputs(PlacementInputRepository v, ThermalModel thermal) {
         this.placementInputs = v;
@@ -86,6 +91,6 @@ public final class SchedulingServiceBuilder {
                 engines != null ? engines : new EngineRegistry(List.of(new WeightedScoreScheduler())),
                 evaluator != null ? evaluator : ConstraintEvaluator.withDefaults(),
                 properties != null ? properties : new SchedulerProperties(),
-                links, dispatch, budgets, placementInputs, thermalModel);
+                links, dispatch, budgets, placementInputs, thermalModel, holds);
     }
 }

@@ -127,7 +127,8 @@ class RunInputReplayRuleTest {
         RunInputCapture.Knobs knobs = new RunInputCapture.Knobs(RunInputCapture.MAPPER.readTree(power),
                 in.knobs().thermal(), in.knobs().network());
         return new RunInputCapture.RunInputs(in.formatVersion(), in.engineId(), in.capturedAt(), in.powerBudgetWatts(),
-                in.nodes(), in.excludedNodes(), in.workloads(), in.policy(), in.mdcBudgets(), in.links(), in.cooldowns(), knobs);
+                in.nodes(), in.excludedNodes(), in.workloads(), in.policy(), in.mdcBudgets(), in.links(),
+                in.placementHolds(), in.cooldowns(), knobs);
     }
 
     private static SchedulingHistory recorded(Long workloadId, String node, double score) {

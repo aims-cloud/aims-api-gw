@@ -11,6 +11,7 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
+import com.innogrid.aims.scheduler.model.NodePlacementHolds;
 import com.innogrid.aims.scheduler.model.NodeResource;
 
 /**
@@ -48,6 +49,12 @@ public class PlacementContext {
      * 원장에 값을 넣기 전까지 배치 동작이 이 기능 이전과 완전히 같다.
      */
     private MdcPowerBudgets mdcBudgets = MdcPowerBudgets.EMPTY;
+
+    /**
+     * 이번 실행이 보는 노드 배치 중지 원장 스냅샷. 비어 있으면 C7은 아무 노드도 막지 않는다 — 원장에 행을 넣기 전까지
+     * 배치 동작이 이 기능 이전과 같다.
+     */
+    private NodePlacementHolds placementHolds = NodePlacementHolds.EMPTY;
 
     private PlacementContext(List<NodeResource> nodes, SchedulingPolicy policy, ConstraintEvaluator evaluator) {
         this.nodes = nodes == null ? Collections.emptyList() : nodes;
@@ -110,6 +117,17 @@ public class PlacementContext {
         return mdcBudgets;
     }
 
+    /** 노드 배치 중지 스냅샷을 싣는다. null이면 빈 원장. */
+    public PlacementContext withPlacementHolds(NodePlacementHolds holds) {
+        this.placementHolds = holds == null ? NodePlacementHolds.EMPTY : holds;
+        return this;
+    }
+
+    /** 이번 실행의 노드 배치 중지 스냅샷. 원장이 비어 있으면 빈 값이다. */
+    public NodePlacementHolds placementHolds() {
+        return placementHolds;
+    }
+
     /**
      * 링크 반영 게이트 — 정책이 {@code affinityEnabled}이고 워크로드에 {@code dataMdcId}가 있을 때만 참.
      * 제약(C5)과 weighted 점수 혼합이 같은 조건을 봐야 하므로 한곳에 둔다.
@@ -139,13 +157,14 @@ public class PlacementContext {
     /**
      * 노드만 바꾼 새 컨텍스트 — 통합 권고가 노드 하나를 비워 보는 계산과, 온도 상한이 있는 저장 전 모의 실행이 쓴다. this는 바꾸지 않는다({@code with*}와 다르다).
      *
-     * <p>판정 입력(정책 · 링크 · MDC 예산 · 실행 단위 전력 예산 · 평가기의 설정과 냉각 대기 상태)을 그대로 잇고,
+     * <p>판정 입력(정책 · 링크 · MDC 예산 · 노드 배치 중지 · 실행 단위 전력 예산 · 평가기의 설정과 냉각 대기 상태)을 그대로 잇고,
      * 평가기는 냉각 대기를 새로 걸지 않는 사본이다. 수집 제외 목록은 진단 문구용이라 잇지 않는다.</p>
      */
     public PlacementContext sandbox(List<NodeResource> nodes) {
         return new PlacementContext(nodes, policy, evaluator.copyWithoutCooldownMarking())
                 .withLinkMatrix(linkMatrix)
                 .withMdcBudgets(mdcBudgets)
+                .withPlacementHolds(placementHolds)
                 .withPowerBudget(powerBudgetWatts);
     }
 

@@ -151,7 +151,7 @@ public final class BenchmarkContexts {
     }
 
     /**
-     * 기준 컨텍스트를 그대로 잇는 사본 — 노드 사본·정책에 더해 <b>제외 목록과 원장 스냅샷</b>까지 옮긴다.
+     * 기준 컨텍스트를 그대로 잇는 사본 — 노드 사본·정책에 더해 <b>제외 목록과 원장 스냅샷</b>(링크 · MDC 예산 · 노드 배치 중지)까지 옮긴다.
      *
      * <p>원장을 빠뜨리면 셀마다 제약이 달라진다. 링크 원장이 없으면 링크 단절 제약이 아무 노드도 막지
      * 않고, 전력 예산 원장이 없으면 MDC 합계 상한이 적용되지 않아 <b>벤치마크가 운영보다 느슨한 판</b>에서
@@ -163,6 +163,7 @@ public final class BenchmarkContexts {
         return build(source.nodes(), source.policy(), evaluator, source.linkMatrix())
                 .withExcluded(source.excludedNodes())
                 .withMdcBudgets(source.mdcBudgets())
+                .withPlacementHolds(source.placementHolds())
                 .withPowerBudget(source.powerBudgetWatts());
     }
 

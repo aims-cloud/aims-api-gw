@@ -12,9 +12,11 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
+import com.innogrid.aims.scheduler.model.NodePlacementHolds;
 import com.innogrid.aims.scheduler.model.ReservationJudgment;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
+import com.innogrid.aims.scheduler.repository.NodePlacementHoldRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
 
 /**
@@ -44,13 +46,17 @@ final class PlacementContextAssembler {
     /** 실행 계층 연동. null이면(직접 조립한 테스트 경로) 실행 중 워크로드의 시작 시각을 조회하지 않는다. */
     private final PlacementDispatchService dispatchService;
 
+    /** 노드 배치 중지 원장. null이면(직접 조립한 테스트 경로) 배치 중지 제약이 걸리지 않는다. */
+    private final NodePlacementHoldRepository holdRepository;
+
     PlacementContextAssembler(NodeResourceCollector nodeCollector,
                               ConstraintEvaluator constraintEvaluator,
                               WorkloadRepository workloadRepository,
                               SchedulerProperties properties,
                               MdcLinkRepository linkRepository,
                               MdcPowerBudgetRepository budgetRepository,
-                              PlacementDispatchService dispatchService) {
+                              PlacementDispatchService dispatchService,
+                              NodePlacementHoldRepository holdRepository) {
         this.nodeCollector = nodeCollector;
         this.constraintEvaluator = constraintEvaluator;
         this.workloadRepository = workloadRepository;
@@ -58,6 +64,7 @@ final class PlacementContextAssembler {
         this.linkRepository = linkRepository;
         this.budgetRepository = budgetRepository;
         this.dispatchService = dispatchService;
+        this.holdRepository = holdRepository;
     }
 
     /**
@@ -70,7 +77,8 @@ final class PlacementContextAssembler {
                 PlacementContext.of(snapshot.nodes(), policy, constraintEvaluator)
                         .withExcluded(snapshot.excluded())
                         .withLinkMatrix(loadLinkMatrix(policy))
-                        .withMdcBudgets(loadMdcBudgets());
+                        .withMdcBudgets(loadMdcBudgets())
+                        .withPlacementHolds(loadPlacementHolds());
         applyReservations(context);
         return context;
     }
@@ -93,6 +101,14 @@ final class PlacementContextAssembler {
      */
     private MdcPowerBudgets loadMdcBudgets() {
         return budgetRepository == null ? MdcPowerBudgets.EMPTY : MdcPowerBudgets.of(budgetRepository.findAll());
+    }
+
+    /**
+     * 노드 배치 중지 원장을 <b>실행당 1회</b> 읽는다. MDC 전력 예산처럼 정책 게이트가 없다 — 운영자가 직접 넣은 값이다.
+     * 원장이 비어 있으면 C7은 아무 노드도 막지 않으므로 배치 결과가 그대로다.
+     */
+    private NodePlacementHolds loadPlacementHolds() {
+        return holdRepository == null ? NodePlacementHolds.EMPTY : NodePlacementHolds.of(holdRepository.findAll());
     }
 
     /**

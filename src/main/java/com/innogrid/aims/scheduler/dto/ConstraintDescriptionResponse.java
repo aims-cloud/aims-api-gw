@@ -11,7 +11,7 @@ import java.util.List;
  * 데도 쓴다.</p>
  */
 public record ConstraintDescriptionResponse(
-        String code,            // C0 ~ C6
+        String code,            // C0 ~ C7 (C7 은 C0 다음, C1 앞에서 평가)
         String name,
         String description,
         String source,          // 임계값의 출처 (정책 필드 / 워크로드 필드 / 설정)
@@ -25,6 +25,11 @@ public record ConstraintDescriptionResponse(
                                 + "노드는 후보 목록에 넣지 않는다. 0 으로 채우면 빈 노드로 오판되기 때문이다. "
                                 + "제외된 노드는 진단 응답의 excludedNodes 와 배치 실패 사유에 표기된다.",
                         "메트릭 저장소 응답 (설정의 node-job 으로 대상 노드 선택)", false),
+                new ConstraintDescriptionResponse("C7", "노드 배치 중지",
+                        "운영자가 노드 배치 중지 원장에 올린 노드를 제외한다. C1 보다 앞에서 검사하므로 그 노드의 제외 사유는 "
+                                + "자원 부족이 아니라 배치 중지와 원장의 사유다. 이미 배치되거나 실행 중인 워크로드는 그대로이고, "
+                                + "자산 원장의 점검 상태는 읽지 않는다. 원장이 비어 있으면 아무 노드도 막지 않는다.",
+                        "노드 배치 중지 원장(/scheduler/node-placement-holds)의 nodeId", false),
                 new ConstraintDescriptionResponse("C1", "자원 가용성",
                         "예약분을 뺀 가용 CPU·메모리·GPU 가 워크로드 요구량 이상이어야 한다. "
                                 + "같은 실행에서 앞서 배치된 워크로드의 요구량도 예약으로 잡혀 있다. "

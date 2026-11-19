@@ -289,6 +289,23 @@ class RunInputCaptureTest {
                 RunInputCapture.MAPPER.writeValueAsString(written), "판 1 의 필드 이름·종류·순서가 바뀌었다");
     }
 
+    @DisplayName("형식 2 고정 픽스처를 읽어 다시 쓰면 같은 JSON 이다 — 배치 중지 목록의 이름 · 자리 · 행 필드가 바뀌면 저장해 둔 실행을 "
+            + "재생할 수 없다")
+    @Test
+    void format_2_fixture_round_trips() throws Exception {
+        String fixture;
+        try (var in = getClass().getResourceAsStream("/scheduler/replay/run-input-format-2.json")) {
+            fixture = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+
+        RunInputCapture.RunInputs read = RunInputCapture.read(fixture);
+
+        assertEquals(2, read.formatVersion());
+        assertEquals(List.of(new RunInputCapture.HoldRow("rpl-busy:9100", "점검")), read.placementHolds());
+        assertEquals(RunInputCapture.MAPPER.writeValueAsString(RunInputCapture.MAPPER.readTree(fixture)),
+                RunInputCapture.MAPPER.writeValueAsString(read), "판 2 의 필드 이름·종류·순서가 바뀌었다");
+    }
+
     // ── 단건 배치 입력 ─────────────────────────────────────────
 
     @DisplayName("단건 배치 1회에 입력 한 행 — 엔진은 요청과, 성공 여부·선택 노드는 응답과 같고, 저장한 입력을 다시 계산하면 같은 결정이 나온다")

@@ -14,6 +14,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuAllocationResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuGroupSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuInstanceInfoResponse;
@@ -59,7 +60,8 @@ public class ResourceExplorerVmGpuService {
                     Map.entry("gpuMemUtilAvgPercent", ListSort.by(VmGpuInstanceListItemResponse::gpuMemUtilAvgPercent)),
                     Map.entry("vramUsedGb", ListSort.by(VmGpuInstanceListItemResponse::vramUsedGb)),
                     Map.entry("vramAllocatedGb", ListSort.by(VmGpuInstanceListItemResponse::vramAllocatedGb)),
-                    Map.entry("collectStatus", ListSort.by(VmGpuInstanceListItemResponse::collectStatus)),
+                    Map.entry("collectStatus", ListSort.by(VmGpuInstanceListItemResponse::collectStatus,
+                            Comparator.comparing(MonitoringStatus::name))),   // 선언 순서가 아닌 이름순
                     Map.entry("recentAlarmCount", ListSort.by(VmGpuInstanceListItemResponse::recentAlarmCount))),
             Comparator.comparing(VmGpuInstanceListItemResponse::instanceName, GpuPanelAssembler::compareGpuName));
 

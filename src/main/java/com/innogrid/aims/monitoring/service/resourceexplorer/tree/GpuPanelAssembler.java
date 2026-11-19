@@ -49,8 +49,8 @@ public final class GpuPanelAssembler {
         return series.stream().map(s -> new Series(gpuName(s.index(), s.uuid()), s.points())).toList();
     }
 
-    public static String collectStatus(GpuSample gpu) {
-        return (gpu.collecting() ? MonitoringStatus.COLLECTING : MonitoringStatus.UNAVAILABLE).name();
+    public static MonitoringStatus collectStatus(GpuSample gpu) {
+        return gpu.collecting() ? MonitoringStatus.COLLECTING : MonitoringStatus.UNAVAILABLE;
     }
 
     /** 트리와 같은 표시 이름 — "GPU {인덱스}", 인덱스가 없으면 UUID */

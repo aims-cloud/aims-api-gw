@@ -1,5 +1,7 @@
 package com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu;
 
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
+
 /**
  * VM GPU 인스턴스 목록 1행.
  * instanceId 는 GPU UUID(트리 GPU 장치 노드의 resourceId), instanceName 은 트리와 같은 표시 이름("GPU 0").
@@ -16,7 +18,7 @@ public record VmGpuInstanceListItemResponse(
         Double gpuMemUtilAvgPercent,
         Double vramUsedGb,
         Double vramAllocatedGb,
-        String collectStatus,           // MonitoringStatus 이름 — COLLECTING | UNAVAILABLE
+        MonitoringStatus collectStatus, // COLLECTING | UNAVAILABLE
         Long recentAlarmCount           // GPU 알람이 GPU 단위로 기록되지 않아 null
 ) {
 }

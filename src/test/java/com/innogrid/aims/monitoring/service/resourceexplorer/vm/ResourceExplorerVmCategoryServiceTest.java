@@ -16,6 +16,7 @@ import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.cpu.VmCpuMetricTrendResponse;
@@ -120,7 +121,7 @@ class ResourceExplorerVmCategoryServiceTest {
         PageResponse<VmCpuListItemResponse> page = cpu.getCpuDevices(null, NS, INFRA, NODE, 1, 10, "socket,asc");
         assertThat(page.totalElements()).isEqualTo(2);
         assertThat(page.items()).extracting(VmCpuListItemResponse::socket).containsExactly(0, 1);
-        assertThat(page.items().get(0).collectStatus()).isEqualTo("COLLECTING");
+        assertThat(page.items().get(0).collectStatus()).isEqualTo(MonitoringStatus.COLLECTING);
         assertThat(page.items().get(0).threadCount()).isEqualTo(4);
 
         assertThat(cpu.getCpuDevices(null, NS, INFRA, NODE, 1, 1, "coreCount,desc").items())

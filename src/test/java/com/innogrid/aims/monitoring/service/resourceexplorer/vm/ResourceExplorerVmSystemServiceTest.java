@@ -20,6 +20,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemInfoR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostSystemMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostSystemMetricsQueryService.SystemInfo;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostSystemMetricsQueryService.SystemSummary;
@@ -128,12 +129,12 @@ class ResourceExplorerVmSystemServiceTest {
         assertThat(info.kernelRelease()).isEqualTo("5.15.0-113-generic");
         assertThat(info.architecture()).isEqualTo("x86_64");
         assertThat(info.bootTime()).isEqualTo(boot.atZone(ZoneId.systemDefault()).toOffsetDateTime());
-        assertThat(info.collectStatus()).isEqualTo("COLLECTING");
+        assertThat(info.collectStatus()).isEqualTo(MonitoringStatus.COLLECTING);
         assertThat(info.lastCollectedAt()).isEqualTo(sample.atZone(ZoneId.systemDefault()).toOffsetDateTime());
 
         when(metrics.info(SEL)).thenReturn(Optional.empty());
         SystemInfoResponse unavailable = service.getSystemInfo(null, NS, INFRA, VM);
-        assertThat(unavailable.collectStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(unavailable.collectStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
         assertThat(unavailable.hostname()).isNull();
         assertThat(unavailable.bootTime()).isNull();
         assertThat(unavailable.lastCollectedAt()).isNull();

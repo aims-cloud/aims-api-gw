@@ -19,6 +19,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSys
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
@@ -231,7 +232,7 @@ class ResourceExplorerNodeFileSystemServiceTest {
 
         assertThat(info.mountPath()).isEqualTo("/boot");
         assertThat(info.fsType()).isEqualTo("vfat");
-        assertThat(info.collectStatus()).isEqualTo("COLLECTING");
+        assertThat(info.collectStatus()).isEqualTo(MonitoringStatus.COLLECTING);
         assertThat(info.lastCollectedAt()).isEqualTo(SAMPLE_AT.atZone(ZoneId.systemDefault()).toOffsetDateTime());
 
         when(metrics.mount(NODE_SEL, "/missing")).thenReturn(Optional.empty());

@@ -24,6 +24,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSys
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountInfoResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountListItemResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.filesystem.FileSystemMountSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostFileSystemMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostFileSystemMetricsQueryService.MountUsage;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.MetricSelector;
@@ -228,7 +229,7 @@ class ResourceExplorerVmFileSystemServiceTest {
 
         assertThat(info.mountPath()).isEqualTo("/");
         assertThat(info.fsType()).isEqualTo("ext4");
-        assertThat(info.collectStatus()).isEqualTo("COLLECTING");
+        assertThat(info.collectStatus()).isEqualTo(MonitoringStatus.COLLECTING);
         assertThat(info.lastCollectedAt()).isEqualTo(OffsetDateTime.ofInstant(SAMPLE_AT, ZoneId.systemDefault()));
 
         assertThatThrownBy(() -> service.getMountInfo(null, NS, INFRA, VM, "/boot"))       // 목록엔 있어도 단건 표본이 없으면 404

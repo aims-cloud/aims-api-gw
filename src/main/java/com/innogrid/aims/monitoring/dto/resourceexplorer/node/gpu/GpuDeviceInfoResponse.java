@@ -2,6 +2,8 @@ package com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu;
 
 import java.time.OffsetDateTime;
 
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
+
 /**
  * 개별 GPU 개요 탭의 GPU 정보 표.
  * (화면 라벨은 "File system 정보" 로 표기돼 있으나 디자인 오타로 보고 GPU 정보로 정의)
@@ -17,7 +19,7 @@ public record GpuDeviceInfoResponse(
         String nvmlVersion,
         String vbiosVersion,
         String pState,                  // 예: 5 (P5)
-        String collectStatus,           // MonitoringStatus 이름 — 지금 수집 중이면 COLLECTING, 끊겼으면 UNAVAILABLE. TODO:: enum 전환 (CPU·File system 과 공통화)
+        MonitoringStatus collectStatus, // 지금 수집 중이면 COLLECTING, 끊겼으면 UNAVAILABLE
         OffsetDateTime lastCollectedAt
 ) {
 }

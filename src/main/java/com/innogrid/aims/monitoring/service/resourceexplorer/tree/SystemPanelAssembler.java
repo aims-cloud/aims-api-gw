@@ -50,13 +50,13 @@ public final class SystemPanelAssembler {
         SystemInfo i = info.get();
         return new SystemInfoResponse(i.hostname(), i.osName(), i.osVersion(), i.kernelRelease(), i.architecture(),
                 i.bootTimeSeconds() == null ? null : MetricFormat.toOffsetDateTime(Instant.ofEpochSecond(i.bootTimeSeconds())),
-                MonitoringStatus.COLLECTING.name(),
+                MonitoringStatus.COLLECTING,
                 MetricFormat.toOffsetDateTime(i.collectedAt()));
     }
 
     /** 값 없는 시스템 정보 표 — exporter 미등록(NOT_CONFIGURED) 또는 표본 없음(UNAVAILABLE) */
     public static SystemInfoResponse emptyInfo(MonitoringStatus status) {
-        return new SystemInfoResponse(null, null, null, null, null, null, status.name(), null);
+        return new SystemInfoResponse(null, null, null, null, null, null, status, null);
     }
 
     /** 모니터링 차트 — 조회 구간은 지금 기준 interval 기간, 버킷 간격은 기간별 defaultStep. 미수집이면 빈 시리즈 */

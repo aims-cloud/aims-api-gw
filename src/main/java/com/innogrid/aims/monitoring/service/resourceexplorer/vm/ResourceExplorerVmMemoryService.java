@@ -3,6 +3,7 @@ package com.innogrid.aims.monitoring.service.resourceexplorer.vm;
 import java.time.Instant;
 import java.util.List;
 
+import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.memory.VmMemoryMetricTrendResponse;
@@ -39,7 +40,7 @@ public class ResourceExplorerVmMemoryService {
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
-        var points = metrics.memoryTrend(metric, sel, from, to, step);
+        List<DataPoint> points = metrics.memoryTrend(metric, sel, from, to, step);
         return new VmMemoryMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("memory", points)));
     }

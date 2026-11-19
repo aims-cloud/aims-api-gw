@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 대상 화면: 지능형 예측 진단 > 스케줄러, 지능형 예측 진단 > 전력 최적화 진단
-- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 88개
+- 기준 코드: `com.innogrid.aims.scheduler` — 10장 변경 이력의 마지막 행 시점. 엔드포인트 89개
 - 관련 문서: docs/10 알람 API 프론트 계약(같은 형식), docs/06 자원 탐색기 트리 설계(역할 스코프), docs/14 배치 전략 비교 방법론(8장 비교 API 의 판·지표·판정 규칙이 왜 그렇게 정해졌는지와 기준 시점의 봉인 값)
 
 **필드 하나하나의 진실은 Swagger(`/swagger-ui/index.html`, `/v3/api-docs`)입니다.** 이 문서는 필드를 전수로 옮기지 않습니다. 대신 화면을 붙일 때 Swagger 만으로는 알기 어려운 것 — 경로 묶음, 공통 규칙, 값이 비는 조건, 오류가 나는 조건, 그리고 앞으로 바뀔 예정 — 을 적습니다. 필드 목록이 필요하면 Swagger 를 보고, 이 문서와 다르면 코드가 맞습니다.
@@ -250,7 +250,7 @@
 
 ---
 
-## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (30)
+## 3. 워크로드 · 노드 · 이력 — `/api/v1/scheduler` (31)
 
 진단 화면과 스케줄 화면이 함께 씁니다.
 
@@ -269,6 +269,7 @@
 | GET | `/nodes`, `/nodes/{nodeId}` | 노드 목록·상세(27필드 — 아래 GPU 축·디스크 축) |
 | GET | `/nodes/excluded` | 수집 실패로 후보에서 빠진 노드와 사유 |
 | GET | `/nodes/reservations` | 노드별 예약 내역 — 노드 예약으로 잡힌 배치 대기 · 실행 중 워크로드와 판정 · 예약량. `nodeId` 필터(읽기 전용 · 아래 **노드별 예약 내역**) |
+| GET | `/nodes/{nodeId}/drain-preview` | 노드 비우기 모의 배치 — 그 노드의 배치 대기 · 실행 중 워크로드를 나머지 노드에 차례로 놓아 봄. `engine`(읽기 전용 · 아래 **노드 비우기 모의 배치**) |
 | GET | `/nodes/power-efficiency` | 노드별 전력 효율 지표(코어 수를 반영한 효율 · 순위 포함 · 아래 주의 17) |
 | GET | `/nodes/{nodeId}/power-efficiency/trend` | 효율 추세. `from`, `to`, `step` |
 | GET | `/constraints` | 제약 조건 설명(C0~C7 · C7 노드 배치 중지는 C0 다음 행) |
@@ -342,6 +343,18 @@
 - **C1 디스크 검사와 같은 식입니다.** 디스크를 요구한 배치는 CPU·메모리·GPU 가 충분하고 `availableDiskGb < requiredDiskGb` 인 노드를 `INSUFFICIENT_DISK`("디스크 부족 (필요 NGB, 가용 NGB / 총량 NGB)")로 뺍니다. 그 문장의 가용·총량이 `availableDiskGb`·`diskCapacityGb` 이고 필요는 워크로드의 `requiredDiskGb` 입니다. CPU 등이 먼저 모자라면 `INSUFFICIENT_RESOURCE` 로 옵니다. 응답 값은 조회 시점이라 이력에 남은 배치 시점의 수와는 다를 수 있습니다.
 - **`diskCapacityGb = 0` 은 "여유 없음"이 아니라 "모름"입니다.** 그 노드는 디스크 때문에는 빠지지 않고(다른 제약은 그대로 · 주의 11 의 `디스크검사 0.0`), `availableDiskGb`·`diskUsagePercent` 도 0 입니다. 이 세 칸을 함께 "-" 로 두십시오. `reservedDiskGb` 는 총량을 모르는 노드에도 그 노드에 배치된 워크로드의 요구량이 더해지므로 값이 있을 수 있고, 가용 계산에는 쓰이지 않으니 그대로 보이면 됩니다. 총량이 있는데 가용이 0 이면 실제로 가득 찬 노드입니다(가용 시리즈가 빠져도 이렇게 보입니다).
 - CPU·메모리·GPU 처럼 총량·예약·가용 세 칸을 각 축의 제자리에 넣었습니다. 세 키가 한곳에 모이지 않고 세 군데(`totalGpu` 뒤 · `reservedGpu` 뒤 · 맨 끝)로 흩어지므로 JSON 키 순서에 의존하는 화면은 주의하십시오. 총량은 설정된 마운트 지점 하나(기본 `/`)의 시리즈이고, 다른 마운트는 세지 않습니다.
+
+**노드 비우기 모의 배치(`/nodes/{nodeId}/drain-preview`)** — 노드 한 대를 비운다고 할 때 그 노드의 워크로드를 나머지 노드가 함께 받을 수 있는지 미리 봅니다. 아무것도 옮기거나 저장하지 않고, 지금 화면이 부를 계획은 없습니다.
+
+- 대상은 노드별 예약 내역과 같은 규칙으로 응답의 `evaluatedAt` 시각에 판정한 그 노드의 행입니다(`FULL` · `GPU_ONLY` · `EXPIRED` 모두 — 노드를 비우려면 보존 기한이 지난 배치 대기도 풀어야 하므로 같은 규칙으로 놓아 봄). 따로 부른 노드별 예약 내역과는 판정 시각이 다를 수 있습니다. 놓는 곳은 그 노드를 뺀 수집 노드이고, 그 노드들의 기존 예약을 그대로 봅니다. `EXPIRED` 행도 실행 중보다 먼저 자리를 잡으므로, 더 쓰지 않을 `EXPIRED` 행은 배치 예약 취소 뒤 삭제하고 봐야 실행 중 워크로드의 결과가 실제보다 나쁘게 나오지 않습니다.
+- 배치 대기를 먼저, 실행 중을 다음에 놓고 같은 묶음 안은 우선순위 → 등록 순입니다. 성공한 건은 그 자리에 예약으로 쌓여 다음 건이 봅니다(워크로드 종류가 달라도 같은 노드를 봄).
+- 정책은 워크로드 종류마다 고릅니다(5장 순서 · `default` 행이 없어도 저장하지 않음). `engine` 을 주면 그 엔진, 비우면 그 정책의 기본 엔진 → `weighted` 이고, 모르는 이름은 **400** 입니다.
+- 제약 검사는 실제 배치와 같습니다 — 다른 노드의 배치 중지(C7) · 링크(C5 · 정책 `affinityEnabled` 일 때) · MDC 전력 예산(C6 · 합계에서 비울 노드는 빠짐) · 걸려 있는 냉각 대기. 냉각 대기를 새로 걸지 않습니다.
+- 보지 않는 것: 다른 대기 워크로드와의 경쟁, 호출 뒤의 노드 상태 변화, 스케줄이 지정한 정책 · 온도 상한 · 전력 상한(이것은 스케줄 모의 실행 `POST /schedules/{id}/dry-run` 으로 확인). 비운 노드의 전력은 MDC 전력 합계에서 뺍니다(통합 권고와 같은 가정). 스케줄러가 모르는 부하(워크로드로 등록되지 않은 것)는 옮겨 보지 않으므로 노드 사용률(`/nodes/{nodeId}`)을 함께 봅니다.
+- 다른 노드가 없으면 엔진을 부르지 않고 모든 행이 실패이며 사유는 「옮길 다른 노드가 없습니다」(수집 노드가 0이면 활성 노드 없음 사유)입니다. 대상이 한 실행 처리 상한(`max-workloads-per-run` · 기본 500)을 넘으면 앞부분만 평가하고 `truncated` true · `allPlaceable` false 입니다. 대상이 0건이면 `allPlaceable` 은 true 입니다.
+- 노드가 수집 후보 · 수집 제외 · 배치 대기/실행 중 워크로드의 배정 노드 · 배치 중지 원장 어디에도 없으면 **404** 입니다. 수집 제외이거나 수집되지 않았지만 배정 워크로드가 있는 노드는 200 이고 `collected` 가 false 입니다.
+- 실제로 옮기려면 먼저 노드 배치 중지(6장)로 그 노드를 새 배치에서 빼고, 배치 대기는 배치 예약 취소(주의 13)로 대기로 되돌립니다. 실행 중 워크로드는 실행 계층에서 끝내야 하므로 `allPlaceable` 이 true 여도 노드를 바로 꺼도 된다는 뜻이 아닙니다.
+- 호출마다 메트릭을 한 번 수집하므로 버튼 단위로 부릅니다. 응답 12필드 순서 고정 — `evaluatedAt`·`nodeId`·`collected`·`held`·`holdReason`·`otherNodeCount`·`workloadCount`·`placeableCount`·`truncated`·`allPlaceable`·`decisions`·`limitation`. `decisions` 행은 13필드이고 `success` · `selectedMdcId` · `selectedNodeId` · `finalScore` · `reason` · `exclusionCodes` 는 스케줄 모의 실행의 결정과 같은 뜻입니다.
 
 **노드별 예약 내역(`/nodes/reservations`)** — 노드 목록의 `reserved*` 가 어떤 워크로드로 이루어졌는지 보여 줍니다. 배치 대기(SCHEDULED) · 실행 중(RUNNING) 워크로드를 배치와 같은 규칙으로 판정해 노드마다 묶고, 행마다 예약량을, 노드마다 그 합을 줍니다. 저장하지 않고, 지금 화면이 부를 계획은 없습니다.
 
@@ -715,6 +728,7 @@
 |---|---|---|
 | 노드 목록 | 1건 | 모니터링 대상 노드가 백엔드가 도는 서버 하나뿐 |
 | 노드별 예약 내역 | 노드 1대(`localhost:9100`) · `EXPIRED` 1행 · 합계 0 | 워크로드 표의 유일한 행(id 1)이 2026-09-10 에 배치된 배치 대기라 보존 기한(24시간)이 지났다. 노드 목록의 `reserved*` 도 0 이다. 서버에는 `FULL` · `GPU_ONLY` 로 판정될 행이 없다 |
+| 노드 비우기 모의 배치 | `localhost:9100` · 대상 1행(id 1 · `EXPIRED`) · 실패 | 노드가 1대라 옮길 다른 노드가 없다(「옮길 다른 노드가 없습니다」). 다른 노드로 옮기는 결과는 노드가 둘 이상일 때만 나온다 |
 | 디스크 총량·가용 | 값 있음(총량 95 GB) | 노드 익스포터(`localhost:9100`)가 살아 있고 마운트 `/` 시리즈가 있다. 예약은 디스크를 요구한 워크로드가 없어 0 |
 | 전력·온도 | 0 | IPMI 타깃(`ipmi-exporter:9290`) down. 살아나도 `instance` 가 노드와 다르므로 익스포터 대응 원장에 적어야 이어진다 |
 | GPU 개수·사용률·온도·전력 | 0 | DCGM 타깃(`mdc1-gpu-node1:9400`) down. 살아나도 노드 `instance`(`localhost:9100`)와 호스트명이 달라 호스트명 일치가 걸리지 않는다 — 전력·온도와 마찬가지로 익스포터 대응 원장에 적어야 넷이 함께 이어진다 |
@@ -837,6 +851,7 @@
 | #200 | 2026-11-17 | Nova 인벤토리 | **Nova 인벤토리 모의 배치 추가** — `POST /inventory/nova/dry-run` 신설(작업 81 → 82 · 3장 「Nova 인벤토리 모의 배치」). 쓸 수 있는 하이퍼바이저를 빈 노드로 두고 그 위 VM 을 정책 상한(놓기 전 값)을 지키며 저장 없이 다시 놓아 보며, 기능 플래그 `aims.scheduler.inventory.simulation-enabled` 가 꺼져 있으면 `DISABLED` 입니다. 새 스키마 다섯(`ApiResponseNovaDryRunResponse` · `NovaDryRunResponse` · `NovaDryRunNode` · `NovaDryRunDecision` · `NovaDryRunExcluded`). `NovaInventoryNode` 의 필드 설명 넷 · 노드 설명과 `GET /inventory/nova` 설명 문구를 실제 값에 맞춤 | 경로 60 → 61 · 작업 81 → 82 · 기존 요청 · 응답 · DDL 그대로 · 새 설정 `aims.scheduler.inventory.simulation-enabled`(기본 false) · Swagger 는 새 경로 · 새 스키마 다섯 · 설명 문구 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
 | #202 | 2026-11-17 | Nova 인벤토리 | **모의 배치 노드 사용률 추가 · flavor 탓에 빈 대상은 조회 실패** — 노드에 `simulatedCpuUsagePercent` · `simulatedMemoryUsagePercent` · `overLimit`, 요약에 `overLimitNodeCount`(`hostChangedCount` 뒤). 쓸 수 있는 호스트 위 VM 의 flavor 를 못 읽어 다시 놓을 VM 이 0 이면 `NO_VMS` 대신 `INVENTORY_FAILED`(`inventoryStatus` `OK` · `vmCount` 0 · `excluded` 유지). 엔진 설명을 「노드 배치 스코어 식과 반올림 뒤 동점 여부가 엔진마다 달라 VM 별 결정은 다를 수 있음」으로 바로잡음 · `overLimit` 은 물리 총량 0 인 자원을 넘지 않은 것으로 봄(3장 「Nova 인벤토리 모의 배치」) | 경로 61 · 작업 82 · 스키마 571 그대로 · 응답에 키 넷 추가(기존 키 · 값 그대로, flavor 경우의 `status` · `message` 만 바뀜) · Swagger 는 새 속성 넷과 설명 문구 · DDL 그대로 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
 | #205 | 2026-11-18 | 워크로드 · 노드 | **노드별 예약 내역 조회 추가** — `GET /nodes/reservations` 신설(작업 82 → 83 · 3장 「노드별 예약 내역」). 배치 대기 · 실행 중 워크로드를 배치와 같은 규칙으로 `FULL` · `GPU_ONLY` · `EXPIRED` 로 판정해 노드마다 묶고, 행 예약량과 노드 합계 · 판정 시각 · 규칙 값 · 배정 노드 없는 수를 줍니다. 메트릭은 수집하지 않습니다. 새 스키마 넷(`ApiResponseNodeReservationsResponse` · `NodeReservationsResponse` · `NodeReservationsNode` · `NodeReservationsHeldWorkload`) | 경로 61 → 62 · 작업 82 → 83 · 스키마 571 → 575 · 기존 요청 · 응답 · DDL 그대로 · 배치 결과 그대로(예약 판정을 메서드로 옮기기만 함) · Swagger 는 새 경로와 새 스키마 넷 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 화면 수정 없음(화면은 이 경로를 부르지 않음) |
-| (이번) | 2026-11-19 | 노드 배치 중지 · 배치 결정 · 배치 이력 · 스케줄 실행 · 실행 이력 상세 · 통합 권고 · 제약 조건 설명 · 실행 재생 | **노드 배치 중지 원장 추가** — `/node-placement-holds` 신설(작업 83 → 88 · 6장 「노드 배치 중지」). 행이 있는 노드는 다음 배치부터 제약 평가의 맨 앞에서 빠지고, 제외 사유 코드에 `NODE_PLACEMENT_HOLD`(15번째) · `/constraints` 에 C7 행(C0 다음 · 7 → 8행)이 더해집니다. 실행 입력의 형식 판이 1 → 2(배치 중지 목록 `placementHolds` 추가 · 판 1 로 저장한 실행은 배치 중지 없음으로 재생 · 2장 「실행 입력 저장」 · 실행 재생 응답 `formatVersion` 설명도 판 1 · 2 로). 새 표 `node_placement_holds`(`deploy/sql/2026-11-19_node_placement_holds.sql`) · 새 스키마 넷(`ApiResponseListNodePlacementHoldResponse` · `ApiResponseNodePlacementHoldResponse` · `NodePlacementHoldRequest` · `NodePlacementHoldResponse`) | 경로 62 → 64 · 작업 83 → 88 · 스키마 575 → 579 · 기존 요청 · 응답 키 그대로 · 기존 작업의 operationId 그대로(새 작업은 `listHolds` · `createHold` · `getHold` · `updateHold` · `deleteHold`) · 원장이 비어 있으면 배치 결과 그대로 · 제외 사유 코드를 값 목록으로 싣는 곳(Swagger 열거값 · 이력 `exclusionCode` 필터의 400 문장)에 값 하나 추가 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 원장 화면이 없어 화면 수정 없음. 원장에 행이 있으면 후보 상세 · 배치 이력 · 실행 상세에 새 코드가 나오고 통합 권고에서 그 노드로 옮기는 권고가 빠짐 |
+| #208 | 2026-11-19 | 노드 배치 중지 · 배치 결정 · 배치 이력 · 스케줄 실행 · 실행 이력 상세 · 통합 권고 · 제약 조건 설명 · 실행 재생 | **노드 배치 중지 원장 추가** — `/node-placement-holds` 신설(작업 83 → 88 · 6장 「노드 배치 중지」). 행이 있는 노드는 다음 배치부터 제약 평가의 맨 앞에서 빠지고, 제외 사유 코드에 `NODE_PLACEMENT_HOLD`(15번째) · `/constraints` 에 C7 행(C0 다음 · 7 → 8행)이 더해집니다. 실행 입력의 형식 판이 1 → 2(배치 중지 목록 `placementHolds` 추가 · 판 1 로 저장한 실행은 배치 중지 없음으로 재생 · 2장 「실행 입력 저장」 · 실행 재생 응답 `formatVersion` 설명도 판 1 · 2 로). 새 표 `node_placement_holds`(`deploy/sql/2026-11-19_node_placement_holds.sql`) · 새 스키마 넷(`ApiResponseListNodePlacementHoldResponse` · `ApiResponseNodePlacementHoldResponse` · `NodePlacementHoldRequest` · `NodePlacementHoldResponse`) | 경로 62 → 64 · 작업 83 → 88 · 스키마 575 → 579 · 기존 요청 · 응답 키 그대로 · 기존 작업의 operationId 그대로(새 작업은 `listHolds` · `createHold` · `getHold` · `updateHold` · `deleteHold`) · 원장이 비어 있으면 배치 결과 그대로 · 제외 사유 코드를 값 목록으로 싣는 곳(Swagger 열거값 · 이력 `exclusionCode` 필터의 400 문장)에 값 하나 추가 · 증거 묶음 `entriesDigest` `412a1dddcb56` 그대로 · 원장 화면이 없어 화면 수정 없음. 원장에 행이 있으면 후보 상세 · 배치 이력 · 실행 상세에 새 코드가 나오고 통합 권고에서 그 노드로 옮기는 권고가 빠짐 |
+| (이번) | 2026-11-19 | 노드 | **노드 비우기 모의 배치 추가** — `GET /nodes/{nodeId}/drain-preview` 신설(작업 88 → 89 · 3장 「노드 비우기 모의 배치」). 노드 한 대를 비운다고 할 때 그 노드의 배치 대기 · 실행 중 워크로드(노드별 예약 내역의 행)를 나머지 노드에 배치 대기 먼저 · 우선순위 → 등록 순으로 놓아 보고, 성공한 건을 예약으로 쌓아 함께 들어가는지 돌려줍니다. 워크로드 종류마다 정책을 고르고 실제 배치와 같은 제약을 보며, 아무것도 저장하지 않고 냉각 대기를 새로 걸지 않습니다 | 경로 64 → 65 · 작업 88 → 89 · 기존 경로 · 응답 · operationId · DDL · 설정 그대로 · 화면 수정 필요 없음 |
 
 예정 항목은 착수 시점에 날짜를 채우고, PR 번호는 병합된 뒤 채웁니다. `(이번)` 은 작성 당시 PR 번호가 없던 변경이며, 병합된 뒤 다음 계약 변경 때 번호를 채웁니다.

@@ -7,6 +7,7 @@ import java.util.Map;
 
 import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.ListSort;
+import com.innogrid.aims.monitoring.dto.resource.MetricTrendResponse.DataPoint;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
@@ -75,7 +76,7 @@ public class ResourceExplorerVmCpuService {
         Instant to = Instant.now();
         Instant from = to.minus(interval.window());
         String step = interval.defaultStep();
-        var points = metrics.cpuTrend(metric, sel, from, to, step);
+        List<DataPoint> points = metrics.cpuTrend(metric, sel, from, to, step);
         return new VmCpuMetricTrendResponse(metric, metric.unit(), from.getEpochSecond(), to.getEpochSecond(), step,
                 points.isEmpty() ? List.of() : List.of(new Series("cpu", points)));
     }

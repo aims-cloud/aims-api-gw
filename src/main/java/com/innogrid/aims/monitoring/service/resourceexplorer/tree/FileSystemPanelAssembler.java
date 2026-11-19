@@ -125,7 +125,7 @@ public final class FileSystemPanelAssembler {
         return new FileSystemMountInfoResponse(
                 mount.mountPath(),
                 mount.fsType(),
-                MonitoringStatus.COLLECTING.name(),
+                MonitoringStatus.COLLECTING,
                 MetricFormat.toOffsetDateTime(mount.collectedAt()));
     }
 

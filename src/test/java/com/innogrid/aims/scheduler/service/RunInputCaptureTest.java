@@ -267,9 +267,9 @@ class RunInputCaptureTest {
         assertEquals(declaredFields(SchedulingPolicy.class, Set.of("id", "createdAt")), componentNames(RunInputCapture.PolicyRow.class));
     }
 
-    @DisplayName("형식 1 고정 픽스처를 읽어 다시 쓰면 같은 JSON 이다 — 형식 1 의 필드 이름·종류·순서가 바뀌면 저장해 둔 실행을 재생할 수 없다")
+    @DisplayName("형식 1 고정 픽스처를 지금 코드로 읽으면 판 1 · 배치 중지 없음이고, 그 밖의 필드 이름·종류·순서가 그대로다")
     @Test
-    void format_1_fixture_round_trips() throws Exception {
+    void format_1_fixture_reads_without_holds() throws Exception {
         String fixture;
         try (var in = getClass().getResourceAsStream("/scheduler/replay/run-input-format-1.json")) {
             fixture = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
@@ -277,9 +277,16 @@ class RunInputCaptureTest {
 
         RunInputCapture.RunInputs read = RunInputCapture.read(fixture);
 
-        assertEquals(RunInputCapture.FORMAT_VERSION, read.formatVersion());
+        assertEquals(1, read.formatVersion());
+        assertTrue(RunInputCapture.readable(read.formatVersion()), "판 1 은 지금 코드도 재생한다");
+        assertNull(read.placementHolds(), "판 1 에는 배치 중지 목록이 없다");
+        assertTrue(RunInputReplay.holds(read).isEmpty(), "재생은 판 1 을 배치 중지 없음으로 읽는다");
+        String rewritten = RunInputCapture.MAPPER.writeValueAsString(read);
+        tools.jackson.databind.node.ObjectNode written =
+                (tools.jackson.databind.node.ObjectNode) RunInputCapture.MAPPER.readTree(rewritten);
+        written.remove("placementHolds");
         assertEquals(RunInputCapture.MAPPER.writeValueAsString(RunInputCapture.MAPPER.readTree(fixture)),
-                RunInputCapture.MAPPER.writeValueAsString(read), "픽스처에 없는 필드·이름이 다른 필드·순서가 다른 필드가 있다");
+                RunInputCapture.MAPPER.writeValueAsString(written), "판 1 의 필드 이름·종류·순서가 바뀌었다");
     }
 
     // ── 단건 배치 입력 ─────────────────────────────────────────

@@ -15,7 +15,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record ScheduleRunReplayResponse(
         @Schema(description = "실행 PK")
         Long runId,
-        @Schema(description = "저장한 입력의 형식 판. 지금 재생할 수 있는 판은 1뿐이다")
+        @Schema(description = "저장한 입력의 형식 판. 지금 재생할 수 있는 판은 1 · 2이고, 판 1은 배치 중지 목록 없이 재생한다")
         int formatVersion,
         @Schema(description = "입력을 저장한 시각(UTC) — 배치 루프 직전")
         OffsetDateTime capturedAt,

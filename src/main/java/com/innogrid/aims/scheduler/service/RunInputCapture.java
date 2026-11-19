@@ -22,6 +22,7 @@ import com.innogrid.aims.scheduler.entity.SchedulingPolicy;
 import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
+import com.innogrid.aims.scheduler.model.NodePlacementHolds;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.repository.ScheduleRunInputRepository;
 
@@ -33,7 +34,7 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p><b>담는 것</b>: 배치 루프 직전의 노드 상태(예약 반영 뒤 · 선언 필드 전부, 수집 순서 그대로 — 엔진은 동점이면 앞 노드를
  * 고른다)·수집에서 빠진 노드·대상 워크로드(배치 순서 그대로)·정책 사본(스케줄의 온도 상한을 덮어쓴 뒤)·실행 전력 상한·MDC
- * 예산·링크 원장·냉각 대기·엔진 노브(전력·열·네트워크 설정 전부).</p>
+ * 예산·링크 원장·노드 배치 중지 원장(판 2부터)·냉각 대기·엔진 노브(전력·열·네트워크 설정 전부).</p>
  *
  * <p><b>모은 그 자리에서 문자열로 바꾼다</b>. 루프는 노드 예약을 제자리에서 바꾸고 냉각 대기를 새로 건다 — 참조만 들고 있다가
  * 나중에 바꾸면 이번 실행의 예약과 대기가 섞여 들어간다.</p>
@@ -47,8 +48,16 @@ import tools.jackson.databind.json.JsonMapper;
  */
 final class RunInputCapture {
 
-    /** payload 형식 판. 담는 항목이 바뀌면 올린다. */
-    static final int FORMAT_VERSION = 1;
+    /**
+     * payload 형식 판. 담는 항목이 바뀌면 올린다 — 판 2는 판 1에 노드 배치 중지 목록({@code placementHolds})을 더했다.
+     * 판을 올리지 않고 필드만 더하면, 옛 코드는 모르는 키를 오류 없이 버려 중지 목록을 뺀 채 재생하고 원인 없는 불일치를 낸다.
+     */
+    static final int FORMAT_VERSION = 2;
+
+    /** 지금 코드가 재생할 수 있는 판인지. 판 1은 배치 중지 목록이 없는 입력으로 읽는다(그때는 그 원장이 없었다). */
+    static boolean readable(int formatVersion) {
+        return formatVersion == 1 || formatVersion == FORMAT_VERSION;
+    }
 
     static final JsonMapper MAPPER = JsonMapper.builder().build();
 
@@ -88,6 +97,7 @@ final class RunInputCapture {
                 PolicyRow.of(context.policy()),
                 new TreeMap<>(context.mdcBudgets().budgetByMdc()),
                 linksOf(context.linkMatrix()),
+                holdsOf(context.placementHolds()),
                 cooldownsOf(thermalModel.cooldownMarks()),
                 new Knobs(MAPPER.valueToTree(properties.getPower()), MAPPER.valueToTree(properties.getThermal()),
                         MAPPER.valueToTree(properties.getNetwork())));
@@ -114,6 +124,13 @@ final class RunInputCapture {
         return rows;
     }
 
+    /** 노드 배치 중지 목록 — 노드 id 순(스냅샷이 이미 정렬돼 있다). */
+    private static List<HoldRow> holdsOf(NodePlacementHolds holds) {
+        List<HoldRow> rows = new ArrayList<>();
+        holds.reasonByNode().forEach((nodeId, reason) -> rows.add(new HoldRow(nodeId, reason)));
+        return rows;
+    }
+
     private static List<CooldownRow> cooldownsOf(Map<String, Map<Double, Instant>> marks) {
         List<CooldownRow> rows = new ArrayList<>();
         marks.forEach((nodeId, byLimit) -> byLimit.forEach((limit, since) -> rows.add(new CooldownRow(nodeId, limit, since))));
@@ -121,13 +138,16 @@ final class RunInputCapture {
         return rows;
     }
 
-    // ── 형식 1 ──────────────────────────────────────────────────
+    // ── 형식 2(판 1 + 노드 배치 중지) ───────────────────────────
 
-    /** 한 회차의 배치 입력. 목록은 모두 순서가 의미를 갖거나 정렬해 둔 것이다. */
+    /**
+     * 한 회차의 배치 입력. 목록은 모두 순서가 의미를 갖거나 정렬해 둔 것이다. {@code placementHolds}는 판 2부터 있고,
+     * 판 1 입력을 읽으면 null이다 — 재생은 이를 빈 목록으로 다룬다.
+     */
     record RunInputs(int formatVersion, String engineId, Instant capturedAt, Double powerBudgetWatts,
                      List<NodeRow> nodes, List<ExcludedNode> excludedNodes, List<WorkloadRow> workloads,
                      PolicyRow policy, Map<String, Double> mdcBudgets, List<LinkRow> links,
-                     List<CooldownRow> cooldowns, Knobs knobs) {}
+                     List<HoldRow> placementHolds, List<CooldownRow> cooldowns, Knobs knobs) {}
 
     /** {@link NodeResource}의 선언 필드 전부. 이름을 필드와 같게 둔다 — 빠진 필드를 테스트가 반사로 잡는다. */
     record NodeRow(String mdcId, String nodeId, int totalCpu, long totalMemoryMb, int totalGpu,
@@ -182,6 +202,9 @@ final class RunInputCapture {
     /** 링크 원장 한 쌍. 정책의 링크 게이트가 꺼진 실행은 원장을 읽지 않아 비어 있다. */
     record LinkRow(String mdcA, String mdcB, double latencyMs, Double bandwidthMbps, Double packetLossPercent,
                    MdcLink.LinkStatus status) {}
+
+    /** 노드 배치 중지 한 건 — 노드 id 와 사유(없으면 빈 문자열). */
+    record HoldRow(String nodeId, String reason) {}
 
     /** 냉각 대기 한 건 — 그 대기를 건 온도 상한과 시작 시각. 만료 정리 전 그대로다. */
     record CooldownRow(String nodeId, double limitCelsius, Instant since) {}

@@ -121,7 +121,7 @@ class ScheduleRunReplayApiTest {
         }
     }
 
-    @DisplayName("실행 중인 실행·형식 판 2·지문이 다른 입력·지금 코드로 읽을 수 없는 입력은 409 다")
+    @DisplayName("실행 중인 실행·모르는 형식 판 3·지문이 다른 입력·지금 코드로 읽을 수 없는 입력은 409 다")
     @Test
     void replay_of_running_run_unknown_format_or_altered_payload_is_409() throws Exception {
         String payload = fixture();
@@ -129,8 +129,8 @@ class ScheduleRunReplayApiTest {
         try {
             long running = runRepository.save(new ScheduleRun(scheduleId, "rpl", ScheduleRun.TriggerType.MANUAL, "tester")).getId();
             inputRepository.save(input(running, 1, digest(payload), payload));
-            long version2 = finishedRun(scheduleId);
-            inputRepository.save(input(version2, 2, digest(payload), payload));
+            long unknownVersion = finishedRun(scheduleId);
+            inputRepository.save(input(unknownVersion, 3, digest(payload), payload));
             long altered = finishedRun(scheduleId);
             inputRepository.save(input(altered, 1, digest(payload), payload.replace("rpl-w1", "rpl-w2")));
             long unreadable = finishedRun(scheduleId);   // 지문은 맞지만 지금 코드에 없는 열거값 — 처리하지 않으면 본문 없는 403이 된다
@@ -138,7 +138,7 @@ class ScheduleRunReplayApiTest {
             assertNotEquals(payload, unknownState);
             inputRepository.save(input(unreadable, 1, digest(unknownState), unknownState));
 
-            for (long runId : List.of(running, version2, altered, unreadable)) {
+            for (long runId : List.of(running, unknownVersion, altered, unreadable)) {
                 mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + runId + "/replay")).andExpect(status().isConflict());
             }
         } finally {
@@ -183,7 +183,7 @@ class ScheduleRunReplayApiTest {
         }
     }
 
-    @DisplayName("엔진별 재계산도 입력 없는 실행·다른 스케줄의 실행은 404, 실행 중·형식 판 2·지문이 다른 입력은 409 다")
+    @DisplayName("엔진별 재계산도 입력 없는 실행·다른 스케줄의 실행은 404, 실행 중·모르는 형식 판 3·지문이 다른 입력은 409 다")
     @Test
     void engine_replay_shares_replay_errors() throws Exception {
         String payload = fixture();
@@ -198,11 +198,11 @@ class ScheduleRunReplayApiTest {
 
             long running = runRepository.save(new ScheduleRun(scheduleId, "rpl", ScheduleRun.TriggerType.MANUAL, "tester")).getId();
             inputRepository.save(input(running, 1, digest(payload), payload));
-            long version2 = finishedRun(scheduleId);
-            inputRepository.save(input(version2, 2, digest(payload), payload));
+            long unknownVersion = finishedRun(scheduleId);
+            inputRepository.save(input(unknownVersion, 3, digest(payload), payload));
             long altered = finishedRun(scheduleId);
             inputRepository.save(input(altered, 1, digest(payload), payload.replace("rpl-w1", "rpl-w2")));
-            for (long runId : List.of(running, version2, altered)) {
+            for (long runId : List.of(running, unknownVersion, altered)) {
                 mockMvc.perform(get(BASE + "/" + scheduleId + "/runs/" + runId + "/replay/engines")).andExpect(status().isConflict());
             }
         } finally {

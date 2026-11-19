@@ -96,7 +96,7 @@ class ExclusionCodeTest {
             assertEquals(power.contains(r), r.isPower(), r + " 의 전력 묶음 판정");
             assertFalse(r.isThermal() && r.isPower(), r + " 가 두 묶음에 동시에 들었다");
         }
-        assertEquals(14, ExclusionReason.values().length, "까닭을 더하거나 빼면 이 수와 묶음 판정을 함께 본다");
+        assertEquals(15, ExclusionReason.values().length, "까닭을 더하거나 빼면 이 수와 묶음 판정을 함께 본다");
     }
 
     @DisplayName("검사마다 제 까닭이 붙는다")

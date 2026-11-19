@@ -16,6 +16,7 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.ExcludedNode;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
+import com.innogrid.aims.scheduler.model.NodePlacementHolds;
 import com.innogrid.aims.scheduler.model.NodeResource;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -78,6 +79,7 @@ class BenchmarkContextsTest {
                 .withExcluded(List.of(new ExcludedNode("mdc-01", "node-z", List.of("cpu사용률"))))
                 .withLinkMatrix(LinkMatrix.of(List.of(new MdcLink("mdc-01", "mdc-02", 20))))
                 .withMdcBudgets(new MdcPowerBudgets(Map.of("mdc-01", 4000.0)))
+                .withPlacementHolds(new NodePlacementHolds(Map.of("node-a", "점검")))
                 .withPowerBudget(700.0);
 
         PlacementContext carried = BenchmarkContexts.copyOf(source, evaluator());
@@ -86,6 +88,7 @@ class BenchmarkContextsTest {
         assertEquals(List.of("node-z"), carried.excludedNodes().stream().map(ExcludedNode::nodeId).toList());
         assertEquals(1, carried.linkMatrix().size(), "링크 원장을 빠뜨리면 링크 제약이 아무 노드도 막지 않는다");
         assertEquals(1, carried.mdcBudgets().size(), "예산 원장을 빠뜨리면 MDC 합계 상한이 적용되지 않는다");
+        assertTrue(carried.placementHolds().isHeld("node-a"), "배치 중지 원장을 빠뜨리면 중지한 노드가 판에서 후보로 돌아온다");
         assertNotNull(carried.powerBudgetWatts(), "실행 단위 전력 예산도 함께 이어야 한다");
         assertEquals(700.0, carried.powerBudgetWatts().doubleValue(), 1e-9);
         assertEquals(3, carried.nodes().size());
@@ -96,6 +99,7 @@ class BenchmarkContextsTest {
         assertTrue(bare.excludedNodes().isEmpty());
         assertSame(LinkMatrix.EMPTY, bare.linkMatrix());
         assertSame(MdcPowerBudgets.EMPTY, bare.mdcBudgets());
+        assertSame(NodePlacementHolds.EMPTY, bare.placementHolds());
     }
 
     // ── 평가기 ────────────────────────────────────────────────

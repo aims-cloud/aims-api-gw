@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
@@ -35,6 +36,7 @@ import com.innogrid.aims.scheduler.entity.Workload;
 import com.innogrid.aims.scheduler.model.GpuTelemetry;
 import com.innogrid.aims.scheduler.model.LinkMatrix;
 import com.innogrid.aims.scheduler.model.MdcPowerBudgets;
+import com.innogrid.aims.scheduler.model.NodePlacementHolds;
 import com.innogrid.aims.scheduler.model.NodeResource;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 
@@ -113,7 +115,8 @@ final class RunInputReplay {
                 .withPowerBudget(in.powerBudgetWatts())
                 .withExcluded(in.excludedNodes())
                 .withLinkMatrix(LinkMatrix.of(links))
-                .withMdcBudgets(new MdcPowerBudgets(in.mdcBudgets()));
+                .withMdcBudgets(new MdcPowerBudgets(in.mdcBudgets()))
+                .withPlacementHolds(holds(in));
         SchedulingEngine engine = switch (engineId) {
             case "weighted" -> new WeightedScoreScheduler(power, thermal, network);
             case "power" -> new PowerAwareScheduler(power, thermal, network, props);
@@ -121,6 +124,16 @@ final class RunInputReplay {
             default -> throw new IllegalArgumentException("재생할 수 없는 엔진: " + engineId);
         };
         return new Rebuilt(props, thermal, context, engine);
+    }
+
+    /** 저장한 배치 중지 목록. 판 1 입력은 이 목록이 없어(null) 빈 값이다 — 그때는 그 원장이 없었다. */
+    static NodePlacementHolds holds(RunInputCapture.RunInputs in) {
+        if (in.placementHolds() == null || in.placementHolds().isEmpty()) return NodePlacementHolds.EMPTY;
+        Map<String, String> byNode = new TreeMap<>();
+        for (RunInputCapture.HoldRow h : in.placementHolds()) {
+            byNode.put(h.nodeId(), h.reason() == null ? "" : h.reason());
+        }
+        return new NodePlacementHolds(byNode);
     }
 
     /**

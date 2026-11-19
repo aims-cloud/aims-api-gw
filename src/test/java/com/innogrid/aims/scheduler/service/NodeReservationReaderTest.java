@@ -52,7 +52,7 @@ class NodeReservationReaderTest {
     private final WorkloadRepository workloadRepository = mock(WorkloadRepository.class);
     private final PlacementDispatchService dispatch = mock(PlacementDispatchService.class);
     private final PlacementContextAssembler assembler = new PlacementContextAssembler(
-            null, null, workloadRepository, new SchedulerProperties(), null, null, dispatch);
+            null, null, workloadRepository, new SchedulerProperties(), null, null, dispatch, null);
 
     // ── 판정 끝값 ──────────────────────────────────────────────
 

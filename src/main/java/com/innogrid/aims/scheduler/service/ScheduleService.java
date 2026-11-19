@@ -332,7 +332,7 @@ public class ScheduleService {
         ScheduleRunInput input = inputRepository.findByScheduleRunId(run.getId())
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND,
                         "저장한 입력이 없는 실행입니다(입력 저장 전 실행·배치 전에 끝난 실행·저장 실패): " + runId));
-        if (input.getFormatVersion() != RunInputCapture.FORMAT_VERSION) {
+        if (!RunInputCapture.readable(input.getFormatVersion())) {
             throw new BusinessException(HttpStatus.CONFLICT, "재생할 수 없는 입력 형식 판입니다: " + input.getFormatVersion());
         }
         // 아래 검사들은 처리하지 않은 예외가 본문 없는 403으로 나가지 않게 한다 — 읽지 못한 입력은 409, 그 밖은 사유를 실은 500

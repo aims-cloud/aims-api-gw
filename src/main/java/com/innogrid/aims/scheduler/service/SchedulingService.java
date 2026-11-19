@@ -33,6 +33,7 @@ import com.innogrid.aims.scheduler.model.PolicyChoice;
 import com.innogrid.aims.scheduler.model.SchedulingResult;
 import com.innogrid.aims.scheduler.repository.MdcLinkRepository;
 import com.innogrid.aims.scheduler.repository.MdcPowerBudgetRepository;
+import com.innogrid.aims.scheduler.repository.NodePlacementHoldRepository;
 import com.innogrid.aims.scheduler.repository.PlacementInputRepository;
 import com.innogrid.aims.scheduler.repository.SchedulingPolicyRepository;
 import com.innogrid.aims.scheduler.repository.WorkloadRepository;
@@ -102,7 +103,8 @@ public class SchedulingService {
                              PlacementDispatchService dispatchService,
                              MdcPowerBudgetRepository budgetRepository,
                              PlacementInputRepository inputRepository,
-                             ThermalModel thermalModel) {
+                             ThermalModel thermalModel,
+                             NodePlacementHoldRepository holdRepository) {
         this.workloadRepository = workloadRepository;
         this.policyRepository = policyRepository;
         this.placementService = placementService;
@@ -110,7 +112,7 @@ public class SchedulingService {
         this.properties = properties;
         this.dispatchService = dispatchService;
         this.contextAssembler = new PlacementContextAssembler(nodeCollector, constraintEvaluator, workloadRepository,
-                properties, linkRepository, budgetRepository, dispatchService);
+                properties, linkRepository, budgetRepository, dispatchService, holdRepository);
         this.nodeReader = new NodeSnapshotReader(contextAssembler, constraintEvaluator);
         this.reservationReader = new NodeReservationReader(contextAssembler);
         this.policyResolver = new PolicyResolver(policyRepository);

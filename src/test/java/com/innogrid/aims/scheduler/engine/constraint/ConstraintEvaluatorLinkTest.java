@@ -70,8 +70,8 @@ class ConstraintEvaluatorLinkTest {
     @Test
     void c5_listed_after_power() {
         List<ConstraintDescriptionResponse> all = ConstraintDescriptionResponse.all();
-        assertEquals(7, all.size());   // C6 MDC 전력 예산이 뒤에 붙어 C5는 더 이상 마지막이 아니다
-        ConstraintDescriptionResponse c5 = all.get(5);
+        assertEquals(8, all.size());   // C7 노드 배치 중지가 C0 다음에 들어와 C5는 일곱째 자리다
+        ConstraintDescriptionResponse c5 = all.get(6);
         assertEquals("C5", c5.code());
         assertTrue(c5.togglable());
         assertTrue(c5.description().contains("affinityEnabled"));

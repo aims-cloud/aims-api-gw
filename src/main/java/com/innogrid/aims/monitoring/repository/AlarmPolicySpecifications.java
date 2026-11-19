@@ -9,6 +9,7 @@ import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmLevel;
 import com.innogrid.aims.monitoring.dto.alarm.alarmPolicy.AlarmTargetScope;
 import com.innogrid.aims.monitoring.entity.AlarmPolicy;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -53,7 +54,7 @@ public final class AlarmPolicySpecifications {
             }
             if (notBlank(resourceId)) {
                 Subquery<Long> individual = query.subquery(Long.class);
-                var sub = individual.from(AlarmPolicy.class);
+                Root<AlarmPolicy> sub = individual.from(AlarmPolicy.class);
                 individual.select(sub.get("id"))
                         .where(cb.equal(sub.join("targetResourceIds"), resourceId.trim()));
                 p.add(cb.or(cb.equal(root.get("targetScope"), AlarmTargetScope.ALL), root.get("id").in(individual)));

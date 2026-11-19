@@ -20,7 +20,6 @@ import com.innogrid.aims.monitoring.repository.AgentNodeRepository;
 import com.innogrid.aims.monitoring.repository.CollectServiceRepository;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.agent.CollectTargetsBuilder.Targets;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;

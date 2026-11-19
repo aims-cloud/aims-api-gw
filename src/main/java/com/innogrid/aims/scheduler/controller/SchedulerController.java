@@ -14,6 +14,7 @@ import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
+import com.innogrid.aims.scheduler.dto.NodeReservationsResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyTrendResponse;
@@ -313,6 +314,25 @@ public class SchedulerController {
     public ApiResponse<List<ExcludedNodeResponse>> getExcludedNodes() {
         return ApiResponse.ok(schedulingService.nodeSnapshot().excludedNodes().stream()
                 .map(ExcludedNodeResponse::from).toList());
+    }
+
+    @Operation(summary = "노드별 예약 내역",
+               description = "배치가 노드 예약으로 잡는 워크로드(배치 대기 · 실행 중)를 노드마다 묶어 판정(FULL · GPU_ONLY · EXPIRED)과 "
+                       + "예약량을 보여 줍니다. 노드 목록(/nodes)의 reserved* 가 어떤 워크로드로 이루어졌는지 확인하는 경로입니다. "
+                       + "메트릭을 수집하지 않고 워크로드와 전달 기록만 읽습니다. 노드 목록은 메트릭을 수집한 노드의 예약만 세므로, "
+                       + "수집되지 않은 노드의 행은 여기에만 나옵니다. 같은 워크로드는 /workloads/page(status · assignedNodeId 필터)로도 "
+                       + "볼 수 있지만, 여기서는 보존 기한 · 메트릭 지연 · GPU 만 남기는 규칙과 전달 기록의 시작 시각을 적용한 결과를 줍니다. "
+                       + "보존 기한이 지난 배치 대기(EXPIRED)는 자원을 묶지 않지만 SCHEDULED 로 남습니다. 배치 예약 취소"
+                       + "(POST /workloads/{workloadId}/release)는 대기로 되돌려 이 목록에서 빼며 다음 스케줄 실행이 다시 배치할 수 "
+                       + "있으므로, 더 쓰지 않을 워크로드는 되돌린 뒤 삭제합니다. 실행이 끝났는데 RUNNING 으로 남은 행은 GPU 를 "
+                       + "계속 잡으므로 실행 계층에서 확인한 뒤 상태 변경(PATCH /workloads/{workloadId}/status)으로 끝냅니다. "
+                       + "ID 가 reservations 인 노드는 /nodes/{nodeId} 로 조회할 수 없습니다"
+                       + "(/nodes/excluded · /nodes/power-efficiency 와 같음).")
+    @GetMapping("/nodes/reservations")
+    public ApiResponse<NodeReservationsResponse> getNodeReservations(
+            @Parameter(description = "이 노드의 행만(앞뒤 공백은 뺀 값과 정확히 일치). 없는 노드면 빈 배열, 비우면 전체")
+            @RequestParam(required = false) String nodeId) {
+        return ApiResponse.ok(schedulingService.nodeReservations(nodeId));
     }
 
     @Operation(summary = "노드 단건 자원 현황",

@@ -11,6 +11,7 @@ import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.common.log.PortalLog;
 import com.innogrid.aims.monitoring.dto.log.PortalLogType;
 import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
+import com.innogrid.aims.scheduler.dto.DraftCapacityResponse;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
@@ -296,6 +297,26 @@ public class SchedulerController {
     public ApiResponse<SchedulingResult> dryRunDraft(@RequestBody WorkloadRequest request,
                                                      @RequestParam(required = false) String engine) {
         return ApiResponse.ok(schedulingService.dryRun(workloadService.draft(request), engine));
+    }
+
+    @Operation(summary = "워크로드 수용 개수 모의 배치",
+               description = "워크로드 생성 폼 값 하나를 지금 노드에 차례로 놓아 몇 개까지 들어가는지 셉니다 — 들어갈 때마다 그 노드에 예약으로 "
+                       + "쌓고, 처음 들어가지 못하거나 한 번에 세는 상한(max-workloads-per-run)까지 들어가면 멈춥니다. "
+                       + "검증 · 사유 문구는 생성과 같고, 종류를 비우면 VM 으로 읽어 정책을 고릅니다(정책이 하나도 없어도 default 를 저장하지 않음). "
+                       + "다른 워크로드의 기존 예약 · 노드 배치 중지 · MDC 전력 예산 · 링크 제약 · 걸려 있는 냉각 대기는 실제 배치와 같게 봅니다. "
+                       + "들어갈 수 있는지는 엔진과 관계없이 같은 제약으로 판정하므로, MDC 전력 예산이 없고 상한 전에 멈췄다면 엔진은 놓는 순서만 "
+                       + "바꾸고 개수(총 개수 · 노드별 개수)는 같습니다. MDC 전력 예산이 있으면 놓는 순서에 따라 개수가 달라질 수 있습니다. "
+                       + "CPU · 메모리 사용률 상한은 놓기 전 값으로 보므로 마지막으로 놓은 개수에서는 상한을 넘을 수 있고, "
+                       + "디스크 총량을 모르는 노드는 디스크로 막지 않습니다. "
+                       + "워크로드 · 배치 이력 · 정책을 쓰지 않고, 저장 전 모의 배치(POST /workloads/dry-run)와 달리 냉각 대기를 새로 걸지 않습니다. "
+                       + "호출 시점의 여유 개수이며 예측이 아닙니다. 호출마다 메트릭을 한 번 수집하므로 버튼 단위로 부릅니다. 모르는 engine 은 400.")
+    @PostMapping("/workloads/dry-run/capacity")
+    public ApiResponse<DraftCapacityResponse> previewDraftCapacity(
+            @RequestBody WorkloadRequest request,
+            @Parameter(description = "weighted · power · temperature. 비우면 적용 정책의 기본 엔진(defaultEngine), "
+                    + "그것도 없으면 weighted")
+            @RequestParam(required = false) String engine) {
+        return ApiResponse.ok(schedulingService.draftCapacity(workloadService.draft(request), engine));
     }
 
     // ── 노드 자원 현황 ──────────────────────────────────────────

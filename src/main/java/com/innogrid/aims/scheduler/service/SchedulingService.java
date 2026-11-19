@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
+import com.innogrid.aims.scheduler.dto.DraftCapacityResponse;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.NodeDrainPreviewResponse;
 import com.innogrid.aims.scheduler.dto.NodeReservationsResponse;
@@ -80,6 +81,9 @@ public class SchedulingService {
     /** 노드 비우기 모의 배치. 빈이 아니라 여기서 만든다 — 조립과 같은 예약 판정 · 저장 없는 정책 선택 · {@link #evaluateIn}을 쓴다. */
     private final NodeDrainPreviewer drainPreviewer;
 
+    /** 워크로드 수용 개수 모의 배치. 빈이 아니라 여기서 만든다 — 조립과 같은 컨텍스트 · 저장 없는 정책 선택을 쓴다. */
+    private final DraftCapacityPreviewer capacityPreviewer;
+
     /** 워크로드 상태 변경(일괄 재개 · 상태 전이 · 예약 취소). 빈이 아니라 여기서 만든다 — 트랜잭션은 이 서비스의 공개 메서드가 연다. */
     private final WorkloadStatusChanger statusChanger;
 
@@ -123,6 +127,8 @@ public class SchedulingService {
         this.policyResolver = new PolicyResolver(policyRepository);
         this.drainPreviewer = new NodeDrainPreviewer(contextAssembler, constraintEvaluator, policyResolver::choose,
                 this::evaluateIn, engineRegistry, properties);
+        this.capacityPreviewer = new DraftCapacityPreviewer(contextAssembler, policyResolver::choose, engineRegistry,
+                properties);
         this.statusChanger = new WorkloadStatusChanger(workloadRepository, dispatchService, properties);
         this.inputRepository = inputRepository;
         this.inputCapture = inputRepository == null ? null : new RunInputCapture(thermalModel, properties);
@@ -314,6 +320,16 @@ public class SchedulingService {
     public SchedulingResult dryRun(Workload draft, String engineId) {
         String requested = requestedEngine(engineId);
         return evaluate(draft, requested, choosePolicy(draft.resolveResourceType()).policy());
+    }
+
+    /**
+     * 워크로드 수용 개수 모의 배치 — 저장하지 않은 초안 하나를 지금 노드에 차례로 놓아 몇 개까지 들어가는지 센다.
+     * 아무것도 저장하지 않고 냉각 대기를 새로 걸지 않는다. 메트릭을 한 번 수집하므로 트랜잭션을 열지 않는다.
+     *
+     * @param engineId 비우면 정책 기본 엔진, 등록되지 않은 이름이면 400
+     */
+    public DraftCapacityResponse draftCapacity(Workload draft, String engineId) {
+        return capacityPreviewer.preview(draft, requestedEngine(engineId));
     }
 
     /** 요청한 엔진 — 비었거나 공백이면 null(정책에서 고른다), 등록되지 않은 이름이면 400. */

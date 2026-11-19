@@ -42,6 +42,7 @@ GET /api/v1/scheduler/nodes/excluded
 GET /api/v1/scheduler/nodes/power-efficiency
 GET /api/v1/scheduler/nodes/reservations
 GET /api/v1/scheduler/nodes/{nodeId}
+GET /api/v1/scheduler/nodes/{nodeId}/drain-preview
 GET /api/v1/scheduler/nodes/{nodeId}/power-efficiency/trend
 GET /api/v1/scheduler/optimization/consolidation
 GET /api/v1/scheduler/optimization/power

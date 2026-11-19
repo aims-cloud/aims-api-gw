@@ -14,6 +14,7 @@ import com.innogrid.aims.scheduler.dto.ConstraintDescriptionResponse;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
 import com.innogrid.aims.scheduler.dto.ExcludedNodeResponse;
 import com.innogrid.aims.scheduler.dto.ExclusionSummaryResponse;
+import com.innogrid.aims.scheduler.dto.NodeDrainPreviewResponse;
 import com.innogrid.aims.scheduler.dto.NodeReservationsResponse;
 import com.innogrid.aims.scheduler.dto.NodeResponse;
 import com.innogrid.aims.scheduler.dto.PowerEfficiencyResponse;
@@ -340,6 +341,26 @@ public class SchedulerController {
     @GetMapping("/nodes/{nodeId}")
     public ApiResponse<NodeResponse> getNodeResource(@PathVariable String nodeId) {
         return ApiResponse.ok(NodeResponse.from(schedulingService.getNodeResource(nodeId)));
+    }
+
+    @Operation(summary = "노드 비우기 모의 배치",
+               description = "노드 한 대를 비운다고 할 때, 그 노드에 배정된 배치 대기 · 실행 중 워크로드(노드별 예약 내역의 행)를 그 노드를 뺀 "
+                       + "나머지 노드에 배치 대기 먼저 → 실행 중 다음, 같은 묶음 안은 우선순위 → 등록 순으로 놓아 보고 함께 들어가는지 돌려줍니다. "
+                       + "워크로드 종류마다 배치 정책을 고르고(정책이 하나도 없어도 default 를 저장하지 않음), 성공한 건은 그 자리에 예약으로 쌓아 "
+                       + "다음 건이 봅니다. 다른 노드의 기존 예약 · 노드 배치 중지 · MDC 전력 예산 · 링크 제약은 실제 배치와 같게 봅니다. "
+                       + "워크로드 · 배치 이력 · 정책을 쓰지 않고 냉각 대기를 새로 걸지 않습니다. 호출마다 메트릭을 한 번 수집하므로 버튼 단위로 부릅니다. "
+                       + "실제로 옮기려면 먼저 노드 배치 중지(POST /node-placement-holds)로 그 노드를 새 배치에서 빼고, 배치 대기는 배치 예약 취소"
+                       + "(POST /workloads/{workloadId}/release)로 대기로 되돌립니다 — 중지하지 않은 노드는 다음 배치가 다시 고를 수 있습니다. "
+                       + "실행 중 워크로드는 실행 계층에서 끝내야 하므로 allPlaceable 이 true 여도 노드를 바로 꺼도 된다는 뜻이 아닙니다. "
+                       + "다른 대기 워크로드와의 경쟁은 보지 않으니 스케줄 모의 실행(POST /schedules/{id}/dry-run)으로 함께 확인합니다. "
+                       + "노드가 수집 후보 · 수집 제외 · 배정 워크로드 · 배치 중지 원장 어디에도 없으면 404, 모르는 engine 은 400.")
+    @GetMapping("/nodes/{nodeId}/drain-preview")
+    public ApiResponse<NodeDrainPreviewResponse> previewNodeDrain(
+            @PathVariable String nodeId,
+            @Parameter(description = "weighted · power · temperature. 비우면 워크로드마다 적용 정책의 기본 엔진(defaultEngine), "
+                    + "그것도 없으면 weighted")
+            @RequestParam(required = false) String engine) {
+        return ApiResponse.ok(schedulingService.drainPreview(nodeId, engine));
     }
 
     // ── 전력 효율성 평가 ────────────────────────────────────────

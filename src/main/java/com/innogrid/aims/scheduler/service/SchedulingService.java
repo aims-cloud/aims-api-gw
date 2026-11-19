@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.innogrid.aims.common.exception.BusinessException;
 import com.innogrid.aims.scheduler.config.SchedulerProperties;
 import com.innogrid.aims.scheduler.dto.EngineResponse;
+import com.innogrid.aims.scheduler.dto.NodeDrainPreviewResponse;
 import com.innogrid.aims.scheduler.dto.NodeReservationsResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownReleaseResponse;
 import com.innogrid.aims.scheduler.dto.ThermalCooldownResponse;
@@ -46,6 +47,7 @@ import com.innogrid.aims.scheduler.repository.WorkloadRepository;
  *
  * <p>배치 컨텍스트 조립(노드 수집 · 링크·예산 원장 · 예약 반영)은 {@link PlacementContextAssembler}에, 노드 조회(열 상태 ·
  * 단건 404 · 냉각 대기)는 {@link NodeSnapshotReader}에, 노드별 예약 내역은 {@link NodeReservationReader}에,
+ * 노드 비우기 모의 배치는 {@link NodeDrainPreviewer}에,
  * 배치 정책 선택은 {@link PolicyResolver}에, 워크로드 상태 변경(일괄 재개 · 상태 전이 · 예약 취소)은
  * {@link WorkloadStatusChanger}에 맡긴다.</p>
  */
@@ -74,6 +76,9 @@ public class SchedulingService {
 
     /** 배치 정책 선택. 빈이 아니라 여기서 만든다. */
     private final PolicyResolver policyResolver;
+
+    /** 노드 비우기 모의 배치. 빈이 아니라 여기서 만든다 — 조립과 같은 예약 판정 · 저장 없는 정책 선택 · {@link #evaluateIn}을 쓴다. */
+    private final NodeDrainPreviewer drainPreviewer;
 
     /** 워크로드 상태 변경(일괄 재개 · 상태 전이 · 예약 취소). 빈이 아니라 여기서 만든다 — 트랜잭션은 이 서비스의 공개 메서드가 연다. */
     private final WorkloadStatusChanger statusChanger;
@@ -116,6 +121,8 @@ public class SchedulingService {
         this.nodeReader = new NodeSnapshotReader(contextAssembler, constraintEvaluator);
         this.reservationReader = new NodeReservationReader(contextAssembler);
         this.policyResolver = new PolicyResolver(policyRepository);
+        this.drainPreviewer = new NodeDrainPreviewer(contextAssembler, constraintEvaluator, policyResolver::choose,
+                this::evaluateIn, engineRegistry, properties);
         this.statusChanger = new WorkloadStatusChanger(workloadRepository, dispatchService, properties);
         this.inputRepository = inputRepository;
         this.inputCapture = inputRepository == null ? null : new RunInputCapture(thermalModel, properties);
@@ -248,6 +255,17 @@ public class SchedulingService {
      */
     public NodeReservationsResponse nodeReservations(String nodeId) {
         return reservationReader.read(nodeId);
+    }
+
+    /**
+     * 노드 비우기 모의 배치 — 노드 한 대를 비운다고 할 때 그 노드의 배치 대기 · 실행 중 워크로드를 나머지 노드에 차례로 놓아 본다.
+     * 아무것도 저장하지 않고 냉각 대기를 새로 걸지 않는다. 메트릭을 한 번 수집하므로 트랜잭션을 열지 않는다.
+     *
+     * @param nodeId   비울 노드(앞뒤 공백은 뺌 · 어디에도 없는 노드면 404)
+     * @param engineId 비우면 워크로드마다 정책 기본 엔진, 등록되지 않은 이름이면 400
+     */
+    public NodeDrainPreviewResponse drainPreview(String nodeId, String engineId) {
+        return drainPreviewer.preview(nodeId, requestedEngine(engineId));
     }
 
     /**

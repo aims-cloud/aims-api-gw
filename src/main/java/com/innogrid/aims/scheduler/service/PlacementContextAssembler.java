@@ -200,4 +200,31 @@ final class PlacementContextAssembler {
     /** 워크로드 하나의 판정. {@code startedAt}은 실행 중일 때 전달 기록의 시작 시각이고, 그 밖에는 null이다. */
     record Held(Workload workload, OffsetDateTime startedAt, ReservationJudgment judgment) {
     }
+
+    /**
+     * 노드 비우기 모의 배치의 입력 — 노드를 한 번 수집하고 예약을 한 번 판정해(같은 {@code now}) 함께 돌려준다.
+     *
+     * <p>{@link #createContext}와 같은 원장(MDC 전력 예산 · 노드 배치 중지)을 읽고 같은 {@link #apply}로 예약을 얹는다. 다른 점은 둘이다.
+     * 링크 원장은 정책 게이트 없이 한 번 읽는다 — 비우기 모의 배치는 워크로드 종류마다 다른 정책으로 사본을 만들고, 링크 반영을 끈
+     * 정책에서는 {@link PlacementContext#linkAware}가 링크를 보지 않으므로 정책마다 게이트를 걸어 읽은 것과 결과가 같다. 노드가 하나도
+     * 수집되지 않아도 예약을 판정한다 — 비울 대상 목록이 그 판정에서 나온다. 돌려주는 컨텍스트의 정책은 {@code null}이고, 호출자가
+     * 정책마다 사본을 만든다.</p>
+     */
+    DrainBase drainBase(OffsetDateTime now) {
+        NodeResourceCollector.Snapshot snapshot = nodeCollector.collect();
+        LinkMatrix links = linkRepository == null ? LinkMatrix.EMPTY : LinkMatrix.of(linkRepository.findAll());
+        PlacementContext context =
+                PlacementContext.of(snapshot.nodes(), null, constraintEvaluator)
+                        .withExcluded(snapshot.excluded())
+                        .withLinkMatrix(links)
+                        .withMdcBudgets(loadMdcBudgets())
+                        .withPlacementHolds(loadPlacementHolds());
+        Reservations reading = readReservations(now);
+        apply(context, reading);
+        return new DrainBase(context, reading);
+    }
+
+    /** {@link #drainBase} 한 번의 결과 — 예약을 얹은 수집 컨텍스트(정책 없음)와 그때 쓴 예약 판정. */
+    record DrainBase(PlacementContext context, Reservations reading) {
+    }
 }

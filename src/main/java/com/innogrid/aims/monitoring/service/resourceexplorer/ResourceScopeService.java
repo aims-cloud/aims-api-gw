@@ -17,7 +17,6 @@ import com.innogrid.aims.infra.entity.RoleNamespace;
 import com.innogrid.aims.infra.repository.RoleAssetRepository;
 import com.innogrid.aims.infra.repository.RoleNamespaceRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.ResourceStatus;
-import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;

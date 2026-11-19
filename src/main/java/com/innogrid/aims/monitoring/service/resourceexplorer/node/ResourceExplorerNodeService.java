@@ -13,7 +13,6 @@ import com.innogrid.aims.common.dto.PageResponse;
 import com.innogrid.aims.common.util.ListSort;
 import com.innogrid.aims.common.util.MetricFormat;
 import com.innogrid.aims.infra.entity.Asset;
-import com.innogrid.aims.infra.repository.AssetRepository;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeDailyUsageResponse;
@@ -29,7 +28,6 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.NodeVmListItemResp
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.ScopedHost;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService;
-import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.DailyMax;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostDetailMetricsQueryService.HostSummaryMetrics;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.tree.HostMetricsQueryService.HostUtilization;

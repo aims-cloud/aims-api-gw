@@ -116,7 +116,7 @@ public class ResourceExplorerNodeCpuService {
                 device.coreCount(),
                 device.threadCount(),
                 baseClockGhz(device.model()),
-                MonitoringStatus.COLLECTING.name(),
+                MonitoringStatus.COLLECTING,
                 collectedAt);
     }
 

@@ -83,7 +83,7 @@ public class ResourceExplorerVmCpuService {
 
     private static VmCpuListItemResponse row(CpuDevice d) {
         return new VmCpuListItemResponse(d.socket(), d.vendor(), d.model(), d.coreCount(), d.threadCount(),
-                MonitoringStatus.COLLECTING.name());
+                MonitoringStatus.COLLECTING);
     }
 
 }

@@ -75,6 +75,7 @@ DELETE /api/v1/scheduler/thermal/cooldowns/{nodeId}
 GET /api/v1/scheduler/workloads
 POST /api/v1/scheduler/workloads
 POST /api/v1/scheduler/workloads/dry-run
+POST /api/v1/scheduler/workloads/dry-run/capacity
 GET /api/v1/scheduler/workloads/page
 GET /api/v1/scheduler/workloads/resource-types
 POST /api/v1/scheduler/workloads/resume-exhausted

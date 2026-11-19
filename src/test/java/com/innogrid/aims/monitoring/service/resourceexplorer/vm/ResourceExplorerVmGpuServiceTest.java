@@ -20,6 +20,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.mdc.NodeMetricInterval;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuDeviceSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuAllocationResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuGroupSummaryResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.vm.gpu.VmGpuInstanceInfoResponse;
@@ -126,11 +127,11 @@ class ResourceExplorerVmGpuServiceTest {
 
         assertThat(page.items()).extracting(VmGpuInstanceListItemResponse::instanceName).containsExactly("GPU 0", "GPU 1", "GPU 10");
         assertThat(page.items().get(0)).isEqualTo(new VmGpuInstanceListItemResponse("GPU-a", "GPU 0", null,
-                42.0, 30.0, 25.0, 20.0, 20.0, 80.0, "COLLECTING", null));
+                42.0, 30.0, 25.0, 20.0, 20.0, 80.0, MonitoringStatus.COLLECTING, null));
         VmGpuInstanceListItemResponse stale = page.items().get(1);
         assertThat(stale.gpuUtilCurrentPercent()).isNull();
         assertThat(stale.gpuUtilAvgPercent()).isEqualTo(5.0);
-        assertThat(stale.collectStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(stale.collectStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
         assertThat(page.items().get(2).allocationType()).isEqualTo("MIG");
     }
 
@@ -181,9 +182,9 @@ class ResourceExplorerVmGpuServiceTest {
     @Test
     void 기본_정보는_드라이버_버전_라벨과_수집_상태를_담고_CUDA는_null이다() {
         assertThat(service.getInstanceInfo(null, NS, INFRA, NODE, "GPU-a"))
-                .isEqualTo(new VmGpuInstanceInfoResponse("Tesla T4", "GPU-a", null, "595.91.07", "COLLECTING",
+                .isEqualTo(new VmGpuInstanceInfoResponse("Tesla T4", "GPU-a", null, "595.91.07", MonitoringStatus.COLLECTING,
                         NOW.minusSeconds(10).atZone(ZoneId.systemDefault()).toOffsetDateTime()));
-        assertThat(service.getInstanceInfo(null, NS, INFRA, NODE, "GPU-b").collectStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(service.getInstanceInfo(null, NS, INFRA, NODE, "GPU-b").collectStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
     }
 
     @Test

@@ -31,6 +31,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.gpu.GpuPcieReplayResponse.GpuCounter;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget;
 import com.innogrid.aims.monitoring.entity.MonitoringTarget.ExporterType;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
@@ -235,9 +236,9 @@ class ResourceExplorerNodeGpuServiceTest {
         GpuDeviceInfoResponse info = service.getDeviceInfo("11", "GPU-a");
 
         assertThat(info).isEqualTo(new GpuDeviceInfoResponse("NVIDIA A100-SXM4-80GB", "GPU-a", "00000000:17:00.0",
-                null, "550.54.15", null, null, null, "COLLECTING",
+                null, "550.54.15", null, null, null, MonitoringStatus.COLLECTING,
                 NOW.minusSeconds(10).atZone(ZoneId.systemDefault()).toOffsetDateTime()));
-        assertThat(service.getDeviceInfo("11", "GPU-b").collectStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(service.getDeviceInfo("11", "GPU-b").collectStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
     }
 
     @Test

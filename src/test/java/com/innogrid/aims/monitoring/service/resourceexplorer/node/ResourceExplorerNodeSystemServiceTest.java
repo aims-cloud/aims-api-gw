@@ -16,6 +16,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemInfoR
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.system.SystemSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
@@ -96,7 +97,7 @@ class ResourceExplorerNodeSystemServiceTest {
         assertThat(summary.coreCount()).isNull();
 
         SystemInfoResponse info = service.getSystemInfo("12");
-        assertThat(info.collectStatus()).isEqualTo("NOT_CONFIGURED");
+        assertThat(info.collectStatus()).isEqualTo(MonitoringStatus.NOT_CONFIGURED);
         assertThat(info.hostname()).isNull();
 
         assertThat(service.getSystemMetricTrend("12", SystemMetric.INTERRUPTS, NodeMetricInterval.LAST_1H).series()).isEmpty();
@@ -139,12 +140,12 @@ class ResourceExplorerNodeSystemServiceTest {
         assertThat(info.kernelRelease()).isEqualTo("6.8.0-44-generic");
         assertThat(info.architecture()).isEqualTo("x86_64");
         assertThat(info.bootTime()).isEqualTo(boot.atZone(ZoneId.systemDefault()).toOffsetDateTime());
-        assertThat(info.collectStatus()).isEqualTo("COLLECTING");
+        assertThat(info.collectStatus()).isEqualTo(MonitoringStatus.COLLECTING);
         assertThat(info.lastCollectedAt()).isEqualTo(sample.atZone(ZoneId.systemDefault()).toOffsetDateTime());
 
         when(metrics.info(NODE_SEL)).thenReturn(Optional.empty());
         SystemInfoResponse unavailable = service.getSystemInfo("11");
-        assertThat(unavailable.collectStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(unavailable.collectStatus()).isEqualTo(MonitoringStatus.UNAVAILABLE);
         assertThat(unavailable.hostname()).isNull();
         assertThat(unavailable.bootTime()).isNull();
     }

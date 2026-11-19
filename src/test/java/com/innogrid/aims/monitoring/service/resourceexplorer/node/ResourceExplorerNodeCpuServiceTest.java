@@ -17,6 +17,7 @@ import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuDeviceListI
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetric;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuMetricTrendResponse;
 import com.innogrid.aims.monitoring.dto.resourceexplorer.node.cpu.CpuSummaryResponse;
+import com.innogrid.aims.monitoring.dto.resourceexplorer.tree.MonitoringStatus;
 import com.innogrid.aims.monitoring.repository.MonitoringTargetRepository;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService;
 import com.innogrid.aims.monitoring.service.resourceexplorer.ResourceScopeService.Scope;
@@ -135,7 +136,7 @@ class ResourceExplorerNodeCpuServiceTest {
         assertThat(intel.coreCount()).isEqualTo(32);
         assertThat(intel.threadCount()).isEqualTo(64);
         assertThat(intel.baseClockGhz()).isEqualTo(2.0);
-        assertThat(intel.collectStatus()).isEqualTo("COLLECTING");
+        assertThat(intel.collectStatus()).isEqualTo(MonitoringStatus.COLLECTING);
         assertThat(intel.lastCollectedAt()).isEqualTo(SAMPLE_AT.atZone(ZoneId.systemDefault()).toOffsetDateTime());
 
         CpuDeviceListItemResponse amd = page.items().get(1);

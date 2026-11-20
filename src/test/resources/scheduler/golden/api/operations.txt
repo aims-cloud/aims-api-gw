@@ -53,6 +53,7 @@ GET /api/v1/scheduler/policies/{policyId}
 PUT /api/v1/scheduler/policies/{policyId}
 DELETE /api/v1/scheduler/policies/{policyId}
 POST /api/v1/scheduler/policies/{policyId}/activate
+POST /api/v1/scheduler/policies/{policyId}/dry-run
 GET /api/v1/scheduler/schedules
 POST /api/v1/scheduler/schedules
 DELETE /api/v1/scheduler/schedules

@@ -131,6 +131,32 @@ public class SchedulingPolicyService {
         return ActivationResponse.of(target, others);
     }
 
+    /** 정책 수정 전 모의 배치에 쓰는 저장된 정책과, 부분 수정을 얹은 저장되지 않은 사본. */
+    public record PolicyEdit(SchedulingPolicy saved, SchedulingPolicy edited) {}
+
+    /**
+     * 정책 수정 전 모의 배치 — 저장된 정책의 사본({@link SchedulingPolicy#detachedCopy})에 {@code PUT}과 같은 부분 수정을 얹는다.
+     * 아무것도 저장하지 않고 저장된 정책도 고치지 않는다.
+     *
+     * <p>없으면 404, 본문이 없으면 400, 값이 틀리면 {@code PUT}과 같은 문구의 400. 이름 · 설명은 보지 않고 이름 중복 · 활성 유일성도
+     * 보지 않는다. 리소스 종류 · 활성 여부는 {@code PUT}과 같은 형식 검사만 하고 사본에는 저장된 값을 둔다 — 평가에 쓰는 것은
+     * 판단 필드뿐이다.</p>
+     *
+     * @param changes 부분 수정 값. null 이면 수정 없는 사본
+     */
+    public PolicyEdit previewEdit(Long id, boolean hasBody, SchedulingPolicyRequest changes) {
+        SchedulingPolicy saved = require(id);
+        if (!hasBody) throw badRequest("요청 본문이 필요합니다");
+        SchedulingPolicy edited = saved.detachedCopy();
+        if (changes != null) {
+            apply(edited, changes);
+            validate(edited);
+            edited.setResourceType(saved.getResourceType());
+            edited.setActive(saved.isActive());
+        }
+        return new PolicyEdit(saved, edited);
+    }
+
     /** 없으면 404. */
     public SchedulingPolicy require(Long id) {
         return repository.findById(id)

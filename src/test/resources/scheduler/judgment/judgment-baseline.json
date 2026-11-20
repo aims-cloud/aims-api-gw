@@ -1,0 +1,645 @@
+{
+  "schemaVersion" : 3,
+  "provenance" : {
+    "gitHead" : "d1df80f15cad6593e649cd5495c86f1622d4d845 (refs/heads/feat/scheduler-benchmark-temperature-limit-column)",
+    "productionPath" : "저장소 시험 · 코드 기본 SchedulerProperties · compareFresh(캐시 우회) — 배포 env 의 덮어쓰기는 반영하지 않는다",
+    "distribution" : "heavytail",
+    "boardDigests" : {
+      "concave" : "8e45125a043f",
+      "convex-misrated" : "d199d46fa3b0",
+      "convex-misrated-independent" : "ad4eb53bbcad",
+      "main" : "fb011848258b",
+      "main-independent" : "ef2d4c7b28b7"
+    },
+    "workloadDigest" : "5cb1baa7e752",
+    "configDigest" : "b8f222c123d1",
+    "engineIds" : [
+      "power",
+      "temperature",
+      "weighted"
+    ],
+    "ruleAxisDigests" : {
+      "banned" : "e621e7f43e72",
+      "boards" : "9ab95b89dc3e",
+      "judgment" : "ae0b48b8f9a7",
+      "measured" : "0189eec53480",
+      "metrics" : "8845c99fe402",
+      "prose" : "5d128fcaeb0d",
+      "sensitivity" : "3741559c00dd",
+      "sweep" : "559301d27583"
+    },
+    "judgment" : {
+      "board" : "convex-misrated",
+      "loadRatio" : 60,
+      "powerControl" : "AVAILABLE",
+      "directionCheckBoard" : "main",
+      "distribution" : "heavytail",
+      "minPairedPoints" : 10,
+      "medianReductionPp" : 2.0,
+      "reducedPointRatio" : 0.8333333333333334,
+      "sweepPoints" : 12,
+      "pointIgnorePp" : 2.0E-4
+    }
+  },
+  "cells" : {
+    "direction" : {
+      "board" : "main",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "columns" : {
+        "power" : {
+          "points" : [
+            15.1881,
+            13.8401,
+            13.4922,
+            14.3631,
+            14.0024,
+            12.3989,
+            17.2518,
+            18.1224,
+            14.2116,
+            14.1584,
+            16.2267,
+            18.5873
+          ],
+          "samples" : 12,
+          "median" : 14.2874
+        },
+        "power-idle-fixed" : {
+          "points" : [
+            17.3655,
+            16.1036,
+            15.7425,
+            15.1378,
+            10.1207,
+            12.1146,
+            17.884,
+            14.5014,
+            13.6715,
+            13.6809,
+            18.291,
+            18.2204
+          ],
+          "samples" : 12,
+          "median" : 15.4402
+        },
+        "power-s0" : {
+          "points" : [
+            20.3382,
+            14.2784,
+            14.7064,
+            19.0171,
+            18.1797,
+            14.5591,
+            16.2897,
+            17.4114,
+            16.848,
+            21.9303,
+            21.6687,
+            21.1746
+          ],
+          "samples" : 12,
+          "median" : 17.7956
+        },
+        "power-s1000" : {
+          "points" : [
+            23.9582,
+            22.5842,
+            22.8321,
+            22.6666,
+            22.9107,
+            23.513,
+            24.5094,
+            25.4452,
+            25.2984,
+            26.0526,
+            25.7775,
+            24.3494
+          ],
+          "samples" : 12,
+          "median" : 24.1538
+        },
+        "power-s250" : {
+          "points" : [
+            7.9506,
+            7.1879,
+            6.3317,
+            5.6264,
+            5.2402,
+            6.8416,
+            7.9828,
+            8.7964,
+            9.5029,
+            9.3065,
+            8.7431,
+            8.8058
+          ],
+          "samples" : 12,
+          "median" : 7.9667
+        }
+      }
+    },
+    "judgment" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "columns" : {
+        "power" : {
+          "points" : [
+            11.1952,
+            9.1003,
+            9.5814,
+            2.907,
+            3.7268,
+            7.9303,
+            10.6555,
+            9.8485,
+            7.154,
+            10.2107,
+            11.8903,
+            12.3725
+          ],
+          "samples" : 12,
+          "median" : 9.715
+        },
+        "power-idle-fixed" : {
+          "points" : [
+            14.0369,
+            9.2229,
+            7.772,
+            7.0856,
+            8.5466,
+            8.779,
+            10.0369,
+            10.5323,
+            10.2005,
+            10.3279,
+            12.314,
+            15.316
+          ],
+          "samples" : 12,
+          "median" : 10.1187
+        },
+        "power-s0" : {
+          "points" : [
+            14.8719,
+            14.871,
+            9.9226,
+            10.0353,
+            9.7414,
+            11.0689,
+            16.9224,
+            12.187,
+            13.1412,
+            16.9133,
+            17.7408,
+            15.4697
+          ],
+          "samples" : 12,
+          "median" : 14.0061
+        },
+        "power-s1000" : {
+          "points" : [
+            13.3932,
+            13.1884,
+            12.1336,
+            12.3102,
+            13.5718,
+            13.9302,
+            14.7491,
+            15.1253,
+            15.9228,
+            15.9161,
+            16.1237,
+            14.2509
+          ],
+          "samples" : 12,
+          "median" : 14.0906
+        },
+        "power-s250" : {
+          "points" : [
+            5.5131,
+            4.8755,
+            3.7502,
+            2.8638,
+            4.2859,
+            4.7889,
+            5.6429,
+            20.455,
+            8.3336,
+            7.9963,
+            8.1254,
+            6.9024
+          ],
+          "samples" : 12,
+          "median" : 5.578
+        }
+      }
+    }
+  },
+  "phase" : {
+    "convex-misrated-independent" : [
+      {
+        "phaseSeed" : 7,
+        "powerMedian" : 9.4029
+      },
+      {
+        "phaseSeed" : 11,
+        "powerMedian" : 8.1601
+      },
+      {
+        "phaseSeed" : 13,
+        "powerMedian" : 8.7285
+      }
+    ],
+    "main-independent" : [
+      {
+        "phaseSeed" : 7,
+        "powerMedian" : 17.712
+      },
+      {
+        "phaseSeed" : 11,
+        "powerMedian" : 13.746
+      },
+      {
+        "phaseSeed" : 13,
+        "powerMedian" : 15.093
+      }
+    ]
+  },
+  "concave" : {
+    "board" : "concave",
+    "powerMedian" : 15.4319,
+    "idleFixedMedian" : 15.2314
+  },
+  "outside" : {
+    "convex-misrated:110:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 110,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0.3297,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 1,
+        "median" : 0.3297
+      }
+    },
+    "convex-misrated:110:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 110,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0.3297,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 1,
+        "median" : 0.3297
+      }
+    },
+    "convex-misrated:30:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 30,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          2.6843,
+          2.8874,
+          2.6177,
+          4.9121,
+          5.2021,
+          5.3386,
+          1.5815,
+          1.9689,
+          8.1302,
+          3.1002,
+          2.3013,
+          2.6576
+        ],
+        "samples" : 12,
+        "median" : 2.7859
+      }
+    },
+    "convex-misrated:30:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 30,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          0.0224,
+          0.1426,
+          -0.1179,
+          1.812,
+          2.0605,
+          2.2228,
+          -0.8919,
+          -0.5075,
+          0.155,
+          0.5097,
+          -0.1956,
+          0.0558
+        ],
+        "samples" : 12,
+        "median" : 0.0992
+      }
+    },
+    "convex-misrated:60:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          11.1952,
+          9.1003,
+          9.5814,
+          2.907,
+          3.7268,
+          7.9303,
+          10.6555,
+          9.8485,
+          7.154,
+          10.2107,
+          11.8903,
+          12.3725
+        ],
+        "samples" : 12,
+        "median" : 9.715
+      }
+    },
+    "convex-misrated:60:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 60,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          4.6195,
+          2.7071,
+          3.0597,
+          0.5213,
+          1.2191,
+          1.6314,
+          4.0792,
+          3.4784,
+          4.3365,
+          3.8805,
+          5.2871,
+          5.7139
+        ],
+        "samples" : 12,
+        "median" : 3.6795
+      }
+    },
+    "convex-misrated:90:AVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 90,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          8.4921,
+          7.534,
+          9.1075,
+          null,
+          7.9956,
+          9.4875,
+          13.4118,
+          13.8085,
+          13.3173,
+          11.8382,
+          12.674,
+          9.2742
+        ],
+        "samples" : 11,
+        "median" : 9.4875
+      }
+    },
+    "convex-misrated:90:UNAVAILABLE" : {
+      "board" : "convex-misrated",
+      "loadRatioPercent" : 90,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          5.3653,
+          4.3931,
+          2.8975,
+          null,
+          1.8033,
+          3.2161,
+          6.9011,
+          7.3867,
+          6.9604,
+          5.6107,
+          6.3862,
+          6.1539
+        ],
+        "samples" : 11,
+        "median" : 5.6107
+      }
+    },
+    "main:110:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 110,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 0,
+        "median" : null
+      }
+    },
+    "main:110:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 110,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "samples" : 0,
+        "median" : null
+      }
+    },
+    "main:30:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 30,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          5.4377,
+          5.4868,
+          6.5183,
+          4.9443,
+          0.4146,
+          0.7433,
+          5.2658,
+          6.7524,
+          7.599,
+          8.4736,
+          7.7574,
+          6.3093
+        ],
+        "samples" : 12,
+        "median" : 5.898
+      }
+    },
+    "main:30:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 30,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          2.6207,
+          2.5929,
+          3.4172,
+          2.0342,
+          0.3576,
+          0.6418,
+          2.4303,
+          3.7868,
+          4.5759,
+          5.3652,
+          4.7319,
+          3.4386
+        ],
+        "samples" : 12,
+        "median" : 3.0189
+      }
+    },
+    "main:60:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 60,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          15.1881,
+          13.8401,
+          13.4922,
+          14.3631,
+          14.0024,
+          12.3989,
+          17.2518,
+          18.1224,
+          14.2116,
+          14.1584,
+          16.2267,
+          18.5873
+        ],
+        "samples" : 12,
+        "median" : 14.2874
+      }
+    },
+    "main:60:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 60,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          8.4992,
+          7.2608,
+          6.8593,
+          7.6034,
+          7.2701,
+          5.8617,
+          7.0686,
+          7.9325,
+          7.6887,
+          7.6943,
+          9.448,
+          8.4636
+        ],
+        "samples" : 12,
+        "median" : 7.6461
+      }
+    },
+    "main:90:AVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 90,
+      "powerControl" : "AVAILABLE",
+      "power" : {
+        "points" : [
+          9.3086,
+          8.3041,
+          12.2561,
+          12.0095,
+          10.9445,
+          12.2707,
+          14.2998,
+          14.6453,
+          14.4744,
+          10.4276,
+          9.7567,
+          8.7537
+        ],
+        "samples" : 12,
+        "median" : 11.477
+      }
+    },
+    "main:90:UNAVAILABLE" : {
+      "board" : "main",
+      "loadRatioPercent" : 90,
+      "powerControl" : "UNAVAILABLE",
+      "power" : {
+        "points" : [
+          6.4098,
+          5.4127,
+          6.2808,
+          6.0341,
+          5.0464,
+          6.2867,
+          8.17,
+          8.5428,
+          8.398,
+          7.5609,
+          6.9132,
+          5.93
+        ],
+        "samples" : 12,
+        "median" : 6.3483
+      }
+    }
+  }
+}

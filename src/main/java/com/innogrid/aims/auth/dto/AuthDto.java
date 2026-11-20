@@ -169,5 +169,36 @@ public class AuthDto {
             String description
     ) {}
 
+    // ── 역할 ↔ Tumblebug Namespace 배정 ─────────────────────────
+
+    @Schema(description = "Namespace 배정 요청 — 이미 배정된 nsId 는 건너뛴다")
+    public record AssignNamespacesRequest(
+            @Schema(description = "배정할 Tumblebug Namespace ID 목록", example = "[\"aws\", \"default\"]",
+                    requiredMode = Schema.RequiredMode.REQUIRED)
+            List<String> nsIds
+    ) {}
+
+    @Schema(description = "역할에 배정된 Namespace")
+    public record RoleNamespaceResponse(
+            @Schema(description = "Tumblebug Namespace ID", example = "aws")
+            String nsId,
+            @Schema(description = "Tumblebug 표시 이름 — Tumblebug 에 없거나 조회에 실패하면 null", example = "aws")
+            String name,
+            @Schema(description = "배정 시각")
+            OffsetDateTime assignedAt
+    ) {}
+
+    @Schema(description = "배정 후보 Namespace — Tumblebug 의 전체 Namespace 와 이 역할의 배정 여부")
+    public record NamespaceCandidateResponse(
+            @Schema(description = "Tumblebug Namespace ID", example = "aws")
+            String nsId,
+            @Schema(description = "Tumblebug 표시 이름", example = "aws")
+            String name,
+            @Schema(description = "Tumblebug 설명")
+            String description,
+            @Schema(description = "이 역할에 배정되어 있는지", example = "true")
+            boolean assigned
+    ) {}
+
     private AuthDto() {}
 }

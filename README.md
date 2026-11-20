@@ -76,6 +76,12 @@ com.innogrid.aims
 ./gradlew bootJar    # → build/libs/app.jar
 ```
 
+### 테스트 작성 규칙
+
+- 테스트 메서드 이름은 **영문 snake_case 문장**으로 쓴다. 예: `delete_missing_workload_404`, `unknown_engine_falls_back_default`
+- 의도를 한글로 남기려면 `@DisplayName("…")`을 붙인다. 리포트·IDE에는 그 문장이 표시된다.
+- 판정에 쓰인 수치·상태코드는 이름에 남긴다. 예: `page_response_5_fields`, `required_cpu_0_400`
+
 ## 환경 설정
 
 모든 외부 서비스 주소는 환경변수로 주입한다. 로컬 개발 시에는 `application-local.yml`의 기본값이 적용되므로 별도 설정 없이 실행 가능하다.
@@ -89,6 +95,12 @@ com.innogrid.aims
 | `CB_TUMBLEBUG_URL` | CB-Tumblebug API URL | `http://localhost:1323/tumblebug` |
 | `CB_TUMBLEBUG_USER` | CB-Tumblebug 인증 사용자 | `default` |
 | `CB_TUMBLEBUG_PASS` | CB-Tumblebug 인증 비밀번호 | `default` |
+| `SPRING_MAIL_HOST` | 알람 Email SMTP 호스트. 비우면 Email 전송은 "메일 서버 미구성" FAILED | (없음 — 로컬은 `application-local.yml`) |
+| `SPRING_MAIL_PORT` | SMTP 포트 | `25` |
+| `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | SMTP 인증 계정(아마란스는 그룹웨어 이메일/비밀번호) | (빈 값) |
+| `AIMS_MAIL_SMTP_AUTH` / `AIMS_MAIL_SMTP_STARTTLS` | SMTP 인증·STARTTLS 사용 | `true` |
+| `AIMS_ALARM_MAIL_FROM` | 알람 메일 From. 인증 계정과 같게 | (빈 값) |
+| `AIMS_ALARM_NOTIFICATION_ENABLED` | 알람 전송 파이프라인 사용 | `true` |
 
 ## 브랜치 전략
 

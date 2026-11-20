@@ -1,84 +1,75 @@
 package com.innogrid.aims.dashboard.controller;
 
 import com.innogrid.aims.common.dto.ApiResponse;
-import com.innogrid.aims.mock.MockDataProvider;
+import com.innogrid.aims.dashboard.service.DashboardService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * 대시보드 API — 각 도메인 데이터를 집계하여 대시보드용으로 제공.
- * [요구사항 #37] 네트워크 토폴로지 대시보드
- * [요구사항 #38] 인프라 토폴로지 대시보드
- * [요구사항 #39] 가상서버 그룹
- * [요구사항 #40] 사용자 대시보드
- * [요구사항 #41] 스토리지 대시보드
- * [요구사항 #42] 노드 현황
- * [요구사항 #43] GPU 대시보드
- * [요구사항 #44] 인프라 대시보드
- * [요구사항 #45] 가상서버 현황
- */
-@Tag(name = "대시보드", description = "토폴로지, 노드, GPU, 인프라 대시보드")
+@Tag(name = "대시보드", description = "토폴로지, 노드, 인프라 대시보드")
 @RestController
 @RequestMapping("/api/v1/dashboards")
 public class DashboardController {
 
-    private final MockDataProvider mock;
+    private final DashboardService dashboardService;
 
-    public DashboardController(MockDataProvider mock) {
-        this.mock = mock;
+    public DashboardController(DashboardService dashboardService) {
+        this.dashboardService = dashboardService;
     }
 
-    /** 네트워크 토폴로지 대시보드 */
+    @Operation(summary = "통합 토폴로지",
+            description = "mdcId=배포영역 필터, view=compute|network 토글. 노드에 alias/displayName(별칭표기) 포함")
+    @GetMapping("/topology")
+    public ApiResponse<?> getTopology(@RequestParam(required = false) String mdcId,
+                                      @RequestParam(required = false, defaultValue = "network") String view) {
+        return ApiResponse.ok(dashboardService.getTopology(mdcId, view));
+    }
+
+    @Operation(summary = "네트워크 토폴로지")
     @GetMapping("/topology/network")
     public ApiResponse<?> getNetworkTopologyDashboard() {
-        return ApiResponse.ok(mock.getNetworkTopology());
+        return ApiResponse.ok(dashboardService.getNetworkTopology());
     }
 
-    /** 인프라 토폴로지 대시보드 */
+    @Operation(summary = "인프라 토폴로지")
     @GetMapping("/topology/infra")
     public ApiResponse<?> getInfraTopologyDashboard() {
-        return ApiResponse.ok(mock.getNetworkTopology());
+        return ApiResponse.ok(dashboardService.getInfraDashboard());
     }
 
-    /** 가상서버 그룹 토폴로지 */
+    @Operation(summary = "가상서버 그룹")
     @GetMapping("/topology/vm-groups")
     public ApiResponse<?> getVmGroupTopology() {
-        return ApiResponse.ok(mock.getVmStatusDashboard());
+        return ApiResponse.ok(dashboardService.getVmStatusDashboard());
     }
 
-    /** 사용자 맞춤형 대시보드 */
+    @Operation(summary = "사용자 대시보드")
     @GetMapping("/user")
     public ApiResponse<?> getUserDashboard() {
-        return ApiResponse.ok(mock.getUserDashboard());
+        return ApiResponse.ok(dashboardService.getUserDashboard());
     }
 
-    /** 스토리지 대시보드 */
+    @Operation(summary = "스토리지 대시보드")
     @GetMapping("/storage")
     public ApiResponse<?> getStorageDashboard() {
-        return ApiResponse.ok(mock.getStorageDashboard());
+        return ApiResponse.ok(dashboardService.getStorageDashboard());
     }
 
-    /** 노드 현황 */
+    @Operation(summary = "노드 현황")
     @GetMapping("/nodes")
     public ApiResponse<?> getNodeStatusDashboard() {
-        return ApiResponse.ok(mock.getNodeStatusDashboard());
+        return ApiResponse.ok(dashboardService.getNodeStatusDashboard());
     }
 
-    /** GPU 대시보드 */
-    @GetMapping("/gpu")
-    public ApiResponse<?> getGpuDashboard() {
-        return ApiResponse.ok(mock.getGpuDashboard());
-    }
-
-    /** 인프라 통합 대시보드 */
+    @Operation(summary = "인프라 통합 대시보드")
     @GetMapping("/infra")
     public ApiResponse<?> getInfraDashboard() {
-        return ApiResponse.ok(mock.getInfraDashboard());
+        return ApiResponse.ok(dashboardService.getInfraDashboard());
     }
 
-    /** 가상서버 현황 */
+    @Operation(summary = "가상서버 현황")
     @GetMapping("/vm-status")
     public ApiResponse<?> getVmStatusDashboard() {
-        return ApiResponse.ok(mock.getVmStatusDashboard());
+        return ApiResponse.ok(dashboardService.getVmStatusDashboard());
     }
 }

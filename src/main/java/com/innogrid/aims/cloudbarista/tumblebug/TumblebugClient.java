@@ -59,8 +59,24 @@ public class TumblebugClient {
         rest.delete().uri("/ns/{ns}/infra/{id}", nsId, infraId).retrieve().toBodilessEntity();
     }
 
+    /** Node(VM) 상세 — spec·image·IP·connection·cspResourceId 등 (자원 탐색기 VM 정보 표) */
+    public Map<String, Object> getNode(String nsId, String infraId, String nodeId) {
+        return rest.get().uri("/ns/{ns}/infra/{id}/node/{nodeId}", nsId, infraId, nodeId).retrieve().body(MAP_TYPE);
+    }
+
     public Map<String, Object> sendCommand(String nsId, String infraId, Map<String, Object> body) {
         return rest.post().uri("/ns/{ns}/cmd/infra/{id}", nsId, infraId)
+                .body(body).retrieve().body(MAP_TYPE);
+    }
+
+    /**
+     * Infra 안 Node(VM) 한 대에만 원격 명령을 실행한다 — {@code POST /ns/{ns}/cmd/infra/{infra}?nodeId=}.
+     * 동기 호출이라 명령이 끝날 때까지(본문 timeoutMinutes 까지) 응답을 기다린다. 응답은 model.InfraSshCmdResultForAPI
+     * ({@code results[].nodeId·stdout·stderr·error}).
+     */
+    public Map<String, Object> sendNodeCommand(String nsId, String infraId, String nodeId, Map<String, Object> body) {
+        return rest.post().uri(b -> b.path("/ns/{ns}/cmd/infra/{id}").queryParam("nodeId", "{nodeId}")
+                        .build(nsId, infraId, nodeId))
                 .body(body).retrieve().body(MAP_TYPE);
     }
 

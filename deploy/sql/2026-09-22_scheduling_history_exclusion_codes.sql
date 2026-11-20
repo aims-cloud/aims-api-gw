@@ -1,0 +1,33 @@
+-- 배치 결정 이력의 제외 사유 코드 집계 (feat/history-exclusion-code)
+--
+-- 배치 한 건의 이력에는 사람이 읽는 사유 문장 하나(reason)만 남았다. 엔진은 후보 노드마다 왜 빠졌는지를
+-- 코드(ExclusionReason)로 돌려주는데, 이력을 만드는 자리가 선택된 노드 한 건만 쓰고 나머지를 버렸다.
+-- 그래서 "지난주 실패 가운데 어느 제약이 가장 먼저 걸려 빠진 후보가 몇이었나" 를 DB 로 셀 수 없었다.
+--
+-- 이 열은 후보 노드의 제외 코드를 코드별로 센 JSON 객체 문자열이다. 예: {"COOLING_DOWN":1,"INSUFFICIENT_RESOURCE":3}
+--   * 키는 코드 이름 오름차순, 값은 그 코드로 빠진 후보 수.
+--   * 모집단은 candidate_count 와 같다 — 수집 단계에서 빠진 노드(메트릭 없음·질의 무응답)는 후보가 아니라 여기에도 없다.
+--   * 한 노드는 먼저 걸린 제약 하나로만 센다(C1 자원 → C2 사용률 → C3 열 → C4 전력 → C5 링크 → C6 MDC 예산 순,
+--     배치 응답의 exclusionCode 와 같은 규칙). 그래서 값의 합 = 부적격 후보 수, candidate_count − 합 = 적격 후보 수.
+--     자원이 모자라면서 동시에 뜨거운 노드는 INSUFFICIENT_RESOURCE 로만 잡히므로 열 계열 건수는 하한이다.
+--   * 적격 후보(제외되지 않은 노드)는 세지 않는다. 성공한 결정에서도 나머지 후보가 빠진 사유는 남는다.
+--   * 제외가 하나도 없으면 NULL 이다 — 빈 객체가 아니다. "쟀는데 0" 과 "옛 행" 을 가르지 않기 위해서다.
+--   * 이 열이 생기기 전의 행은 NULL 이다. 코드 이름은 바뀌지 않으나 늘 수는 있다 — 옛 행은 옛 이름 그대로 남는다.
+--
+-- 코드 하나를 열거형 열로 남기는 대안을 버리고 집계 문자열을 평문 TEXT 로 둔 까닭: Hibernate 는 열거형(@Enumerated STRING)
+-- 열을 처음 만들 때 그 시점의 값 목록으로 CHECK 제약을 자동 생성하고 뒤에 값이 늘어도 고치지 않는다(2026-09-18 개발 서버
+-- 실측). 제외 코드는 제약이 늘면 함께 늘어나는 목록이라, 열거형 열이었다면 새 코드가 생기는 날 이력 저장이 통째로 실패한다.
+--
+-- 코드별 건수를 DB 에서 바로 셀 때:
+--   SELECT k AS code, SUM(v::int) AS excluded
+--     FROM scheduling_history, jsonb_each_text(exclusion_codes::jsonb) AS j(k, v)
+--    WHERE exclusion_codes IS NOT NULL AND created_at >= now() - interval '7 days'
+--    GROUP BY k ORDER BY excluded DESC;
+--
+-- 어느 DB 에 필요한가:
+--   * 이미 돌아가는 DB(기본 프로파일 validate) — 배포 전에 이 스크립트를 먼저 실행해야 한다. 열이 없으면 앱이 기동하지 않는다.
+--   * 새 DB — 2026-09-04_scheduler_base_tables.sql 의 CREATE 에 이 열이 이미 들어 있어 이 스크립트는 no-op 이다(README 순서 목록).
+--   * 배포 VM(환경파일 SPRING_JPA_HIBERNATE_DDL_AUTO=update) — Hibernate 가 자동 추가하지만, 스키마를 의도대로 고정하기 위해 남긴다.
+--   psql -U aims -d aims -v ON_ERROR_STOP=1 -f 2026-09-22_scheduling_history_exclusion_codes.sql
+
+ALTER TABLE scheduling_history ADD COLUMN IF NOT EXISTS exclusion_codes TEXT;

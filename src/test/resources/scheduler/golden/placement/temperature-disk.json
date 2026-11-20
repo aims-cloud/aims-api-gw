@@ -1,0 +1,75 @@
+{
+  "success" : true,
+  "selectedMdcId" : "gld-mdc-2",
+  "selectedNodeId" : "gld-idle:9100",
+  "finalScore" : 0.6566,
+  "reason" : "[온도최적화] 점수 0.6566 (여유:0.47 균형:0.55 냉각:0.72 자원:0.95) 평균온도:44.3°C — 3개 후보",
+  "candidateScores" : [ {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-tiny:9100",
+    "cpuScore" : 0.945,
+    "memoryScore" : 0.945,
+    "powerScore" : 0.7433,
+    "temperatureScore" : 0.4933,
+    "networkScore" : 0.5714,
+    "totalScore" : 0.6758,
+    "eligible" : false,
+    "exclusionReason" : "자원 부족 (필요 CPU:2 MEM:1024MB GPU:0, 가용 CPU:1.0 MEM:460MB GPU:0)",
+    "exclusionCode" : "INSUFFICIENT_RESOURCE",
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.4933,
+      "열적균형" : 0.5714,
+      "냉각점수" : 0.7433,
+      "자원여유" : 0.945,
+      "디스크검사" : 0.0,
+      "배치후예상온도C" : 49.4,
+      "클러스터평균온도C" : 44.3333
+    }
+  }, {
+    "mdcId" : "gld-mdc-2",
+    "nodeId" : "gld-idle:9100",
+    "cpuScore" : 0.945,
+    "memoryScore" : 0.945,
+    "powerScore" : 0.7156,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 0.5489,
+    "totalScore" : 0.6566,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.4667,
+      "열적균형" : 0.5489,
+      "냉각점수" : 0.7156,
+      "자원여유" : 0.945,
+      "디스크검사" : 0.0,
+      "배치후예상온도C" : 41.5,
+      "클러스터평균온도C" : 44.3333
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-active:9100",
+    "cpuScore" : 0.55,
+    "memoryScore" : 0.55,
+    "powerScore" : 0.4622,
+    "temperatureScore" : 0.2667,
+    "networkScore" : 0.3797,
+    "totalScore" : 0.4049,
+    "eligible" : true,
+    "exclusionReason" : null,
+    "exclusionCode" : null,
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.2667,
+      "열적균형" : 0.3797,
+      "냉각점수" : 0.4622,
+      "자원여유" : 0.55,
+      "디스크검사" : 1.0,
+      "배치후예상온도C" : 57.0625,
+      "클러스터평균온도C" : 44.3333
+    }
+  } ],
+  "policyName" : "golden"
+}

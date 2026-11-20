@@ -1,0 +1,72 @@
+{
+  "success" : false,
+  "selectedMdcId" : null,
+  "selectedNodeId" : null,
+  "finalScore" : 0.0,
+  "reason" : "온도 제약을 충족하는 노드가 없습니다",
+  "candidateScores" : [ {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-tiny:9100",
+    "cpuScore" : 0.945,
+    "memoryScore" : 0.945,
+    "powerScore" : 0.7433,
+    "temperatureScore" : 0.4933,
+    "networkScore" : 0.5714,
+    "totalScore" : 0.6758,
+    "eligible" : false,
+    "exclusionReason" : "자원 부족 (필요 CPU:16 MEM:1024MB GPU:0, 가용 CPU:1.0 MEM:460MB GPU:0)",
+    "exclusionCode" : "INSUFFICIENT_RESOURCE",
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.4933,
+      "열적균형" : 0.5714,
+      "냉각점수" : 0.7433,
+      "자원여유" : 0.945,
+      "배치후예상온도C" : 129.2,
+      "클러스터평균온도C" : 44.3333
+    }
+  }, {
+    "mdcId" : "gld-mdc-2",
+    "nodeId" : "gld-idle:9100",
+    "cpuScore" : 0.945,
+    "memoryScore" : 0.945,
+    "powerScore" : 0.7156,
+    "temperatureScore" : 0.4667,
+    "networkScore" : 0.5489,
+    "totalScore" : 0.6566,
+    "eligible" : false,
+    "exclusionReason" : "자원 부족 (필요 CPU:16 MEM:1024MB GPU:0, 가용 CPU:7.9 MEM:14745MB GPU:0)",
+    "exclusionCode" : "INSUFFICIENT_RESOURCE",
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.4667,
+      "열적균형" : 0.5489,
+      "냉각점수" : 0.7156,
+      "자원여유" : 0.945,
+      "배치후예상온도C" : 52.0,
+      "클러스터평균온도C" : 44.3333
+    }
+  }, {
+    "mdcId" : "gld-mdc-1",
+    "nodeId" : "gld-active:9100",
+    "cpuScore" : 0.55,
+    "memoryScore" : 0.55,
+    "powerScore" : 0.4622,
+    "temperatureScore" : 0.2667,
+    "networkScore" : 0.3797,
+    "totalScore" : 0.4049,
+    "eligible" : false,
+    "exclusionReason" : "자원 부족 (필요 CPU:16 MEM:1024MB GPU:0, 가용 CPU:4.0 MEM:9830MB GPU:0)",
+    "exclusionCode" : "INSUFFICIENT_RESOURCE",
+    "details" : {
+      "온도계측" : 1.0,
+      "열적여유" : 0.2667,
+      "열적균형" : 0.3797,
+      "냉각점수" : 0.4622,
+      "자원여유" : 0.55,
+      "배치후예상온도C" : 71.5,
+      "클러스터평균온도C" : 44.3333
+    }
+  } ],
+  "policyName" : "golden"
+}

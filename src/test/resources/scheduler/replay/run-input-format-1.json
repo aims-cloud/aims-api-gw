@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "engineId": "weighted",
+  "capturedAt": "2026-10-29T00:00:00Z",
+  "powerBudgetWatts": null,
+  "nodes": [
+    {"mdcId": "mdc-01", "nodeId": "rpl-busy:9100", "totalCpu": 16, "totalMemoryMb": 65536, "totalGpu": 0,
+     "cpuUsagePercent": 40.0, "memoryUsagePercent": 40.0, "diskUsagePercent": 0.0,
+     "powerWatts": 220.0, "powerCapacityWatts": 500.0, "temperatureCelsius": 55.0,
+     "networkRxBps": 0.0, "networkTxBps": 0.0,
+     "gpuUsagePercent": 0.0, "gpuTemperatureCelsius": 0.0, "gpuPowerWatts": 0.0,
+     "reservedCpu": 0, "reservedMemoryMb": 0, "reservedGpu": 0, "reservedDiskGb": 0,
+     "diskCapacityGb": 0, "thermalState": "NORMAL", "powerSource": "IPMI"},
+    {"mdcId": "mdc-01", "nodeId": "rpl-idle:9100", "totalCpu": 16, "totalMemoryMb": 65536, "totalGpu": 0,
+     "cpuUsagePercent": 10.0, "memoryUsagePercent": 10.0, "diskUsagePercent": 0.0,
+     "powerWatts": 150.0, "powerCapacityWatts": 500.0, "temperatureCelsius": 45.0,
+     "networkRxBps": 0.0, "networkTxBps": 0.0,
+     "gpuUsagePercent": 0.0, "gpuTemperatureCelsius": 0.0, "gpuPowerWatts": 0.0,
+     "reservedCpu": 0, "reservedMemoryMb": 0, "reservedGpu": 0, "reservedDiskGb": 0,
+     "diskCapacityGb": 0, "thermalState": "NORMAL", "powerSource": "IPMI"}
+  ],
+  "excludedNodes": [],
+  "workloads": [
+    {"id": 9930101, "name": "rpl-w1", "resourceType": "GPU",
+     "requiredCpu": 4, "requiredMemoryMb": 1024, "requiredGpu": 0, "requiredDiskGb": 0,
+     "preferredMdcId": null, "dataMdcId": null, "maxPowerBudgetWatts": null, "maxTemperatureCelsius": null,
+     "requiredBandwidthMbps": null, "priority": "NORMAL", "status": "PENDING", "retryCount": 0}
+  ],
+  "policy": {"name": "default", "description": "재생 형식 1 픽스처", "resourceType": "GPU", "defaultEngine": "weighted",
+             "warningTemperatureCelsius": null,
+             "cpuWeight": 0.3, "memoryWeight": 0.3, "powerWeight": 0.2, "temperatureWeight": 0.2, "networkWeight": 0.0,
+             "maxCpuUsagePercent": 80.0, "maxMemoryUsagePercent": 85.0, "maxTemperatureCelsius": 75.0,
+             "maxPowerUsagePercent": 90.0,
+             "powerAwareEnabled": false, "temperatureAwareEnabled": false, "affinityEnabled": false, "active": true},
+  "mdcBudgets": {},
+  "links": [],
+  "cooldowns": [],
+  "knobs": {"power": {}, "thermal": {}, "network": {}}
+}
